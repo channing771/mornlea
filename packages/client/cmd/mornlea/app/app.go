@@ -137,8 +137,11 @@ type Application struct {
 	// panelLastFrameAt 是上一帧调试面板读数的采样时刻，用于计算 PanelReadout.FrameMillis。
 	panelLastFrameAt time.Time
 	inventory        client.InventoryMirror
-	furnace          client.FurnaceMirror
-	chest            client.ChestMirror
+	// itemIcons 在材质注册表装配后一次性编码，所有 WebView 物品栏位共享同一
+	// 只读名称与 PNG data URI，不在权威 tick 热路径执行图像编码。
+	itemIcons itemIconCatalog
+	furnace   client.FurnaceMirror
+	chest     client.ChestMirror
 	// crafting 是权威合成网格的 latest-wins 只读镜像：网格内容、产物与有效
 	// 尺寸全部以服务端状态为准，客户端不预测；尺寸 3 表示工作台视图。
 	crafting      client.CraftingMirror
@@ -159,7 +162,13 @@ type Application struct {
 	itemDrops         *client.ItemDrops
 	itemDropInstances []render.ItemDrop
 	inventoryOpen     bool
-	inventorySource   int
+	gameToken         uint64
+	gameIdentity      string
+	gameSource        *client.UIGameSlotRef
+	gameRecipeIndex   int
+	gameCursorFree    bool
+	gameCharacter     bool
+	gameUIDirty       bool
 	serverTick        uint64
 	combatFeedback    combatFeedback
 	// worldTimeTicks 是最后确认的权威绝对世界时间，只在接受更新状态时前进。

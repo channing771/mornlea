@@ -32,8 +32,7 @@
 - 场景顺序与正式清单以 `captureScenes` 及其顺序测试为准，固定上传容量以布局代码和容量
   测试为准；不要在指南复制会漂移的清单或数字。常显 HUD（快捷栏/状态行/氧气/
   采掘进食/弹条/准星/聊天/marker）的 GPU 呈现已退役，其像素验收由 WebView HUD
-  组件断言与 `frontend/visual` 部件基线承接，capture 只保留世界、夜景、材质与
-  容器保留面场景。`mining-crack-early` 与 `mining-crack-heavy` 两景呈现世界空间采掘裂纹，依次紧随 `water-surface-slope`。
+  组件断言与 `frontend/visual` 部件基线承接，capture 只保留世界、夜景、材质场景，四个旧容器场景已迁到前端。`mining-crack-early` 与 `mining-crack-heavy` 两景呈现世界空间采掘裂纹，依次紧随 `water-surface-slope`。
 ## 消费端接口 (`capture/scene_application.go`)
 
 - `SceneApplication` 是 capture 对宿主应用状态的唯一访问面：场景表的
@@ -64,3 +63,10 @@
 - 无窗口视觉门禁：`make visual-check`（全部场景通过 tracked golden，不产生
   `*-actual.png`/`*-diff.png`）；更新基线用 `make visual-update`，更新后必须
   重跑 `make visual-check`。
+
+## 人物与掉落过程
+
+- `avatar-detail` 在settings-menu之后、far-horizon之前，用正侧背三个人物钉住静态材质；后继far-horizon完整重置相机，不污染依赖既有投影参数的场景。
+- `--motion-demo` 保留默认break-burst；`--motion-scene`显式选择avatar-walk、drop-scatter、drop-density。复用180帧上限的录制循环与标准库编码，不写world表或比较阈值。新剧本20Hz，原break-burst仍保持50帧和13cs延迟。
+- 专用场景先清理镜像和`ResetEntityPresentation`跨帧历史；掉落在正式帧注入。静态glyph在预热完成，运动帧抑制目标标签和描边以便审查；不修改生产游戏的目标反馈样式。
+- 橡树林在Apply复用完整呈现清场，不能携带权威加载期间生成的牛或敌对生物。

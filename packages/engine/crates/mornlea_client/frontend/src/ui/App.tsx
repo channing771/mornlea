@@ -15,6 +15,7 @@ import {
   type UplinkEvent,
 } from "../bridge/client";
 import { HudRoot } from "../hud/HudRoot";
+import { GamePanels } from "./GamePanels";
 import { DebugPanel } from "./DebugPanel";
 import { LoadingScreen } from "./LoadingScreen";
 import { MainMenu } from "./MainMenu";
@@ -54,12 +55,13 @@ export function App({ bridge = defaultBridge, onEvent }: AppProps = {}) {
   // 常显 HUD 叠加在最底层：菜单相位/装配前的 hud 分节缺席，组件自身渲染
   // null；游戏/暂停相位有已装配世界时由 Go 下行驱动，菜单面板仍绘制在
   // HUD 之上（暂停遮罩盖住世界与 HUD 是既有层叠语义）。
-  const hudOverlay = <HudRoot hud={state.hud} />;
+  const game = state.phase === "game" && !state.debug?.visible ? state.game : undefined;
+  const hudOverlay = <HudRoot hud={state.hud} onSelect={game?.cursorFree && game.confirmed ? (index)=>emit({type:"game-action",token:game.token,op:"hotbar",index}) : undefined} />;
 
   switch (state.phase) {
     case "game":
       // 游戏相位零 chrome：除 HUD 外无菜单参与（Rust 侧另有 hidden 语义）。
-      return <>{hudOverlay}{debugOverlay}</>;
+      return <>{game && <GamePanels game={game} hud={state.hud} onEvent={emit}/ >}{hudOverlay}{debugOverlay}</>;
     case "menu":
     case "starting":
       return (
@@ -175,9 +177,19 @@ function routeKeyDown(event: KeyboardEvent, state: UIState, emit: (event: Uplink
       // 加载期无任何合法上行动作：全部按键静默（Go 侧对 loading 相位的动作
       // 事件另有防御档，这里是前端侧的零上行保证）。
       return;
-    case "game":
-      // 游戏相位 WebView 隐藏（无 debug 分节时不会进入这里），键盘归 winit。
+    case "game": {
+      const game = state.game;
+      if (!game?.cursorFree || event.repeat) return;
+      if (event.key === "Escape" || event.key.toLowerCase() === "e") {
+        emit({type:"game-action",token:game.token,op:game.kind === "none" ? (event.key === "Escape" ? "capture":"inventory") : "close"});
+      } else if (event.key === "Tab" && game.kind === "none") {
+        emit({type:"game-action",token:game.token,op:"capture"});
+      } else if (/^[1-9]$/.test(event.key) && game.confirmed) {
+        emit({type:"game-action",token:game.token,op:"hotbar",index:Number(event.key)-1});
+      } else return;
+      event.preventDefault();
       return;
+    }
   }
 }
 

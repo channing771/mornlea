@@ -3,6 +3,17 @@
 // 约定（visual.mjs 依赖，勿改结构）：`export const fixtureNames = [` 后每行
 // 一个双引号 kebab-case 名称加逗号，闭于 `] as const;`。
 export const fixtureNames = [
+  "panel-inventory",
+  "panel-inventory-empty",
+  "panel-inventory-full",
+  "items-all",
+  "hud-hotbar-first",
+  "hud-hotbar-last",
+  "panel-workbench",
+  "panel-chest",
+  "panel-furnace",
+  "panel-character",
+  "panel-inventory-narrow",
   "panel-main-menu",
   "panel-settings",
   "panel-pause",

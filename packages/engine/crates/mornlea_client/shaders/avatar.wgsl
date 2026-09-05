@@ -29,6 +29,7 @@ struct VsOut {
     @location(2)       uv:       vec2f,
     @location(3)       material: u32,
     @location(4)       daylight: f32,
+    @location(5)       face:     u32,
 };
 
 fn cube_normal(face: u32) -> vec3f {
@@ -56,6 +57,22 @@ fn avatar_uv(local: vec3f, face: u32) -> vec2f {
     }
 }
 
+// 人物内部材质每六层对应六面；本地 -Z 是前向，后脑独占 +Z 层。
+// 旧牛、敌怪、物品与纯色哨兵保持原采样规则。
+fn avatar_face_material(material: u32, face: u32) -> u32 {
+    if (material >= 112u && material < 160u) {
+        return material + face;
+    }
+    return material;
+}
+
+// 物品透明轮廓层紧邻牛头层之后、人物分面层之前。掉落薄片仍用有厚度的
+// cuboid 做保守布局，但片元只保留本地 ±Z 两张大面，避免四个窄侧面把整幅
+// 图标压成矩形边框。方块、牛、人物与纯色粒子均落在此区间之外。
+fn item_icon_material(material: u32) -> bool {
+    return material >= 81u && material < 112u;
+}
+
 @vertex
 fn vs_main(
     @location(0)             local: vec3f,
@@ -75,9 +92,11 @@ fn vs_main(
         instance.transform[1].xyz,
         instance.transform[2].xyz,
     ) * cube_normal(vi / 4u));
-    out.uv = avatar_uv(local, vi / 4u);
-    out.material = instance.material;
+    let face = vi / 4u;
+    out.uv = avatar_uv(local, face);
+    out.material = avatar_face_material(instance.material, face);
     out.daylight = camera.daylight.x;
+    out.face = face;
     return out;
 }
 
@@ -86,6 +105,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4f {
     let light_dir = normalize(vec3f(0.35, 0.85, 0.4));
     let diffuse = 0.58 + 0.42 * max(dot(in.normal, light_dir), 0.0);
     if (in.material != 0xFFFFFFFFu) {
+        if (item_icon_material(in.material) && in.face < 4u) { discard; }
         let c = textureSample(atlas, atlas_smp, in.uv, i32(in.material));
         // 与 terrain/crack 同阈值（0.5）的二值化丢弃；牛身层不透明，
         // 本分支恒不触发，只承接契约。

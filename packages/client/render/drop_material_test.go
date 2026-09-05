@@ -28,6 +28,21 @@ func TestItemDropMaterialCoversAllRegisteredItems(t *testing.T) {
 	}
 }
 
+// TestItemDropFlakesUseRegistryItemIconLayers 锁定世界薄片与 UI 图标同源：凡是
+// 透明轮廓物品都直接采样 assets 的物品层，不再把工具贴成整面方块材质。
+func TestItemDropFlakesUseRegistryItemIconLayers(t *testing.T) {
+	for item := core.ItemID(1); item < core.ItemIDMax; item++ {
+		want, outlined := assets.ItemIconLayer(item)
+		if !outlined {
+			continue
+		}
+		got, ok := itemDropMaterial(item)
+		if !ok || got != uint32(want) {
+			t.Fatalf("轮廓物品 %d 的掉落层=(%d,%v)，想要同源图标层 %d", item, got, ok, want)
+		}
+	}
+}
+
 // TestItemDropMaterialsSampleWorldAndFoodLayers 锁定层选择规则：方块类采样
 // 与世界同源的材质层，食物走牛肉/小麦层；石头与生牛肉肉眼可辨且非同一纯色块。
 func TestItemDropMaterialsSampleWorldAndFoodLayers(t *testing.T) {
@@ -39,8 +54,8 @@ func TestItemDropMaterialsSampleWorldAndFoodLayers(t *testing.T) {
 		{core.ItemGrass, uint32(assets.LayerGrassTop)},
 		{core.ItemRawBeef, uint32(assets.LayerRawBeef)},
 		{core.ItemCookedBeef, uint32(assets.LayerCookedBeef)},
-		{core.ItemWheat, uint32(assets.LayerWheat7)},
-		{core.ItemTorch, uint32(assets.LayerTorch)},
+		{core.ItemWheat, uint32(assets.LayerItemWheat)},
+		{core.ItemTorch, uint32(assets.LayerItemTorch)},
 	}
 	for _, tc := range cases {
 		got, ok := itemDropMaterial(tc.item)
@@ -58,28 +73,33 @@ func TestItemDropMaterialsSampleWorldAndFoodLayers(t *testing.T) {
 	}
 }
 
-// TestItemDropMaterialsMatchRegistryTopFace 锁定可放置物品与注册表同源：掉
-// 落代表层必须等于注册表顶面层；种子/马铃薯/胡萝卜是记录在案的例外——取成熟
-// 层（stage0 仅约 4% 覆盖，在小方块上近乎不可见），其余一律直通。
+// TestItemDropMaterialsMatchRegistryTopFace 锁定立方体物品与注册表同源：掉落
+// 代表层必须等于注册表顶面层；透明轮廓物品由上一测试钉住独立同源图标层。
 func TestItemDropMaterialsMatchRegistryTopFace(t *testing.T) {
 	registry := assets.NewRegistry()
-	matureOverride := map[core.ItemID]uint16{
-		core.ItemWheatSeeds: assets.LayerWheat7,
-		core.ItemPotato:     assets.LayerPotato7,
-		core.ItemCarrot:     assets.LayerCarrot7,
-	}
 	for item := core.ItemID(1); item < core.ItemIDMax; item++ {
+		if _, outlined := assets.ItemIconLayer(item); outlined {
+			continue
+		}
 		block, ok := core.ItemPlacement(item)
 		if !ok {
 			continue
 		}
 		want := uint32(registry.Material(block, mesh.FacePosY))
-		if override, ok := matureOverride[item]; ok {
-			want = uint32(override)
-		}
 		got, ok := itemDropMaterial(item)
 		if !ok || got != want {
 			t.Fatalf("可放置物品 %d 材质层=(%d,%v)，想要注册表顶面层 %d", item, got, ok, want)
 		}
+	}
+}
+
+// TestItemDropIconLayerRangeMatchesClientShader 钉住共享 shader 的薄片材质边界：
+// 牛头层 80 不进入，生牛肉到最后一个原创物品层 81..111 全部进入，人物从
+// 112 起另走六面材质。三段相邻但互不重叠。
+func TestItemDropIconLayerRangeMatchesClientShader(t *testing.T) {
+	if assets.LayerCowHead != 80 || assets.LayerRawBeef != 81 || assets.LayerItemBrokenIronSword != 111 ||
+		assets.LayerHumanSageHead != 112 {
+		t.Fatalf("薄片 shader 边界漂移: cow=%d raw=%d last=%d human=%d",
+			assets.LayerCowHead, assets.LayerRawBeef, assets.LayerItemBrokenIronSword, assets.LayerHumanSageHead)
 	}
 }

@@ -1,25 +1,9 @@
-//! GameOverlay 参与模型(生产实现)。
+//! 游戏覆盖层的透明合成与响应链控制。
 //!
-//! WebView 的响应链参与恰有两态——`Menu`(菜单相位,全参与)与 `GameOverlay`
-//! (游戏相位,仅合成),枚举见 [`OverlayMode`]。模式由下行状态的相位字段
-//! 推导(`crate::webview::MenuWebview::push_state` 是唯一切换点,与既有
-//! 「装配完成隐藏 WebView / 退回主菜单显示」生命周期同源),切换动作经
-//! [`plan_transition`] 落到 AppKit:
-//!
-//! - **Menu**:视图可见、`hitTest:` 走父类实现、firstResponder 归 WebView
-//!   ——菜单 chrome 可点,键盘由页面路由。
-//! - **GameOverlay**:视图**保持可见**(透明合成于 wgpu 画面之上,承载常显
-//!   HUD)、`hitTest:` 返回 `nil`(命中测试跳过本视图子树,事件落到下层
-//!   winit 内容视图)、firstResponder 归还 winit——可见合成与响应链参与
-//!   解耦,输入行为与无 WebView 基线逐项一致(前置 spike S1 实证)。
-//!
-//! benchmark/capture/`-connect` 无头路径零参与不因本模型改变:WebView 只在
-//! 「需要呈现菜单」的状态推送时挂载,纯游戏相位推送与挂载失败后的推送都不
-//! 触发挂载(挂载门谓词 [`crate::window`] 侧钉住)。
-//!
-//! 线程约束:子类构造与模式切换必须在创建窗口的 OS 主线程调用(与
-//! [`crate::webview`] 的既有约束一致);`hitTest:` 被 AppKit 在主线程高频
-//! 调用,穿透标志因此用原子量,免锁;纯函数与页面相位脚本无线程要求。
+//! `Menu` 表示不透明菜单，`GameOverlay` 表示透明游戏覆盖层；两者的输入
+//! 参与由 `plan_transition` 的布尔参数独立决定。捕获态游戏全穿透，自由
+//! 光标和前端面板消费键鼠，仍保持世界透明合成。交互远程窗口同样挂载；
+//! capture/benchmark 从不创建窗口或 WebView。
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
@@ -32,9 +16,7 @@ use objc2_web_kit::{WKWebView, WKWebViewConfiguration};
 
 /// WebView 参与模式(生产枚举)。
 ///
-/// 两态互斥且完备:菜单相位需要 chrome 可交互,游戏相位需要 HUD 常驻合成
-/// 又必须把输入全部让给 winit。没有第三态——「既不可见也不参与」的旧隐藏
-/// 语义已被 GameOverlay 取代(见 [`plan_transition`] 的动作表)。
+/// 两个模式表达背景合成，响应链参与另由 `plan_transition` 参数控制。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum OverlayMode {
     /// 菜单相位:WebView 全参与(既有行为),菜单 chrome 可点、键盘归页面。

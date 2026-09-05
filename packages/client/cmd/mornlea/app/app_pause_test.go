@@ -213,16 +213,16 @@ func TestPauseQuitToMenuTearsDownAndAllowsReassembly(t *testing.T) {
 // 本地形态同一位为假。
 func TestPauseRemoteFormSkipsGateAndMarksSegment(t *testing.T) {
 	remoteApp := &Application{
-		menu:            menuState{phase: MenuPhaseGame},
-		window:          &fakeInteractiveWindow{},
-		remotePlayers:   client.NewRemotePlayers(),
-		itemDrops:       client.NewItemDrops(),
-		inventorySource: -1,
-		render:          config.Defaults().Render,
-		serverTick:      0,
-		mirror:          client.NewMirror(),
-		predictor:       client.NewPredictor(),
-		startupOptions:  Options{Render: config.Defaults().Render},
+		menu:          menuState{phase: MenuPhaseGame},
+		window:        &fakeInteractiveWindow{},
+		remotePlayers: client.NewRemotePlayers(),
+		itemDrops:     client.NewItemDrops(),
+
+		render:         config.Defaults().Render,
+		serverTick:     0,
+		mirror:         client.NewMirror(),
+		predictor:      client.NewPredictor(),
+		startupOptions: Options{Render: config.Defaults().Render},
 	}
 	remoteApp.releaseResources = remoteApp.releaseOwnedResources
 	if !remoteApp.remote() {

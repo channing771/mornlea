@@ -41,6 +41,10 @@ packages/client/cmd/mornlea/app/
 - 权威 tick、渲染与网络热路径不执行无界工作：接收管线的缓冲按「全量初始
   快照 + 运行期 fail-fast」定容（`applicationReceiverCapacity`），drain 预算
   集中为导出常量 `MessageDrainMax`，capture 与 benchmark 与本包共用一个值。
+- 材质 `Registry` 创建成功后立即构建 `itemIconCatalog`：每个注册物品只做一次
+  16×16 RGBA → PNG data URI 编码，应用生命周期内只读复用。HUD、背包、合成
+  网格、箱子、熔炉和配方都把同一目录传给 client 栏位构造器；不得在 tick 或
+  UI 文档组装路径重新编码。
 
 ## 导出面纪律 (`app/accessors.go`, `app/app.go`)
 
@@ -129,3 +133,12 @@ packages/client/cmd/mornlea/app/
   时逐字保留 build tag，不引入新平台矩阵。
 - 定点验证：`go test ./packages/client/cmd/mornlea/app -race -count=1`——不编译执行
   capture/benchmark 的重型测试，这是分包的直接收益之一。
+
+## 前端游戏面板 (`app_game_ui.go`)
+
+- `game` 分节独立于 HUD，带跨会话递增的视图 token；视图身份/来源/配方选择变化及时下行，库存、网格和容器权威消息也置游戏分节脏标记，避免纯背包变化被 HUD 内容去重吞掉。
+- `drainGameUIEvents` 在非 dev 游戏帧照常排空 typed 事件。相位、会话、调试与聊天、确认位、token 和索引通过后才路由既有 Memory/TCP 同源请求。第一次槽位点击只存来源，第二次仅发送一次命令，产物只走 `TakeCraftingOutput`，熔炉产物拒绝作为输入目标。
+- 游戏面板全部由前端 DOM 绘制与命中，`RenderFrame` 不再准备或提交容器和 tooltip GPU 实例。旧统一整数来源与capture访问器已移除，面板只消费 `gameSource` 语义引用。
+- Tab 进入自由光标，WebView 返回的关闭/捕获事件刷新鼠标基线并抑制当帧世界动作。交互远程连接也装配前端，capture/benchmark 保持无 WebView。
+
+- capture 公共清场经 `ResetEntityPresentation` 同时清掉步态、破碎粒子与下落历史，防止加载阶段掉落或前一个场景污染后续独立画面。

@@ -1,8 +1,8 @@
 package capture
 
 // motion_break_burst.go：完整采掘生命周期的 motion 演示入口。产物是 50 帧 GIF，
-// 只验呈现、不进任何比对门禁：场景值不追加进 `captureScenes`（27 张 PNG
-// 纪律不动），`RunCapture`/`visual-check`/`visual-update` 都不感知它。
+// 只验呈现、不进任何比对门禁：场景值不追加进 `captureScenes`（世界 PNG
+// 纪律独立），`RunCapture`/`visual-check`/`visual-update` 都不感知它。
 //
 // 时间线（帧号 = 合成 tick 偏移，延迟沿用 13cs）：F0–4 目标静置无采掘；
 // F5–24 采掘爬坡（`RequiredTicks=200`，`ProgressTicks=(i-5)*10`，裂纹 0→9 扫完）；
@@ -21,8 +21,6 @@ import (
 	"bytes"
 	"fmt"
 	"image"
-	"image/color/palette"
-	"image/draw"
 	"image/gif"
 	"os"
 	"path/filepath"
@@ -243,43 +241,34 @@ func captureMotionFrame(app SceneApplication, frame int) (*image.NRGBA, error) {
 	return bgraToNRGBA(app.Renderer().Readback(), captureWidth, captureHeight), nil
 }
 
-// captureBreakBurstMotionFrames 以帧号 0→44 连抓固定帧数：抓帧回调由调用方
+// `captureBreakBurstMotionFrames` 以帧号 0→49 连抓固定帧数：抓帧回调由调用方
 // 注入（生产走 `captureMotionFrame`，测试走合成帧），
 // 本函数只钉住帧数与帧序，是演示确定性的落点。
 func captureBreakBurstMotionFrames(
 	capture func(frame int) (*image.NRGBA, error),
 ) ([]*image.NRGBA, error) {
-	frames := make([]*image.NRGBA, 0, breakBurstMotionFrameCount)
-	for frame := range breakBurstMotionFrameCount {
-		img, err := capture(frame)
-		if err != nil {
-			return nil, fmt.Errorf("抓取 motion 第 %d 帧（tick %d）: %w", frame, breakBurstMotionTick(frame), err)
-		}
-		if img == nil {
-			return nil, fmt.Errorf("抓取 motion 第 %d 帧（tick %d）: 空帧", frame, breakBurstMotionTick(frame))
-		}
-		frames = append(frames, img)
-	}
-	return frames, nil
+	return captureBoundedMotionFrames(breakBurstMotionFrameCount, capture)
 }
 
-// encodeBreakBurstMotionGIF 把 50 帧 NRGBA 编成 GIF 字节：固定 Plan9 调色板
-// + Floyd-Steinberg 抖动（与开发捕获服务的 GIF 口径同源，但 capture 不得
-// 导入 devcapture，方向由架构门禁强制，故此处保留小体量重复）。固定调色板
-// 使同输入逐字节一致；空输入直接失败，不产出零帧 GIF 假证据。
+// `encodeBreakBurstMotionGIF` 保留采掘演示的原始延迟，复用全片确定性
+// 自适应调色板与无抖色编码；空输入明确失败。
 func encodeBreakBurstMotionGIF(frames []*image.NRGBA) ([]byte, error) {
+	return encodeMotionGIF(frames, breakBurstMotionFrameDelay)
+}
+
+func encodeMotionGIF(frames []*image.NRGBA, delay int) ([]byte, error) {
 	if len(frames) == 0 {
 		return nil, fmt.Errorf("编码 motion GIF：空帧序列")
 	}
+	colors := motionPalette(frames)
 	out := &gif.GIF{Delay: make([]int, 0, len(frames))}
 	for index, frame := range frames {
 		if frame == nil {
 			return nil, fmt.Errorf("编码 motion GIF：第 %d 帧为空", index)
 		}
-		paletted := image.NewPaletted(frame.Bounds(), palette.Plan9)
-		draw.FloydSteinberg.Draw(paletted, frame.Bounds(), frame, image.Point{})
+		paletted := palettizeMotion(frame, colors)
 		out.Image = append(out.Image, paletted)
-		out.Delay = append(out.Delay, breakBurstMotionFrameDelay)
+		out.Delay = append(out.Delay, delay)
 	}
 	first := out.Image[0]
 	out.Config = image.Config{

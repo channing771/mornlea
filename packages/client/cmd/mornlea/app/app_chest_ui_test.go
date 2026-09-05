@@ -5,7 +5,7 @@ package app
 // app_chest_ui_test.go：箱子界面镜像生命周期与熔炉/箱子互斥。
 
 import (
-	"github.com/channing771/mornlea/packages/client/render/hud"
+	"github.com/channing771/mornlea/packages/client/client"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
 	"github.com/go-gl/mathgl/mgl32"
@@ -27,16 +27,16 @@ func TestAuthoritativeChestStateOpensUI(t *testing.T) {
 	sendInteractiveServerMessage(t, serverEndpoint, state)
 	app.DrainServerMessages(1)
 	got, opened := app.chest.State()
-	if !opened || got != state || !app.inventoryOpen || app.inventorySource != -1 {
-		t.Fatalf("权威箱子界面 state=%+v opened=%v ui=%v source=%d",
-			got, opened, app.inventoryOpen, app.inventorySource)
+	if !opened || got != state || !app.inventoryOpen || app.gameSource != nil {
+		t.Fatalf("权威箱子界面 state=%+v opened=%v ui=%v source=%v",
+			got, opened, app.inventoryOpen, app.gameSource)
 	}
-	app.inventorySource = 1
+	app.gameSource = &client.UIGameSlotRef{Area: "inventory", Index: 1}
 	state.Items[0].Count++
 	sendInteractiveServerMessage(t, serverEndpoint, state)
 	app.DrainServerMessages(1)
-	if app.inventorySource != 1 {
-		t.Fatalf("连续权威更新清除了已选来源: %d", app.inventorySource)
+	if app.gameSource == nil || app.gameSource.Index != 1 {
+		t.Fatalf("连续权威更新清除了已选来源: %v", app.gameSource)
 	}
 }
 
@@ -54,12 +54,10 @@ func TestChestTwoClicksSendOneMoveWithoutPrediction(t *testing.T) {
 	}
 	app.inventoryOpen = true
 
-	width, height := uint32(1280), uint32(720)
-	sourceX, sourceY := chestSlotCenter(t, 1, width, height)
-	targetX, targetY := chestSlotCenter(t, core.ChestFirstSlot+5, width, height)
-	app.clickInventorySlot(sourceX, sourceY, width, height)
+	app.menu.phase = MenuPhaseGame
+	gameTestAction(app, "slot", "inventory", 1)
 	assertNoInteractiveClientMessage(t, serverEndpoint)
-	app.clickInventorySlot(targetX, targetY, width, height)
+	gameTestAction(app, "slot", "chest", 5)
 
 	message := receiveInteractiveClientMessage(t, serverEndpoint)
 	want := network.MoveContainerStack{
@@ -86,7 +84,7 @@ func TestExplicitChestCloseClearsUIAndSendsOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	app.inventoryOpen = true
-	app.inventorySource = core.ChestFirstSlot + 3
+	app.gameSource = &client.UIGameSlotRef{Area: "chest", Index: core.ChestFirstSlot + 3 - core.ChestFirstSlot}
 
 	app.setInventoryOpen(false)
 	message := receiveInteractiveClientMessage(t, serverEndpoint)
@@ -95,8 +93,8 @@ func TestExplicitChestCloseClearsUIAndSendsOnce(t *testing.T) {
 	}
 	app.setInventoryOpen(false)
 	assertNoInteractiveClientMessage(t, serverEndpoint)
-	if app.inventoryOpen || app.inventorySource != -1 {
-		t.Fatalf("关闭后 ui=%v source=%d", app.inventoryOpen, app.inventorySource)
+	if app.inventoryOpen || app.gameSource != nil {
+		t.Fatalf("关闭后 ui=%v source=%v", app.inventoryOpen, app.gameSource)
 	}
 	if !window.CursorCaptured() {
 		t.Fatal("关闭箱子后未恢复鼠标捕获")
@@ -112,12 +110,12 @@ func TestChestClosedMessageClearsUIWithoutEcho(t *testing.T) {
 	state.Chest.Slot, state.Chest.Generation = 1, 2
 	sendInteractiveServerMessage(t, serverEndpoint, state)
 	app.DrainServerMessages(1)
-	app.inventorySource = core.ChestFirstSlot
+	app.gameSource = &client.UIGameSlotRef{Area: "chest", Index: core.ChestFirstSlot - core.ChestFirstSlot}
 
 	sendInteractiveServerMessage(t, serverEndpoint, network.ContainerClosed{Container: state.Chest})
 	app.DrainServerMessages(1)
-	if app.inventoryOpen || app.inventorySource != -1 {
-		t.Fatalf("服务端关闭后 ui=%v source=%d", app.inventoryOpen, app.inventorySource)
+	if app.inventoryOpen || app.gameSource != nil {
+		t.Fatalf("服务端关闭后 ui=%v source=%v", app.inventoryOpen, app.gameSource)
 	}
 	if _, opened := app.chest.State(); opened {
 		t.Fatal("服务端关闭后仍保留箱子镜像")
@@ -180,15 +178,15 @@ func TestPlayerResetClosesChestUI(t *testing.T) {
 		t.Fatal(err)
 	}
 	app.inventoryOpen = true
-	app.inventorySource = core.ChestFirstSlot
+	app.gameSource = &client.UIGameSlotRef{Area: "chest", Index: core.ChestFirstSlot - core.ChestFirstSlot}
 	sendInteractiveServerMessage(t, serverEndpoint, network.PlayerState{
 		ServerTick: 1, Dimension: core.Overworld,
 		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true, Ready: true, Reset: true,
 	})
 
 	app.DrainServerMessages(1)
-	if app.inventoryOpen || app.inventorySource != -1 {
-		t.Fatalf("reset 后 ui=%v source=%d", app.inventoryOpen, app.inventorySource)
+	if app.inventoryOpen || app.gameSource != nil {
+		t.Fatalf("reset 后 ui=%v source=%v", app.inventoryOpen, app.gameSource)
 	}
 	if _, opened := app.chest.State(); opened {
 		t.Fatal("reset 后仍保留箱子镜像")
@@ -202,27 +200,13 @@ func TestClientSessionCloseClearsChestMirror(t *testing.T) {
 		t.Fatal(err)
 	}
 	app.inventoryOpen = true
-	app.inventorySource = core.ChestFirstSlot
+	app.gameSource = &client.UIGameSlotRef{Area: "chest", Index: core.ChestFirstSlot - core.ChestFirstSlot}
 
 	app.CloseClientSession(nil)
-	if app.inventoryOpen || app.inventorySource != -1 {
-		t.Fatalf("断线后 open=%v source=%d，想要界面关闭且来源清除", app.inventoryOpen, app.inventorySource)
+	if app.inventoryOpen || app.gameSource != nil {
+		t.Fatalf("断线后 open=%v source=%v，想要界面关闭且来源清除", app.inventoryOpen, app.gameSource)
 	}
 	if _, opened := app.chest.State(); opened {
 		t.Fatal("断线后仍保留箱子镜像")
 	}
-}
-
-func chestSlotCenter(t *testing.T, slot int, width, height uint32) (float64, float64) {
-	t.Helper()
-	for x := range int(width) {
-		for y := range int(height) {
-			got, ok := hud.ChestSlotAt(float64(x), float64(y), width, height)
-			if ok && int(got) == slot {
-				return float64(x), float64(y)
-			}
-		}
-	}
-	t.Fatalf("找不到箱子统一栏位 %d 的像素", slot)
-	return 0, 0
 }

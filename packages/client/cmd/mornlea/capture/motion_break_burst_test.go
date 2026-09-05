@@ -414,7 +414,7 @@ func TestBreakBurstMotionDropIsDirtAtFixedBlock(t *testing.T) {
 }
 
 // TestBreakBurstMotionSceneStaysOutOfCaptureScenes 钉住演示场景不进正式表：
-// 27 张 PNG 纪律与 `visual-check` 比对都不感知 motion 演示。
+// 世界 PNG 纪律与 `visual-check` 比对都不感知 motion 演示。
 func TestBreakBurstMotionSceneStaysOutOfCaptureScenes(t *testing.T) {
 	for _, scene := range captureScenes {
 		lowered := strings.ToLower(scene.Name)

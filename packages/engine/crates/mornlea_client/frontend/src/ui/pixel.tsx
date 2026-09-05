@@ -15,7 +15,6 @@ import {
   DropdownMenuContent as RetrouiDropdownMenuContent,
   DropdownMenuItem as RetrouiDropdownMenuItem,
   DropdownMenuTrigger as RetrouiDropdownMenuTrigger,
-  Input as RetrouiInput,
   type CardProps as RetrouiCardProps,
 } from "pixel-retroui";
 
@@ -37,15 +36,15 @@ export function PixelButton({ className, ...props }: PixelButtonProps) {
   return <RetrouiButton className={joinClass("pixel-button", className)} {...props} />;
 }
 
-/** PixelInput 属性：原生 input 属性全量透传；retroui Input 的 className 落在包装层，
+/** PixelInput 属性：原生 input 属性全量透传；className 落在包装层，
  * 其余属性（value/onChange/aria-label/autoFocus 等）透传给内部原生 input，
  * label 包裹关联与可及性命名因此保持原生语义。 */
 export type PixelInputProps = InputHTMLAttributes<HTMLInputElement>;
 
-// PixelInput：retroui Input 的像素化单行文本框。包装层自带演示外距与
-// Minecraft 字体回退，由 ui.css 的 .pixel-input 公共层归零/回栈。
+// `PixelInput` 用原生输入框保持表单语义，包装层统一奶油细描边与焦点环。
+// retroui 的内联 border-image-source 会覆盖主题，因此此处不使用其图像边框。
 export function PixelInput({ className, ...props }: PixelInputProps) {
-  return <RetrouiInput className={joinClass("pixel-input", className)} {...props} />;
+  return <div className={joinClass("pixel-input", className)}><input {...props} /></div>;
 }
 
 /** PixelCard 属性：沿用 retroui Card 的形参面（面板容器几何不在组件内展开，

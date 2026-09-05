@@ -19,8 +19,8 @@ const (
 
 func TestShortGrassUsesAppendedProceduralCutoutLayer(t *testing.T) {
 	registry := NewRegistry()
-	if got := registry.LayerCount(); got != int(LayerCookedBeef)+1 {
-		t.Fatalf("LayerCount = %d，想要覆盖短草、裂纹与牛层追加后的 %d", got, int(LayerCookedBeef)+1)
+	if got := registry.LayerCount(); got != int(LayerHumanClayLeg)+6 {
+		t.Fatalf("LayerCount = %d，想要覆盖短草、裂纹、牛、物品与人物层追加后的 %d", got, int(LayerHumanClayLeg)+6)
 	}
 	if got, want := len(registry.MeshSnapshot().Blocks), 85; got != want {
 		t.Fatalf("mesh registry 条目 = %d，想要 %d", got, want)

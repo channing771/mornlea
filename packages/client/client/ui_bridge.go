@@ -31,6 +31,8 @@ const (
 	UIEventSettingsChanged UIEventKind = 2
 	// UIEventDebugAction 表示一条调试面板编辑事件(字符串 op)。
 	UIEventDebugAction UIEventKind = 3
+	// UIEventGameAction 传递带视图身份的游戏交互。
+	UIEventGameAction UIEventKind = 4
 )
 
 // 菜单动作 id,与 schema `menuAction` 枚举及 Go app 层动作分发表逐值互钉
@@ -119,16 +121,20 @@ const (
 	maxUISettingsPathBytes = 1024
 	// maxDebugPanelEditValueBytes 是调试编辑文本字节上界(schema maxLength=64)。
 	maxDebugPanelEditValueBytes = 64
+	// MaxUIEnvelopeBytes 是桥单份 JSON 的既有 1 MiB 容量；下行面板的最坏
+	// 图标载荷与上行排空缓冲共用这一容量契约。
+	MaxUIEnvelopeBytes = 1 << 20
 	// maxUIEnvelopeBytes 是排空缓冲的字节上界:单批 64 条、每条最坏为一条
 	// 1024 字节(UTF-8 转义后至多 4 倍)的 texturePackPath 变化事件,取
 	// 1 MiB 固定 scratch 一刀切,装载失败在 Rust 侧表现为 CAPACITY。
-	maxUIEnvelopeBytes = 1 << 20
+	maxUIEnvelopeBytes = MaxUIEnvelopeBytes
 )
 
 // UIEvent 是从 Rust 排空的一条已校验桥事件。`Kind` 为 `UIEventAction` 时只读
 // `ActionID`;为 `UIEventSettingsChanged` 时只读 `Field` 与 `Value`;
 // 为 `UIEventDebugAction` 时只读 `PanelAction`(与 `PanelValue`)。
 type UIEvent struct {
+	GameAction UIGameAction
 	// Kind 决定其余字段的解释方式。
 	Kind UIEventKind
 	// ActionID 仅在 `Kind` 为 `UIEventAction` 时有效,取 UIAction* 之一。
@@ -216,6 +222,8 @@ func decodeUIEvent(payload json.RawMessage) (UIEvent, error) {
 		return UIEvent{}, errors.New("type 必须是字符串")
 	}
 	switch eventType {
+	case "game-action":
+		return decodeGameActionEvent(fields)
 	case "action":
 		return decodeActionEvent(fields)
 	case "settings-change":

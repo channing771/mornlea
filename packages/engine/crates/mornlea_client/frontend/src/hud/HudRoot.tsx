@@ -30,9 +30,10 @@ import "./hud.css";
 export interface HudRootProps {
   /** 桥下行的游戏相位 HUD 分节；菜单相位/未装配时缺席。 */
   readonly hud: HudState | undefined;
+ readonly onSelect?: (index:number)=>void;
 }
 
-export function HudRoot({ hud }: HudRootProps) {
+export function HudRoot({ hud, onSelect }: HudRootProps) {
   if (hud === undefined) {
     return null;
   }
@@ -49,7 +50,7 @@ export function HudRoot({ hud }: HudRootProps) {
   const statusRows = (
     <StatusRow health={hud.health} hunger={hud.hunger} oxygen={hud.oxygen} open={open} />
   );
-  const hotbar = <Hotbar slots={hud.hotbar?.slots} selectedIndex={hud.hotbar?.selectedIndex} />;
+  const hotbar = <Hotbar slots={hud.hotbar?.slots} selectedIndex={hud.hotbar?.selectedIndex} onSelect={onSelect} />;
   return (
     <div
       className={open ? "hud-root hud-root--open" : "hud-root"}

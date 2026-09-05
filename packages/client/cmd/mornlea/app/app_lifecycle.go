@@ -133,7 +133,6 @@ func (a *Application) resetSessionOwnedState() {
 	a.damageFeedback.Reset()
 	a.damageStrength = 0
 	a.inventoryOpen = false
-	a.inventorySource = -1
 	a.itemDrops.Reset()
 	// burst 跟踪表随会话一并清空:旧会话的首次 tick 在新会话是未来 tick(年龄
 	// 钳制为 0 会误重 burst),旧 ID 的淘汰抑制也不得带入新会话。

@@ -4,8 +4,8 @@
  * 时长。几何只在 design px × `--hud-scale` 下表达（单一比例，变量由
  * HudRoot 注入组件根，缺省值供纯 CSS 预览）。
  *
- * 组件族零 transition/animation：权威 tick 下行即硬切呈现，与迁移前 GPU
- * 呈现的帧级行为一致，`prefers-reduced-motion` 因此无需额外分支。
+ * 权威值随 tick 下行；槽位内部视觉层用令牌过渡，命中矩形保持稳定。
+ * `prefers-reduced-motion` 将槽位过渡时长归零。
  * 类名统一 `hud-*` 前缀，与 retroui 产物带入的通用工具类名隔离。
  */
 
@@ -188,12 +188,7 @@
   background: var(--hud-item-tile-edge);
 }
 
-.hud-slot-tile::after {
-  content: "";
-  position: absolute;
-  inset: calc(var(--hud-item-tile-border) * var(--hud-scale));
-  background: var(--hud-item-tile);
-}
+
 
 /* 耐久条：亮底轨道 + 剩余比例填充，绿/红两档随比例（低耐久阈值见令牌注释）。
  * 轨道走亮底专用令牌（深可可半透），填充沿用既有健康绿/低耐久红。 */
@@ -430,3 +425,14 @@
   text-shadow: var(--hud-text-shadow-offset-scaled) var(--hud-text-shadow-offset-scaled) 0
     var(--text-shadow);
 }
+
+/* 命中框不随视觉弹起移动，边缘槽位保留完整点击面。 */
+.hud-slot-hit { display:block; position:relative; box-sizing:border-box; flex-shrink:0; width:calc(var(--hud-hotbar-slot-size)*var(--hud-scale)); height:calc(var(--hud-hotbar-slot-size)*var(--hud-scale)); padding:0; border:0; background:transparent; font:inherit; overflow:visible; }
+.hud-slot-hit:not(:disabled) { pointer-events:auto; cursor:pointer; }
+.hud-slot-hit:disabled { pointer-events:none; }
+.hud-slot-hit .hud-slot { pointer-events:none; transition:transform var(--hud-dock-duration) var(--hud-dock-easing); }
+.hud-slot-hit .hud-slot--selected { transform:translateY(calc(var(--hud-selected-lift)*var(--hud-scale)*-1)) scale(var(--hud-selected-scale)); }
+.hud-slot-hit .hud-slot--neighbor { transform:translateY(calc(var(--hud-neighbor-lift)*var(--hud-scale)*-1)) scale(var(--hud-neighbor-scale)); }
+.hud-slot-hit:focus-visible { outline:calc(var(--hud-slot-border)*var(--hud-scale)) solid var(--accent-sage-solid); border-radius:calc(var(--hud-slot-radius)*var(--hud-scale)); }
+.hud-slot-tile { display:flex; align-items:center; justify-content:center; background:transparent; }
+.hud-slot-tile .game-item-icon { width:100%; height:100%; }

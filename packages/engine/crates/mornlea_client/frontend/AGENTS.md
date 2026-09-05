@@ -1,7 +1,7 @@
 # AGENTS.md — packages/engine/crates/mornlea_client/frontend
 
-本目录是菜单层 WebView 前端（Vite + TypeScript strict + React）：把 Go 组装的
-菜单状态呈现为四屏组件，并把用户交互回传为上行事件。行为规格住 openspec
+本目录是菜单与游戏面板 WebView 前端（Vite + TypeScript strict + React）：把 Go 组装的
+菜单、HUD、背包/合成、容器与人物状态呈现为组件，并把用户交互回传为上行事件。行为规格住 openspec
 capability `webview-menu-ui`（当前 delta 见 `openspec/changes/client-webview-ui/specs/webview-menu-ui/spec.md`）；
 菜单语义的权威在 Go（相位机、设置草稿、装配裁决），本目录只做呈现与回传。
 Rust 侧只消费本目录的构建产物 `dist/`（经 `mornlea://` scheme 内嵌供给），
@@ -150,3 +150,14 @@ corepack pnpm build
 
 无 Rust/Go 代码改动时不需要 `make rust`；本目录改动不进 Go 测试闭包，
 `go test ./packages/audit -count=1` 仅在同时触碰 Go 侧时需要。
+
+## 游戏面板与输入
+
+- `src/bridge/game.ts` 与 schema 的 `gameState`/`gameActionEvent` 同步。独立 `game` 分节携带 token、视图 kind、自由光标、确认位、固定槽位与来源，库存/产物/数量/耐久/熔炼进度来自 Go 权威镜像；组件只回传语义 area/index/op，不把索引变回像素坐标。
+- `src/ui/GamePanels.tsx` 绘制个人背包、只读人物、工作台、箱子与熔炉；十条配方只选择并预览材料，不自动填料。背包按三排存储加独立底部快捷栏呈现；所有槽位为 button，tooltip 不吞指针，窄窗口横向网格和纵向面板可滚动。
+- 游戏捕获态 HUD 不接收点击；自由光标允许 HUD 选择，面板与自由光标状态下 E/Esc/Tab/数字键按 Go 视图 token 上行。任何关闭/换会话后的旧 token 均由 Go 拒绝。
+- `HudSlot.name/icon` 是共享出口。`icon` 只允许有上界的内嵌 PNG data URL，由 Go 装配缓存供给；禁止页面加载网络图像或持久化。选中 HUD 内层上移 5px/scale 1.08，左右邻格上移 2px/scale 1.03，180ms ease-out；全部经 tokens，减少动态效果时过渡归零，button 命中框固定。
+- 面板 fixture 的候选截图先目检，再按 `visual-baseline` 的阶段验收流程更新基线。
+
+- 视觉入口先经 `visual/export-catalog.mjs` 调离线Go导出测试，重新构建生产图标目录与生产配方快照；生成JSON被忽略、不入dist。类型检查与截图只消费本次导出，缺图/非法物品堆立即失败，禁止静态占位图片。
+- `PixelInput` 在既有桥接层内使用原生input与包装层，移除了retroui内联SVG border-image；连续细可可描边、cream填色与sage焦点环均经既有tokens。语义属性照常透传。

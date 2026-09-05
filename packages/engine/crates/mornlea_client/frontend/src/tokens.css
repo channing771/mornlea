@@ -323,3 +323,52 @@
   --text-dropdown: var(--text-on-panel);
   --shadow-dropdown: var(--panel-shadow);
 }
+
+/* 奶油面板与快捷栏动效共享值；命中区域保持原尺寸。 */
+:root {
+ --game-surface: #fff5df;
+ --game-paper: #f8ead0;
+ --game-padding: 16px;
+ --game-gap: 12px;
+ --game-small-gap: 6px;
+ --game-panel-width: 740px;
+ --game-slot-size: 40px;
+ --game-panel-radius: 24px;
+ --game-control-radius: 12px;
+ --game-border: 2px;
+ --game-shadow: 0 12px 48px rgba(74,56,38,.28);
+ --game-scrim: rgba(74,56,38,.32);
+ --game-title: 26px;
+ --game-subtitle: 16px;
+ --game-small-text: 12px;
+ --game-icon-size: 32px;
+ --game-portrait-width: 180px;
+ --game-portrait-skin: #e8b98d;
+ --game-panel-height: 88vh;
+ --game-recipes-width: 180px;
+ --hud-selected-lift: 5px;
+ --hud-selected-scale: 1.08;
+ --hud-neighbor-lift: 2px;
+ --hud-neighbor-scale: 1.03;
+ --hud-dock-duration: 180ms;
+ --hud-dock-easing: ease-out;
+ --radius-panel: var(--game-panel-radius);
+ --radius-control: var(--game-control-radius);
+ --panel-surface: var(--game-surface);
+ --slot-well: var(--game-paper);
+}
+@media (prefers-reduced-motion: reduce) { :root { --hud-dock-duration: 0ms; } }
+:root {
+ --game-grid-width: 408px;
+ --game-recipe-icon: 20px;
+ --game-recipe-padding: 4px;
+ --game-recipe-height: 32px;
+}
+:root {
+ --game-flow-width: 72px;
+ --game-flame-width: 24px;
+ --game-flame-height: 24px;
+ --game-meter-height: 8px;
+}
+:root { --game-compact-width: 520px; }
+:root { --game-slot-min: 24px; }

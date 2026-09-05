@@ -209,12 +209,9 @@ impl ClientWindow {
         })
     }
 
-    /// 下行菜单状态推送:首次「需要菜单参与」的状态推送时把 WebView 挂到本
-    /// 窗口的 contentView 之上(此后生命周期由 WebView 自管);游戏相位的
-    /// 推送在 WebView 尚未挂载时是纯校验空操作——`-connect` 直进游戏与基准/
-    /// capture 路径因此永不创建 WebView,零参与。挂载失败的环境里按
-    /// 「无 WebView」降级。JSON 非法(非 UTF-8/缺 phase)返回 false,由 FFI
-    /// 层转参数错误。
+    /// 交互窗口下行状态：首次推送挂载前端，包含直接进入游戏的远程连接。
+    /// 无头 renderer 没有 `ClientWindow`，不会经过本入口。焦点换手清理
+    /// 原生键鼠残留；挂载失败保持既有失败标志，不绘制 GPU 面板回退。
     pub fn push_ui_state(&mut self, json: &[u8]) -> bool {
         let wants_visible = match crate::webview::state_wants_visible(json) {
             Ok(wants_visible) => wants_visible,
@@ -223,11 +220,7 @@ impl ClientWindow {
         // spike 自驱动档把下行相位作为断言信号(世界装配/暂停开合都以
         // 「是否要求 WebView 全参与」呈现),在任何早退路径之前记录。
         crate::spike_auto::note_phase(wants_visible);
-        if should_mount(
-            self.webview.is_some(),
-            self.webview_attach_failed,
-            wants_visible,
-        ) {
+        if should_mount(self.webview.is_some(), self.webview_attach_failed, true) {
             let (ns_window, ns_view) = match (self.ns_window(), self.ns_view()) {
                 (Some(ns_window), Some(ns_view)) => (ns_window, ns_view),
                 // 句柄未注册(窗口已销毁或非本线程表)视为无窗口降级:推送

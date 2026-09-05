@@ -21,7 +21,7 @@ package app
 //     裸 hud 分节不是合法下行。
 //
 // 零参与语义:无窗口(基准/capture)从不推送——纪律层出口为 nil,冲刷退化为
-// 空操作;`-connect` 直进游戏的进程只有纯校验空操作,WebView 永不挂载。
+// 空操作；`-connect` 交互窗口下行同一前端状态。
 
 import (
 	"encoding/json"
@@ -37,12 +37,13 @@ import (
 // uiStateJSON 是下行状态快照的组装载体,字段形状与 schema `$defs/uiState`
 // 逐键一致(相位分节按需出现,序列化经 omitempty 缺席)。
 type uiStateJSON struct {
-	Phase    string          `json:"phase"`
-	Menu     *uiMenuJSON     `json:"menu,omitempty"`
-	Settings *uiSettingsJSON `json:"settings,omitempty"`
-	Pause    *uiPauseJSON    `json:"pause,omitempty"`
-	Loading  *uiLoadingJSON  `json:"loading,omitempty"`
-	Debug    *uiDebugJSON    `json:"debug,omitempty"`
+	Game     *client.UIGameState `json:"game,omitempty"`
+	Phase    string              `json:"phase"`
+	Menu     *uiMenuJSON         `json:"menu,omitempty"`
+	Settings *uiSettingsJSON     `json:"settings,omitempty"`
+	Pause    *uiPauseJSON        `json:"pause,omitempty"`
+	Loading  *uiLoadingJSON      `json:"loading,omitempty"`
+	Debug    *uiDebugJSON        `json:"debug,omitempty"`
 	// Hud 是游戏相位 hud 分节的下行载荷原文,由推送纪律层 marshal 产出;整份
 	// 文档路径回填最近一次下行的载荷,避免把前端已呈现的 HUD 清成缺席。
 	Hud json.RawMessage `json:"hud,omitempty"`
@@ -147,6 +148,9 @@ func (phase MenuPhase) uiPhase() string {
 // 下行的 hud 分节。
 func (a *Application) buildUIState() uiStateJSON {
 	state := uiStateJSON{Phase: a.menu.phase.uiPhase()}
+	if a.hudPushPhaseWindow() && !a.clientSessionClosed {
+		state.Game = a.buildGameUIState()
+	}
 	if a.hudPushInWindow && len(a.pushedHUDSection) != 0 {
 		state.Hud = json.RawMessage(a.pushedHUDSection)
 	}
@@ -374,6 +378,8 @@ func (a *Application) syncHUDPushWindow() {
 // 丢弃尚未冲刷的脏标记与已下行基线,并清空本帧派生的呈现快照。回到游戏相位后
 // 的第一次冲刷由 `syncHUDPushWindow` 的进入分支保证无条件下行。
 func (a *Application) resetHUDStatePush() {
+	a.invalidateGameView()
+	a.gameCursorFree = false
 	a.hudPush.Reset()
 	a.pushedHUDSection = nil
 	a.hudPushInWindow = false
@@ -428,29 +434,37 @@ func (a *Application) pushUIStateIfChanged() {
 	}
 	a.syncHUDPushWindow()
 	if a.menu.phase == MenuPhaseGame && !a.panelVisible() && !a.clientSessionClosed &&
-		a.pushedUIDocumentPhase == MenuPhaseGame {
+		a.pushedUIDocumentPhase == MenuPhaseGame && !a.gameUIDirty {
 		return
 	}
 	a.pushUIStateDocument(a.marshalUIStateDocument(nil))
+	a.gameUIDirty = false
 }
 
 // assembleHUDState 从已确认镜像组装 hud 分节。它只在纪律层确要下行时求值:
 // 「镜像值 → 语义字段」的换算全部委托 `packages/client/client` 的构造器,本函数不解释
 // 字段语义、不预测任何权威状态。
 func (a *Application) assembleHUDState() client.UIHudState {
+	// `ContentSize` 与 WebView CSS 像素同为逻辑点；世界帧缓冲仍使用物理像素。
+	// 无窗口的离屏夹具沿用其设计尺寸，不会挂载 WebView。
+	width, height := a.frameWidth, a.frameHeight
+	if a.window != nil {
+		width, height = a.window.ContentSize()
+	}
+	viewport := client.NewUIHudViewport(uint32(max(0, width)), uint32(max(0, height)))
 	// 会话已关闭：旧会话的镜像不再下行（与断线隐藏常显 HUD 的既有语义一致），
 	// 只保留 viewport 让前端安全降级为不呈现。Predictor 不随断线复位（新会话
 	// 在装配时整体重建），因此这里必须显式拦截陈旧确认值。
 	if a.clientSessionClosed {
 		return client.UIHudState{
-			Viewport: client.NewUIHudViewport(uint32(a.frameWidth), uint32(a.frameHeight)),
+			Viewport: viewport,
 		}
 	}
 	state := client.UIHudState{
-		Viewport: client.NewUIHudViewport(uint32(a.frameWidth), uint32(a.frameHeight)),
+		Viewport: viewport,
 	}
 	if hotbar, confirmed := a.inventory.Hotbar(); confirmed {
-		state.Hotbar = client.NewUIHudHotbar(hotbar)
+		state.Hotbar = client.NewUIHudHotbar(hotbar, &a.itemIcons)
 	}
 	if health, ready := a.predictor.Health(); ready {
 		state.Health = client.NewUIHudHealth(health)

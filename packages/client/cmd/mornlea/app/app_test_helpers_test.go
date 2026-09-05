@@ -70,13 +70,13 @@ func newInteractiveTestApplication(
 	clientEndpoint, serverEndpoint := network.NewMemoryPair(8)
 	t.Cleanup(func() { _ = clientEndpoint.Close() })
 	return &Application{
-		clientEndpoint:  clientEndpoint,
-		receiver:        client.NewReceiver(clientEndpoint, 8),
-		mirror:          client.NewMirror(),
-		itemDrops:       client.NewItemDrops(),
-		inventorySource: -1,
-		predictor:       client.NewPredictor(),
-		serverCancel:    func() {},
+		clientEndpoint: clientEndpoint,
+		receiver:       client.NewReceiver(clientEndpoint, 8),
+		mirror:         client.NewMirror(),
+		itemDrops:      client.NewItemDrops(),
+
+		predictor:    client.NewPredictor(),
+		serverCancel: func() {},
 	}, serverEndpoint
 }
 func sendInteractiveServerMessage(
@@ -155,4 +155,21 @@ func audioPlayerState(tick uint64, health, hunger uint8, reset bool) network.Pla
 		ServerTick: tick, Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 10, 0.5},
 		OnGround: true, Ready: true, Reset: reset, Health: health, Hunger: hunger,
 	}
+}
+
+// gameTestAction 保留真实视图身份与生产守卫，测试只提供语义操作。
+func gameTestAction(a *Application, op, area string, index int) {
+	a.handleGameAction(client.UIGameAction{Token: a.buildGameUIState().Token, Op: op, Area: area, Index: index})
+}
+
+type gameEventDrainer struct {
+	events []client.UIEvent
+	drains int
+}
+
+func (d *gameEventDrainer) DrainUIEvents() []client.UIEvent {
+	d.drains++
+	events := d.events
+	d.events = nil
+	return events
 }

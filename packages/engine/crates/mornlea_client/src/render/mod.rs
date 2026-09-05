@@ -2858,6 +2858,69 @@ mod entity_tests {
             vec![0u8; (entity::AVATAR_MAX_INSTANCES + 1) * entity::ENTITY_INSTANCE_BYTES];
         assert_eq!(renderer.render_frame(&oversized), FrameResult::Invalid);
     }
+
+    /// 物品图层正视仍显示完整轮廓，侧视时四个窄面全丢弃；紧邻范围外的世界
+    /// 材质在同一侧视几何上仍可见，证明共享 shader 没有改变其他实体分支。
+    #[test]
+    fn item_icon_flake_renders_broad_faces_without_card_edges() {
+        let Some(mut renderer) = renderer_or_skip_pub(64, 64) else {
+            return;
+        };
+        let bytes_per_layer: usize = (0..super::ATLAS_MIPS)
+            .map(|m| {
+                let s = (super::ATLAS_TEX_SIZE >> m).max(1) as usize;
+                s * s * 4
+            })
+            .sum();
+        assert!(renderer.upload_atlas(112, &vec![192u8; bytes_per_layer * 112]));
+
+        let empty = empty_frame_pub();
+        assert_eq!(renderer.render_frame(&empty), FrameResult::Rendered);
+        let mut base = vec![0u8; 64 * 64 * 4];
+        assert!(renderer.readback(&mut base));
+
+        let instance = |material: u32, side_view: bool| {
+            let mut bytes = [0u8; entity::ENTITY_INSTANCE_BYTES];
+            let matrix = if side_view {
+                [
+                    0.0f32, 0.0, -0.8, 0.0, 0.0, 0.8, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5,
+                    1.0,
+                ]
+            } else {
+                [
+                    0.8f32, 0.0, 0.0, 0.0, 0.0, 0.8, 0.0, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.5,
+                    1.0,
+                ]
+            };
+            for (index, value) in matrix.into_iter().enumerate() {
+                bytes[index * 4..index * 4 + 4].copy_from_slice(&value.to_le_bytes());
+            }
+            bytes[76..80].copy_from_slice(&1.0f32.to_le_bytes());
+            bytes[80..84].copy_from_slice(&material.to_le_bytes());
+            bytes
+        };
+
+        let mut front = empty_frame_pub();
+        front.drop_instances = instance(81, false).to_vec();
+        assert_eq!(renderer.render_frame(&front), FrameResult::Rendered);
+        let mut front_pixels = vec![0u8; 64 * 64 * 4];
+        assert!(renderer.readback(&mut front_pixels));
+        assert_ne!(front_pixels, base, "物品图层的 ±Z 大面必须可见");
+
+        let mut item_side = empty_frame_pub();
+        item_side.drop_instances = instance(81, true).to_vec();
+        assert_eq!(renderer.render_frame(&item_side), FrameResult::Rendered);
+        let mut item_side_pixels = vec![0u8; 64 * 64 * 4];
+        assert!(renderer.readback(&mut item_side_pixels));
+        assert_eq!(item_side_pixels, base, "物品图层侧视不得留下卡片窄边");
+
+        let mut world_side = empty_frame_pub();
+        world_side.drop_instances = instance(0, true).to_vec();
+        assert_eq!(renderer.render_frame(&world_side), FrameResult::Rendered);
+        let mut world_side_pixels = vec![0u8; 64 * 64 * 4];
+        assert!(renderer.readback(&mut world_side_pixels));
+        assert_ne!(world_side_pixels, base, "范围外世界材质侧面必须保持可见");
+    }
 }
 
 #[cfg(test)]

@@ -1,3 +1,4 @@
+import { parseGame, validateGameAction, type GameState, type GameAction } from "./game";
 // 类型化桥 client：下行 `window.mornlea.onState` 注入点 + 上行事件 postMessage
 // 封装。协议形状以单源 `schema.json` 为权威（JSON Schema 草案 2020-12）；本文件
 // 的 TS 类型与守卫函数按 schema 手写钉值，由 schema.test.ts 用 ajv 对同一份
@@ -96,7 +97,7 @@ export interface DebugState {
   readonly rows: readonly DebugRow[];
 }
 
-/** framebuffer 像素尺寸：单一比例缩放变量 `--hud-scale` 的唯一窗口输入。 */
+/** CSS 逻辑像素尺寸（窗口 `ContentSize`）：单一比例缩放变量 `--hud-scale` 的唯一窗口输入。 */
 export interface HudViewport {
   readonly width: number;
   readonly height: number;
@@ -107,6 +108,8 @@ export interface HudSlot {
   readonly item: number;
   readonly count: number;
   readonly durability?: number;
+  readonly name?: string;
+  readonly icon?: string;
 }
 
 /** 快捷栏镜像：恰九格，格序即栏位序。 */
@@ -174,6 +177,7 @@ export interface UIState {
   readonly loading?: LoadingState;
   readonly debug?: DebugState;
   readonly hud?: HudState;
+ readonly game?: GameState;
 }
 
 export interface ActionEvent {
@@ -195,7 +199,7 @@ export type DebugEditEvent =
     }
   | { readonly type: "debug-edit"; readonly op: "edit-value" | "confirm"; readonly value: string };
 
-export type UplinkEvent = ActionEvent | SettingsChangeEvent | DebugEditEvent;
+export type UplinkEvent = ActionEvent | SettingsChangeEvent | DebugEditEvent | GameAction;
 
 export interface UplinkEnvelope {
   readonly v: 1;
@@ -517,16 +521,22 @@ function parseHudViewport(raw: unknown, context: string): HudViewport {
   };
 }
 
-function parseHudSlot(raw: unknown, context: string): HudSlot {
+export function parseHudSlot(raw: unknown, context: string): HudSlot {
   const record = asRecord(raw, context);
   // durability 是可选键：部分磨损工具才携带；未知键仍按 additionalProperties 拒绝。
-  requireKeys(record, ["item", "count"], context, ["durability"]);
+  requireKeys(record, ["item", "count"], context, ["durability", "name", "icon"]);
   const slot: Writable<HudSlot> = {
     item: requireInteger(record, "item", 0, MAX_ITEM_ID, context),
     count: requireInteger(record, "count", 0, MAX_STACK_COUNT, context),
   };
   if ("durability" in record) {
     slot.durability = requireRatio(record, "durability", context);
+  }
+  if ("name" in record) slot.name = requireString(record,"name",64,context);
+  if ("icon" in record) {
+    const icon = requireString(record,"icon",65536,context);
+    if (!/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(icon)) throw new BridgeProtocolError("非法物品图像");
+    slot.icon = icon;
   }
   return slot;
 }
@@ -632,7 +642,7 @@ function parseHud(record: RecordLike): HudState {
 /** parseState 收口一行下行状态：违约即抛 `BridgeProtocolError`，不产出部分可信对象。 */
 export function parseState(raw: unknown): UIState {
   const state = asRecord(raw, "uiState");
-  requireKeys(state, ["phase", "menu", "settings", "pause", "loading", "debug", "hud"], "uiState");
+  requireKeys(state, ["phase", "menu", "settings", "pause", "loading", "debug", "hud", "game"], "uiState");
   return {
     phase: requireEnum(state, "phase", PHASES, "uiState"),
     menu: state.menu === undefined ? undefined : parseMenu(asRecord(state.menu, "menu")),
@@ -642,6 +652,7 @@ export function parseState(raw: unknown): UIState {
     loading:
       state.loading === undefined ? undefined : parseLoading(asRecord(state.loading, "loading")),
     debug: state.debug === undefined ? undefined : parseDebug(asRecord(state.debug, "debug")),
+    game: state.game === undefined ? undefined : parseGame(state.game),
     hud: state.hud === undefined ? undefined : parseHud(asRecord(state.hud, "hud")),
   };
 }
@@ -654,6 +665,7 @@ export function createEnvelope(events: readonly UplinkEvent[]): UplinkEnvelope {
   if (events.length > MAX_EVENTS_PER_BATCH) {
     throw new BridgeProtocolError(`上行事件批超过 ${MAX_EVENTS_PER_BATCH} 条上界`);
   }
+  for (const event of events) { if (event.type === "game-action") validateGameAction(event); }
   return { v: 1, events: [...events] };
 }
 

@@ -444,7 +444,7 @@ func TestApplicationConstructionCreatesPanelWhenDevOn(t *testing.T) {
 }
 
 // Mutation killed: 未确认权威快捷栏时提交 HUD 段会改变段字节。
-func TestApplicationPreparesContainerHUDOnlyWhenConfirmed(t *testing.T) {
+func TestApplicationKeepsGPUPanelsEmptyWhenConfirmed(t *testing.T) {
 	glyphs := &IntegrationGlyphSource{}
 	app := newRemoteRenderApplication(t, glyphs)
 	if err := app.remotePlayers.Apply(RemoteSpawn(1, "Remote-1", 1, mgl32.Vec3{1, 2, 3})); err != nil {
@@ -468,8 +468,8 @@ func TestApplicationPreparesContainerHUDOnlyWhenConfirmed(t *testing.T) {
 		t.Fatalf("已确认快捷栏 RenderFrame=(%v,%v)", rendered, err)
 	}
 	// 常显层已迁 WebView：只有容器界面打开时 GPU 保留面才产生面板实例。
-	if _, quads, _ := app.hotbarRenderer.FrameStreams(); len(quads) == 0 {
-		t.Fatal("已确认且容器打开时没有产生容器保留面实例")
+	if _, quads, _ := app.hotbarRenderer.FrameStreams(); len(quads) != 0 {
+		t.Fatal("已确认且容器打开时不得产生 GPU 面板实例")
 	}
 
 	// 关闭容器界面：保留面回到零实例（快捷栏贴条等常显层不再由 GPU 呈现）。
@@ -630,3 +630,15 @@ func (w *zeroFramebufferWindow) ContentSize() (int, int)              { return 0
 func (w *zeroFramebufferWindow) SetContentSize(int, int)              {}
 func (w *zeroFramebufferWindow) CancelClose()                         {}
 func (w *zeroFramebufferWindow) Close()                               {}
+
+func TestCaptureEntityResetClearsPriorBursts(t *testing.T) {
+	app := &Application{}
+	drops := []render.ItemDrop{{ID: core.DropID{Dimension: core.Overworld, Generation: 1}, Block: core.BlockPos{}, Item: core.ItemStone}}
+	if got := app.entityEncoder.EncodeBreakBurstInstances(nil, 1, drops); len(got) == 0 {
+		t.Fatal("未装入粒子夹具")
+	}
+	app.ResetEntityPresentation()
+	if got := app.entityEncoder.EncodeBreakBurstInstances(nil, 2, nil); len(got) != 0 {
+		t.Fatal("抓帧清场残留前景粒子")
+	}
+}

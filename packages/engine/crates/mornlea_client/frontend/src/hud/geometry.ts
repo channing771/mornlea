@@ -1,5 +1,5 @@
 // HUD 呈现层 design 基准：与 `internal/render/hud` 的布局常量逐值同源
-// （design px）。Go 侧是布局与命中几何的唯一权威，这里只承担两件事——
+// （design px）。前端独占生产布局与语义命中，这里只承担两件事——
 // 单一比例 `--hud-scale` 的缩放分母（`DESIGN_WIDTH`/`DESIGN_HEIGHT`），以及
 // 状态格的语义解析（`resolve*Fill`，与 health.go/hunger.go/oxygen.go 的
 // 逐槽判定逐项平移）。`src/hud/hud.css` 消费的、与 Go 布局常量对应的
@@ -10,9 +10,9 @@
 // 断言消费」的常量——互钉断言是 `--hud-*` 令牌值的真实消费方，组件自身的
 // 尺寸全部经 CSS 令牌取得，不直接 import 这些数值。
 
-/** 视口尺寸：桥下行 `hud.viewport` 是唯一权威窗口输入（framebuffer 口径），
+/** 视口尺寸：桥下行 `hud.viewport` 是唯一权威窗口输入（窗口 `ContentSize` 的 CSS 逻辑像素口径），
  * 页面不读 `window` 尺寸参与缩放——resize 的呈现更新由 Go 随状态下行携带，
- * GPU 面板与 WebView 状态行因此共用同一份比例。 */
+ * 高 DPI 下物理帧缓冲尺寸不会被误用为 CSS 布局尺寸。 */
 export interface Viewport {
   readonly width: number;
   readonly height: number;

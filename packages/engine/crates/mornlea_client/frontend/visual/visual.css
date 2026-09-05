@@ -43,3 +43,11 @@
   align-items: center;
   gap: var(--hud-progress-track-gap);
 }
+.game-narrow-fixture { width:360px; height:640px; transform:translateZ(0); margin:auto; }
+
+.visual-items-all { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; padding: 24px; color: var(--text-on-panel); background: var(--panel-surface); }
+.visual-items-all figure { margin: 0; text-align: center; }
+.visual-items-all img { width: 64px; height: 64px; image-rendering: pixelated; }
+.visual-items-all figcaption { font-size: 12px; }
+
+.visual-column { color: var(--text-on-panel); }

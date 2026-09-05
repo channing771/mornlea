@@ -1,0 +1,71 @@
+.game-panel-overlay { position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center; padding:var(--game-small-gap); background:var(--game-scrim); box-sizing:border-box; }
+.game-panel { box-sizing:border-box; width:min(var(--game-panel-width),100%); max-height:var(--game-panel-height); overflow:auto; background:var(--game-surface); color:var(--text-on-panel); border:var(--game-border) solid var(--hud-slot-edge); border-radius:var(--game-panel-radius); box-shadow:var(--game-shadow); padding:var(--game-padding); }
+.game-panel-header { display:flex; justify-content:space-between; align-items:center; gap:var(--game-gap); }
+.game-panel h1 { font-size:var(--game-title); margin:0; }
+.game-panel h2 { font-size:var(--game-subtitle); margin:var(--game-gap) 0 var(--game-small-gap); }
+.game-panel h2 span,.game-panel p { color:var(--text-secondary-on-panel); }
+.game-eyebrow { font-size:var(--game-small-text); margin:0 0 var(--game-small-gap); }
+.game-close,.game-tabs button,.game-recipes button { font:inherit; color:var(--text-on-panel); background:var(--game-paper); border:var(--game-border) solid var(--panel-border); border-radius:var(--game-control-radius); padding:var(--game-small-gap); cursor:pointer; }
+.game-close { min-width:var(--game-slot-size); min-height:var(--game-slot-size); font-size:var(--game-title); }
+.game-tabs { display:flex; gap:var(--game-small-gap); margin-top:var(--game-gap); }
+.game-tabs button[aria-pressed=true],.game-recipes button[aria-pressed=true] { background:var(--accent-wash); border-color:var(--accent-sage-solid); }
+.game-panel-body { display:flex; flex-wrap:wrap; gap:var(--game-padding); }
+.game-panel-main { flex:1; min-width:0; }
+.game-slot-grid { display:grid; grid-template-columns:repeat(var(--game-columns),var(--game-slot-size)); gap:var(--game-small-gap); max-width:100%; padding:var(--game-small-gap) 0; overflow-x:auto; }
+.game-slot { position:relative; box-sizing:border-box; display:flex; align-items:center; justify-content:center; padding:0; width:var(--game-slot-size); height:var(--game-slot-size); border:var(--game-border) solid var(--hud-slot-edge); border-radius:var(--game-control-radius); background:var(--game-paper); box-shadow:0 var(--hud-slot-shadow-offset) var(--hud-slot-shadow-blur) var(--hud-slot-shadow); color:var(--text-on-panel); cursor:pointer; flex-shrink:0; }
+.game-slot:focus-visible,.game-close:focus-visible,.game-tabs button:focus-visible,.game-recipes button:focus-visible { outline:var(--game-border) solid var(--accent-sage-solid); outline-offset:var(--game-border); }
+.game-slot:hover:not(:disabled) { background:var(--accent-wash); }
+.game-slot[aria-pressed=true] { outline:var(--game-border) solid var(--accent-wheat-solid); outline-offset:var(--game-border); }
+.game-slot:disabled { cursor:default; }
+.game-item-icon { width:var(--game-icon-size); height:var(--game-icon-size); object-fit:contain; image-rendering:pixelated; pointer-events:none; }
+.game-item-placeholder { font-size:var(--game-subtitle); color:var(--text-secondary-on-panel); }
+.game-slot-count { position:absolute; right:var(--game-border); bottom:var(--game-border); font-size:var(--game-small-text); color:var(--text-on-panel); background:var(--game-surface); border-radius:var(--game-border); }
+.game-slot-durability { position:absolute; width:80%; height:var(--game-border); bottom:var(--game-border); accent-color:var(--accent-wheat-solid); }
+.game-tooltip { display:none; position:fixed; bottom:var(--game-gap); left:50%; transform:translateX(-50%); padding:var(--game-small-gap) var(--game-gap); background:var(--game-surface); border:var(--game-border) solid var(--hud-slot-edge); border-radius:var(--game-control-radius); color:var(--text-on-panel); z-index:30; font-size:var(--game-small-text); pointer-events:none; white-space:nowrap; }
+.game-slot:hover .game-tooltip,.game-slot:focus-visible .game-tooltip { display:block; }
+.game-crafting { display:flex; align-items:center; gap:var(--game-gap); }
+.game-crafting-arrow { font-size:var(--game-title); color:var(--accent-wheat-solid); }
+.game-output { background:var(--hud-slot-face-2); }
+.game-recipes { flex:0 1 var(--game-recipes-width); }
+.game-recipe-list { display:grid; gap:var(--game-small-gap); }
+.game-recipes button { display:flex; align-items:center; gap:var(--game-small-gap); font-size:var(--game-small-text); text-align:left; }
+.game-recipe-preview p { font-size:var(--game-small-text); }
+.game-preview-slot { cursor:default; }
+.game-panel-footer { display:flex; flex-wrap:wrap; justify-content:space-between; gap:var(--game-small-gap); margin-top:var(--game-padding); font-size:var(--game-small-text); color:var(--text-secondary-on-panel); }
+.game-furnace-progress { display:flex; gap:var(--game-gap); margin-top:var(--game-gap); }
+.game-furnace-progress label { display:grid; gap:var(--game-small-gap); font-size:var(--game-small-text); }
+.game-furnace-progress progress { max-width:100%; accent-color:var(--accent-wheat-solid); }
+.game-character { display:flex; flex-wrap:wrap; gap:var(--game-padding); align-items:center; padding:var(--game-padding) 0; }
+.game-character svg { width:var(--game-portrait-width); border-radius:var(--game-control-radius); }
+.game-character dl { display:flex; gap:var(--game-padding); }
+.game-character dd { margin:var(--game-small-gap) 0; }
+.game-portrait-paper { fill:var(--game-paper); }
+.game-portrait-shadow { fill:var(--hud-slot-shadow); }
+.game-portrait-skin { fill:var(--game-portrait-skin); }
+.game-portrait-hair { fill:var(--hud-slot-edge); }
+.game-portrait-shirt { fill:var(--accent-sage-solid); }
+.game-portrait-scarf { fill:var(--accent-wheat-solid); }
+.game-portrait-trousers { fill:var(--text-secondary-on-panel); }
+.game-free-cursor { position:fixed; inset:0; z-index:0; cursor:default; }
+.game-free-cursor p,.game-key-hint { position:fixed; top:var(--game-gap); left:50%; transform:translateX(-50%); padding:var(--game-small-gap) var(--game-gap); border-radius:var(--game-control-radius); background:var(--game-surface); color:var(--text-on-panel); font-size:var(--game-small-text); pointer-events:none; white-space:nowrap; }
+.game-key-hint { opacity:.8; }
+.game-panel-main { flex:1 1 var(--game-grid-width); max-width:100%; }
+.game-recipe-list button { min-height:var(--game-recipe-height); padding:var(--game-recipe-padding) var(--game-small-gap); }
+.game-recipe-list .game-item-icon { width:var(--game-recipe-icon); height:var(--game-recipe-icon); }
+.game-inventory-hotbar { margin-top:var(--game-gap); padding-top:var(--game-small-gap); border-top:var(--game-border) solid var(--panel-border); }
+.game-slot--selected { outline:var(--game-border) solid var(--accent-sage-solid); outline-offset:var(--game-border); background:var(--accent-wash); }
+.game-furnace-flow { display:flex; align-items:center; gap:var(--game-gap); }
+.game-furnace-column { display:flex; align-items:center; flex-direction:column; gap:var(--game-small-gap); color:var(--text-secondary-on-panel); font-size:var(--game-small-text); }
+.game-furnace-arrow { width:var(--game-flow-width); display:flex; align-items:center; flex-direction:column; gap:var(--game-small-gap); color:var(--accent-wheat-solid); font-size:var(--game-small-text); }
+.game-furnace-arrow > span:first-child { font-size:var(--game-title); }
+.game-flame,.game-flame svg { display:block; width:var(--game-flame-width); height:var(--game-flame-height); }
+.game-flame-track { fill:var(--slot-well); stroke:var(--panel-border); }
+.game-flame-fill { fill:var(--accent-wheat-solid); }
+.game-meter { width:100%; height:var(--game-meter-height); border-radius:var(--game-control-radius); overflow:hidden; background:var(--game-paper); border:var(--game-border) solid var(--panel-border); }
+.game-meter > span { display:block; height:100%; background:var(--accent-wheat-solid); }
+.game-panel--compact { width:min(var(--game-compact-width),100%); }
+.game-furnace-flow { padding-top:var(--game-gap); }
+/* 九列优先随面板缩放，极窄窗口低于最小点击尺寸后才横向滚动。 */
+.game-slot-grid { width:min(calc(var(--game-columns) * var(--game-slot-size) + (var(--game-columns) - 1) * var(--game-small-gap)),100%); grid-template-columns:repeat(var(--game-columns),minmax(var(--game-slot-min),1fr)); }
+.game-slot-grid > .game-slot { width:100%; height:auto; aspect-ratio:1; min-width:var(--game-slot-min); }
+.game-slot .game-item-icon { max-width:calc(100% - 2 * var(--game-border)); max-height:calc(100% - 2 * var(--game-border)); }

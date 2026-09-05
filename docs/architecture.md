@@ -59,7 +59,7 @@ engine C ABI 当前为 v10（v10 即 `MGW1` layout 3 的 15 材质 worldgen 请�
 
 ## 7. `mornlea_client` / client ABI v14
 
-`mornlea_client` 持有 Darwin 窗口与事件采集、进程内 WKWebView 菜单层、GPU 资源、shader、render pass、窗口 surface 和离屏渲染。窗口型 UI（主菜单/设置/暂停/F3）由内嵌的 Vite + TypeScript + React 前端经 WKWebView 呈现，资产经 `mornlea://` scheme handler 从 Rust 内嵌字节供给；生存 HUD 与容器等固定界面仍走既有 GPU quad 管线。Go 不导入 WebGPU 绑定，只通过 `packages/client/client` 提供的 client ABI bridge 使用窗口和 renderer 领域接口。
+`mornlea_client` 持有 Darwin 窗口与事件采集、进程内 WKWebView 菜单层、GPU 资源、shader、render pass、窗口 surface 和离屏渲染。窗口型 UI（主菜单/设置/暂停/F3）由内嵌的 Vite + TypeScript + React 前端经 WKWebView 呈现，资产经 `mornlea://` scheme handler 从 Rust 内嵌字节供给；常显 HUD、背包/合成、人物页、工作台、箱子、熔炉及 tooltip 同样由前端呈现，生产帧不再准备或提交面板 GPU 实例。`-connect` 是交互联机入口，首次下行即挂载同一前端；只有 capture/benchmark 保持无窗口、无 WebView。Go 不导入 WebGPU 绑定，只通过 `packages/client/client` 提供的 client ABI bridge 使用窗口和 renderer 领域接口。
 
 client C ABI 当前为 v14，并与 engine ABI 独立演进。它完整保留 v13 引入的 window composite capture、两段式容量查询与紧凑 top-down BGRA8 输出；菜单状态权威在 Go：下行 `ui_push_state` 在状态变化时向 WebView 推送 JSON 状态，上行 `drain_ui_events` 读出版本化 JSON 事件信封；桥协议形状由前端 `schema.json` 单源钉值。header、Rust FFI、`packages/client/client` bridge、版本和跨语言检查必须同步更新；失败或容量不足不能发布部分输出。
 

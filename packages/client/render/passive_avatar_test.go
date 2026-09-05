@@ -141,16 +141,13 @@ func TestPassiveAvatarLowersHeadWhenGrazing(t *testing.T) {
 	}
 }
 
-// TestAvatarSolidBranchesUseSentinelMaterial 锁定纯色分支的哨兵材质：玩家/
-// 伙伴/夜行者各部件传哨兵走原纯色路径，像素逐字节不变的新测试锁。
+// TestAvatarSolidBranchesUseSentinelMaterial 锁定夜行者保留纯色哨兵路径。
 func TestAvatarSolidBranchesUseSentinelMaterial(t *testing.T) {
 	avatars := []Avatar{
-		{Key: testEntityKey(testAvatarID(1))},
-		{Key: EntityKey{Kind: EntityCompanion, ID: [16]byte(testAvatarID(2))}},
 		{Key: HostileEntityKey(9)},
 	}
 	parts := buildAvatarParts(nil, avatars)
-	if got, want := len(parts), 3*avatarPartsPerBody; got != want {
+	if got, want := len(parts), avatarPartsPerBody; got != want {
 		t.Fatalf("parts=%d want=%d", got, want)
 	}
 	for index, part := range parts {
@@ -181,7 +178,7 @@ func TestAvatarInstanceLayoutIs96Bytes(t *testing.T) {
 	if got, want := len(stream), 450*96; got != want {
 		t.Fatalf("实例流=%d bytes，想要 450×96=%d", got, want)
 	}
-	// 首个纯色实例：颜色逐字节可解，材质为哨兵，保留区全零。
+	// 首个人物实例：颜色逐字节可解，材质指向人物分面，保留区全零。
 	base := AvatarColor(testAvatarID(1))
 	head := avatarShade(base, 1.12)
 	for index, want := range head {
@@ -189,8 +186,8 @@ func TestAvatarInstanceLayoutIs96Bytes(t *testing.T) {
 			t.Fatalf("首实例颜色通道 %d=%v，想要 %v", index, got, want)
 		}
 	}
-	if got := binary.LittleEndian.Uint32(stream[80:]); got != avatarMaterialSolid {
-		t.Fatalf("首实例材质=%d，想要哨兵 %d", got, avatarMaterialSolid)
+	if got := binary.LittleEndian.Uint32(stream[80:]); got != parts[0].material {
+		t.Fatalf("首实例材质=%d，想要人物层 %d", got, parts[0].material)
 	}
 	for offset := 84; offset < 96; offset++ {
 		if stream[offset] != 0 {

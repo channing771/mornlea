@@ -203,6 +203,7 @@ func runGamePhase(app *Application) error {
 	panelToggleWasDown := false
 	enterWasDown := false
 	backspaceWasDown := false
+	tabWasDown := false
 	var input client.InputState
 	// `textInputBuffer` 与 `chatInput.runes` 同以 `companion.MaxPlanCommandBytes`
 	// 为界（M5E 递延 2 的清偿，E7 同源化收口）：rune 编码后每字符至少 1 字节，
@@ -317,6 +318,22 @@ func runGamePhase(app *Application) error {
 			}
 		}
 		pausedUI := app.pauseVisible()
+		// 游戏桥每帧都排空；调试事件另外保留给既有编辑器。
+		var gameUIEvents []client.UIEvent
+		if !pausedUI {
+			capturedBeforeEvents := app.window.CursorCaptured()
+			gameUIEvents = app.drainGameUIEvents(app.renderer)
+			if !capturedBeforeEvents && app.window.CursorCaptured() {
+				justCaptured = true
+				lastMouseX, lastMouseY = app.window.CursorPos()
+				input = client.InputState{}
+			}
+		}
+		tabDown := app.window.KeyDown(client.KeyTab)
+		if tabDown && !tabWasDown && !pausedUI && !app.inventoryOpen && !app.chatInput.open && !app.panelVisible() {
+			app.setGameCursorFree(!app.gameCursorFree)
+		}
+		tabWasDown = tabDown
 
 		// 调试面板：F3 边沿仍由 Go 检测；选中/编辑/确认/取消/关闭经桥上行
 		// 事件回传，这里按序消费并同步运行时快照。面板不存在时
@@ -328,7 +345,7 @@ func runGamePhase(app *Application) error {
 			keys := panelKeys{Toggle: !panelBlocked && toggleDown && !panelToggleWasDown}
 			panelToggleWasDown = toggleDown
 			app.panel.handleKeys(keys)
-			events := decodeDebugPanelEvents(app.renderer.DrainUIEvents())
+			events := decodeDebugPanelEvents(gameUIEvents)
 			if len(events) != 0 && app.panel.applyPanelEvents(events, app.remote()) {
 				app.applyPanelChange()
 			}
@@ -358,7 +375,7 @@ func runGamePhase(app *Application) error {
 
 		clickDown := app.window.PrimaryButtonDown()
 		if clickDown && !clickWasDown && !app.window.CursorCaptured() &&
-			!pausedUI && !app.inventoryOpen && !app.chatInput.open {
+			!pausedUI && !app.inventoryOpen && !app.chatInput.open && !app.gameCursorFree {
 			app.window.SetCursorCaptured(true)
 			lastMouseX, lastMouseY = app.window.CursorPos()
 			justCaptured = true
@@ -390,11 +407,6 @@ func runGamePhase(app *Application) error {
 				lastMouseX, lastMouseY = app.window.CursorPos()
 			}
 		}
-		if app.inventoryOpen && actions.Click {
-			width, height := app.FramebufferSize()
-			cursorX, cursorY := app.window.CursorPos()
-			app.clickInventorySlot(cursorX, cursorY, uint32(width), uint32(height))
-		}
 
 		movement := client.MovementFromKeys(
 			app.window.KeyDown(client.KeyW),
@@ -403,7 +415,7 @@ func runGamePhase(app *Application) error {
 			app.window.KeyDown(client.KeyD),
 			app.window.KeyDown(client.KeySpace),
 		)
-		if app.inventoryOpen || chatBlockedThisFrame || pausedUI || app.panelVisible() {
+		if app.inventoryOpen || app.gameCursorFree || chatBlockedThisFrame || pausedUI || app.panelVisible() {
 			// 界面打开时持续发送中性输入，避免服务端沿用上一帧移动；
 			// 面板可见时游戏键整体捕获（spec「游戏键 MUST NOT 产生上行」）。
 			// 暂停期同理：本地权威冻结期间不产生任何玩法上行。

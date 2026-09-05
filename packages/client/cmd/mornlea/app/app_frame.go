@@ -203,31 +203,6 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	} else if err := a.nameTagRenderer.Prepare(tags, a.scheduler.UploadBudget()); err != nil {
 		return false, fmt.Errorf("准备世界名牌: %w", err)
 	}
-	inventory, inventoryConfirmed := a.inventory.State()
-	// 合成视图只画最后确认的权威网格；未确认时传 nil，HUD 按空的个人 2×2
-	// 呈现——3×3 工作台视图只在收到尺寸 3 的权威状态后出现，绝不预测。
-	var craftingOverlay *hud.CraftingOverlay
-	if crafting, confirmed := a.crafting.State(); confirmed {
-		craftingOverlay = &hud.CraftingOverlay{
-			Size:   crafting.Size,
-			Slots:  crafting.Slots,
-			Output: crafting.Output,
-		}
-	}
-	var overlay *hud.FurnaceOverlay
-	if furnace, opened := a.furnace.State(); opened {
-		overlay = &hud.FurnaceOverlay{
-			Input:         furnace.Input,
-			Fuel:          furnace.Fuel,
-			Output:        furnace.Output,
-			ProgressTicks: furnace.ProgressTicks,
-			BurnTicks:     furnace.BurnTicks,
-		}
-	}
-	var chestOverlay *hud.ChestOverlay
-	if chest, opened := a.chest.State(); opened {
-		chestOverlay = &hud.ChestOverlay{Items: chest.Items}
-	}
 	// 生命值、氧气与饥饿值由 hud 分节组装路径直接读取权威确认镜像（见
 	// `assembleHUDState`），GPU 保留面不再消费它们。饥饿值例外：进食输入位的
 	// 派生需要权威确认的未满判断。
@@ -237,26 +212,6 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	// WebView 组件呈现。
 	a.framePopup = a.updateItemPopup()
 	a.markHUDPresentationChanges(hunger, hungerReady)
-	// 容器悬停 tooltip：界面打开时把本帧指针坐标传入渲染层，与点击命中同一
-	// 坐标源（`window.CursorPos`）；无头路径 window 为 nil，恒为无效输入，
-	// 零实例。
-	tooltip := hud.TooltipOverlay{}
-	if a.inventoryOpen && a.window != nil {
-		cursorX, cursorY := a.window.CursorPos()
-		tooltip = hud.TooltipOverlay{Valid: true, CursorX: cursorX, CursorY: cursorY}
-	}
-	// 容器保留面只在「有已装配世界且物品镜像已确认」时准备：常显层已迁
-	// WebView，关闭容器界面时 GPU 保留面零实例。
-	hudVisible := a.menuHUDVisible() && inventoryConfirmed
-	if hudVisible {
-		if err := a.hotbarRenderer.Prepare(
-			inventory, inventoryConfirmed, a.inventoryOpen, a.inventorySource, craftingOverlay, overlay, chestOverlay,
-			tooltip,
-			uint32(width), uint32(height), a.scheduler.UploadBudget(),
-		); err != nil {
-			return false, fmt.Errorf("准备容器保留面 HUD: %w", err)
-		}
-	}
 	// 相位窗口先同步再冲刷：进入游戏相位的当帧就能携带首次 hud 下行（同步是
 	// 幂等的边界检测，`pushUIStateIfChanged` 里会再判一次）。hud 分节在权威
 	// tick 边界冲刷，脏标记由镜像确认、采掘/进食推进、弹条窗口与 marker 武装/
@@ -360,10 +315,7 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		renderTiming.recordNameTag(nameTagDuration + renderNow().Sub(started))
 	}
 	var hudSegment []byte
-	if hudVisible {
-		hudViewport, hudQuads, hudGlyphs := a.hotbarRenderer.FrameStreams()
-		hudSegment = client.EncodeQuadSegment(hudViewport, hudQuads, hudGlyphs, 48)
-	}
+
 	rendered := a.renderer.RenderFrame(client.RenderFrame{
 		ViewProj:         viewProj,
 		ViewProjInv:      viewProjInv,

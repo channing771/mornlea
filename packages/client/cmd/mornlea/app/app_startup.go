@@ -126,6 +126,10 @@ func NewWithDependencies(
 	if registryErr != nil {
 		return nil, fmt.Errorf("加载材质包 %q: %w", options.ResolvedTexturePackPath, registryErr)
 	}
+	itemIcons, itemIconErr := newItemIconCatalog(reg)
+	if itemIconErr != nil {
+		return nil, fmt.Errorf("构建物品图标目录: %w", itemIconErr)
+	}
 	ctx := context.Background()
 	var store storage.WorldStore
 	var clientEndpoint network.ClientEndpoint
@@ -283,32 +287,32 @@ func NewWithDependencies(
 		appMenuPhase = MenuPhaseMenu
 	}
 	app := &Application{
-		window:          window,
-		renderer:        rustRenderer,
-		frameWidth:      width,
-		frameHeight:     height,
-		clientEndpoint:  clientEndpoint,
-		receiver:        receiver,
-		server:          running,
-		host:            host,
-		serverCancel:    serverCancel,
-		serverDone:      serverDone,
-		mirror:          client.NewMirror(),
-		itemDrops:       client.NewItemDrops(),
-		inventorySource: -1,
-		predictor:       client.NewPredictor(),
-		remotePlayers:   client.NewRemotePlayers(),
-		companions:      &client.Companions{},
-		hostiles:        &client.Hostiles{},
-		passives:        &client.Passives{},
-		chatEvents:      &client.ChatEvents{},
-		remoteNameTags:  make([]render.NameTag, 0, MaxFrameNameTags),
-		camera:          camera,
-		center:          CameraChunk(camera.Pos),
-		loadedChunks:    make(map[core.ChunkPos]struct{}),
-		ticks:           ticks,
-		saves:           saves,
-		render:          options.Render,
+		window:         window,
+		renderer:       rustRenderer,
+		frameWidth:     width,
+		frameHeight:    height,
+		clientEndpoint: clientEndpoint,
+		receiver:       receiver,
+		server:         running,
+		host:           host,
+		serverCancel:   serverCancel,
+		serverDone:     serverDone,
+		mirror:         client.NewMirror(),
+		itemDrops:      client.NewItemDrops(),
+		itemIcons:      itemIcons,
+		predictor:      client.NewPredictor(),
+		remotePlayers:  client.NewRemotePlayers(),
+		companions:     &client.Companions{},
+		hostiles:       &client.Hostiles{},
+		passives:       &client.Passives{},
+		chatEvents:     &client.ChatEvents{},
+		remoteNameTags: make([]render.NameTag, 0, MaxFrameNameTags),
+		camera:         camera,
+		center:         CameraChunk(camera.Pos),
+		loadedChunks:   make(map[core.ChunkPos]struct{}),
+		ticks:          ticks,
+		saves:          saves,
+		render:         options.Render,
 		benchmarkTransport: func() string {
 			if options.BenchmarkTransport == "" {
 				return "memory"

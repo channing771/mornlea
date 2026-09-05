@@ -14,6 +14,9 @@ go.work 成员）。更具体的边界见各子目录 `AGENTS.md`：
 - `client` 持有只读权威镜像、输入预测、消息接收、client ABI bridge 和渲染侧 CPU 编排，不成为第二个权威模拟器。
 - `render`（含 `hud`）、`mesh`、`lod`、`assets`、`audio` 持有呈现侧数据描述、CPU 编码与平台桥接职责。
 - `cmd/mornlea` 是图形客户端应用入口（薄 main 加 app/capture/benchmark/devcapture 四个功能域子包）。
+- `assets.Registry` 持有全注册物品的 16×16 RGBA 只读图标缓存；完整方块从当前
+  顶面/侧面材质生成等距小方块，透明轮廓物品同时占 atlas 追加层供世界薄片采样。
+  原创建图与 contact sheet 入口见 `assets/ITEM_ICONS.md`。
 
 ## 依赖边界
 

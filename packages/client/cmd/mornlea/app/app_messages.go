@@ -97,7 +97,6 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 				if a.containerOpen() {
 					a.clearContainerUI()
 				} else {
-					a.inventorySource = -1
 				}
 			}
 			if result.ResetView {
@@ -115,6 +114,7 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			continue
 		}
 		if state, ok := message.(network.InventoryState); ok {
+			a.gameUIDirty = true
 			if err := a.inventory.Apply(state); err != nil {
 				a.CloseClientSession(err)
 				return
@@ -134,6 +134,7 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			continue
 		}
 		if state, ok := message.(network.FurnaceState); ok {
+			a.gameUIDirty = true
 			previous, opened := a.furnace.Ref()
 			if err := a.furnace.Apply(state); err != nil {
 				a.CloseClientSession(err)
@@ -146,7 +147,6 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			// 否则两个镜像会同时报告 opened，点击分流会用错容器。
 			a.chest.Reset()
 			if !opened || previous != state.Furnace {
-				a.inventorySource = -1
 			}
 			a.inventoryOpen = true
 			if a.window != nil {
@@ -155,6 +155,7 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			continue
 		}
 		if state, ok := message.(network.ChestState); ok {
+			a.gameUIDirty = true
 			previous, opened := a.chest.Ref()
 			if err := a.chest.Apply(state); err != nil {
 				a.CloseClientSession(err)
@@ -163,7 +164,6 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			a.hudPush.Mark()
 			a.furnace.Reset()
 			if !opened || previous != state.Chest {
-				a.inventorySource = -1
 			}
 			a.inventoryOpen = true
 			if a.window != nil {
@@ -172,6 +172,7 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			continue
 		}
 		if state, ok := message.(network.CraftingState); ok {
+			a.gameUIDirty = true
 			previous, confirmed := a.crafting.State()
 			if err := a.crafting.Apply(state); err != nil {
 				a.CloseClientSession(err)
@@ -185,7 +186,6 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 				// 结束既有容器查看关系（sim 侧语义），镜像同步互斥。
 				a.furnace.Reset()
 				a.chest.Reset()
-				a.inventorySource = -1
 				a.inventoryOpen = true
 				if a.window != nil {
 					a.window.SetCursorCaptured(false)

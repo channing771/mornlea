@@ -81,6 +81,24 @@ pub const HUD_HOTBAR: &str = include_str!("../../shaders/hotbar.wgsl");
 mod tests {
     use super::*;
 
+    #[test]
+    fn human_material_faces_are_isolated_from_existing_entities() {
+        assert!(AVATAR.contains("material >= 112u && material < 160u"));
+        assert!(AVATAR.contains("return material + face;"));
+        assert!(AVATAR.contains("out.material = avatar_face_material(instance.material, face);"));
+        assert!(AVATAR.contains("default: { return vec2f(local.x + 0.5, 0.5 - local.y); }"));
+    }
+
+    /// 物品薄片只保留本地 ±Z 大面；材质边界严格夹在牛头层之后、人物层之前，
+    /// 避免把方块、牛、人物或纯色粒子的窄面一并丢弃。
+    #[test]
+    fn item_icon_materials_discard_only_narrow_faces() {
+        assert!(AVATAR.contains("fn item_icon_material(material: u32) -> bool"));
+        assert!(AVATAR.contains("material >= 81u && material < 112u"));
+        assert!(AVATAR.contains("@location(5)       face:     u32"));
+        assert!(AVATAR.contains("if (item_icon_material(in.material) && in.face < 4u)"));
+    }
+
     /// 单源存在性:路径失效或文件清空都必须在编译/测试期暴露。
     #[test]
     fn shaders_are_nonempty_and_have_entry_points() {

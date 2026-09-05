@@ -127,7 +127,52 @@ fn parse_envelope_events(bytes: &[u8]) -> Result<Vec<serde_json::Value>, Envelop
     if events.is_empty() || events.iter().any(|event| !event.is_object()) {
         return Err(EnvelopeError::Events);
     }
+    if events.iter().any(|event| {
+        event.get("type").and_then(|v| v.as_str()) == Some("game-action")
+            && !valid_game_action(event)
+    }) {
+        return Err(EnvelopeError::Events);
+    }
     Ok(events.clone())
+}
+
+/// 游戏上行先在原生桥拒绝额外字段与越界索引，Go 再校验视图身份。
+fn valid_game_action(event: &serde_json::Value) -> bool {
+    let Some(object) = event.as_object() else {
+        return false;
+    };
+    let token = event.get("token").and_then(|v| v.as_u64());
+    if !token.is_some_and(|v| v > 0 && v <= 9_007_199_254_740_991) {
+        return false;
+    }
+    let mut keys = vec!["type", "token", "op"];
+    let limit = match event.get("op").and_then(|v| v.as_str()) {
+        Some("close" | "capture" | "inventory" | "character" | "take-output") => None,
+        Some("hotbar") => Some(8),
+        Some("recipe") => Some(9),
+        Some("slot") => {
+            keys.push("area");
+            match event.get("area").and_then(|v| v.as_str()) {
+                Some("inventory") => Some(35),
+                Some("crafting") => Some(8),
+                Some("chest") => Some(26),
+                Some("furnace") => Some(2),
+                _ => return false,
+            }
+        }
+        _ => return false,
+    };
+    if let Some(limit) = limit {
+        keys.push("index");
+        if !event
+            .get("index")
+            .and_then(|v| v.as_u64())
+            .is_some_and(|v| v <= limit)
+        {
+            return false;
+        }
+    }
+    object.len() == keys.len() && keys.iter().all(|key| object.contains_key(*key))
 }
 
 /// 跨线程共享的队列句柄:WebKit 回调(主线程)与渲染器排空(同一主线程)
@@ -376,5 +421,23 @@ mod tests {
         // type 枚举必须非空且首项为 action(协议形状锚点)。
         let event_types = &schema["$defs"]["uplinkEvent"]["description"];
         assert!(event_types.is_string());
+    }
+}
+
+#[cfg(test)]
+mod game_action_tests {
+    use super::*;
+    #[test]
+    fn invalid_game_actions_never_enter_queue() {
+        for event in [
+            serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"inventory","index":36}),
+            serde_json::json!({"type":"game-action","token":1,"op":"close","index":0}),
+            serde_json::json!({"type":"game-action","token":0,"op":"close"}),
+        ] {
+            let mut queue = UiEventQueue::new();
+            let data = serde_json::to_vec(&serde_json::json!({"v":1,"events":[event]})).unwrap();
+            assert!(queue.enqueue_envelope(&data).is_err());
+            assert!(queue.is_empty());
+        }
     }
 }

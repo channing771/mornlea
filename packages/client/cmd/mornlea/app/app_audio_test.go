@@ -35,65 +35,39 @@ func (recorder audioCueRecorder) want(t *testing.T, cues ...audio.Cue) {
 
 func TestLocalAudioUIClicksOnlyForEffectiveActions(t *testing.T) {
 	app, endpoint := newInteractiveTestApplication(t)
+	app.menu.phase = MenuPhaseGame
 	var recorder audioCueRecorder
 	app.playCue = recorder.play
-	width, height := uint32(1280), uint32(720)
-
-	var inventory core.Inventory
-	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 4}
-	if err := app.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
+	if err := app.inventory.Apply(network.InventoryState{}); err != nil {
 		t.Fatal(err)
 	}
-	// 产物格取出是合成视图的有效界面动作：确认产物非空时单击即发送取出请求，
-	// 照常播点击 cue（recipe-click 发送路径已随格子工作台删除）。
-	crafting := network.CraftingState{Size: 2}
-	crafting.Output = core.ItemStack{Item: core.ItemStoneBrick, Count: 4}
+	crafting := network.CraftingState{Size: 2, Output: core.ItemStack{Item: core.ItemStoneBrick, Count: 4}}
 	if err := app.crafting.Apply(crafting); err != nil {
 		t.Fatal(err)
 	}
-	outputX, outputY := craftingOutputCenter(t, 2, width, height)
-	app.clickInventorySlot(outputX, outputY, width, height)
+	app.setInventoryOpen(true)
+	gameTestAction(app, "take-output", "", 0)
 	if _, ok := receiveInteractiveClientMessage(t, endpoint).(network.TakeCraftingOutput); !ok {
-		t.Fatal("产物格点击未发送 TakeCraftingOutput")
+		t.Fatal("缺少产物请求")
 	}
-
-	sourceX, sourceY := inventorySlotCenter(t, 1, width, height)
-	targetX, targetY := inventorySlotCenter(t, 2, width, height)
-	app.clickInventorySlot(sourceX, sourceY, width, height)
-	app.clickInventorySlot(sourceX, sourceY, width, height)
-	app.clickInventorySlot(sourceX, sourceY, width, height)
-	app.clickInventorySlot(targetX, targetY, width, height)
+	gameTestAction(app, "slot", "inventory", 1)
+	gameTestAction(app, "slot", "inventory", 1)
+	gameTestAction(app, "slot", "inventory", 1)
+	gameTestAction(app, "slot", "inventory", 2)
 	if _, ok := receiveInteractiveClientMessage(t, endpoint).(network.MoveInventoryStack); !ok {
-		t.Fatal("有效第二次点击未发送 MoveInventoryStack")
+		t.Fatal("缺少移动请求")
 	}
 	recorder.want(t, audio.CueUIClick, audio.CueUIClick, audio.CueUIClick, audio.CueUIClick, audio.CueUIClick)
-
-	app.clickInventorySlot(0, 0, width, height)
-	// 空产物格：网格不匹配任何配方，点击既不发送也不发声——本地不从「不可
-	// 取出」路径发声的纪律与旧 recipe-click 时代一致，权威拒绝在服务端。
 	if err := app.crafting.Apply(network.CraftingState{Size: 2}); err != nil {
 		t.Fatal(err)
 	}
-	app.clickInventorySlot(outputX, outputY, width, height)
-	app.inventorySource = core.FurnaceInputSlot
-	if err := app.furnace.Apply(network.FurnaceState{
-		Furnace: core.FurnaceRef{Dimension: core.Overworld, Generation: 1},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	outputSlotX, outputSlotY := furnaceSlotCenter(t, core.FurnaceOutputSlot, width, height)
-	app.clickInventorySlot(outputSlotX, outputSlotY, width, height)
-	_ = app.clientEndpoint.Close()
-	app.furnace.Reset()
-	app.inventorySource = 1
-	app.clickInventorySlot(targetX, targetY, width, height)
-	recorder.want(t, audio.CueUIClick, audio.CueUIClick, audio.CueUIClick,
-		audio.CueUIClick, audio.CueUIClick)
-
+	gameTestAction(app, "take-output", "", 0)
+	gameTestAction(app, "slot", "inventory", 36)
+	recorder.want(t, audio.CueUIClick, audio.CueUIClick, audio.CueUIClick, audio.CueUIClick, audio.CueUIClick)
 	silentApp, _ := newInteractiveTestApplication(t)
 	var silent audioCueRecorder
 	silentApp.playCue = silent.play
-	silentApp.clickInventorySlot(outputX, outputY, width, height)
+	gameTestAction(silentApp, "take-output", "", 0)
 	silent.want(t)
 }
 

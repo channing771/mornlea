@@ -33,7 +33,7 @@ type runDependencies struct {
 	runBenchmark   func(*application.Application, string) error
 	runCapture     func(*application.Application, string, bool) error
 	// `runMotionDemo` 只服务显式 motion 演示；普通 capture 与游戏不调用。
-	runMotionDemo func(*application.Application, string) error
+	runMotionDemo func(*application.Application, string, string) error
 	// `runGoldenUpdateControl` 只服务显式 baseline update；普通 capture 与游戏不调用。
 	runGoldenUpdateControl func(*application.Application, *application.Application, string) error
 }
@@ -49,8 +49,8 @@ func run(args []string) error {
 		runCapture: func(app *application.Application, dir string, updateGolden bool) error {
 			return capture.RunCapture(app, dir, updateGolden)
 		},
-		runMotionDemo: func(app *application.Application, outPath string) error {
-			return capture.RunBreakBurstMotion(app, outPath)
+		runMotionDemo: func(app *application.Application, outPath, scene string) error {
+			return capture.RunMotion(app, outPath, scene)
 		},
 		runGoldenUpdateControl: func(lodOn, lodOff *application.Application, dir string) error {
 			return capture.RunGoldenUpdateControl(lodOn, lodOff, dir)
@@ -181,7 +181,7 @@ func runWithDependencies(args []string, dependencies runDependencies) error {
 			return fmt.Errorf("启动 motion 演示抓帧: %w", err)
 		}
 		return errors.Join(
-			dependencies.runMotionDemo(motionApp, options.MotionDemoPath),
+			dependencies.runMotionDemo(motionApp, options.MotionDemoPath, options.MotionScene),
 			motionApp.Close(),
 		)
 	}

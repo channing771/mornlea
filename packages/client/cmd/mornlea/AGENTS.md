@@ -53,7 +53,7 @@ packages/client/cmd/mornlea/
 | 普通本地 | 无特殊 flag | 启动停留在主菜单，进入游戏后才打开存档、启动本地 Host 并登录；AI 模型设置只注入此模式 |
 | 远程联机 | `--connect` | 跳过本地 Host 与菜单延迟装配，经 TCP 连接并登录远程服务端；不携带 AI 运行时 |
 | 视觉抓帧 | `--capture`（可带 `--update-golden`） | 确定性内存世界加离屏 renderer，跑完 capture 包的固定场景表；不能与 `--benchmark`/`--connect` 同用 |
-| motion 演示 | `--motion-demo`（GIF 输出路径） | 与抓帧同源的无头装配，只跑 capture 包的 motion 演示入口（50 帧采掘生命周期 GIF 连抓）；不进场景表与比对，不能与其余无头/联机路径同用 |
+| motion 演示 | `--motion-demo`（GIF 输出路径） | 与抓帧同源的无头装配，只跑 capture 包的 motion 演示入口（由 `--motion-scene` 选择采掘、人物行走、掉落散开或密度过程的有界 GIF 连抓）；不进场景表与比对，不能与其余无头/联机路径同用 |
 | 性能场景 | `--benchmark` + `--perf-output` | 固定工作负载、`--benchmark-transport` 指定 transport 的无头观察者路径 |
 | 画面捕获（叠加项） | `--dev-capture`（可带 `--dev-capture-addr`） | 不是独立模式：叠加在普通本地/远程联机交互路径上，main 拉起 devcapture 的回环捕获服务并注入 `CaptureCoordinator`；与 `--benchmark`/`--capture` 互斥，服务启动失败仅告警降级、游戏照常运行 |
 
@@ -66,15 +66,15 @@ packages/client/cmd/mornlea/
 - capture 与 benchmark 都忽略用户材质覆盖（配置强制回落 `config.Defaults()`）、
   不创建交互窗口、也不请求音频设备。
 
-`--capture` 跑的固定场景表住 `capture/capture.go` 的 `captureScenes`（当前 22
+`--capture` 跑的固定场景表住 `capture/capture.go` 的 `captureScenes`（当前 24
 景，完整清单、顺序约束与尾序以 `captureScenes` 与 `capture/AGENTS.md` 为准，
 本总纲不复制会漂移的枚举）。常显 HUD（快捷栏贴条与选中框、状态行、氧气、
 进食轨道、物品名弹条、准星、聊天呈现与命中 marker）的 GPU 呈现已迁
 WebView 组件；采掘不再有屏幕进度条，其进度反馈由世界空间方块裂纹承载
 （`remove-mining-hud-bar`）。只承载这部分像素的 `hud-hotbar-health`、
 `hud-survival-feedback`与 `hud-item-name-popup` 三景随之退役移出清单，其像素
-验收由前端 HUD 组件断言与 `frontend/visual` 部件基线承接；capture 只保留
-世界、夜景、材质与容器保留面（容器四景）场景。
+验收由前端 HUD 组件断言与 `frontend/visual` 部件基线承接；capture 的世界、夜景与材质场景继续走离屏 GPU；容器四景的旧场景登记已移除，
+生产帧不绘制 GPU 面板，面板像素由前端 fixture 承接。
 
 ## Documentation Sync Policy
 

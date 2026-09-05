@@ -2,13 +2,13 @@
 
 本目录统一存放视觉回归基线，均为测试夹具二进制。
 
-- `world/`：无窗口世界场景基线 27 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
+- `world/`：无窗口世界场景基线 24 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
 - `passive-death/`：被动牛 GIF 动态基线 4 个，对应 `cmd/mornlea/capture/passive_death_scripts.go` 的 `passiveDeathGIFScripts`（按 tick 步进抓帧，标准库 `image/gif` 编码，逐帧解码沿用双阈值比对）。
-- `ui/`：前端 UI 部件基线 19 张，对应 `packages/engine/crates/mornlea_client/frontend/visual/fixture-names.ts` 的 `fixtureNames`。
+- `ui/`：前端 UI 部件基线 30 张，对应 `packages/engine/crates/mornlea_client/frontend/visual/fixture-names.ts` 的 `fixtureNames`。
 
 旧目录 `cmd/mornlea/capture/testdata/golden/` 与 `engine/crates/mornlea_client/frontend/visual/golden/` 已清空，仅剩空目录，不再写入。
 
-## world（27 张）
+## world（24 张）
 
 文件名即场景名加 `.png` 后缀，场景定义与顺序以 `captureScenes` 为准。
 
@@ -16,10 +16,6 @@
 |---|---|---|
 | `terrain-noon.png` | `terrain-noon` | 正午固定光照下的出生点地形远眺，锁定昼夜管线最亮相位的基准画面。 |
 | `avatar-nametag.png` | `avatar-nametag` | 远端玩家与其双语昵称名牌在正午世界中的透视与字形呈现。 |
-| `inventory-crafting.png` | `inventory-crafting` | 展开的背包与 2×2 合成网格（石砖配方），对照落在背包区的来源轮廓。 |
-| `workbench-crafting.png` | `workbench-crafting` | 展开的 3×3 工作台（石锄不对称配方），对照落在网格区的来源轮廓。 |
-| `chest-container.png` | `chest-container` | 高空视角下箱子容器面板与统一背包的对照呈现。 |
-| `furnace-container.png` | `furnace-container` | 高空视角下熔炉输入格、燃料格、产物格与其进度状态。 |
 | `debug-panel.png` | `debug-panel` | 面板可见态下的高空世界底图，见证无头路径不引入额外面板像素。 |
 | `skylight-tunnel.png` | `skylight-tunnel` | 天窗竖井内的日光下探与井壁明暗过渡。 |
 | `block-light-room.png` | `block-light-room` | 午夜封闭石室的纯方块光衰减基线。 |
@@ -39,15 +35,27 @@
 | `mining-crack-heavy.png` | `mining-crack-heavy` | 同一目标砖块上的最重阶段裂纹，与浅阶段对照判读加深。 |
 | `main-menu.png` | `main-menu` | 主菜单相位全景底图，固定自转时刻的纯全景世界画面。 |
 | `settings-menu.png` | `settings-menu` | 设置相位全景底图，同一全景世界的另一自转时刻。 |
+| `avatar-detail.png` | `avatar-detail` | 原创旅人正面、侧面和背面同框，验收服装材质与静态轮廓。 |
 | `far-horizon.png` | `far-horizon` | 高空远眺的近景地形、远环壳带、雾过渡与天空四段构图。 |
 | `water-underwater.png` | `water-underwater` | 眼睛浸没的水下视角，水色叠加与穿水衰减同框。 |
 
-## ui（19 张）
+## ui（30 张）
 
 文件名即 fixture 名加 `.png` 后缀，清单以 `fixture-names.ts` 的 `fixtureNames` 为准，对应组件以 `fixtures.tsx` 的注册表为准。
 
 | 基线文件 | fixture 名 | 对应组件 |
 |---|---|---|
+| `panel-inventory.png` | `panel-inventory` | 个人背包与2×2合法石砖配方。 |
+| `panel-inventory-empty.png` | `panel-inventory-empty` | 空背包。 |
+| `panel-inventory-full.png` | `panel-inventory-full` | 按物品堆叠上限填满背包、工具合法单件与半耐久。 |
+| `items-all.png` | `items-all` | 生产注册表全物品图标与名称。 |
+| `hud-hotbar-first.png` | `hud-hotbar-first` | HUD首格选中及邻格抬升。 |
+| `hud-hotbar-last.png` | `hud-hotbar-last` | HUD末格选中及邻格抬升。 |
+| `panel-workbench.png` | `panel-workbench` | 3×3合法石锄材料与产物。 |
+| `panel-chest.png` | `panel-chest` | 箱子及统一背包。 |
+| `panel-furnace.png` | `panel-furnace` | 熔炉三格与熔炼/燃烧进度。 |
+| `panel-character.png` | `panel-character` | 只读人物页。 |
+| `panel-inventory-narrow.png` | `panel-inventory-narrow` | 小窗口滚动背包。 |
 | `panel-main-menu.png` | `panel-main-menu` | `MainMenu` 主菜单整屏。 |
 | `panel-settings.png` | `panel-settings` | `SettingsPanel` 设置整屏。 |
 | `panel-pause.png` | `panel-pause` | `PauseMenu` 暂停整屏。 |
@@ -68,17 +76,22 @@
 | `hud-chat.png` | `hud-chat` | `HudRoot` 多行聊天。 |
 | `hud-container-open.png` | `hud-container-open` | `HudRoot` 容器打开态翻转构图。 |
 
-## motion（1 个）
+## motion（4 个）
 
 motion 演示产物只验呈现、不进比对：`make visual-check` 与 `--update-golden`
-都不感知本目录，`world/` 的 27 张 PNG 纪律也不含它。
+都不感知本目录，`world/` 的 24 张 PNG 纪律也不含它。
 
 | 演示文件 | 场景 | 帧数/时长 | 生成入口 |
 |---|---|---|---|
 | `break-burst.gif` | `break-burst-motion`：完整采掘生命周期——F0–4 目标静置，F5–24 采掘爬坡（裂纹 0→9 扫完），F25 破坏同帧（目标置空 + 采掘熄灭 + 泥土掉落注入），F25–44 粒子存续 + 掉落下落（3 格落差重力积分约 9 tick，F34 着陆），F34–49 掉落静置留存 | 50 帧，每帧 0.13 秒，循环约 6.5 秒 | `go run ./packages/client/cmd/mornlea --motion-demo testdata/visual-golden/motion/break-burst.gif`（仓库根运行） |
 
-- 演示场景值住 `packages/client/cmd/mornlea/capture/motion_break_burst.go`，不追加进 `captureScenes`。
-- 编码只用标准库 `image/gif`（固定调色板 + 抖动），固定输入逐字节一致。
+| `avatar-walk.gif` | 静止→慢走→快走→停稳；慢走40 tick与快走20 tick各走4.3格 | 100帧，20Hz，5秒 | 同上加 `--motion-scene avatar-walk`，输出改为 `avatar-walk.gif` |
+| `drop-scatter.gif` | 触发前空场→四堆正式帧出生→散开下落→着陆 | 80帧，20Hz，4秒 | 同上加 `--motion-scene drop-scatter`，输出改为 `drop-scatter.gif` |
+| `drop-density.gif` | 空场→1→4→9→16→32→移除一半至16堆→稳态 | 160帧，20Hz，8秒 | 同上加 `--motion-scene drop-density`，输出改为 `drop-density.gif` |
+
+- 新演示的原始关键PNG写在输出路径加 `-frames/` 的旁路审查目录，不纳入golden；GIF是完整过程，PNG只帮助核对编码保真。
+- 演示场景值住 `packages/client/cmd/mornlea/capture/motion_break_burst.go` 与 `motion_experience.go`，不追加进 `captureScenes`。
+- 编码只用标准库 `image/gif`（全片共享自适应调色板，无抖色），固定输入逐字节一致。
 
 ## passive-death（4 个）
 
@@ -102,6 +115,8 @@ motion 演示产物只验呈现、不进比对：`make visual-check` 与 `--upda
   - `passive-death/` 门禁：逐帧沿用双阈值比对，全部帧通过方为通过，单基线帧预算有界。
 
 路由纪律：窗口 chrome 只进 `ui/`，世界单帧只进 `world/`，时间过程只进 GIF；世界帧不得携带窗口 chrome 像素，UI 夹具不得复刻世界像素。
+
+人物 `avatar-detail` PNG只钉正侧背材质与静态比例，`avatar-walk` GIF只审查距离驱动的步态与停稳，职责不同。四个旧GPU容器场景已迁移到前端同名 `panel-*` fixtures，世界图不承载面板。
 
 去重纪律：同一行为禁止 PNG + GIF 双存。已并存且职责不同（门禁采样点与全流程人工审查物，如裂纹双帧与采掘演示）必须在本节注明理由；新增重叠由所属玩法 change 按本节收敛，本节只立规则不动既有基线。
 
