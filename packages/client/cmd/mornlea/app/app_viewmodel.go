@@ -5,6 +5,7 @@ package app
 import (
 	"fmt"
 
+	"github.com/channing771/mornlea/packages/client/client"
 	"github.com/channing771/mornlea/packages/client/render"
 	"github.com/channing771/mornlea/packages/shared/core"
 )
@@ -34,13 +35,17 @@ const viewmodelInstanceBytes = 96
 // 相机位姿直通本帧呈现相机：根变换由它派生，相机空间偏移经根变换烘焙为世界
 // 变换后由既有世界投影绘制；全景相位返回 nil，无需位姿。
 func (a *Application) deriveViewmodelInput(panorama bool, crack render.BlockCrack) *render.ViewmodelInput {
-	if panorama || a.clientSessionClosed {
+	// 第三人称只渲染自身身体（见 `appendSelfAvatar`），双手 viewmodel 仅第
+	// 一人称呈现：非第一人称返回 nil，编码流恒为空，帧字节与本字段引入前逐
+	// 位一致（静态抓帧的无双手像素回归即系于此）。
+	if a.cameraMode != client.CameraFirstPerson {
 		return nil
 	}
 	// 双手与 HUD 常显层一体：背包/容器打开或切出游戏相位（暂停/菜单）时
 	// 无输入，与血条、饥饿、快捷栏同隐同现（门控形状与 `updateItemPopup`
-	// 同形）；回到游戏相位且界面关闭后下一帧恢复。HUD 前端本体不在此派生内。
-	if a.inventoryOpen || a.menu.phase != MenuPhaseGame {
+	// 同形，落点见 `hudLinkedHidden`，自身身体复用同一门）；回到游戏相位
+	// 且界面关闭后下一帧恢复。HUD 前端本体不在此派生内。
+	if a.hudLinkedHidden(panorama) {
 		return nil
 	}
 	// 静态抓帧抑制：用户裁决静态画面一律无双手像素，静态 runner 装配后置

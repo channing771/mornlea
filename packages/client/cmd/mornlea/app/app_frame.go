@@ -289,6 +289,10 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	if renderTiming != nil {
 		started = renderNow()
 	}
+	// 第三人称自身身体：复用远端身体的同一 avatar 管线（上限内追加，满员时
+	// 自身让路，名牌不追加）；第一人称与 HUD 联动隐藏时（背包/菜单/全景/
+	// 断线）不追加，见 `appendSelfAvatar`。
+	avatars = a.appendSelfAvatar(avatars, vista != nil)
 	a.avatarStream = a.entityEncoder.EncodeAvatarInstances(a.avatarStream, a.serverTick, avatars)
 	if renderTiming != nil {
 		renderTiming.recordAvatar(renderNow().Sub(started))
