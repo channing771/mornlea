@@ -45,8 +45,8 @@ func TestApplyPlayerStateKeepsWeatherOnStaleOrEqualTick(t *testing.T) {
 	if _, err := p.ApplyPlayerState(newest, flatClientWorld{}); err != nil {
 		t.Fatalf("ApplyPlayerState(rain): %v", err)
 	}
-	// 和解确认后旅途再走两步：未确认输入非空，避免空/非空切片的
-	// `DeepEqual` 假阳性掩盖真正的镜像修改。
+	// 和解确认后旅途再走两步：未确认输入非空，避免空与非空切片的深度比较
+	// 假阳性掩盖真正的镜像修改。
 	advanceSteps(t, p, 2, Control{MoveX: 1})
 
 	for _, tick := range []uint64{newest.ServerTick - 1, newest.ServerTick} {

@@ -1825,7 +1825,7 @@ impl OffscreenRenderer {
             || !CrackPass::instances_valid(&input.crack_instances)
             || !viewmodel::instances_valid(&input.viewmodel_instances)
             || !weather::instances_valid(&input.precip_instances)
-            || !input.weather_gray.is_finite()
+            || !weather::gray_valid(input.weather_gray)
             || input.overlay_strength.is_nan()
             || input.water_tint.iter().any(|value| value.is_nan())
         {

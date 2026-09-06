@@ -126,7 +126,7 @@ func weatherHash(index int) uint32 {
 // 摆动。调用方复用 `dst` 缓冲时稳定天气帧零分配。
 func BuildWeatherParts(dst []avatarPart, cam mgl32.Vec3, yaw float32, serverTick uint64, kind core.WeatherKind) []avatarPart {
 	if kind != core.WeatherRain && kind != core.WeatherThunder {
-		return dst
+		return dst[:0]
 	}
 	sy := float32(math.Sin(float64(yaw)))
 	cy := float32(math.Cos(float64(yaw)))

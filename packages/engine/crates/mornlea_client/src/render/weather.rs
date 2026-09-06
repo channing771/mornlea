@@ -47,14 +47,21 @@ pub fn instances_valid(instances: &[u8]) -> bool {
     instances.len().is_multiple_of(WEATHER_INSTANCE_BYTES) && instances.len() <= WEATHER_FULL_BYTES
 }
 
+/// 校验天气灰度值：有限且落在 0..=1。解析层（`state_valid`）与整帧校验
+/// （`validate_frame`）共用同一语义：绕过解析直接构造的 `FrameInput` 同样被拒。
+pub fn gray_valid(gray: f32) -> bool {
+    gray.is_finite() && (0.0..=1.0).contains(&gray)
+}
+
 /// 校验天气状态段字节：恰 4 字节且灰度有限落在 0..=1；空段非法——晴天由
 /// 调用方省略段表达，不以零负载段表达（晴天帧与旧版本逐字节一致的前提）。
 pub fn state_valid(segment: &[u8]) -> bool {
     if segment.len() != WEATHER_STATE_BYTES {
         return false;
     }
-    let gray = f32::from_le_bytes(segment.try_into().expect("状态段恰 4 字节"));
-    gray.is_finite() && (0.0..=1.0).contains(&gray)
+    gray_valid(f32::from_le_bytes(
+        segment.try_into().expect("状态段恰 4 字节"),
+    ))
 }
 
 /// 绘制选择：非空段才录制；空段跳过，晴天帧 draw 选择不变。
@@ -119,6 +126,26 @@ mod tests {
         assert!(!state_valid(&f32::NAN.to_le_bytes()), "NaN 拒绝");
         assert!(!state_valid(&1.5f32.to_le_bytes()), "越界拒绝");
         assert!(!state_valid(&(-0.5f32).to_le_bytes()), "负值拒绝");
+    }
+
+    /// 灰度值域锁（`validate_frame` 与解析层共用语义）：0..=1 含端点合法，
+    /// NaN、无穷与越界拒绝——绕过 `parse_frame` 直接构造的 `FrameInput` 同样被拒。
+    #[test]
+    fn gray_valid_locks_range_for_direct_frame_construction() {
+        for gray in [0.0, 0.5, 0.75, 1.0] {
+            assert!(gray_valid(gray), "灰度 {gray} 合法");
+        }
+        for gray in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, -0.1, 1.5] {
+            assert!(!gray_valid(gray), "灰度 {gray} 必须拒绝");
+        }
+        // `state_valid` 与 `gray_valid` 同语义：字节段解码值与直接值的判定一致。
+        for gray in [0.0, 0.5, 1.0, f32::NAN, 1.5, -0.5] {
+            assert_eq!(
+                state_valid(&gray.to_le_bytes()),
+                gray_valid(gray),
+                "灰度 {gray} 的两处判定必须一致"
+            );
+        }
     }
 
     /// 绘制选择锁：空段永不录制（晴天帧 draw 选择不变），非空合法段才绘制。

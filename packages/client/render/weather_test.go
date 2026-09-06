@@ -190,6 +190,20 @@ func TestBuildWeatherPartsClearEmitsNothing(t *testing.T) {
 	}
 }
 
+// TestBuildWeatherPartsClearTruncatesReusedBuffer 晴天截断复用缓冲：先雨后
+// 晴复用同一 `dst`，晴天必须把长度清零，不得残留旧 256 粒（否则直接复用者
+// 会在晴天误绘降水）。
+func TestBuildWeatherPartsClearTruncatesReusedBuffer(t *testing.T) {
+	cam := mgl32.Vec3{0, 40, 0}
+	dst := BuildWeatherParts(nil, cam, 0, 500, core.WeatherRain)
+	if len(dst) != WeatherMaxParticles {
+		t.Fatalf("雨天粒子数 = %d，想要 %d", len(dst), WeatherMaxParticles)
+	}
+	if cleared := BuildWeatherParts(dst, cam, 0, 501, core.WeatherClear); len(cleared) != 0 {
+		t.Fatalf("复用缓冲的晴天粒子数 = %d，想要 0", len(cleared))
+	}
+}
+
 // TestBuildWeatherPartsSelectsFormByHeightRelativeToSnowline 降水形态只由
 // 本地高度相对雪线确定：整列在线上的相机全为雪、整列在线下的全为雨，跨线
 // 相机按粒子世界高度逐粒分形（spec 高度决定雨雪形态场景）。
@@ -281,9 +295,11 @@ func TestBuildWeatherPartsStaysInCameraForwardBox(t *testing.T) {
 	}
 }
 
-// TestEncodeWeatherInstancesSteadyFrameZeroAlloc 稳定天气帧零 Go 分配：
+// TestBuildWeatherPartsSteadyFrameZeroAlloc 部件级稳定天气帧零分配：
 // 复用调用方缓冲时部件构建与字节编码都不分配（spec 稳定帧零分配）。
-func TestEncodeWeatherInstancesSteadyFrameZeroAlloc(t *testing.T) {
+// 生产入口（`EncodeWeatherInstances`/`EncodeWeatherState`）的断言见
+// `weather_streams_test.go`。
+func TestBuildWeatherPartsSteadyFrameZeroAlloc(t *testing.T) {
 	cam := mgl32.Vec3{0, 40, 0}
 	parts := BuildWeatherParts(make([]avatarPart, 0, WeatherMaxParticles), cam, 0, 99, core.WeatherRain)
 	buf := make([]byte, WeatherMaxParticles*avatarInstanceBytes)
