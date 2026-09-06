@@ -49,3 +49,31 @@
 - Ruling: 接缝 bug——Go 相机空间 bake × Rust 世界 VP，design 未指定投影机制是计划缺陷。修复：Go 按本帧相机位姿烘焙世界变换，Rust 零改动；否决 P×I 独立通道；贴墙裁剪为已知限制。错了的代价：若世界烘焙在近裁剪/遮挡上不可接受，需另起 P×I change（ABI v18），回退成本为本 change 内重做。
 - 已同步：delta spec（根变换 + 重放 GIVEN 含相机）/ design.md §1 / tasks.md（§5 重做 + §6.1/6.2）。C3 与 scenario v22 结论暂定，修复后重裁。
 - Task 5: 重做（任务 6 之后）
+
+## Task 6：viewmodel 世界烘焙修复（子代理开发轮 + 审查轮）
+
+- Green：`908a82bc`，根变换由本帧相机位姿派生（`T·Ry·Rx` 经评审对 `Forward` 验算通过），落点测试红→绿；render/app/audit 绿，Rust 零改动。
+- 任务评审 Spec ✅；Quality 有条件 ✅：Important-1（capture 重置调用点无直接测试）+ Minor-2（补带 yaw 落点）。
+- 修复轮 1/5：`3730ab31`（test-only 双红证），re-review 全 ADDRESSED。
+- 附带：bed-night 探针红为双手在屏遮挡（预期 collateral，归任务 5 重做：探针搬迁 + golden 重拍）。
+- Task 6: complete (commits bfbee576..3730ab31, review clean)
+
+## Task 5 重做：基线与收尾门禁（子代理开发轮 + 审查轮）
+
+- Green：`331b291f`（bed-night 探针搬迁避开双手）+ `01c71a8f`（world golden 重拍）；visual-check 24/24 + 4/4 零差异；gofmt ✅；dev-check ✅；test-race 六模块 exit 0（45 ok）；validate 96/0；C3 closed（跨场景重置 + 首帧锁定）；scenario 保持 v22（workload 未变；若 benchmark 观察者持物则重裁）。
+- 任务评审 Spec ✅ Quality ✅ PASS。Minor-1：terrain-noon/debug-panel 新旧 blob 一致系 intentional（两景无确认背包→无段，设计行为）。Minor-2：门禁 SHA=`01c71a8f52d245da755897ffc48ac8ee3807f0d9`（补记）。
+- Task 5: complete (commits 3730ab31..01c71a8f, review clean)
+
+## Ruling 汇总（终审复核清单）
+
+1. backlog 不自建新行，新行注册留给 planner。
+2. audit 全绿硬门禁下，纯注释修复可跨任务文件（零语义变化）。
+3. 超限走 Rust 整帧 `Invalid`（avatar 纪律同形），“整段丢弃”措辞作废，已同步设计/任务。
+4. 接缝 bug 走 Go 世界烘焙（Rust 零改动）；否决 P×I 独立通道；贴墙裁剪为已知限制留后续 change。
+5. scenario v22 保持附条件：benchmark 观察者持物/挥动则重裁。
+
+## 整分支终审
+
+- 终审（ses_f8b0b73cdffeK7zHTCMjkm20PC 的后继终审会话）：CLEAN。递延项 triage：D1 接受（包边界所迫）/ D2 接受（无确认背包则无段，intentional）/ D3 接受（归因 + 更新后零差异闭环，无反证）/ D4 接受（响亮失败即正确告警行为）。
+- Ruling: 保留 `.superpowers/sdd/tasks` 工作区不删——ledger 引用的全部报告证据住在该 git-ignored 目录内，删除即销毁证据链；与 SDD 默认“终审后删除”冲突处，以证据存续为准。
+- 本 change 代码工作完成：6 任务组（T1/T2/T3/T4/T6/T5重做）全部一轮开发一轮审查关闭，breaker 从未触发，无 parked 项。待办（需用户授权）：推送分支 → PR（含 change 链接与验证摘要）→ CI 全绿 → 合并 → sync/archive → planner 注册 backlog 行。
