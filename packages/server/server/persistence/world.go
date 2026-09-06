@@ -679,6 +679,9 @@ func (world *World) scheduleMetadataSaveLocked(tick, worldTime uint64) {
 	// 偏移在派发时刻现取：待保存批次合并到的总是最新权威值（自动保存语义
 	// 与世界时间一致），不阻塞 tick 也不形成无界队列。
 	metadata.DayPhaseOffset = uint64(world.engine.DayPhaseOffset())
+	// 天气与偏移同一快照语义：同一次派发携带同一次观察到的最新权威值。
+	metadata.WeatherKind = world.engine.WeatherKind()
+	metadata.WeatherTicksRemaining = world.engine.WeatherTicksRemaining()
 	select {
 	case world.saveJobs <- saveJob{
 		Kind:     saveKindMetadata,
@@ -826,6 +829,8 @@ func (world *World) flushMetadata(ctx context.Context) error {
 	world.mu.Lock()
 	target := world.engine.WorldTime()
 	offset := world.engine.DayPhaseOffset()
+	weatherKind := world.engine.WeatherKind()
+	weatherRemaining := world.engine.WeatherTicksRemaining()
 	world.metadataSave.latest = target
 	world.mu.Unlock()
 	engineLocker.Unlock()
@@ -843,6 +848,8 @@ func (world *World) flushMetadata(ctx context.Context) error {
 		metadata := world.store.Metadata()
 		metadata.WorldTimeTicks = target
 		metadata.DayPhaseOffset = uint64(offset)
+		metadata.WeatherKind = weatherKind
+		metadata.WeatherTicksRemaining = weatherRemaining
 		world.mu.Unlock()
 		engineLocker.Unlock()
 		if done {

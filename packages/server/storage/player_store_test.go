@@ -62,7 +62,7 @@ func TestPlayerStoreContract(t *testing.T) {
 			name: "memory",
 			open: func(t *testing.T) PlayerStore {
 				t.Helper()
-				return NewMemory(Metadata{FormatVersion: 3, Seed: 42})
+				return NewMemory(Metadata{FormatVersion: currentMetadataVersion, Seed: 42})
 			},
 		},
 		{
@@ -70,7 +70,7 @@ func TestPlayerStoreContract(t *testing.T) {
 			open: func(t *testing.T) PlayerStore {
 				t.Helper()
 				store, err := OpenDisk(context.Background(), t.TempDir(), OpenOptions{
-					Create: Metadata{FormatVersion: 3, Seed: 42},
+					Create: Metadata{FormatVersion: currentMetadataVersion, Seed: 42},
 				})
 				if err != nil {
 					t.Fatal(err)
@@ -678,7 +678,7 @@ func (directory *playerFaultDirectory) Sync() error {
 func openPlayerDisk(t *testing.T, root string) *DiskStore {
 	t.Helper()
 	store, err := OpenDisk(context.Background(), root, OpenOptions{
-		Create: Metadata{FormatVersion: 3, Seed: 42},
+		Create: Metadata{FormatVersion: currentMetadataVersion, Seed: 42},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -790,7 +790,7 @@ func benchmarkPlayerSave(revision uint64) PlayerSave {
 }
 
 func benchmarkPlayerMetadata() Metadata {
-	return Metadata{FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld}
+	return Metadata{FormatVersion: currentMetadataVersion, Seed: 42, SpawnDimension: core.Overworld}
 }
 
 // TestDiskStoreV4PlayerFileMigratesToFullHealth 覆盖 DiskStore 侧的 v4 迁移：

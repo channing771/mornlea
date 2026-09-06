@@ -48,7 +48,7 @@ func TestMornleaServerPersonaFileReachesCompanionDefinition(t *testing.T) {
 	stop := errors.New("stop after server config capture")
 	err = run(context.Background(), []string{"--config", configPath}, dependencies{
 		openDisk: func(context.Context, string, storage.OpenOptions) (storage.WorldStore, error) {
-			return storage.NewMemory(storage.Metadata{FormatVersion: 3, Seed: 42}), nil
+			return storage.NewMemory(storage.Metadata{FormatVersion: 4, Seed: 42}), nil
 		},
 		listenTCP: func(string) (network.Listener, error) { return mornleaServerTestListener{}, nil },
 		newHost: func(_ context.Context, serverConfig server.Config, _ server.Generator, _ storage.WorldStore) (mornleaServerHost, error) {

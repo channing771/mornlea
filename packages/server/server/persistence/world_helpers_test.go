@@ -44,7 +44,7 @@ type persistenceTestStore struct {
 func newPersistenceTestStore() *persistenceTestStore {
 	return &persistenceTestStore{
 		metadata: storage.Metadata{
-			FormatVersion:  3,
+			FormatVersion:  4,
 			Seed:           42,
 			SpawnDimension: core.Overworld,
 		},

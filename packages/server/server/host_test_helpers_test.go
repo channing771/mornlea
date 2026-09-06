@@ -99,7 +99,7 @@ func playerID(value byte) core.PlayerID {
 
 func testMetadata() storage.Metadata {
 	return storage.Metadata{
-		FormatVersion:  3,
+		FormatVersion:  4,
 		Seed:           42,
 		SpawnDimension: core.Overworld,
 		SpawnAnchor:    core.ChunkPos{X: 2, Z: -3},
@@ -331,7 +331,7 @@ func (store *hostTestStore) Close() error {
 
 func newHostTestStore() *hostTestStore {
 	return &hostTestStore{MemoryStore: storage.NewMemory(storage.Metadata{
-		FormatVersion:  3,
+		FormatVersion:  4,
 		Seed:           42,
 		SpawnDimension: core.Overworld,
 	})}

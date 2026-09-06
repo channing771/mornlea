@@ -444,7 +444,7 @@ func TestMemoryReconcileAcquireIncludesInactiveTombstoneWithoutPausingActive(t *
 	activeID := chatTestCompanionID(1)
 	inactiveID := chatTestCompanionID(2)
 	tombstone := companionBootstrapIdentity(0x7a)
-	store := storage.NewMemory(storage.Metadata{FormatVersion: 3, Seed: 42})
+	store := storage.NewMemory(storage.Metadata{FormatVersion: 4, Seed: 42})
 	companions := persistence.NewCompanions(store, storage.StoredCompanions{
 		Revision:         7,
 		AgentNamespaceID: companionBootstrapIdentity(0x70),

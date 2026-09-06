@@ -36,7 +36,7 @@ func runPlacementSuccessScript(t *testing.T, transport string) placementSuccessT
 	t.Helper()
 	identity := integrationIdentity(0xa6, "PlacementAck")
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 4, Seed: 42, SpawnDimension: core.Overworld,
 	})
 	var inventory core.Inventory
 	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemDirt, Count: 8}

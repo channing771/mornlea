@@ -175,7 +175,7 @@ func TestMaterialMigrationRealDiskRoundTrip(t *testing.T) {
 	otherDimension.SetBlock(0, core.MinY, 0, core.StoneID)
 
 	store, err := storage.OpenDisk(ctx, worldPath, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 3,
+		FormatVersion: 4,
 		Seed:          42,
 	}})
 	if err != nil {
@@ -224,7 +224,7 @@ func TestMaterialMigrationRealDiskRetriesProgressFailureWithoutSecondRevision(t 
 	chunk.SetBlock(0, core.MinY, 0, core.StoneID)
 
 	store, err := storage.OpenDisk(ctx, worldPath, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 3,
+		FormatVersion: 4,
 		Seed:          42,
 	}})
 	if err != nil {
@@ -711,7 +711,7 @@ type materialMigrationTestStore struct {
 
 func newMaterialMigrationTestStore(seed int64) *materialMigrationTestStore {
 	return &materialMigrationTestStore{
-		metadata: storage.Metadata{FormatVersion: 3, Seed: seed},
+		metadata: storage.Metadata{FormatVersion: 4, Seed: seed},
 		chunks:   make(map[core.ChunkKey]storage.StoredChunk),
 	}
 }

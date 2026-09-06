@@ -156,6 +156,10 @@ func newWorld(
 	// `DayPhaseOffset` **严格拒绝** >23999——wire 只传播权威单值，没有历史
 	// 包袱。两侧策略不同是刻意的，装配归一后的值随后经 wire 下发时必然合法。
 	server.engine.RestoreDayPhaseOffset(uint16(metadata.DayPhaseOffset % core.DayLengthTicks))
+	// 天气与偏移同源于世界 metadata：v4 存档值原样恢复，v3 及更早世界的
+	// 零剩余时长在恢复时按新世界默认值掷骰（见 `RestoreWeather`），
+	// 使迁移世界与同种子新世界行为一致。
+	server.engine.RestoreWeather(metadata.WeatherKind, metadata.WeatherTicksRemaining)
 	if companions != nil {
 		if planner == nil {
 			return nil, errors.New("server: nil companion planner")
