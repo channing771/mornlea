@@ -100,6 +100,9 @@ type SceneApplication interface {
 	ArmCombatMarker()
 	ResetCombatFeedback()
 	CombatMarkerVisible() bool
+	// ResetViewmodel 丢弃双手编码器的挥动边沿：公共清场经它把旧场景的挖掘
+	// 锚与攻击窗清零，新场景首帧按新输入重新锚定。
+	ResetViewmodel()
 
 	// UI 相位与菜单覆盖。
 	SetInventoryOpen(open bool)

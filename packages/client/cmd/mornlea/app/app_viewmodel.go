@@ -30,6 +30,9 @@ const viewmodelInstanceBytes = 96
 // 身份直通装配点保留的登录身份：三条真实登录路径全要求 `Identity` 非 nil，
 // 双手与远端所见自身身体按同一键着色；无头与测试装配未保留时回落零值，仍确
 // 定可重放。
+//
+// 相机位姿直通本帧呈现相机：根变换由它派生，相机空间偏移经根变换烘焙为世界
+// 变换后由既有世界投影绘制；全景相位返回 nil，无需位姿。
 func (a *Application) deriveViewmodelInput(panorama bool, crack render.BlockCrack) *render.ViewmodelInput {
 	if panorama || a.clientSessionClosed {
 		return nil
@@ -48,8 +51,16 @@ func (a *Application) deriveViewmodelInput(panorama bool, crack render.BlockCrac
 		Tick:       a.serverTick,
 		Mining:     crack.Visible,
 		AttackTick: a.combatFeedback.lastServerTick,
+		CamPos:     a.camera.Pos,
+		CamYaw:     a.camera.Yaw,
+		CamPitch:   a.camera.Pitch,
 	}
 }
+
+// ResetViewmodel 丢弃双手编码器的挥动边沿（挖掘锚、攻击窗）：场景切换的公共
+// 清场经它调用，旧场景的挥动不得带入新场景首帧；会话重置与权威 reset 直调
+// 编码器重置，与本落点同语义。
+func (a *Application) ResetViewmodel() { a.viewmodelEncoder.ResetViewmodel() }
 
 // validateViewmodelInstanceCount 校验单帧 viewmodel 实例数恒不超过
 // `ViewmodelMaxInstances`：沿 `validateEntityPresentationCounts` 同形，超

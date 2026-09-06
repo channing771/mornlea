@@ -153,6 +153,65 @@ func TestDeriveViewmodelInputCarriesLoginIdentity(t *testing.T) {
 	}
 }
 
+// TestDeriveViewmodelInputCarriesCameraPose 锁定逐帧位姿直通：派生把本帧呈
+// 现相机的位姿填入编码输入，同位姿编码逐字节一致、换位姿字节必变。
+func TestDeriveViewmodelInputCarriesCameraPose(t *testing.T) {
+	app := &Application{}
+	applyViewmodelHotbar(t, app, viewmodelStoneStack, 0)
+	app.serverTick = 10
+	app.camera.Pos = mgl32.Vec3{10, 3, 10}
+	app.camera.Yaw = 0
+	app.camera.Pitch = -0.1
+	input := app.deriveViewmodelInput(false, render.BlockCrack{})
+	if input == nil {
+		t.Fatal("已确认选中派生为 nil，想要携带相机位姿的输入")
+	}
+	if input.CamPos != app.camera.Pos || input.CamYaw != app.camera.Yaw || input.CamPitch != app.camera.Pitch {
+		t.Fatalf("派生位姿=%v/%v/%v，想要本帧呈现相机 %v/%v/%v",
+			input.CamPos, input.CamYaw, input.CamPitch,
+			app.camera.Pos, app.camera.Yaw, app.camera.Pitch)
+	}
+	first := append([]byte(nil), app.viewmodelEncoder.EncodeViewmodelInstances(nil, input)...)
+	app.camera.Pos = mgl32.Vec3{11, 3, 10}
+	moved := app.deriveViewmodelInput(false, render.BlockCrack{})
+	if second := app.viewmodelEncoder.EncodeViewmodelInstances(nil, moved); string(second) == string(first) {
+		t.Fatal("相机平移后编码不变，想要位姿进入烘焙字节")
+	}
+}
+
+// TestSceneFirstFrameNeutralAfterViewmodelReset 锁定场景首帧：公共清场落点
+// 的重置（抓帧场景切换经同一落点）丢弃旧场景的攻击窗与挖掘锚，新场景首帧按
+// 新输入重新锚定，与新编码器逐字节一致。
+func TestSceneFirstFrameNeutralAfterViewmodelReset(t *testing.T) {
+	app, _ := newInteractiveTestApplication(t)
+	applyViewmodelHotbar(t, app, viewmodelStoneStack, 0)
+	app.serverTick = 10
+	app.camera.Pos = mgl32.Vec3{10, 3, 10}
+	app.camera.Pitch = -0.1
+	app.combatFeedback.Observe(9)
+	priming := app.deriveViewmodelInput(false, render.BlockCrack{Visible: true})
+	app.viewmodelStream = app.viewmodelEncoder.EncodeViewmodelInstances(app.viewmodelStream, priming)
+
+	neutral := app.deriveViewmodelInput(false, render.BlockCrack{})
+	if neutral == nil {
+		t.Fatal("已确认选中派生为 nil，想要新场景首帧的中立输入")
+	}
+	fresh := &render.ViewmodelEncoder{}
+	want := fresh.EncodeViewmodelInstances(nil, neutral)
+	if got := app.viewmodelEncoder.EncodeViewmodelInstances(nil, neutral); string(got) == string(want) {
+		t.Fatal("重置前残留状态与新编码器一致，测试失去区分能力")
+	}
+
+	// 与 `resetCapturePresentation` 同落点的重置：场景切换清掉旧边沿。
+	// 战斗确认本身未清（归 `ResetCombatFeedback` 管），故首帧沿新沿重开
+	// （窗龄归零）而非续接旧窗——与新编码器首帧逐字节一致即锁定重锚。
+	app.ResetViewmodel()
+	got := app.viewmodelEncoder.EncodeViewmodelInstances(nil, app.deriveViewmodelInput(false, render.BlockCrack{}))
+	if string(got) != string(want) {
+		t.Fatal("场景首帧编码与新编码器不一致，旧挥动延续到了新场景")
+	}
+}
+
 // TestViewmodelInstanceBytesMatchesEncoderOutput 把计数门常量钉在编码器真
 // 实输出上：中立双手恰两实例、手持方块恰三实例；`render` 侧布局若变，本测
 // 先红，计数门不静默漂移。
