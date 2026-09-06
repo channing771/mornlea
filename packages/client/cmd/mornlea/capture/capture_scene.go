@@ -705,6 +705,9 @@ func resetCapturePresentation(app SceneApplication) error {
 	app.SetDamageFeedback(application.DamageFeedback{})
 	app.SetDamageStrength(0)
 	app.ResetCombatFeedback()
+	// 双手挥动边沿随场景一并清零：修复后双手每景在屏，挖掘锚与攻击窗一旦跨
+	// 场景延续即进入像素；与战斗 marker 同落点清理。
+	app.ResetViewmodel()
 	app.Furnace().Reset()
 	app.Chest().Reset()
 	app.Crafting().Reset()

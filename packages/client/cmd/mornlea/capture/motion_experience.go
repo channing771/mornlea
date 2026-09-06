@@ -166,6 +166,9 @@ func RunMotion(app SceneApplication, outPath, scene string) error {
 	if scene == "break-burst" {
 		return RunBreakBurstMotion(app, outPath)
 	}
+	if scene == "hand-mining" || scene == "hand-attack" {
+		return RunHandSwingMotion(app, outPath, scene)
+	}
 	count := 100
 	switch scene {
 	case "avatar-walk":

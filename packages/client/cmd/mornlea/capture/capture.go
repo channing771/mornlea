@@ -622,12 +622,19 @@ const (
 	captureMenuVistaTickSettingsMenu = application.MenuVistaYawPeriodTicks / 8 * 3
 )
 
+// suppressStaticViewmodel 是静态 runner 装配后的单点双手抑制：用户裁决静
+// 态画面一律无双手像素，`RunCapture` 内调用一次；motion/GIF runner 不经此
+// 函数，手臂只保留在用手击碎方块系列动作 GIF 中。独立成函数只为让装配接线
+// 可被锁定测试直接断言。
+func suppressStaticViewmodel(app SceneApplication) { app.SetViewmodelSuppressed(true) }
+
 // RunCapture 依次跑完全部视觉场景。updateGolden 为真时把抓到的图写进 golden 基线；
 // 为假时与已有基线比对，超阈值的场景把实拍图与差异图写进 dir 并返回错误。
 func RunCapture(app SceneApplication, dir string, updateGolden bool) error {
 	if err := prepareCaptureApplication(app); err != nil {
 		return err
 	}
+	suppressStaticViewmodel(app)
 	// 场景 Apply 用 SetWorldTimeTicks 钉住的昼夜值必须在收敛帧期间保持:
 	// 权威状态里的服务端时间随真实时间前进,不冻结的话最终帧的天空光随
 	// 进程启动漂移,逐像素 golden 门禁在天空光渗入的画面上整片翻色。

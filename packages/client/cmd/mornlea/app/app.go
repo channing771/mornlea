@@ -105,14 +105,18 @@ type Application struct {
 	dropStream      []byte
 	outlineStream   []byte
 	crackStream     []byte
-	billboardBytes  []byte
-	entityEncoder   render.InstanceEncoder
-	lastFrameStats  render.FrameStats
-	remotePlayers   *client.RemotePlayers
-	companions      *client.Companions
-	hostiles        *client.Hostiles
-	chatEvents      *client.ChatEvents
-	chatInput       chatInput
+	// viewmodelStream 是本帧第一人称双手实例流的复用缓冲；`viewmodelEncoder`
+	// 跨帧存续挥动边沿（挖掘锚、攻击窗），会话重置时清零。
+	viewmodelStream  []byte
+	viewmodelEncoder render.ViewmodelEncoder
+	billboardBytes   []byte
+	entityEncoder    render.InstanceEncoder
+	lastFrameStats   render.FrameStats
+	remotePlayers    *client.RemotePlayers
+	companions       *client.Companions
+	hostiles         *client.Hostiles
+	chatEvents       *client.ChatEvents
+	chatInput        chatInput
 	// chatEventBuffer 是 refreshChatLines 的复用缓冲，容量与 client.ChatEventCapacity
 	// 同源（E9/C9）：事件环最多回放 32 条，缓冲按同一常量分配保证零扩容刷新。
 	chatEventBuffer [client.ChatEventCapacity]network.ChatEvent
@@ -162,15 +166,18 @@ type Application struct {
 	itemDrops         *client.ItemDrops
 	itemDropInstances []render.ItemDrop
 	inventoryOpen     bool
-	gameToken         uint64
-	gameIdentity      string
-	gameSource        *client.UIGameSlotRef
-	gameRecipeIndex   int
-	gameCursorFree    bool
-	gameCharacter     bool
-	gameUIDirty       bool
-	serverTick        uint64
-	combatFeedback    combatFeedback
+	// viewmodelSuppressed 是静态抓帧的双手抑制：静态 runner 装配后置位，
+	// 默认关闭，生产与动作 GIF 路径永不置位、零影响。
+	viewmodelSuppressed bool
+	gameToken           uint64
+	gameIdentity        string
+	gameSource          *client.UIGameSlotRef
+	gameRecipeIndex     int
+	gameCursorFree      bool
+	gameCharacter       bool
+	gameUIDirty         bool
+	serverTick          uint64
+	combatFeedback      combatFeedback
 	// worldTimeTicks 是最后确认的权威绝对世界时间，只在接受更新状态时前进。
 	// dayPhaseOffset 是同一份状态携带的显示相位偏移（0..23999），与世界时间
 	// 同一接受纪律：偏移只平移昼夜呈现，绝不回写绝对时间。

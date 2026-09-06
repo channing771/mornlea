@@ -1,184 +1,150 @@
-# Task 6 report
+# Task 6 report — viewmodel 世界烘焙修复
 
-## 实现摘要
+- Status: DONE（6.1/6.2 实现 + 验证闭环；一条已隔离归因的 capture 像素探针失败作为预期后续，见 Concerns-1）
+- Commit: 见回消息（单行英文，无正文无签名）
+- Gate 摘要：落点测试先红（编译红 + 行为红双证据）后绿 → `render` 全绿 → `app` 全绿 → `audit` 全绿 → Task 1/2 回归绿（含 `client` 帧基线）→ Rust 零改动 → capture 仅 bed-night 探针红（已隔离证明是修复生效的预期像素变化，见 §5）
 
-- 将 `ai` 配置硬切换为 `ai.agentService.endpoint`/`apiKeyEnv`，仅允许 loopback IP literal 的 `http` URL，并在启用伙伴时要求非空 Agent credential 环境变量。
-- 旧 direct-model 字段在伙伴启用时给出迁移错误；AI 关闭时告警并忽略。
-- 新增有界 Agent HTTP v1 client、固定 route 类型、Bearer/identity encoding、无 proxy/redirect、响应限制、稳定错误与基础关联校验。
+## 1. 根因复述（Task 5 §3 的裁决落地）
 
-## 文件
+Go 以 `root=Ident4()` 把相机空间偏移直接 bake 进实例 mat4，Rust 用世界 VP
+投影（`clip = view_proj * instance * local`）：双手恒钉在世界原点附近
+（y=-0.45 地面之下），屏幕上永远不可见。按 design 裁决修复：Go 按本帧相机
+位姿烘焙世界变换，Rust 零改动——`ViewmodelInput` 增相机位姿（位置 +
+yaw/pitch），根变换由相机位姿派生，既有相机空间偏移经根变换烘焙为世界变换
+后走既有世界 VP。
 
-- `internal/config/config.go`
-- `internal/config/agent_service_test.go`
-- `internal/companion/agent_config.go`
-- `internal/companion/agent_client.go`
-- `internal/companion/agent_client_test.go`
-- 更新的配置迁移、persona 与未知字段测试；删除已退役 direct-model 配置测试。
+## 2. 改动
 
-## TDD RED
+- `packages/client/render/viewmodel.go`
+  - `ViewmodelInput` 增 `CamPos mgl32.Vec3`、`CamYaw`、`CamPitch`（本帧呈现
+    相机位姿；零值即旧链单位根，重放比较须连同位姿固定）。
+  - 新增 `viewmodelRootFromCameraPose`：根 = 平移（位姿）× 偏航绕 Y × 俯仰
+    绕 X。旋转顺序与展示相机朝向公式同构；scratch 逐字验算 5 组位姿（含
+    Task 5 两个见证相机）下与同位姿 `LookAtV` 视图逆的最大元差
+    ≤3.81e-06（float32 噪声级），故采用无退化、无逐帧求逆的闭形。
+  - `buildViewmodelParts` 根由 `Ident4` 改为该函数；挥动旋转仍在相机空间绕
+    臂根发生，再随刚体根整体落到世界。相位/三形态/六档/重置语义零改动。
+- `packages/client/cmd/mornlea/app/app_viewmodel.go`
+  - `deriveViewmodelInput` 直通本帧呈现相机位姿（`a.camera` 即帧循环的
+    `cam`：非全景相位两者同一指针，全景相位返回 nil 无需位姿，故无需改帧
+    接线行签名）。
+  - 新增 `ResetViewmodel`（转调编码器重置，供场景清场；会话重置与权威
+    reset 仍直调编码器重置，同语义）。
+- `packages/client/cmd/mornlea/capture/scene_application.go`：`SceneApplication`
+  增 `ResetViewmodel`（capture 实际消费的最小面；`windowedCaptureApp` 内嵌
+  接口不受影响）。
+- `packages/client/cmd/mornlea/capture/capture_scene.go`：
+  `resetCapturePresentation` 在 `ResetCombatFeedback` 同落点调
+  `ResetViewmodel`，关闭 C3（Task 5 §4 前瞻警示的跨场景重置）。
 
-`go test ./internal/config -run 'AIConfigAgent|AIConfigLegacy' -race -count=1` 失败，原因是 `AI.AgentService` 尚不存在。
+## 3. 落点测试 oracle 与红绿证据
 
-`go test ./internal/companion -run 'Agent(Contract|Client)' -race -count=1` 失败，原因是 `NewAgentClient`、Agent settings、route request/response 类型与 fixture codec 尚不存在。
+新文件 `packages/client/render/viewmodel_projection_test.go`（世界烘焙投影主题）：
 
-这两项失败均为新增 API 尚未实现导致的预期编译失败。
+- Oracle 方法：固定相机（位置 (10,3,10)/yaw0/pitch-0.1，远离原点）+ 逐字
+  复用的相机数学（`Forward` 朝向公式 → `LookAtV` 视图 → `core.Perspective`
+  投影按 `ViewProj` 同序组合，480×480 帧）作为投影 oracle，不反向依赖展示
+  相机所在包（`render` 低层方向 + 审计包边门禁）。
+- `TestViewmodelLandingProjectionOnScreen`：中立双手实例中心须距相机
+  1.5m 内、w>0、NDC 落屏内、左右手分居 NDC/像素左右两半。
+- `TestViewmodelZeroPoseRootIsIdentity`：零位姿根为单位阵（Task 1/2 零位姿
+  回归口径走旧链）。
+- `TestViewmodelPoseEntersReplayBytes`：同位姿同输入逐字节一致，相机平移
+  字节必变（位姿死亡即红）。
+- 红证据（stash 隔离实测）：① 编译红（`CamPos` 未定义）；② 旧根行为红——
+  第 0 只手距相机 15.32 米（原点钉住）vs 想要 1.5 米内。绿证据：实现后三测
+  试全过。
 
-## GREEN
+app 侧 `app_viewmodel_test.go` 新增：
 
-`go test ./internal/config ./internal/companion -run 'Agent|AIConfig|Contract' -race -count=1`：PASS。
+- `TestDeriveViewmodelInputCarriesCameraPose`（逐帧位姿直通 + 进字节）。
+- `TestSceneFirstFrameNeutralAfterViewmodelReset`（场景首帧锁定：清场落点
+  重置后，旧窗不延续、新沿重开，首帧与新编码器逐字节一致；修测试时发现
+  窗龄计数陷阱——首帧期望须取新编码器首编码而非二次编码，实现未动）。
 
-`go test ./internal/config -race -count=1`：PASS。
+## 4. 回归命令与输出
 
-`go test ./internal/companion -race -count=1`：PASS。
+| 命令 | 结果 |
+|---|---|
+| `go test ./packages/client/render -race -count=1` | ok（全绿，含 Task 1 全部 26+ 相位/重放测试与新增 3 落点测试） |
+| `go test ./packages/client/cmd/mornlea/app -race -count=1` | ok（67s，全绿，含 Task 2 接线门限与新增 2 装配测试） |
+| `go test ./packages/client/client -race -count=1 -run TestEncodeRenderFrameWithoutViewmodel` | PASS（Task 1 帧级空段基线：无输入帧逐字节不动） |
+| `go test ./packages/audit -count=1` | ok（含包边/注释标识符门禁；中途因测试注释反引号外来标识符红一次，已改 plain text 后绿） |
+| `go vet` + `gofmt -l`（三包） | 干净 |
+| `git status` Rust 文件 | 零修改（`packages/engine` 无条目） |
 
-`go vet ./internal/config ./internal/companion`：PASS。
+## 5. 变更文件
 
-`go test ./internal/archcheck -count=1`：PASS。
+- 改：`packages/client/render/viewmodel.go`、`packages/client/cmd/mornlea/app/app_viewmodel.go`、
+  `packages/client/cmd/mornlea/capture/capture_scene.go`、
+  `packages/client/cmd/mornlea/capture/scene_application.go`
+- 增：`packages/client/render/viewmodel_projection_test.go`、
+  `app_viewmodel_test.go` 内 2 测试（同文件主题内加法）
+- 未碰：`app_frame.go` 接线行（位姿经 `a.camera` 直通，签名不动）、ABI/协议/存档/golden、`progress.md`/`ledger.md`
 
-`gofmt` clean 与 `git diff --check`：PASS。
+## 6. 自评
 
-## 自审
-
-检查了配置环境变量与错误文本不包含 credential 值；HTTP client 禁用环境 proxy、压缩和 redirect，并对请求/响应 body、header 施加边界。当前应用装配尚未接入新 client，保留后续 Planner/Dialogue cutover 的边界。
+- TDD 纪律完整：编译红 + 行为红（15.32m）双证据后才实现；根变换数学先经
+  scratch 对 `LookAtV` 逆逐字验算再落码，不靠手算断言。
+- 最小 diff：渲染语义只动根一行，相位/形态/档位/重置逻辑零触碰；零位姿退
+  化保证全部历史测试走旧链。
+- 隔离定位代替猜测：bed-night 失败经“旧根 + 其余全保留”对照证明源于双手
+  在屏（修复生效），而非重置接线误伤。
 
 ## Concerns
 
-`config.AI.ModelSettings` 以 `json:"-"` 仅保留源码兼容，现有 cmd/server 的旧 direct client 装配尚待后续 cutover 移除。client 的部分复杂嵌套 payload 使用 `json.RawMessage`，需要后续任务接线时进一步收紧为领域类型。
+1. （预期后续，非本任务范围）`TestBedNightScenePixelsShowMultiOrientationBedsAtNight`
+   在本修复下失败（东西向床头亮带探针）：bed-night 相机近处布床 + 清场确认
+   空背包 → 中立双手按设计在屏并遮挡探针像素。隔离证据：旧根 + 其余改动全
+   保留时该测试通过。探针重定位/golden 重拍（`visual-update` + `visual-check`
+   全绿）须另起收尾步骤并经人工逐图确认，本任务未动任何基线。
+2. 已知限制（design 已记录）：相机贴墙/穿几何时手可能被世界裁剪，实现期不
+   处理，后续 change 另起通道。
+3. scenario 保持 v22（沿 Task 5 §5 结论：固定输入/被测世界/分辨率全不动，
+   性能数值只记录；但逐帧字节已变——升版必要性待收尾 change 按升级纪律重裁）。
 
-## Follow-up: cancellation fixture lifecycle
+## Fix round 1（评审 findings 关闭）
 
-独立核对发现早期 focused client tests 遗留进程。以 `go test ./internal/companion -run TestAgentClientRejectsCorrelationMismatchAndCancellation -count=1 -timeout=3s -v` 重现：测试超时，堆栈显示 `httptest.Server.Close` 等待 handler，而 handler 无界等待 `r.Context().Done()`。客户端已向调用方返回 `context.Canceled`，但该 server-side context 在 keep-alive connection 上不保证在测试清理前结束；这是 fixture lifecycle leak，不是 Agent client 生命周期泄漏。
+- Fix commit: 见回消息（单行英文，无正文无签名）
+- 范围：评审要求的一处 Important + 一处 Minor；Minor-1（oracle 复制公式）按
+  评审结论接受现状，零改动。
 
-RED 后恢复 fixture 的明确 `release` channel：handler 可由请求 context 或测试完成后的 release 退出，避免 `Server.Close` 无界等待。遗留 PID 已 SIGQUIT 取证后 TERM 清理；随后 focused 命令连续运行两遍均自行退出。
+### Important-1：清场直达重置的直接测试（已加，红绿双证）
 
-## Round 1 review repair
+- 加法：`packages/client/cmd/mornlea/capture/capture_viewmodel_reset_test.go`
+ （单一清场接线主题）。`resetViewmodelRecorder` 内嵌 `SceneApplication` 只
+  计数 `ResetViewmodel` 调用、其余直通真实装配；
+  `TestResetCapturePresentationResetsViewmodel` 走一遍公共清场并断言重置恰
+  被调用一次。既有应用层首帧测试只锁重置语义，本测试锁清场是否调用它。
+- 红证据：注释掉 `capture_scene.go:710` 的 `app.ResetViewmodel()` 后，
+  `ResetViewmodel 调用 = 0，想要 1` 变红；恢复后变绿。
+- Covering：`go test ./packages/client/cmd/mornlea/capture -run
+  TestResetCapturePresentationResetsViewmodel -count=1` 绿；全量 capture 套
+  件除已知 bed-night 探针外无新增红点（见下）。
 
-### RED
+### Minor-2：非零偏航/俯仰落点覆盖（已加，红绿双证）
 
-`go test ./internal/companion -run 'AgentClientRound1' -count=1` 最初失败：duplicate `status` 被 `encoding/json` 覆盖后接受；`contract_version=v2` 的 Acquire 已到达 `httptest` handler；`/readyz` 503 `not_ready` 被当作 unavailable。
+- 改法：`viewmodel_projection_test.go` 内 oracle 改为接受位姿参数，落点断言
+  收敛为 `assertHandsLandedOnScreen` 唯一落点；原零偏航用例不动，新增
+  `TestViewmodelLandingProjectionYawedCamera`（位置 (−3,4,7)、偏航 0.6、俯
+  仰 −0.25，同屏内 + 左右半屏断言）。双手定义在相机空间，正确根下两用例
+  NDC 一致；顺序/符号写错即偏离相机空间原位而变红。
+- 红证据：旧根下两用例各红（15.32 米 / 9.38 米 vs 想要 1.5 米内）；实现后
+  双绿。
 
-`go test ./internal/config -run 'AIConfigAgentServiceRejectsCaseFold' -count=1` 最初失败：`endpoint` 与 `ENDPOINT` 同时出现时 `map` 遍历顺序决定生效值。
+### Covering tests（含红证明）与命令输出
 
-### GREEN
+| 命令 | 输出 |
+|---|---|
+| `go test ./packages/client/render ./packages/client/cmd/mornlea/app -race -count=1` | 双包 ok（render 3.9s、app 68s） |
+| `go test ./packages/audit -count=1` | ok（含注释标识符门禁；新增注释零 backticked 外来标识符、零任务编号） |
+| `go test ./packages/client/cmd/mornlea/capture -race -count=1` | 仅已知 bed-night 探针红（东西向床头亮带，修复生效的预期遮挡，基线收尾前保持）；新增清场测试绿，无其他红点 |
+| `gofmt -l`（两包） | 无输出 |
+| `git status` Rust 文件 | 零修改 |
 
-- `strictDecodeJSON` 先拒绝非法 UTF-8、孤立 surrogate 与任意 object depth 的 duplicate key，再执行 strict typed decode。
-- 所有已暴露的 route request 在 marshal 前检查 v1、canonical UUID 与 route identity/range；不合法 request 返回 `ErrAgentUnavailable` 且不触网。
-- `/readyz` 的 manifest 503 `not_ready` 作为 typed 成功值处理；每次 request 的 lifetime merge 使用可停止 `context.AfterFunc`，避免正常调用残留 goroutine。
-- Agent transport 由 client 专有创建，外部 `http.Client` 不能带入 proxy/redirect/compression/header 策略；发送前也检查 header 字节边界。
-- 配置 parser 检测大小写 collision，`agentService` 逐字段解析并对 nested unknown 精确告警。
+### 变更文件（本轮）
 
-### 验证
-
-`go test ./internal/companion -run 'Agent(Client|Contract)' -count=1 -timeout=30s`：PASS。
-
-`go test ./internal/config -run 'Agent|AIConfig' -count=1`：PASS。
-
-### Concerns
-
-复核仍需要继续完成全部 HTTP schema 的 nested DTO 替换与每条 manifest route 的 status/error/correlation matrix；本次变更只处理了本轮新增 RED 覆盖的 transport/config 问题。
-
-## Round 1 continuation
-
-### RED
-
-`go test ./internal/companion -run AgentContractGolden -count=1` 在新的 checked-in golden DTO harness 下失败：IPv6 loopback MCP endpoint、terminal fact variants、strict nullable dialogue line 和 error envelope 尚未由实际 DTO validator 表达。这些失败证明此前字符串/map fixture helper 不能覆盖 production codec。
-
-### GREEN
-
-- 生产 Agent DTO 不再持有 `json.RawMessage`：Plan、fact node、environment、memory state/proposal 和 reconcile nullable members 都改为 closed structural DTO；Dialogue wire 字段为 `fact_node`，reconcile 总是输出 `mirror` 与 `tombstone_operation_id`。
-- strict decoder 检查 duplicate key、非法 UTF-8 与孤立 surrogate；DTO validators 对 text/identity/variant、plan/memory 状态、常量和 correlation 进行拒绝并返回零值。
-- 每条当前 client route 的 success correlation 加入 request/client/namespace/lease/run/companion/generation/snapshot/epoch/operation 核对；稳定 errors 加入 manifest status/path allowlist。
-- `TestAgentContractGoldenDrivesActualDTOCodecs` 读取 checked-in valid/invalid golden，并直接执行 production strict decoder 和 typed DTO validators。
-
-### GREEN/验证
-
-`go test ./internal/config ./internal/companion -run 'Agent|AIConfig|Contract' -race -count=1` 连续两遍：PASS。
-
-`go test ./internal/config -race -count=1`、`go test ./internal/companion -race -count=1`、`go vet ./internal/config ./internal/companion`、`go test ./internal/archcheck -count=1`、`gofmt`、`git diff --check`：PASS。
-
-### 剩余风险
-
-需要继续补完整 manifest 11-route `httptest` dispatch matrix 和由 manifest 解析出的 method/status/identity assertions；当前 golden test 已覆盖每个 checked-in schema fixture 的实际 DTO codec，但尚不是所有 route 的端到端 transport case。
-
-## Round 2 manifest matrix repair
-
-### RED
-
-`go test ./internal/companion -run 'AgentManifest|AgentClientStrict' -race -count=1` 首轮暴露未声明 `201` 被接受并返回已填充 DTO，Acquire contract version、reconcile tombstone、memory delete epoch 等关联不匹配也会留下部分值；strict nested required/variant、非法 request 与 error envelope 仍有漏网。
-
-`go test ./internal/companion -run TestAgentStrictJSONAllowsEscapedLiteralSurrogateText -count=1` 失败为 `invalid strict JSON`，证明原 surrogate scanner 把转义后的字面 `\\ud800` 误判为孤立 surrogate。
-
-`go test ./internal/companion -run TestAgentContractGoldenDrivesActualDTOCodecs -count=1` 在 `memory_state_zero` panic，证明旧 golden harness 对未识别 invalid schema 直接返回 false 而伪绿。
-
-`go test ./internal/companion -run 'TestAgentClientStrictNestedRequiredAndVariantFields/nonterminal_proposal_explicit_null' -count=1` 返回已填充 Dialogue DTO，证明显式 `memory_proposal:null` 被错误等同为字段缺席。
-
-`go test ./internal/companion -run 'TestAgentClientRejectsInvalidRequestsBeforeDispatch/MCP_(encoded_path|invalid_port)' -count=1` 的两个 case 都到达 `httptest` handler，证明 encoded `/mcp` 与越界端口未在触网前拒绝。
-
-`go test ./internal/config -run TestAIConfigDisabledFormsIgnoreAgentAndLegacySettings -count=1` 因 disabled 配置的数值 `agentService` 解析失败，证明空伙伴仍提前要求 service/timeout 形状。
-
-### GREEN 与 manifest 覆盖
-
-- `manifest.json` 直接驱动 11 条公开 route 的实际 `AgentClient` 方法、method/path、Bearer/匿名、精确 Content-Type、identity profile、success status 与 error allowlist；全部 request 均由 production DTO marshal 后进入真实 `httptest` transport，全部 response/error 均经过 production strict decoder 与 correlation。
-- success 共 14 个实际 dispatch：12 个 manifest response，加上 Dialogue terminal/nonterminal 与 reconcile active/inactive 展开；包含 `/readyz` 503 `not_ready`。59 个 route/error 声明组合逐一验证，并为每条 route 验证错误 status/code 错配、未声明 code 与未声明 success status 均返回 typed 零值。
-- 由 manifest identity profile 驱动 79 个 response correlation mutation；覆盖 contract/request/client/namespace/lease/run/companion/generation/snapshot/epoch/operation，以及 reconcile tombstone 和 delete new-epoch 映射。golden 本身若不满足同名关联会直接失败，不再静默跳过。
-- production contract boundary 无 `json.RawMessage`。所有顶层及 nested DTO 使用 closed typed object/union decoder，required/unknown/null 与 variant presence 精确区分；duplicate、非法 UTF-8、孤立高低 surrogate、错误 surrogate pair、NaN、trailing、null、type、missing、unknown 均失败且丢弃部分值，合法 surrogate pair 与转义字面量正常接受。
-- request 在触网前校验 v1、canonical UUID、range/deadline、text byte/控制字符、非空数组、variant、loopback MCP URL 的 256-byte/exact raw path/有效端口，以及 256 KiB body；response 校验精确 status/常量/enum/variant、64 KiB body 与 16 KiB header。
-- request/response body 的 exact 与 `+1` byte、chunked overflow、声明 Content-Length overflow、request/response header 的 exact 与 `+1` byte、Content-Type 变体都有独立边界测试。
-- client 使用独立构造的 transport，不继承外部 client 或可变全局默认 transport；proxy nil、identity encoding、compression/keep-alive/redirect 禁用，断连 GET 仅一次请求。caller cancel/deadline 与并发幂等 `Close` 都取消 in-flight 并返回零值；正常调用无 goroutine 累积，`%v`/`%+v`/`%#v` 不泄漏 credential。
-- disabled/missing/null/empty companions 不解析 Agent service、timeout 或 secret；active 配置覆盖 legacy 单字段迁移、IPv4/IPv6 loopback、case-fold collision、nested unknown 精确路径，以及 timeout 0/1/60/61。
-
-### 最终验证
-
-`go test ./internal/config ./internal/companion -run 'Agent|AIConfig|Contract' -race -count=1 -timeout=120s` 连续两遍：PASS。
-
-`go test ./internal/config -race -count=1`：PASS。
-
-`go test ./internal/companion -race -count=1`：PASS。
-
-`go vet ./internal/config ./internal/companion`：PASS。
-
-`go test ./internal/archcheck -count=1`：PASS。
-
-`gofmt` 与 `git diff --check`：PASS。
-
-### 剩余风险
-
-consolidated findings 1–7 在本轮范围内均已闭环。Planner/Dialogue wiring、persistence 与 Task 7 之后的实现仍按后续任务推进，本轮未触碰。
-
-## Round 3 strict/lifecycle repair
-
-### RED
-
-新增 `agent_client_round3_test.go` 后运行：
-
-`go test ./internal/companion ./internal/config -run 'ExplicitNull|NullableFields|OutboundHeader|DuplicateJSONContentType|AfterResponseHeaders|LinearizesAdmission|FormattingAndLogging|LargestValidTypedRequest|AgentServiceEndpointMatrix' -count=1 -timeout=30s`
-
-真实失败包括：Plan `x/y/z:null`、Dialogue `base_revision:null`、memory `summary:null` 与 cancel `cancelled:null` 被解成零值并作为部分成功返回；raw TCP listener 观察到 outbound header 实际为 16,371 bytes 而测试要求的 Python 同 scope 预算是 16,384 bytes；重复两条 `Content-Type: application/json` 被接受；解引用后的 `AgentClient` `%v` 泄漏 credential；`http://127.0.0.1:0` 被配置接受。
-
-共享 worktree 的整包命令同时被并行任务的预期 RED 阻断：Task 7A 正在修订的 MCP fixture 令三个 `ContractFixture` case 暂时失败，Task 8 正在新增的 storage v5 test 因尚未实现 `companionFlagActive` 令 archcheck 暂时编译失败。本轮没有修改、暂存或借豁免绕过这些并行文件。
-
-### GREEN
-
-- closed DTO 解码在 typed unmarshal 前拒绝所有 non-nullable required/optional field 的显式 `null`；nullable allowlist 只含 error `request_id`、memory state `operation_id` 及 reconcile `mirror`/`memory`/`tombstone_operation_id`，variant validator 继续裁决合法组合。public client matrix 覆盖 identity/nested/string/bool/number、`x/y/z`、`base_revision`、`revision`、`summary`、`active`、`cancelled`，失败全部返回 typed 零值。
-- outbound header 固定 `Host`、`User-Agent`、`Content-Length`、`Connection: close` 与显式 headers，并按 `len(name)+2+len(value)+2` 对每条真实 line 计数。独立 raw listener 证明 16,384 bytes 可触网成功、16,385 bytes 在触网前拒绝；response `Content-Type` 使用 `Header.Values`，只接受唯一一条精确 `application/json`。inbound transport/header 边界仍覆盖 exact 与 `+1`。
-- client lifecycle 改为 mutex 保护的 closed admission 与 active cancel registry；`Close` 同步标记 closed、取消全部 active request、等待并发 `Close` 的首个关闭过程，之后的新公开调用不触网。caller cancel/deadline 与 `Close` 在 response headers 已 flush、body 阻塞时都返回对应 context error 与 typed 零值；正常调用不创建 lifetime goroutine。
-- credential 使用 redacted wrapper，并为 `AgentClient` 的 pointer/value method set 提供安全 `fmt.Formatter` 与 `slog.LogValuer` 表示；pointer 与 dereferenced value 的 `%v`、`%+v`、`%#v`、`%q` 及 structured log 均不泄漏。
-- Agent service endpoint 的显式 port 只接受 `1..65535`；IPv4/IPv6 loopback 的 1、8080、65535 通过，0 与 70000 拒绝。
-- 生产 public preflight 发送最大维度合法 Dialogue request：4,096-byte 最坏 JSON expansion persona、256 exposed blocks、1,089 heights、最大整数 identity fields，真实 wire 为 94,799/262,144 bytes；更大的 public typed request 在触网前拒绝。由此证明合法 DTO 的理论最大值远低于 request cap，而 cap 不可被 public path 绕过。
-
-### 隔离验证
-
-为隔离并行 Task 7A/8 的预期 RED，只显式暂存六个 Task 6 文件，在 detached `148b935c` 临时 worktree 通过 pipe 应用 `git diff --cached --binary`；首次 Go 命令只因 clean worktree 尚无 `libmornlea_engine` 链接失败，按仓库规则运行 `make rust` 后从头验证：
-
-- `make rust`：PASS。
-- `go test ./internal/config ./internal/companion -run 'Agent|AIConfig|Contract' -race -count=1 -timeout=120s` 连续两遍：PASS。
-- `go test ./internal/config -race -count=1 -timeout=120s`：PASS。
-- `go test ./internal/companion -race -count=1 -timeout=120s`：PASS。
-- `go vet ./internal/config ./internal/companion`：PASS。
-- `go test ./internal/archcheck -count=1 -timeout=120s`：PASS。
-- Task 6 文件 `gofmt -l` 无输出，`git diff --check`：PASS。
-- 隔离 worktree 删除前确认无相关 `go test` 残留进程，随后只移除该明确临时 worktree。
-
-### 结果
-
-Round 3 指定的 strict null、真实 header scope、body-read cancellation、Close admission、secret representation、endpoint port 与 256 KiB preflight 证据均已闭环；未触碰 Task 7+ 生产实现、contracts、OpenSpec 或 storage 文件。
+- 改：`packages/client/render/viewmodel_projection_test.go`（oracle 参数化 +
+  断言收敛 + 新增偏航用例，实现零改动）
+- 增：`packages/client/cmd/mornlea/capture/capture_viewmodel_reset_test.go`
+- 未碰：实现文件、ABI/协议/存档/golden、`progress.md`/`ledger.md`

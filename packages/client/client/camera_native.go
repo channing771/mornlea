@@ -46,6 +46,19 @@ func NativeViewProj(cam *Camera) ([16]float32, core.Frustum) {
 	return viewProj, frustum
 }
 
+// queryCameraABI 以指定 ABI 版本调用无状态相机出口并返回原始状态码。
+// 生产路径恒传当前 header 常量；测试用它锁定“错误版本先于其他校验被拒绝”
+// 的顺序（无状态出口无需窗口与 GPU，可在无头环境经真实 FFI 边界验证）。
+func queryCameraABI(abi uint32, pos, viewProj, frustum unsafe.Pointer) uint32 {
+	return uint32(C.mornlea_client_camera_viewproj(
+		C.uint32_t(abi),
+		(*C.float)(pos),
+		0, 0, 1, 1, 0.1, 100,
+		(*C.float)(viewProj),
+		(*C.float)(frustum),
+	))
+}
+
 // checkCameraStatus 把相机查询的状态码折叠为稳定中文 panic，文案风格与
 // `Renderer.check` 一致。
 func checkCameraStatus(operation string, status uint32) {

@@ -12,9 +12,10 @@ import (
 	"sort"
 )
 
-// passiveDeathGoldenDir 是 GIF 动态基线的独立目录（相对仓库根）：与 PNG
-// 场景表（`captureGoldenDir`）解耦，新增 GIF 不触碰 24 景顺序与 PNG 基线。
-const passiveDeathGoldenDir = "testdata/visual-golden/passive-death"
+// passiveDeathMotionDir 是被动牛 GIF 的基线目录（相对仓库根）：像素比对
+// 退役后并入 `motion/`（只保留生成、人工审查，不进比对阈值），与 PNG 场景
+// 表（`captureGoldenDir`）解耦，新增 GIF 不触碰 24 景顺序与 PNG 基线。
+const passiveDeathMotionDir = "testdata/visual-golden/motion"
 
 // gifFrameBudget 是单条 GIF 基线的帧数上限（8fps×6s=48）：与 devcapture 的
 // 录制上限纪律同源（总帧数有界），参数校验在首帧捕获之前。

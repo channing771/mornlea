@@ -30,7 +30,8 @@ func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 		"materials-showcase",
 		"target-block-feedback", "grass-closeup", "oak-grove", "ai-companion", "sword-combat",
 		"hostile-mob", "passive-herd", "passive-graze", "water-surface-slope", "mining-crack-early", "mining-crack-heavy",
-		"main-menu", "settings-menu", "avatar-detail", "far-horizon", "water-underwater",
+		"main-menu", "settings-menu", "avatar-detail",
+		"far-horizon", "water-underwater",
 	}
 	if len(captureScenes) != 24 {
 		t.Fatalf("正式场景数=%d，想要 24", len(captureScenes))

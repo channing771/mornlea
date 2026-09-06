@@ -213,3 +213,22 @@ func TestCombatMarkerChangePointsDriveSingleHudPush(t *testing.T) {
 		t.Fatalf("组装求值次数 = %d, want 5", assembleCalls)
 	}
 }
+
+// TestObserveCombatHitForCaptureOpensAttackEdge 锁定抓帧专用确认沿：经既有
+// `Observe` 语义写入确认 tick（严格递增才接受），只供抓帧管线合成打击沿，
+// 生产路径（`DrainServerMessages`）行为不变。
+func TestObserveCombatHitForCaptureOpensAttackEdge(t *testing.T) {
+	app := &Application{}
+	app.ObserveCombatHitForCapture(7)
+	if app.combatFeedback.lastServerTick != 7 {
+		t.Fatalf("确认沿=%d，想要 7", app.combatFeedback.lastServerTick)
+	}
+	if !app.CombatMarkerVisible() {
+		t.Fatal("确认沿写入后 marker 不可见")
+	}
+	// 陈旧沿不得回退确认点（与线上严格递增语义一致）。
+	app.ObserveCombatHitForCapture(5)
+	if app.combatFeedback.lastServerTick != 7 {
+		t.Fatalf("陈旧沿回退确认点=%d，想要保持 7", app.combatFeedback.lastServerTick)
+	}
+}
