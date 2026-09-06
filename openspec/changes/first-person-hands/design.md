@@ -20,9 +20,14 @@
 
 竖直柱状双手被用户否决（“两根柱子”）。新姿态：双手自左下/右下屏角斜向入画，手臂长轴向画面中心倾斜约 20°–35°（roll 向中心 + 轻微 pitch，右手为主手更靠中心、持物位更高），臂根落在屏角之外只留前臂与持物入画。实现仍是世界烘焙（根变换多乘斜持旋转，无新通道）；角度/偏移以上线数值为初值，落点以 capture 实拍 PNG 目检为准迭代（3–5 轮内锁定，逐轮记录数值与截图结论，锁定后写死为常量 + 落点测试钉死）。
 
-## 视觉基线（追加）
+## 视觉基线（追加，用户评审后二次修订）
 
-静态 golden 在 `captureScenes` 尾部（`water-underwater` 恒末位之前）追加四景：`hand-tool`（持剑近景）、`hand-block`（持方块近景）、`hand-mining`（采掘挥动中段 + 裂纹同框）、`hand-attack`（命中 marker 窗内）；同步 `testdata/visual-golden/README.md` 索引与顺序测试。动作 GIF 基线新增两剧本（`hand-mining`、`hand-attack`，复用 180 帧录制循环与 `--motion-scene` 机制，`options.go` 白名单与测试同步扩展）：GIF 不进比对阈值，作为人工审查基线入库。姿态变更会改写既有含手场景的 golden，任务 5 再次重跑 `visual-update` + `visual-check`。
+用户二次裁决：静态 golden 一律禁手——手臂只出现在“用手击碎方块”系列动作 GIF 中；游戏中手臂与 HUD 常显层一体，背包/菜单打开时与血条饥饿快捷栏同隐同现。
+
+- 静态表全局禁手：静态 capture runner 在装配后置位 viewmodel 抑制（单点，注释载明用户裁决），GIF/motion runner 不置位。`hand-tool`/`hand-block`/`hand-mining`/`hand-attack` 四景撤销（任务 7 已加的需回退：场景表、README 索引、顺序测试）；world golden 恢复为本 change 前基线（抑制后逐字节一致即证明成立）。
+- 生产门：`deriveViewmodelInput` 在背包/容器打开或非游戏相位时返回空（HUD 一体规则）；HUD 本体是否隐藏不在本 change 范围内，不动前端。
+- passive-death 基线并入 motion：`testdata/visual-golden/passive-death` 迁入 `motion/`，像素比对测试退役（只保留生成能力），README 索引同步。理由：死亡动画是过程基线，与 motion GIF 同性质（人工审查，不进比对阈值）。
+- 动作 GIF 基线保留 `hand-mining`/`hand-attack`（击碎序列，真实挥动：裂纹驱动 + capture 战斗缝注入），GIF 不进比对阈值，作为人工审查基线入库。姿态变更会改写既有含手场景的 golden，任务 5 再次重跑 `visual-update` + `visual-check`。
 
 ## Risks / Trade-offs
 

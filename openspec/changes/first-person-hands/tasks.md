@@ -33,3 +33,10 @@
 - [ ] 7.2 静态基线四景：`captureScenes` 尾部（`water-underwater` 之前）追加 `hand-tool`/`hand-block`/`hand-mining`/`hand-attack` + README 索引 + 顺序测试同步；验证 `go test ./packages/client/cmd/mornlea/capture -race -count=1`。
 - [ ] 7.3 动作 GIF 两剧本：`hand-mining`/`hand-attack` 复用 motion 录制循环 + `--motion-scene` 白名单扩展 + options 测试同步，GIF 入库不进比对；验证 `go test ./packages/client/cmd/mornlea -count=1` 与 capture 包测试。
 - [ ] 7.4 任务 5 再次重做（姿态改写既有含手 golden）：`visual-update` + `visual-check` + 全量门禁重跑，见 §5。
+
+## 8. HUD 一体与静态禁手（用户二次评审，与任务 7 合并评审）
+
+- [ ] 8.1 生产门：`deriveViewmodelInput` 在背包/容器打开或非游戏相位时返回空 + 测试（开包当帧消失、关包恢复）；HUD 本体不动；验证 `go test ./packages/client/cmd/mornlea/app -race -count=1`。
+- [ ] 8.2 静态表全局禁手：capture 静态 runner 单点抑制（GIF/motion runner 不抑制）+ 锁定测试；撤销任务 7 的静态四景（场景表、README、顺序测试回退）；验证 capture 包测试。
+- [ ] 8.3 passive-death 并入 motion：GIF 迁入 `motion/` + 像素比对退役（保留生成）+ README 同步；验证相关测试调整。
+- [ ] 8.4 world golden 恢复本 change 前基线并 `visual-check` 全绿（含手场景逐字节一致即抑制成立）；任务 5 第三次重做全量门禁，见 §5。

@@ -28,6 +28,22 @@
 - **WHEN** 渲染第一人称 viewmodel
 - **THEN** 左右手长轴 MUST 向画面中心倾斜（左手顶端偏右、右手顶端偏左），臂根 MUST 落在左下/右下屏角之外，准星像素 MUST 不被双手覆盖
 
+### Requirement: 双手随 HUD 隐藏（背包与菜单打开时无手臂）
+
+双手 SHALL 与 HUD 常显层一体：背包/容器界面打开或非游戏菜单相位时 MUST NOT 呈现 viewmodel（与血条、饥饿、快捷栏同隐同现）；回到游戏相位且界面关闭后下一帧 MUST 恢复。静态 capture 场景表 MUST NOT 含手臂像素，GIF 动作剧本不受此限。
+
+#### Scenario: 开背包隐藏双手
+
+- **GIVEN** 游戏相位中已确认选中非空且双手正在呈现
+- **WHEN** 打开背包（或切到暂停/菜单相位）
+- **THEN** 当帧起 viewmodel MUST 为空，关闭背包回到游戏相位后 MUST 恢复呈现
+
+#### Scenario: 静态场景表无手臂像素
+
+- **GIVEN** 静态 capture 任一场景（含已确认背包的战斗/采掘景）
+- **WHEN** 抓帧比对
+- **THEN** 画面 MUST NOT 含 viewmodel 像素（与本 change 前 golden 逐字节一致）
+
 ### Requirement: 右手按选中呈现三形态持物
 
 右手持物形态 SHALL 只由已确认镜像的选中槽决定（本地选择请求未确认时 MUST NOT 切换形态）：空槽/未注册为无持物；`core.ItemPlacement` 命中的为手持方块（微缩立方，顶面/侧面材质与世界一致）；其余为手持物品（扁长条程序化几何，工具与食物同形，形状不依赖 HUD sprite）。

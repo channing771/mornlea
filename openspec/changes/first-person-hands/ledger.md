@@ -77,3 +77,13 @@
 - 终审（ses_f8b0b73cdffeK7zHTCMjkm20PC 的后继终审会话）：CLEAN。递延项 triage：D1 接受（包边界所迫）/ D2 接受（无确认背包则无段，intentional）/ D3 接受（归因 + 更新后零差异闭环，无反证）/ D4 接受（响亮失败即正确告警行为）。
 - Ruling: 保留 `.superpowers/sdd/tasks` 工作区不删——ledger 引用的全部报告证据住在该 git-ignored 目录内，删除即销毁证据链；与 SDD 默认“终审后删除”冲突处，以证据存续为准。
 - 本 change 代码工作完成：6 任务组（T1/T2/T3/T4/T6/T5重做）全部一轮开发一轮审查关闭，breaker 从未触发，无 parked 项。待办（需用户授权）：推送分支 → PR（含 change 链接与验证摘要）→ CI 全绿 → 合并 → sync/archive → planner 注册 backlog 行。
+
+## 用户评审：斜持姿态与视觉基线（同一 change 内精化，分支未合）
+
+- 用户结论：柱状双手太抽象，要 MC 式左下/右下斜持；补静态四景 + 动作 GIF 两剧本基线。
+- 已同步回 proposal/design（Pose + 基线节）/delta spec（斜向入画 Scenario）/tasks（§7.1–7.4，§5 再次重做）；validate 96/96。
+
+## Task 7 评审：攻击基线空心（Critical A1）
+
+- 评审 Spec ❌ Quality ❌：capture 只调 `ArmCombatMarker` 从不设 `AttackTick` 边沿，hand-attack 实为空心；生产路径不受影响。姿态数值自洽但截图轮次未入库致观感不可验证；passive-death GIF 属合法耦合转任务 5 重录；bed-night 3-skip 可接受。
+- Ruling: 批准 fix round 加 capture 缝 `ObserveCombatHit`（调既有 `Observe`，`ArmCombatMarker` 先例，零生产语义变化）；V1 由控制会话亲自目检最终 PNG 后关闭。

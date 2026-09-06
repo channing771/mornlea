@@ -10,7 +10,8 @@
 - 挖掘动作：`miningOverlay` active 期间按裂纹进度驱动右手挥动；攻击动作：`CombatHit` marker 6 帧窗内右手一次挥动；两者都只消费既有呈现信号，不新增权威语义。
 - 工具六档摆幅/节奏参数表：空手/方块/剑/镐/铲/斧；斧铲在 B-36 落地前取镐默认占位，落地后只改表不动管线。
 - client ABI v16→v17：frame 新增 viewmodel TLV 段（tag 取下一个空闲值），header/Rust/Go 三端同步；无段帧与变更前逐字节一致。
-- 视觉基线：静态 golden 追加 `hand-tool`/`hand-block`/`hand-mining`/`hand-attack` 四景；动作 GIF 基线新增 `hand-mining`/`hand-attack` 两剧本（入库人工审查，不进比对阈值）。
+- 视觉基线：手臂只出现在“用手击碎方块”系列动作 GIF（`hand-mining`/`hand-attack`，入库人工审查，不进比对阈值）；静态 golden 一律禁手（恢复本 change 前基线）；passive-death 基线并入 motion（退役像素比对，只保留生成）。
+- HUD 一体：背包/容器/菜单打开时双手与血条饥饿快捷栏同隐同现；HUD 本体不动。
 
 ## Non-Goals
 
