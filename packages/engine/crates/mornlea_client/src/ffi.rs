@@ -1040,7 +1040,7 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
             let length = read_u32(cursor + 4) as usize;
             cursor += 8;
             // 各 pass 段均为定长实例数组(长度天然 4 对齐),对齐检查统一;
-            // tag 白名单 1..=10,已退役的 tag 9 与未知 tag 同路径拒绝。
+            // tag 白名单 1..=11,已退役的 tag 9 与未知 tag 同路径拒绝。
             if !length.is_multiple_of(4) || bytes.len() - cursor < length {
                 return None;
             }

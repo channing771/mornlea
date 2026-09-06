@@ -133,7 +133,7 @@ func ViewmodelSwingParams(tier ViewmodelTier) (amplitude float32, periodTicks ui
 	return param.amplitude, param.periodTicks
 }
 
-// ViewmodelMiningAngle 是挖掘挥动的纯相位函数：自 `anchorTick` 起随权威
+// ViewmodelMiningAngle 是挖掘挥动的纯相位函数：自锚点起随权威
 // tick 循环摆动，不读墙钟、帧间隔与本地随机数；同 `(tick, 档, 触发沿)` 重
 // 放逐帧相同。`tick` 回退时调用方重锚（以当前 tick 为新锚），旧相位不延续。
 func ViewmodelMiningAngle(tick, anchorTick uint64, tier ViewmodelTier) float32 {

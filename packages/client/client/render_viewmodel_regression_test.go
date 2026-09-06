@@ -12,7 +12,7 @@ import (
 // 本文件锁定任务 1.2 的帧级回归：无 viewmodel 输入的帧，其 `EncodeRenderFrame`
 // 输出 MUST 与本 change 前逐字节一致。以下 golden 是 viewmodel 接线前
 // （client ABI v16）的帧字节快照；后续 change 新增 viewmodel TLV 段时，空段
-// 不得写入任何字节（沿 `appendTLV` 空负载跳过的既有纪律），三组 golden 必须全绿。
+// 不得写入任何字节（沿空负载跳过的既有纪律），三组 golden 必须全绿。
 
 func viewmodelRegressionFill(n int, seed byte) []byte {
 	out := make([]byte, n)
