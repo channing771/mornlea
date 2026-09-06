@@ -254,6 +254,12 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	if vista != nil {
 		posed := vista.pose(a.camera)
 		cam = &posed
+	} else {
+		// 第三人称后拉与防穿墙：渲染位姿由眼睛经只读镜像射线推导，
+		// `a.camera` 本身恒为眼睛（瞄准与服务端交互射线同源），见
+		// `resolveRenderCamera`；第一人称直通，帧字节逐位不变。
+		resolved := a.resolveRenderCamera()
+		cam = &resolved
 	}
 	vpArr, frustum := client.NativeViewProj(cam)
 	viewProj := mgl32.Mat4(vpArr)
