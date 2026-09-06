@@ -190,6 +190,10 @@ var (
 	// 遮挡。
 	viewmodelHeldItemCenter = mgl32.Vec3{0.35, -0.17, -0.72}
 	viewmodelHeldItemSize   = mgl32.Vec3{0.09, 0.5, 0.12}
+	// viewmodelHeldPickCenter 是镐类（镐/锄/斧档）的专用落点：相对长条通用
+	// 落点整体前移出拳面（`z` +0.08），刃体中段不再落在手臂深度之后；剑类
+	// 与食物火把等沿用通用落点，两者剪影与落点各自独立。
+	viewmodelHeldPickCenter = mgl32.Vec3{0.35, -0.16, -0.64}
 	// viewmodelHeldItemTilt 是长条持物相对手臂的固定前倾：顶端向视线前方微
 	// 倾，刃面透视缩短、不再直立遮屏；与挥动角叠加后相对握持位姿恒定。
 	viewmodelHeldItemTilt = float32(-0.5)
@@ -199,13 +203,14 @@ var (
 // 盖部分物品，未覆盖的已注册物品走本色而非透明黑，保证持物可见。
 var viewmodelHeldNeutralColor = [4]float32{0.75, 0.7, 0.65, 1}
 
-// viewmodelHeldColor 返回扁长条持物的纯色：复用与 HUD、掉落物共享的稳定基
-// 色，未覆盖的物品回落中性色。
+// viewmodelHeldColor 返回扁长条持物的呈现色：复用与 HUD、掉落物共享的稳
+// 定基色再经与手臂同源的呈现明暗（`avatarShade` 系数），浅色工具在亮背景
+// 下与白墙可辨；共享注册色本身不动。未覆盖的物品回落中性呈现色。
 func viewmodelHeldColor(item core.ItemID) [4]float32 {
 	if color, ok := itemDropColor(item); ok && color[3] != 0 {
-		return color
+		return avatarShade(color, 0.82)
 	}
-	return viewmodelHeldNeutralColor
+	return avatarShade(viewmodelHeldNeutralColor, 0.82)
 }
 
 // viewmodelHeldBlockAppearance 返回手持方块的材质与颜色：单实例只带一层号，
@@ -349,7 +354,12 @@ func buildViewmodelParts(dst []avatarPart, input *ViewmodelInput, angle float32)
 		dst = append(dst, viewmodelSlantedLimb(root, viewmodelRightPivot, viewmodelHeldBlockCenter, viewmodelHeldBlockSize,
 			viewmodelSlantAngle, angle, 0, heldColor, heldMaterial))
 	case ViewmodelHeldItem:
-		dst = append(dst, viewmodelSlantedLimb(root, viewmodelRightPivot, viewmodelHeldItemCenter, viewmodelHeldItemSize,
+		heldCenter := viewmodelHeldItemCenter
+		if tier := ViewmodelTierOf(input.Selected); tier == ViewmodelTierPick ||
+			tier == ViewmodelTierHoe || tier == ViewmodelTierAxe {
+			heldCenter = viewmodelHeldPickCenter
+		}
+		dst = append(dst, viewmodelSlantedLimb(root, viewmodelRightPivot, heldCenter, viewmodelHeldItemSize,
 			viewmodelSlantAngle, angle, viewmodelHeldItemTilt, viewmodelHeldColor(input.Selected.Item), avatarMaterialSolid))
 	default:
 	}

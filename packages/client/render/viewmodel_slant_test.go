@@ -136,9 +136,9 @@ func assertViewmodelCrosshairClear(t *testing.T, out []byte) {
 	}
 }
 
-// viewmodelOriginInConvexHull 用单调链求凸包再判原点是否在其内部：凸包退
-// 化为线段或点时不可能覆盖准星，直接通过。
-func viewmodelOriginInConvexHull(points []mgl32.Vec2) bool {
+// viewmodelConvexHullOf 用单调链求点集凸包：退化为线段或点时原样返回短包，
+// 调用方以包长度不足 3 判定不可能覆盖任何像素。
+func viewmodelConvexHullOf(points []mgl32.Vec2) []mgl32.Vec2 {
 	sorted := append([]mgl32.Vec2(nil), points...)
 	for i := 1; i < len(sorted); i++ {
 		for j := i; j > 0 && (sorted[j-1][0] > sorted[j][0] ||
@@ -163,7 +163,18 @@ func viewmodelOriginInConvexHull(points []mgl32.Vec2) bool {
 		}
 		upper = append(upper, p)
 	}
-	hull := append(lower[:len(lower)-1], upper[:len(upper)-1]...)
+	return append(lower[:len(lower)-1], upper[:len(upper)-1]...)
+}
+
+// viewmodelOriginInConvexHull 判原点是否落在点集投影凸包内：凸包退化为线
+// 段或点时不可能覆盖准星，直接通过。
+func viewmodelOriginInConvexHull(points []mgl32.Vec2) bool {
+	return viewmodelHullCoversPoint(viewmodelConvexHullOf(points), mgl32.Vec2{})
+}
+
+// viewmodelHullCoversPoint 判定屏面点是否落在凸包内：点与包内任一点恒在每
+// 条边的同侧（留一像素级余量），退化短包直接判空。
+func viewmodelHullCoversPoint(hull []mgl32.Vec2, point mgl32.Vec2) bool {
 	if len(hull) < 3 {
 		return false
 	}
@@ -172,8 +183,8 @@ func viewmodelOriginInConvexHull(points []mgl32.Vec2) bool {
 	sign := float32(0)
 	for i := range hull {
 		a, b := hull[i], hull[(i+1)%len(hull)]
-		edge, toOrigin := mgl32.Vec2{b[0] - a[0], b[1] - a[1]}, mgl32.Vec2{-a[0], -a[1]}
-		value := edge[0]*toOrigin[1] - edge[1]*toOrigin[0]
+		edge, toPoint := mgl32.Vec2{b[0] - a[0], b[1] - a[1]}, mgl32.Vec2{point[0] - a[0], point[1] - a[1]}
+		value := edge[0]*toPoint[1] - edge[1]*toPoint[0]
 		if value > margin {
 			if sign < 0 {
 				return false
@@ -202,13 +213,17 @@ func TestViewmodelCrosshairClearNeutral(t *testing.T) {
 // TestViewmodelCrosshairClearAtSwingPeak 锁定挥动峰值仍不挡准星：以最大摆
 // 幅档（工具 0.7 弧度）正负峰值直接装配，投影依旧留空准星。
 func TestViewmodelCrosshairClearAtSwingPeak(t *testing.T) {
-	input := viewmodelTestInput(core.PlayerID{51},
-		core.ItemStack{Item: core.ItemIronSword, Count: 1, Durability: 125}, 10)
-	for _, angle := range []float32{0.7, -0.7} {
-		parts := buildViewmodelParts(nil, input, angle)
-		dst := growEncodeBuffer(nil, len(parts)*avatarInstanceBytes)
-		encodeAvatarPartsInto(dst, parts)
-		assertViewmodelCrosshairClear(t, dst)
+	for _, stack := range []core.ItemStack{
+		{Item: core.ItemIronSword, Count: 1, Durability: 125},
+		{Item: core.ItemIronPickaxe, Count: 1, Durability: 125},
+	} {
+		input := viewmodelTestInput(core.PlayerID{51}, stack, 10)
+		for _, angle := range []float32{0.7, -0.7} {
+			parts := buildViewmodelParts(nil, input, angle)
+			dst := growEncodeBuffer(nil, len(parts)*avatarInstanceBytes)
+			encodeAvatarPartsInto(dst, parts)
+			assertViewmodelCrosshairClear(t, dst)
+		}
 	}
 }
 
@@ -232,6 +247,116 @@ func TestViewmodelHeldItemSitsForwardOfHand(t *testing.T) {
 			t.Fatalf("持物 %v 相对手臂前移 = %.3f，想要至少 0.05（装在手的前方）",
 				stack.Item, held[2]-hand[2])
 		}
+	}
+}
+
+// TestViewmodelPickMountClearsFistFront 锁定镐类持物装在拳面之前：镐中心相
+// 对右手中心的前移必须超过拳体前半厚度（0.18），刃体整体落在拳面朝相机一
+// 侧，否则中段像素被手臂深度遮挡（抓帧目检结论）。锄斧随镐档同落点。
+func TestViewmodelPickMountClearsFistFront(t *testing.T) {
+	input := viewmodelTestInput(core.PlayerID{51},
+		core.ItemStack{Item: core.ItemIronPickaxe, Count: 1, Durability: 125}, 10)
+	out := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, input)
+	hand := decodedPartCenter(out, 1)
+	held := decodedPartCenter(out, 2)
+	if held[2]-hand[2] < 0.18 {
+		t.Fatalf("镐相对手臂前移 = %.3f，想要至少 0.18（刃体出拳面）", held[2]-hand[2])
+	}
+	if held.Sub(viewmodelHeldPickCenter).Len() > 1e-5 {
+		t.Fatalf("镐中心 = %v，想要镐专用落点 %v", held, viewmodelHeldPickCenter)
+	}
+}
+
+// TestViewmodelSwordMountUnchanged 锁定剑类持物落点不动：剑与镐分挂不同落
+// 点后，剑持物中心必须逐分量等于既有长条落点常量（攻击静帧/GIF 像素零回归
+// 的单元侧证据）。
+func TestViewmodelSwordMountUnchanged(t *testing.T) {
+	input := viewmodelTestInput(core.PlayerID{51},
+		core.ItemStack{Item: core.ItemIronSword, Count: 1, Durability: 125}, 10)
+	out := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, input)
+	if held := decodedPartCenter(out, 2); held.Sub(viewmodelHeldItemCenter).Len() > 1e-5 {
+		t.Fatalf("剑持物中心 = %v，想要既有落点 %v（不得随镐前移）", held, viewmodelHeldItemCenter)
+	}
+}
+
+// viewmodelInstanceScreenHull 把第 index 个实例的 8 角点投影为屏面 NDC 凸
+// 包：任一角点落在相机后方即失败（静息构图下不应发生）。
+func viewmodelInstanceScreenHull(t *testing.T, out []byte, index int, viewProj mgl32.Mat4) []mgl32.Vec2 {
+	t.Helper()
+	points := make([]mgl32.Vec2, 0, 8)
+	for _, sx := range []float32{-1, 1} {
+		for _, sy := range []float32{-1, 1} {
+			for _, sz := range []float32{-1, 1} {
+				world := viewmodelInstanceCorner(out, index, sx, sy, sz)
+				ndc, w := projectToNDC(viewProj, world)
+				if w <= 0 {
+					t.Fatalf("实例 %d 角点落在相机后方（w=%.2f）", index, w)
+				}
+				points = append(points, mgl32.Vec2{ndc[0], ndc[1]})
+			}
+		}
+	}
+	return viewmodelConvexHullOf(points)
+}
+
+// countViewmodelVisibleCells 在屏面 NDC 网格上数持物可见像素：落在持物凸包
+// 内、且不被任一手臂凸包覆盖的格点即为未遮挡像素。这是保守下界：屏面重叠但
+// 深度在前的部分未计入——只会少算不会多算，足以证明“有像素”。
+func countViewmodelVisibleCells(held, left, right []mgl32.Vec2) (visible, heldCells int) {
+	const grid = 256
+	for iy := 0; iy < grid; iy++ {
+		for ix := 0; ix < grid; ix++ {
+			point := mgl32.Vec2{
+				(float32(ix)+0.5)/grid*2 - 1,
+				(float32(iy)+0.5)/grid*2 - 1,
+			}
+			if !viewmodelHullCoversPoint(held, point) {
+				continue
+			}
+			heldCells++
+			if viewmodelHullCoversPoint(left, point) || viewmodelHullCoversPoint(right, point) {
+				continue
+			}
+			visible++
+		}
+	}
+	return visible, heldCells
+}
+
+// viewmodelWideViewProj 是抓帧同口径的宽幅投影 oracle：与
+// `viewmodelProjectionViewProj` 同一数学公式，只把宽高比换成抓帧画幅
+// （16:9）。静息遮挡只在宽幅下复现（方形 oracle 里新旧落点都与手臂屏面分
+// 离），回归探针必须用本口径，否则红测试无法变红。
+func viewmodelWideViewProj() mgl32.Mat4 {
+	forward := mgl32.Vec3{0, 0, -1}
+	view := mgl32.LookAtV(mgl32.Vec3{}, forward, mgl32.Vec3{0, 1, 0})
+	return core.Perspective(
+		viewmodelProjectionFovY, float32(16)/float32(9),
+		viewmodelProjectionNear, viewmodelProjectionFar,
+	).Mul4(view)
+}
+
+// TestViewmodelPickHeadVisibleAtRest 锁定挖掘静息帧镐头有屏面像素：软件光栅
+// 数出未被双手遮挡的镐格数（保守下界）。本探针是防回归烟雾线（阈值远低于实测
+// 值，只防未来有人把持物移回臂后或缩几何导致可见面积塌零）；新旧落点的区分由
+// 落点钉死测试与抓帧像素计数承担——旧落点屏面本就不遮挡，遮挡并非静息无镐的主
+// 因（主因是持物原色与天空同亮，见视觉基线报告）。
+func TestViewmodelPickHeadVisibleAtRest(t *testing.T) {
+	input := viewmodelTestInput(core.PlayerID{51},
+		core.ItemStack{Item: core.ItemIronPickaxe, Count: 1, Durability: 125}, 10)
+	out := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, input)
+	if len(out) != 3*avatarInstanceBytes {
+		t.Fatalf("持物实例数 = %d，想要 3（左右手 + 持物）", len(out)/avatarInstanceBytes)
+	}
+	viewProj := viewmodelWideViewProj()
+	left := viewmodelInstanceScreenHull(t, out, 0, viewProj)
+	right := viewmodelInstanceScreenHull(t, out, 1, viewProj)
+	held := viewmodelInstanceScreenHull(t, out, 2, viewProj)
+	visible, heldCells := countViewmodelVisibleCells(held, left, right)
+	t.Logf("静息镐屏面格 = %d，可见（未被双手覆盖）= %d", heldCells, visible)
+	const minVisibleCells = 400
+	if visible < minVisibleCells {
+		t.Fatalf("静息镐可见格 = %d，想要至少 %d（镐头须露出手臂剪影）", visible, minVisibleCells)
 	}
 }
 

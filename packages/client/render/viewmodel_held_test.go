@@ -189,15 +189,17 @@ func TestViewmodelHeldBlockAppearance(t *testing.T) {
 }
 
 func TestViewmodelHeldColorFallback(t *testing.T) {
-	// 已登记基色的物品复用共享色。
-	if color := viewmodelHeldColor(core.ItemStonePickaxe); color != ItemColor(core.ItemStonePickaxe) {
-		t.Fatalf("持镐颜色 = %v，想要共享基色 %v", color, ItemColor(core.ItemStonePickaxe))
+	// 已登记基色的物品复用共享色经呈现明暗（与手臂同源的 `avatarShade`
+	// 系数，保证浅色工具在亮背景下可辨；共享注册色本身不动）。
+	if color := viewmodelHeldColor(core.ItemStonePickaxe); color != avatarShade(ItemColor(core.ItemStonePickaxe), 0.82) {
+		t.Fatalf("持镐颜色 = %v，想要呈现明暗 %v", color, avatarShade(ItemColor(core.ItemStonePickaxe), 0.82))
 	}
-	// 未覆盖的已注册物品回落中性不透明色，而非透明黑。
+	// 未覆盖的已注册物品回落中性不透明色（同样经呈现明暗），而非透明黑。
+	wantNeutral := avatarShade(viewmodelHeldNeutralColor, 0.82)
 	for _, item := range []core.ItemID{core.ItemBread, core.ItemStick, core.ItemTorch} {
 		color := viewmodelHeldColor(item)
-		if color != viewmodelHeldNeutralColor {
-			t.Fatalf("持物(物品 %d)颜色 = %v，想要中性色 %v", item, color, viewmodelHeldNeutralColor)
+		if color != wantNeutral {
+			t.Fatalf("持物(物品 %d)颜色 = %v，想要中性呈现色 %v", item, color, wantNeutral)
 		}
 		if color[3] != 1 {
 			t.Fatalf("持物(物品 %d)不透明度 = %v，想要 1", item, color[3])
