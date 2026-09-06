@@ -2,13 +2,13 @@
 
 本目录统一存放视觉回归基线，均为测试夹具二进制。
 
-- `world/`：无窗口世界场景基线 28 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
-- `passive-death/`：被动牛 GIF 动态基线 4 个，对应 `cmd/mornlea/capture/passive_death_scripts.go` 的 `passiveDeathGIFScripts`（按 tick 步进抓帧，标准库 `image/gif` 编码，逐帧解码沿用双阈值比对）。
+- `world/`：无窗口世界场景基线 24 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
+- `motion/`：过程 GIF 基线 10 个（被动牛 4 剧本 + motion 演示 6 个），只验呈现、不进比对，对应 `cmd/mornlea/capture/passive_death_scripts.go` 的 `passiveDeathGIFScripts` 与各 motion 演示入口（按 tick 步进抓帧，标准库 `image/gif` 编码）。
 - `ui/`：前端 UI 部件基线 30 张，对应 `packages/engine/crates/mornlea_client/frontend/visual/fixture-names.ts` 的 `fixtureNames`。
 
 旧目录 `cmd/mornlea/capture/testdata/golden/` 与 `engine/crates/mornlea_client/frontend/visual/golden/` 已清空，仅剩空目录，不再写入。
 
-## world（28 张）
+## world（24 张）
 
 文件名即场景名加 `.png` 后缀，场景定义与顺序以 `captureScenes` 为准。
 
@@ -36,10 +36,6 @@
 | `main-menu.png` | `main-menu` | 主菜单相位全景底图，固定自转时刻的纯全景世界画面。 |
 | `settings-menu.png` | `settings-menu` | 设置相位全景底图，同一全景世界的另一自转时刻。 |
 | `avatar-detail.png` | `avatar-detail` | 原创旅人正面、侧面和背面同框，验收服装材质与静态轮廓。 |
-| `hand-tool.png` | `hand-tool` | 半耐久铁镐选中态、中立持握的工具手持基线。 |
-| `hand-block.png` | `hand-block` | 泥土微缩立方在右手上方、中立持握的方块手持基线。 |
-| `hand-mining.png` | `hand-mining` | 铁镐在手、浅阶段世界裂纹同框的挖掘基线（挥动相位钉死在上升沿）。 |
-| `hand-attack.png` | `hand-attack` | 铁剑在手、合成确认沿钉死攻击窗第 1 帧的打击基线。 |
 | `far-horizon.png` | `far-horizon` | 高空远眺的近景地形、远环壳带、雾过渡与天空四段构图。 |
 | `water-underwater.png` | `water-underwater` | 眼睛浸没的水下视角，水色叠加与穿水衰减同框。 |
 
@@ -80,10 +76,10 @@
 | `hud-chat.png` | `hud-chat` | `HudRoot` 多行聊天。 |
 | `hud-container-open.png` | `hud-container-open` | `HudRoot` 容器打开态翻转构图。 |
 
-## motion（6 个）
+## motion（10 个）
 
-motion 演示产物只验呈现、不进比对：`make visual-check` 与 `--update-golden`
-都不感知本目录，`world/` 的 28 张 PNG 纪律也不含它。
+motion 过程 GIF 只验呈现、不进比对：`make visual-check` 只比对 `world/` PNG
+（GIF 剧本只生成、不设阈值），`world/` 的 24 张 PNG 纪律也不含它。
 
 | 演示文件 | 场景 | 帧数/时长 | 生成入口 |
 |---|---|---|---|
@@ -94,21 +90,14 @@ motion 演示产物只验呈现、不进比对：`make visual-check` 与 `--upda
 | `drop-density.gif` | 空场→1→4→9→16→32→移除一半至16堆→稳态 | 160帧，20Hz，8秒 | 同上加 `--motion-scene drop-density`，输出改为 `drop-density.gif` |
 | `hand-mining.gif` | 铁镐在手、浅裂纹恒定，右手以镐档周期10 tick正弦挥动12次 | 120帧，20Hz，6秒 | 同上加 `--motion-scene hand-mining`，输出改为 `hand-mining.gif` |
 | `hand-attack.gif` | 铁剑在手、每12帧合成一次确认沿（6帧挥动+6帧中立），共10次完整挥动 | 120帧，20Hz，6秒 | 同上加 `--motion-scene hand-attack`，输出改为 `hand-attack.gif` |
+| `graze.gif` | `graze`：吃草前后——常态站立 6 帧接低头吃草 6 帧，常态牛对照 | 12帧，约8fps | 随 `make visual-update` 由 `RunCapture` 内 `RunPassiveDeathGIFs` 生成（像素比对已退役，只保留生成） |
+| `lure.gif` | `lure`：持麦靠近——远端玩家逐帧靠近静立牛，小麦掉落置于牛身前 | 48帧内，约8fps | 同上 |
+| `kill.gif` | `kill`：击杀——第 4 帧死亡 despawn 并刷出生牛肉掉落，随后 20 帧红闪侧倒保留期 | 48帧内，约8fps | 同上 |
+| `beef-drop.gif` | `beef-drop`：牛肉掉落——单个生牛肉掉落的浮动与旋转（权威 tick 派生） | 48帧内，约8fps | 同上 |
 
 - 新演示的原始关键PNG写在输出路径加 `-frames/` 的旁路审查目录，不纳入golden；GIF是完整过程，PNG只帮助核对编码保真。
 - 演示场景值住 `packages/client/cmd/mornlea/capture/motion_break_burst.go`、`motion_experience.go` 与 `motion_hand_swing.go`，不追加进 `captureScenes`。
 - 编码只用标准库 `image/gif`（全片共享自适应调色板，无抖色），固定输入逐字节一致。
-
-## passive-death（4 个）
-
-文件名即剧本名加 `.gif` 后缀，剧本定义以 `passiveDeathGIFScripts` 为准；单基线帧预算 ≤48（8fps×6s），比对时解码逐帧沿用双阈值，全部帧通过方为通过。
-
-| 基线文件 | 剧本名 | 说明 |
-|---|---|---|
-| `graze.gif` | `graze` | 吃草前后：常态站立 6 帧接低头吃草 6 帧，常态牛对照。 |
-| `lure.gif` | `lure` | 持麦靠近：远端玩家逐帧靠近静立牛，小麦掉落置于牛身前。 |
-| `kill.gif` | `kill` | 击杀：第 4 帧死亡 despawn 并刷出生牛肉掉落，随后 20 帧红闪侧倒保留期。 |
-| `beef-drop.gif` | `beef-drop` | 牛肉掉落：单个生牛肉掉落的浮动与旋转（权威 tick 派生）。 |
 
 ## 三类边界与选用规则
 
@@ -116,9 +105,7 @@ motion 演示产物只验呈现、不进比对：`make visual-check` 与 `--upda
 
 - 第一类 UI 窗口型（`ui/`）：窗口与 WebView 层的部件级 PNG。清单以 `fixture-names.ts` 的 `fixtureNames` 为准；本机 Chrome 截图、既有双阈值比对，不进 CI。
 - 第二类世界静态（`world/`）：无头离屏渲染收敛后的单帧稳定态 PNG。场景定义与顺序以 `captureScenes` 为准；`make visual-check` 比对、`make visual-update` 显式覆盖。
-- 第三类过程 GIF（`motion/` + `passive-death/`）：跨 tick 状态迁移的全流程 GIF，按 tick 步进抓帧，覆盖触发前、结算、收敛全过程，不得只截片段。内分两小类：
-  - `motion/` 演示：只验呈现、不进任何比对门禁，供人眼审查全流程；
-  - `passive-death/` 门禁：逐帧沿用双阈值比对，全部帧通过方为通过，单基线帧预算有界。
+- 第三类过程 GIF（`motion/`）：跨 tick 状态迁移的全流程 GIF，按 tick 步进抓帧，覆盖触发前、结算、收敛全过程，不得只截片段。只验呈现、不进任何比对门禁，供人眼审查全流程；其中被动牛 4 剧本随 `make visual-update` 由 `RunCapture` 内生成，motion 演示 6 个经 `--motion-demo` 显式生成。
 
 路由纪律：窗口 chrome 只进 `ui/`，世界单帧只进 `world/`，时间过程只进 GIF；世界帧不得携带窗口 chrome 像素，UI 夹具不得复刻世界像素。
 
@@ -128,7 +115,7 @@ motion 演示产物只验呈现、不进比对：`make visual-check` 与 `--upda
 
 ## 更新入口与纪律
 
-- 世界基线比对入口为 `make visual-check`（含 GIF 剧本），覆盖入口为 `make visual-update`，路径常量为 `capture/capture_image.go` 的 `captureGoldenDir` 与 `capture/passive_death_gif.go` 的 `passiveDeathGoldenDir`。
+- 世界基线比对入口为 `make visual-check`（只比对 `world/` PNG；GIF 剧本只生成、不进比对），覆盖入口为 `make visual-update`，路径常量为 `capture/capture_image.go` 的 `captureGoldenDir` 与 `capture/passive_death_gif.go` 的 `passiveDeathMotionDir`。
 - 部件基线比对入口为 `make frontend-visual-check`（或在 `frontend/` 内执行 `corepack pnpm visual-check`），覆盖入口为 `make frontend-visual-update`（或 `corepack pnpm visual-update`），基线目录由 `visual/visual.mjs` 的 `goldenDir` 经 `repoRoot` 推导。
 - 先目检后覆盖：基线只在预期视觉变化已逐图人工确认后更新，普通验证只比较不自动接受差异；漂移先看实拍图与差异图定位，再决定修代码还是更新基线；基线缺失不静默创建，必须显式请求更新。
 - 比对口径为双阈值，定义与取值以源码为准（`capture/visual_compare.go` 与 `visual/visual.mjs` 的比对函数），本文档不复制具体数值。
