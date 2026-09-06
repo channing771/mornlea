@@ -125,6 +125,48 @@ func TestValidateViewmodelInstanceCount(t *testing.T) {
 	}
 }
 
+// TestDeriveViewmodelInputCarriesLoginIdentity 锁定端到端身份一致：派生把
+// 装配点保留的登录身份填入编码输入，同身份新编码器输出逐字节一致、且与零
+// 身份输出不同（手色随身份键变化，不断言具体颜色值）。
+func TestDeriveViewmodelInputCarriesLoginIdentity(t *testing.T) {
+	app := &Application{}
+	login := core.PlayerID{0: 0x12, 6: 0x40, 8: 0x80, 15: 1}
+	app.startupOptions.Identity = &network.Identity{PlayerID: login, DisplayName: "Tester"}
+	applyViewmodelHotbar(t, app, viewmodelStoneStack, 0)
+	app.serverTick = 10
+	input := app.deriveViewmodelInput(false, render.BlockCrack{})
+	if input == nil {
+		t.Fatal("已确认选中派生为 nil，想要携带登录身份的输入")
+	}
+	if input.Player != login {
+		t.Fatalf("派生身份=%v，想要登录身份 %v", input.Player, login)
+	}
+	got := app.viewmodelEncoder.EncodeViewmodelInstances(nil, input)
+	want := (&render.ViewmodelEncoder{}).EncodeViewmodelInstances(nil, input)
+	if string(got) != string(want) {
+		t.Fatal("同身份编码输出与新编码器不一致")
+	}
+	zero := *input
+	zero.Player = core.PlayerID{}
+	if zeroOut := (&render.ViewmodelEncoder{}).EncodeViewmodelInstances(nil, &zero); string(zeroOut) == string(want) {
+		t.Fatal("零身份与登录身份输出一致，身份未进入颜色派生")
+	}
+}
+
+// TestViewmodelInstanceBytesMatchesEncoderOutput 把计数门常量钉在编码器真
+// 实输出上：中立双手恰两实例、手持方块恰三实例；`render` 侧布局若变，本测
+// 先红，计数门不静默漂移。
+func TestViewmodelInstanceBytesMatchesEncoderOutput(t *testing.T) {
+	neutral := &render.ViewmodelInput{Selected: core.ItemStack{}, Tick: 10}
+	if out := (&render.ViewmodelEncoder{}).EncodeViewmodelInstances(nil, neutral); len(out) != 2*viewmodelInstanceBytes {
+		t.Fatalf("中立输出 %d 字节，想要 %d", len(out), 2*viewmodelInstanceBytes)
+	}
+	held := &render.ViewmodelInput{Selected: viewmodelStoneStack, Tick: 10}
+	if out := (&render.ViewmodelEncoder{}).EncodeViewmodelInstances(nil, held); len(out) != 3*viewmodelInstanceBytes {
+		t.Fatalf("持物输出 %d 字节，想要 %d", len(out), 3*viewmodelInstanceBytes)
+	}
+}
+
 // TestResetSessionOwnedStateClearsViewmodel 锁定会话边界：重置前打开的攻击
 // 窗与挖掘锚在 `resetSessionOwnedState` 后与新编码器逐字节一致。
 func TestResetSessionOwnedStateClearsViewmodel(t *testing.T) {

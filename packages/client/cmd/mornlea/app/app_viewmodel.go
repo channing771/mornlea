@@ -6,11 +6,13 @@ import (
 	"fmt"
 
 	"github.com/channing771/mornlea/packages/client/render"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-// viewmodelInstanceBytes 是单 viewmodel 实例的定长字节数：`render` 侧
-// avatar 实例布局的跨语言契约，`EncodeViewmodelInstances` 输出按此切分；
-// 计数门用它把字节流折算为实例数，本文件不复述布局细节。
+// viewmodelInstanceBytes 是单 viewmodel 实例的定长字节数：与 `render` 侧
+// `avatarInstanceBytes` 同值（跨语言 avatar 实例布局契约）；`render` 未导出
+// 该常量，此处保留字面量，漂移由 `TestViewmodelInstanceBytesMatchesEncoderOutput`
+// 锁定（编码器真实输出恒为本常量的整数倍）。
 const viewmodelInstanceBytes = 96
 
 // deriveViewmodelInput 从已确认镜像派生单帧 viewmodel 编码输入：选中形态
@@ -25,8 +27,9 @@ const viewmodelInstanceBytes = 96
 // 重置的清零见 `resetSessionOwnedState`。未确认快捷栏同样返回 nil——首个确
 // 认到达前没有可呈现的选中。
 //
-// 身份取零值：本地不渲染自身第三人称身体，手色按同一派生口径由传入身份确
-// 定；登录身份当前不保留，零值保证确定可重放，待应用层保留身份后再直通。
+// 身份直通装配点保留的登录身份：三条真实登录路径全要求 `Identity` 非 nil，
+// 双手与远端所见自身身体按同一键着色；无头与测试装配未保留时回落零值，仍确
+// 定可重放。
 func (a *Application) deriveViewmodelInput(panorama bool, crack render.BlockCrack) *render.ViewmodelInput {
 	if panorama || a.clientSessionClosed {
 		return nil
@@ -35,7 +38,12 @@ func (a *Application) deriveViewmodelInput(panorama bool, crack render.BlockCrac
 	if !confirmed {
 		return nil
 	}
+	var player core.PlayerID
+	if identity := a.startupOptions.Identity; identity != nil {
+		player = identity.PlayerID
+	}
 	return &render.ViewmodelInput{
+		Player:     player,
 		Selected:   hotbar.Slots[hotbar.Selected],
 		Tick:       a.serverTick,
 		Mining:     crack.Visible,
