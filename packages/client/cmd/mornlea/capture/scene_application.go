@@ -100,6 +100,9 @@ type SceneApplication interface {
 	ArmCombatMarker()
 	ResetCombatFeedback()
 	CombatMarkerVisible() bool
+	// ObserveCombatHitForCapture 合成打击确认沿（严格递增才接受）：抓帧管线
+	// 用它打开编码器的攻击挥动窗；生产确认只走服务端消息，本方法无生产调用方。
+	ObserveCombatHitForCapture(tick uint64)
 	// ResetViewmodel 丢弃双手编码器的挥动边沿：公共清场经它把旧场景的挖掘
 	// 锚与攻击窗清零，新场景首帧按新输入重新锚定。
 	ResetViewmodel()

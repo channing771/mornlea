@@ -39,7 +39,7 @@
 | `hand-tool.png` | `hand-tool` | 半耐久铁镐选中态、中立持握的工具手持基线。 |
 | `hand-block.png` | `hand-block` | 泥土微缩立方在右手上方、中立持握的方块手持基线。 |
 | `hand-mining.png` | `hand-mining` | 铁镐在手、浅阶段世界裂纹同框的挖掘基线（挥动相位钉死在上升沿）。 |
-| `hand-attack.png` | `hand-attack` | 铁剑在手、命中标记按窗口节奏武装的打击基线（抓帧管线无挥动沿注入面，像素为中立持剑）。 |
+| `hand-attack.png` | `hand-attack` | 铁剑在手、合成确认沿钉死攻击窗第 1 帧的打击基线。 |
 | `far-horizon.png` | `far-horizon` | 高空远眺的近景地形、远环壳带、雾过渡与天空四段构图。 |
 | `water-underwater.png` | `water-underwater` | 眼睛浸没的水下视角，水色叠加与穿水衰减同框。 |
 
@@ -93,7 +93,7 @@ motion 演示产物只验呈现、不进比对：`make visual-check` 与 `--upda
 | `drop-scatter.gif` | 触发前空场→四堆正式帧出生→散开下落→着陆 | 80帧，20Hz，4秒 | 同上加 `--motion-scene drop-scatter`，输出改为 `drop-scatter.gif` |
 | `drop-density.gif` | 空场→1→4→9→16→32→移除一半至16堆→稳态 | 160帧，20Hz，8秒 | 同上加 `--motion-scene drop-density`，输出改为 `drop-density.gif` |
 | `hand-mining.gif` | 铁镐在手、浅裂纹恒定，右手以镐档周期10 tick正弦挥动12次 | 120帧，20Hz，6秒 | 同上加 `--motion-scene hand-mining`，输出改为 `hand-mining.gif` |
-| `hand-attack.gif` | 铁剑在手、每12帧重武装一次标记（当前抓帧管线无 `CombatHit` 注入面，逐帧为中立持剑，标记节奏只进呈现状态；挥动像素待注入面落地） | 120帧，20Hz，6秒 | 同上加 `--motion-scene hand-attack`，输出改为 `hand-attack.gif` |
+| `hand-attack.gif` | 铁剑在手、每12帧合成一次确认沿（6帧挥动+6帧中立），共10次完整挥动 | 120帧，20Hz，6秒 | 同上加 `--motion-scene hand-attack`，输出改为 `hand-attack.gif` |
 
 - 新演示的原始关键PNG写在输出路径加 `-frames/` 的旁路审查目录，不纳入golden；GIF是完整过程，PNG只帮助核对编码保真。
 - 演示场景值住 `packages/client/cmd/mornlea/capture/motion_break_burst.go`、`motion_experience.go` 与 `motion_hand_swing.go`，不追加进 `captureScenes`。

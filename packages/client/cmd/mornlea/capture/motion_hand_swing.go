@@ -7,13 +7,9 @@ package capture
 //
 // 时间线（帧号 = 合成 tick 偏移，延迟 5cs 即 20Hz，与权威 tick 同频）：
 // hand-mining：铁镐在手、浅裂纹恒定（6/30），右手以镐档周期 10 tick 正弦
-// 挥动，120 帧恰好 12 次完整挥动；hand-attack：铁剑在手、每 12 帧重武装
-// 一次命中标记（编码器窗语义为 6 帧挥动 + 6 帧中立，120 帧对应 10 个窗口
-// 沿）。注意：标记武装只推进帧计数，编码器挥动沿需要 `CombatHit` 确认经
-// 应用层写入 `lastServerTick` 才开启——抓帧管线无该注入面（应用层文件不在
-// 本任务范围内），因此 hand-attack 在当前管线下逐帧为中立持剑（标记按节
-// 奏重武装但不进入像素），挥动像素待抓帧 `CombatHit` 注入面落地后自然出
-// 现；hand-mining 的挥动由合成 tick 直接驱动，不受此限。
+// 挥动，120 帧恰好 12 次完整挥动；hand-attack：铁剑在手、每 12 帧合成一次
+// 确认沿（编码器窗语义为 6 帧挥动 + 6 帧中立，120 帧对应 10 个窗口沿），确
+// 认沿经抓帧专用缝写入，与线上 `CombatHit` 同语义。
 //
 // tick 来源是合成推进而非真实无头 tick：真实权威 tick 取决于加载收敛花了
 // 多久，随机器速度漂移（见 `captureScene` 的注释），演示必须逐帧确定才钉
@@ -65,8 +61,8 @@ func handSwingMotionRearmAttack(frame int) bool {
 }
 
 // applyHandSwingMotionFrame 推进一帧时间线状态：合成 tick 直写；挖掘剧本
-// 重装恒定采掘镜像，打击剧本按周期重武装标记。调用方随后走真实
-// `RenderFrame` 抓帧。
+// 重装恒定采掘镜像，打击剧本按周期合成确认沿（`Observe` 既置确认点开编码
+// 器窗口、又重武装标记帧数，一举两得）。调用方随后走真实 `RenderFrame` 抓帧。
 func applyHandSwingMotionFrame(app SceneApplication, scene string, frame int) error {
 	app.SetServerTick(handSwingMotionTick(frame))
 	switch scene {
@@ -74,7 +70,7 @@ func applyHandSwingMotionFrame(app SceneApplication, scene string, frame int) er
 		app.SetMiningOverlay(handSwingMotionOverlay(frame))
 	case "hand-attack":
 		if handSwingMotionRearmAttack(frame) {
-			app.ArmCombatMarker()
+			app.ObserveCombatHitForCapture(handSwingMotionTick(frame))
 		}
 	default:
 		return fmt.Errorf("未知挥动剧本 %q", scene)

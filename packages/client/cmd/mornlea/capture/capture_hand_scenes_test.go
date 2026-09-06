@@ -165,6 +165,14 @@ func TestHandAttackCaptureState(t *testing.T) {
 	if !app.CombatMarkerVisible() {
 		t.Fatal("PinVolatile 后标记不可见")
 	}
+	// 重复钉死幂等：合成沿同值不被接受（严格递增），标记仍保持可见，最终
+	// 帧语义不变。
+	if err := scene.PinVolatile(app); err != nil {
+		t.Fatalf("二次 PinVolatile: %v", err)
+	}
+	if !app.CombatMarkerVisible() {
+		t.Fatal("二次 PinVolatile 后标记不可见")
+	}
 	// 清理：后继 far-horizon 不应继承标记与背包。
 	if err := resetCapturePresentation(app); err != nil {
 		t.Fatalf("清理: %v", err)

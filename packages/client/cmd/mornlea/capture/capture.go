@@ -604,14 +604,14 @@ var captureScenes = []captureScene{
 		PinVolatile:  pinHandMiningVolatile,
 	},
 	{
-		// hand-attack 是打击基线：铁剑在手、标记收敛后重武装；挥动沿需
-		// `CombatHit` 确认才开启（抓帧管线无注入面），像素为中立持剑、
-		// 标记按窗口节奏武装。不带受击远端玩家（带目标对照由战斗场景覆盖）。
+		// hand-attack 是打击基线：铁剑在手、标记收敛后重武装并合成确认沿，
+		// 最终帧落在攻击窗第 1 帧（首帧即起挥）；不带受击远端玩家（带目标
+		// 对照由战斗场景覆盖）。
 		Name:         "hand-attack",
 		WarmupFrames: 8,
 		Prepare:      prepareAICompanion,
 		Apply:        applyHandAttackCaptureState,
-		PinVolatile:  pinSwordCombatVolatile,
+		PinVolatile:  pinHandAttackVolatile,
 	},
 	{
 		// far-horizon 是远环 LOD 的长期视觉门禁(spec delta「MUST 新增

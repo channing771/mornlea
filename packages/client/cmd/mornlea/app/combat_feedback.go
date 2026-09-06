@@ -38,6 +38,13 @@ func (feedback *combatFeedback) Reset() { *feedback = combatFeedback{} }
 
 func (a *Application) ArmCombatMarker() { a.combatFeedback.ArmMarker() }
 
+// ObserveCombatHitForCapture 是抓帧管线合成打击确认沿的专用缝：复用既有
+// `Observe` 的严格递增语义，只写确认点与标记帧数，不经过生产消息管线；生
+// 产路径（`DrainServerMessages` 的 `CombatHit` 消费）行为不变。
+func (a *Application) ObserveCombatHitForCapture(tick uint64) {
+	a.combatFeedback.Observe(tick)
+}
+
 func (a *Application) ResetCombatFeedback() { a.combatFeedback.Reset() }
 
 func (a *Application) CombatMarkerVisible() bool { return a.combatFeedback.MarkerVisible() }

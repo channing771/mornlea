@@ -1,7 +1,10 @@
 package capture
 
 import (
+	"slices"
 	"testing"
+
+	"github.com/channing771/mornlea/packages/client/render/hud"
 )
 
 // 本文件覆盖手持挥动两剧本（挖掘/打击）的确定性映射：合成 tick、采掘镜像
@@ -62,5 +65,54 @@ func TestHandSwingMotionScenesStayOutOfCaptureScenes(t *testing.T) {
 func TestRunMotionRejectsUnknownHandScene(t *testing.T) {
 	if err := RunHandSwingMotion(nil, "", "unknown"); err == nil {
 		t.Fatal("未知挥动剧本想要报错，实际通过")
+	}
+}
+
+// handSwingMotionRecorder 记录时间线驱动的调用：内嵌接口只覆写驱动实际调
+// 用的三个方法，其余保持 nil（驱动不碰它们）。
+type handSwingMotionRecorder struct {
+	SceneApplication
+	ticks    []uint64
+	observed []uint64
+	overlays int
+}
+
+func (r *handSwingMotionRecorder) SetServerTick(tick uint64) { r.ticks = append(r.ticks, tick) }
+
+func (r *handSwingMotionRecorder) ObserveCombatHitForCapture(tick uint64) {
+	r.observed = append(r.observed, tick)
+}
+
+func (r *handSwingMotionRecorder) SetMiningOverlay(_ hud.MiningOverlay) { r.overlays++ }
+
+// TestHandSwingMotionFrameDrivesCaptureSeam 锁定时间线驱动与抓帧缝的接线：
+// 打击剧本只在重武装帧合成确认沿（沿值即该帧合成 tick，严格递增），挖掘剧
+// 本逐帧重装采掘镜像且永不合成沿。
+func TestHandSwingMotionFrameDrivesCaptureSeam(t *testing.T) {
+	attack := &handSwingMotionRecorder{}
+	for frame := 0; frame < 2*handSwingMotionAttackPeriod; frame++ {
+		if err := applyHandSwingMotionFrame(attack, "hand-attack", frame); err != nil {
+			t.Fatalf("帧 %d: %v", frame, err)
+		}
+	}
+	if len(attack.ticks) != 2*handSwingMotionAttackPeriod {
+		t.Fatalf("合成 tick 推进=%d，想要逐帧一次共 %d", len(attack.ticks), 2*handSwingMotionAttackPeriod)
+	}
+	want := []uint64{handSwingMotionTick(0), handSwingMotionTick(handSwingMotionAttackPeriod)}
+	if !slices.Equal(attack.observed, want) {
+		t.Fatalf("合成确认沿=%v，想要 %v（严格递增）", attack.observed, want)
+	}
+
+	mining := &handSwingMotionRecorder{}
+	for frame := 0; frame < 2*handSwingMotionAttackPeriod; frame++ {
+		if err := applyHandSwingMotionFrame(mining, "hand-mining", frame); err != nil {
+			t.Fatalf("帧 %d: %v", frame, err)
+		}
+	}
+	if mining.overlays != 2*handSwingMotionAttackPeriod {
+		t.Fatalf("采掘镜像重装=%d，想要逐帧一次", mining.overlays)
+	}
+	if len(mining.observed) != 0 {
+		t.Fatalf("挖掘剧本合成确认沿=%v，想要永不合成", mining.observed)
 	}
 }
