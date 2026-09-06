@@ -296,6 +296,12 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	a.avatarStream = a.entityEncoder.AppendBreakBurstInstances(a.avatarStream, a.serverTick, a.itemDropInstances)
 	a.outlineStream = a.entityEncoder.EncodeBlockOutlineInstances(a.outlineStream, blockOutline)
 	a.crackStream = a.entityEncoder.EncodeBlockCrackInstances(a.crackStream, crack)
+	// 第一人称双手：输入派生见 `deriveViewmodelInput`（确认纪律与相位门控
+	// 与 `updateItemPopup` 和 `deriveBlockCrack` 同形），计数门超限整帧拒绝。
+	a.viewmodelStream = a.viewmodelEncoder.EncodeViewmodelInstances(a.viewmodelStream, a.deriveViewmodelInput(vista != nil, crack))
+	if err := validateViewmodelInstanceCount(a.viewmodelStream); err != nil {
+		return false, fmt.Errorf("准备第一人称双手: %w", err)
+	}
 
 	right := mgl32.Vec3{
 		float32(math.Cos(float64(cam.Yaw))),
@@ -318,24 +324,25 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	var hudSegment []byte
 
 	rendered := a.renderer.RenderFrame(client.RenderFrame{
-		ViewProj:         viewProj,
-		ViewProjInv:      viewProjInv,
-		Pos:              cam.Pos,
-		Daylight:         dayNight.Daylight,
-		SunDirection:     dayNight.SunDirection,
-		StarVisibility:   dayNight.StarVisibility,
-		SkyColor:         dayNight.ClearColor,
-		CloudMacroX:      cloud.MacroX,
-		CloudLocal:       cloud.Local,
-		Visible:          a.rustVisible,
-		AvatarInstances:  a.avatarStream,
-		DropInstances:    a.dropStream,
-		OutlineInstances: a.outlineStream,
-		CrackInstances:   a.crackStream,
-		OverlayStrength:  a.damageStrength,
-		WaterTint:        underwater.Tint,
-		NameTagSegment:   nameTagSegment,
-		HUDSegment:       hudSegment,
+		ViewProj:           viewProj,
+		ViewProjInv:        viewProjInv,
+		Pos:                cam.Pos,
+		Daylight:           dayNight.Daylight,
+		SunDirection:       dayNight.SunDirection,
+		StarVisibility:     dayNight.StarVisibility,
+		SkyColor:           dayNight.ClearColor,
+		CloudMacroX:        cloud.MacroX,
+		CloudLocal:         cloud.Local,
+		Visible:            a.rustVisible,
+		AvatarInstances:    a.avatarStream,
+		DropInstances:      a.dropStream,
+		OutlineInstances:   a.outlineStream,
+		CrackInstances:     a.crackStream,
+		ViewmodelInstances: a.viewmodelStream,
+		OverlayStrength:    a.damageStrength,
+		WaterTint:          underwater.Tint,
+		NameTagSegment:     nameTagSegment,
+		HUDSegment:         hudSegment,
 	})
 	if a.combatFeedback.AfterRender(rendered) {
 		// marker 到期：显隐由 WebView 组件按 hud 分节下行驱动，置脏等下一个

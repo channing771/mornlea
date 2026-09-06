@@ -46,6 +46,9 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			if state.Reset {
 				a.audioFeedback.Reset()
 				a.combatFeedback.Reset()
+				// 权威 reset 是会话边界：双手编码器的边沿状态与 marker 同步丢弃，
+				// 否则残留攻击窗会在重生后继续挥动。
+				a.viewmodelEncoder.ResetViewmodel()
 				// 权威 reset 是会话边界：hud 分节纪律层丢弃旧基线，回到游戏
 				// 相位后的第一次冲刷无条件下行一份完整分节。
 				a.resetHUDStatePush()

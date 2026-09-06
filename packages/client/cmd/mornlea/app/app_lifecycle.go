@@ -108,6 +108,9 @@ func (a *Application) resetSessionOwnedState() {
 	a.inventory.Reset()
 	a.audioFeedback.Reset()
 	a.combatFeedback.Reset()
+	// 双手挥动边沿（挖掘锚、攻击窗）随会话一并清零：旧会话的相位不得带入
+	// 新会话，与战斗 marker 的清理同纪律。
+	a.viewmodelEncoder.ResetViewmodel()
 	if a.hostiles != nil {
 		a.hostiles.Reset()
 	}

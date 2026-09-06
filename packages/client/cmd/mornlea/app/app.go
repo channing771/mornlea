@@ -105,14 +105,18 @@ type Application struct {
 	dropStream      []byte
 	outlineStream   []byte
 	crackStream     []byte
-	billboardBytes  []byte
-	entityEncoder   render.InstanceEncoder
-	lastFrameStats  render.FrameStats
-	remotePlayers   *client.RemotePlayers
-	companions      *client.Companions
-	hostiles        *client.Hostiles
-	chatEvents      *client.ChatEvents
-	chatInput       chatInput
+	// viewmodelStream 是本帧第一人称双手实例流的复用缓冲；`viewmodelEncoder`
+	// 跨帧存续挥动边沿（挖掘锚、攻击窗），会话重置时清零。
+	viewmodelStream  []byte
+	viewmodelEncoder render.ViewmodelEncoder
+	billboardBytes   []byte
+	entityEncoder    render.InstanceEncoder
+	lastFrameStats   render.FrameStats
+	remotePlayers    *client.RemotePlayers
+	companions       *client.Companions
+	hostiles         *client.Hostiles
+	chatEvents       *client.ChatEvents
+	chatInput        chatInput
 	// chatEventBuffer 是 refreshChatLines 的复用缓冲，容量与 client.ChatEventCapacity
 	// 同源（E9/C9）：事件环最多回放 32 条，缓冲按同一常量分配保证零扩容刷新。
 	chatEventBuffer [client.ChatEventCapacity]network.ChatEvent
