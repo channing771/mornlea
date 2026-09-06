@@ -119,14 +119,17 @@ type viewmodelSwingParam struct {
 }
 
 // viewmodelSwingTable 是六档摆幅与节奏参数表：斧与铲在配方与采掘规则落地
-// 前取镐档默认值，落地后只改这两行的表值。
+// 前取镐档默认值，落地后只改这两行的表值。摆幅按抓帧目检调定：工具三档统
+// 一 0.7（峰值挥动保持手持物在框内且屏面位移可辨，更大摆幅会使峰值帧冲出
+// 画面，见视觉基线报告；档位区分改由周期承担——剑 8 tick 最快、镐 10、空
+// 手 12、方块 14；周期一律不动）。
 var viewmodelSwingTable = [...]viewmodelSwingParam{
 	ViewmodelTierEmptyHand: {amplitude: 0.5, periodTicks: 12},
 	ViewmodelTierBlock:     {amplitude: 0.4, periodTicks: 14},
-	ViewmodelTierSword:     {amplitude: 0.8, periodTicks: 8},
-	ViewmodelTierPick:      {amplitude: 0.6, periodTicks: 10},
-	ViewmodelTierHoe:       {amplitude: 0.6, periodTicks: 10},
-	ViewmodelTierAxe:       {amplitude: 0.6, periodTicks: 10},
+	ViewmodelTierSword:     {amplitude: 0.7, periodTicks: 8},
+	ViewmodelTierPick:      {amplitude: 0.7, periodTicks: 10},
+	ViewmodelTierHoe:       {amplitude: 0.7, periodTicks: 10},
+	ViewmodelTierAxe:       {amplitude: 0.7, periodTicks: 10},
 }
 
 // ViewmodelSwingParams 返回指定档的摆幅与周期：越界档位回落到空手档，编码
@@ -170,21 +173,22 @@ var (
 	// 20°–35° 契约区间内；左右手取镜像符号，顶端都偏向画面中心。
 	viewmodelSlantAngle = float32(28 * math.Pi / 180)
 	// viewmodelLeftCenter/viewmodelRightCenter 是相机空间的双手中心：右手
-	// 为主手，更靠画面中心、位置更高、离相机更近；臂长 0.7 使臂根落在屏底
-	// 之外，只留前臂入画。
-	viewmodelLeftCenter  = mgl32.Vec3{-0.44, -0.47, -0.82}
-	viewmodelRightCenter = mgl32.Vec3{0.33, -0.39, -0.78}
+	// 为主手，更靠画面中心、位置更高、离相机更近；双臂只以前臂入画（约屏
+	// 高下三分之一），臂根落在屏底之外。
+	viewmodelLeftCenter  = mgl32.Vec3{-0.48, -0.55, -0.88}
+	viewmodelRightCenter = mgl32.Vec3{0.37, -0.48, -0.84}
 	// viewmodelLeftPivot/viewmodelRightPivot 是双手挥动转轴（臂根）：落在
 	// 各自手臂正下方，斜持滚转与挥动旋转都绕它发生。
-	viewmodelLeftPivot  = mgl32.Vec3{-0.44, -0.82, -0.82}
-	viewmodelRightPivot = mgl32.Vec3{0.33, -0.74, -0.78}
+	viewmodelLeftPivot  = mgl32.Vec3{-0.48, -0.90, -0.88}
+	viewmodelRightPivot = mgl32.Vec3{0.37, -0.83, -0.84}
 	// viewmodelHeldBlockCenter/viewmodelHeldBlockSize 是手持方块的微缩立方：
-	// 落在右手上方，与世界同源材质。
-	viewmodelHeldBlockCenter = mgl32.Vec3{0.33, -0.10, -0.78}
+	// 被右手握持在相机一侧，与世界同源材质。
+	viewmodelHeldBlockCenter = mgl32.Vec3{0.37, -0.19, -0.72}
 	viewmodelHeldBlockSize   = mgl32.Vec3{0.22, 0.22, 0.22}
 	// viewmodelHeldItemCenter/viewmodelHeldItemSize 是手持物品的扁长条：纵
-	// 轴显著长于另两轴，与立方剪影可辨，被右手握持。
-	viewmodelHeldItemCenter = mgl32.Vec3{0.33, -0.08, -0.80}
+	// 轴显著长于另两轴，与立方剪影可辨；装在右手拳面朝相机一侧，不被手臂
+	// 遮挡。
+	viewmodelHeldItemCenter = mgl32.Vec3{0.35, -0.17, -0.72}
 	viewmodelHeldItemSize   = mgl32.Vec3{0.09, 0.5, 0.12}
 	// viewmodelHeldItemTilt 是长条持物相对手臂的固定前倾：顶端向视线前方微
 	// 倾，刃面透视缩短、不再直立遮屏；与挥动角叠加后相对握持位姿恒定。
@@ -302,9 +306,9 @@ func viewmodelRootFromCameraPose(pos mgl32.Vec3, yaw, pitch float32) mgl32.Mat4 
 // viewmodelSlantedLimb 装配带斜持倾角的四肢 cuboid：挥动旋转先绕臂根转轴
 // 发生，再整体绕肢体中心叠加斜持滚转——落点（中心）由调用方显式摆放在屏
 // 角，倾角只转朝向不搬落点。斜持参数取镜像符号（左负右正，顶端都偏向画面
-// 中心）；挥动参数只驱动右手（左手恒零）；前倾参数只作用于长条持物（手臂
-// 与方块恒零，持物顶端向视线前方微倾以缩短屏面投影）。三者全零时退化为旧
-// 链的平移加缩放。
+// 中心）；挥动参数只驱动右手（左手恒零）；前倾参数只作用于长条持物，且是
+// 局部预旋转（绕持物自身中心，不搬落点，挥动中与手臂的相对位姿恒定）。
+// 三者全零时退化为旧链的平移加缩放。
 func viewmodelSlantedLimb(root mgl32.Mat4, pivot, center, size mgl32.Vec3, slant, swing, tilt float32, color [4]float32, material uint32) avatarPart {
 	back := mgl32.Translate3D(center[0]-pivot[0], center[1]-pivot[1], center[2]-pivot[2])
 	forth := mgl32.Translate3D(pivot[0]-center[0], pivot[1]-center[1], pivot[2]-center[2])
@@ -312,8 +316,9 @@ func viewmodelSlantedLimb(root mgl32.Mat4, pivot, center, size mgl32.Vec3, slant
 		transform: root.Mul4(mgl32.Translate3D(center[0], center[1], center[2])).
 			Mul4(mgl32.HomogRotate3DZ(slant)).
 			Mul4(forth).
-			Mul4(mgl32.HomogRotate3DX(swing + tilt)).
+			Mul4(mgl32.HomogRotate3DX(swing)).
 			Mul4(back).
+			Mul4(mgl32.HomogRotate3DX(tilt)).
 			Mul4(mgl32.Scale3D(size[0], size[1], size[2])),
 		color:    color,
 		material: material,

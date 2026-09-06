@@ -200,15 +200,38 @@ func TestViewmodelCrosshairClearNeutral(t *testing.T) {
 }
 
 // TestViewmodelCrosshairClearAtSwingPeak 锁定挥动峰值仍不挡准星：以最大摆
-// 幅档（剑 0.8 弧度）正负峰值直接装配，投影依旧留空准星。
+// 幅档（工具 0.7 弧度）正负峰值直接装配，投影依旧留空准星。
 func TestViewmodelCrosshairClearAtSwingPeak(t *testing.T) {
 	input := viewmodelTestInput(core.PlayerID{51},
 		core.ItemStack{Item: core.ItemIronSword, Count: 1, Durability: 125}, 10)
-	for _, angle := range []float32{0.8, -0.8} {
+	for _, angle := range []float32{0.7, -0.7} {
 		parts := buildViewmodelParts(nil, input, angle)
 		dst := growEncodeBuffer(nil, len(parts)*avatarInstanceBytes)
 		encodeAvatarPartsInto(dst, parts)
 		assertViewmodelCrosshairClear(t, dst)
+	}
+}
+
+// TestViewmodelHeldItemSitsForwardOfHand 锁定持物装在手的前方（朝相机一侧）：
+// 中立持握下持物中心在相机空间比右手中心更靠近相机（`z` 更大），刃面不被
+// 手臂遮挡才有像素可读性；左右手臂本身不参与本断言。
+func TestViewmodelHeldItemSitsForwardOfHand(t *testing.T) {
+	for _, stack := range []core.ItemStack{
+		{Item: core.ItemIronPickaxe, Count: 1, Durability: 125},
+		{Item: core.ItemDirt, Count: 1},
+	} {
+		input := viewmodelTestInput(core.PlayerID{51}, stack, 10)
+		out := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, input)
+		if len(out) != 3*avatarInstanceBytes {
+			t.Fatalf("持物实例数 = %d，想要 3（左右手 + 持物）", len(out)/avatarInstanceBytes)
+		}
+		hand := decodedPartCenter(out, 1)
+		held := decodedPartCenter(out, 2)
+		// 零位姿下世界坐标即相机坐标（相机朝 `-Z`）：持物 `z` 必须显著更大。
+		if held[2]-hand[2] < 0.05 {
+			t.Fatalf("持物 %v 相对手臂前移 = %.3f，想要至少 0.05（装在手的前方）",
+				stack.Item, held[2]-hand[2])
+		}
 	}
 }
 

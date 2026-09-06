@@ -49,11 +49,11 @@ func TestViewmodelSwingTablePinsValues(t *testing.T) {
 	}{
 		{ViewmodelTierEmptyHand, 0.5, 12},
 		{ViewmodelTierBlock, 0.4, 14},
-		{ViewmodelTierSword, 0.8, 8},
-		{ViewmodelTierPick, 0.6, 10},
+		{ViewmodelTierSword, 0.7, 8},
+		{ViewmodelTierPick, 0.7, 10},
 		// 锄与斧取镐档默认值：与镐逐值相等，规则落地后只改这两行。
-		{ViewmodelTierHoe, 0.6, 10},
-		{ViewmodelTierAxe, 0.6, 10},
+		{ViewmodelTierHoe, 0.7, 10},
+		{ViewmodelTierAxe, 0.7, 10},
 	}
 	for _, tc := range cases {
 		amplitude, period := ViewmodelSwingParams(tc.tier)
