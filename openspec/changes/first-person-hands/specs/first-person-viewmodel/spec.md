@@ -82,11 +82,11 @@
 
 ### Requirement: 相位确定可重放且热路径有界
 
-挥动相位 SHALL 是 `(权威 tick, 手持档, 触发沿)` 的纯函数，不读墙钟、帧间隔与本地随机数；同输入序列 MUST 逐帧相同。单帧 viewmodel 实例恒 ≤4（左手、右手、持物、保留一位），编码复用调用方缓冲零分配；无 viewmodel 输入的帧 MUST 与本 change 前逐字节一致。
+挥动相位 SHALL 是 `(权威 tick, 手持档, 触发沿)` 的纯函数，不读墙钟、帧间隔与本地随机数；手部位姿的根变换由本帧相机位姿（呈现输入）派生，相机空间偏移经该根变换烘焙为世界变换后由既有世界投影绘制。同相机位姿 + 同输入序列 MUST 逐帧相同。单帧 viewmodel 实例恒 ≤4（左手、右手、持物、保留一位），编码复用调用方缓冲零分配；无 viewmodel 输入的帧 MUST 与本 change 前逐字节一致。
 
 #### Scenario: 同 tick 序列重放一致
 
-- **GIVEN** 相同的权威 tick 序列与相同的选中/overlay/marker 输入
+- **GIVEN** 相同的相机位姿、相同的权威 tick 序列与相同的选中/overlay/marker 输入
 - **WHEN** 两次编码 viewmodel 帧
 - **THEN** 输出字节 MUST 逐字节一致
 
