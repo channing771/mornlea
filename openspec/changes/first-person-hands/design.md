@@ -9,7 +9,7 @@
 ## Decisions
 
 1. 新增 viewmodel pass 而非复用 avatar pass：avatar 实例是世界空间 96 字节/实例，viewmodel 是相机空间叠加层；混用会污染 `AVATAR_MAX_INSTANCES=450` 预算与排序语义。新 TLV tag 取下一个空闲值（11），段空时帧字节与之前一致，既有 golden 根基不动。
-2. Go 侧纯函数编码 + Rust 侧只绘制：相位函数与 `AvatarSwingAngle` 同形（`(tick, 档, 触发沿)` 纯函数，无墙钟），`InstanceEncoder` 同式复用缓冲零分配；Rust 不做任何摆动推测，单帧实例恒 ≤4。
+2. Go 侧纯函数编码 + Rust 侧只绘制：相位函数与 `AvatarSwingAngle` 同形（`(tick, 档, 触发沿)` 纯函数，无墙钟），`InstanceEncoder` 同式复用缓冲零分配；Rust 不做任何摆动推测，单帧实例恒 ≤4。超限处理裁决（任务评审 F1，见 ledger）：Rust 侧超限走整帧 `Invalid` 拒绝——与 avatar/drop/轮廓/裂纹共用的 `validate_frame` 纪律同形（`frame_streams.go` 既有注释“超限帧会被 Rust 侧整体拒绝”为该纪律的成文先例）；Go 编码侧恒 ≤4 使该分支生产不可达，拒绝是响亮失败而非静默截断。原“整段丢弃”措辞作废。
 3. 持物形态只认已确认镜像：`Hotbar()` 确认值是唯一真相源，本地选择请求绝不推进形态（与 `updateItemPopup` 的确认纪律同形）；未注册物品按无持物，不 panic。
 4. 工具六档先占位后填实：斧铲取镐默认值的裁决写进参数表注释，B-36 落地后只改表值、不动编码与 ABI；参数表是呈现侧常量，不进任何线上契约。
 5. 左手只占位：编码保留副手字段，协议/存档零字段；副手数据结构与交互的 change 另立。

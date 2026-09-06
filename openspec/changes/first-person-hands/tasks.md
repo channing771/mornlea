@@ -9,12 +9,12 @@
 
 ## 3. Rust viewmodel 绘制 pass
 
-- [ ] 3.1 相机空间叠加绘制（双手 + 持物，实例恒 ≤4，复用 avatar 实例布局与材质分支纪律）+ 无段帧 draw 选择不变 + `#[cfg(test)]` 主题测试；验证 `cargo test -p mornlea_client` 相关主题测试与既有 render 测试全绿。
+- [ ] 3.1 相机空间叠加绘制（双手 + 持物，实例恒 ≤4，复用 avatar 实例布局与材质分支纪律；超限走整帧 `Invalid` 拒绝，与 avatar/drop/轮廓/裂纹的 `validate_frame` 纪律同形，见 design.md Decisions §2 裁决）+ 无段帧 draw 选择不变 + `#[cfg(test)]` 主题测试；验证 `cargo test -p mornlea_client` 相关主题测试与既有 render 测试全绿。
 
 ## 4. app 装配（TDD）
 
 - [ ] 4.1 从已确认 `Hotbar()` + `miningOverlay` + `combatFeedback` 派生 viewmodel 输入（确认纪律、相位门控、churn 时中立回落）并接入 `RenderFrame`，只加 `app_viewmodel*.go` 与 frame 接线行；验证 `go test ./packages/client/cmd/mornlea/app -race -count=1`。
-- [ ] 4.2 计数门：viewmodel 实例计入帧预算校验，超限帧稳定拒绝而非截断绘制；验证同 4.1。
+- [ ] 4.2 计数门：viewmodel 实例计入帧预算校验（Go 编码侧恒 ≤4，生产不可达超限；Rust 侧超限整帧拒绝见 design.md Decisions §2），超限帧稳定拒绝而非截断绘制；验证同 4.1。
 
 ## 5. 基线与收尾门禁
 
