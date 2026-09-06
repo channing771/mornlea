@@ -104,6 +104,9 @@ func (a *Application) quitToMenuFromPause() {
 	if a.pauseGate != nil {
 		a.pauseGate.Resume()
 	}
+	// 退回主菜单是世界退出路径：先把本地视角落盘（内存值继续保留，供本
+	// 进程再次进入时直接恢复），再清空会话态镜像。
+	a.persistCameraMode()
 	a.resetSessionOwnedState()
 	// 关停超时取与延迟装配同一配置来源：两条路径共享 DefaultConfig 的同一份
 	// ShutdownTimeout，避免第三处字面量漂移。

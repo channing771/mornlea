@@ -122,6 +122,9 @@ func NewWithDependencies(
 	if dependencies.PatchSettings == nil {
 		dependencies.PatchSettings = config.PatchSettings
 	}
+	if dependencies.PatchCameraMode == nil {
+		dependencies.PatchCameraMode = config.PatchCameraMode
+	}
 	reg, registryErr := dependencies.NewRegistry(options.ResolvedTexturePackPath)
 	if registryErr != nil {
 		return nil, fmt.Errorf("加载材质包 %q: %w", options.ResolvedTexturePackPath, registryErr)
@@ -308,11 +311,14 @@ func NewWithDependencies(
 		chatEvents:     &client.ChatEvents{},
 		remoteNameTags: make([]render.NameTag, 0, MaxFrameNameTags),
 		camera:         camera,
-		center:         CameraChunk(camera.Pos),
-		loadedChunks:   make(map[core.ChunkPos]struct{}),
-		ticks:          ticks,
-		saves:          saves,
-		render:         options.Render,
+		// 视角初值来自启动参数（main 已从配置文件下传）：越界落回第一人称；
+		// 会话重置与 `startWorld` 重装配不碰它，跨世界保留靠内存值持有。
+		cameraMode:   clampCameraMode(options.CameraMode),
+		center:       CameraChunk(camera.Pos),
+		loadedChunks: make(map[core.ChunkPos]struct{}),
+		ticks:        ticks,
+		saves:        saves,
+		render:       options.Render,
 		benchmarkTransport: func() string {
 			if options.BenchmarkTransport == "" {
 				return "memory"

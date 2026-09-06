@@ -67,6 +67,9 @@ func (a *Application) CloseClientSession(cause error) {
 		if cause != nil {
 			slog.Info("关闭客户端会话", "cause", cause)
 		}
+		// 会话关闭是世界退出路径之一：先把本地视角落盘，下次进入世界恢复。
+		// 退回主菜单不走这里（见 `quitToMenuFromPause`），两者各调一次。
+		a.persistCameraMode()
 		if a.receiver != nil {
 			a.clientCloseErr = a.receiver.Close()
 		} else if a.clientEndpoint != nil {

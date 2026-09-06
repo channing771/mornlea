@@ -335,6 +335,11 @@ func runGamePhase(app *Application) error {
 		}
 		tabWasDown = tabDown
 
+		// 视角切换：F5 上升沿按第一人称→背面→正面循环，纯本地呈现状态。
+		// 聊天/暂停/面板打开时抑制（背包打开不抑制，切视角不影响背包操作）。
+		app.handleCameraModeKey(app.window.KeyDown(client.KeyF5),
+			chatWasOpen || app.chatInput.open || pausedUI || app.panelVisible())
+
 		// 调试面板：F3 边沿仍由 Go 检测；选中/编辑/确认/取消/关闭经桥上行
 		// 事件回传，这里按序消费并同步运行时快照。面板不存在时
 		// （未开 --dev）整段直接跳过。暂停期不再叠加新界面：切换边沿被整体

@@ -12,6 +12,7 @@ import (
 	"runtime/debug"
 	"slices"
 
+	"github.com/channing771/mornlea/packages/client/client"
 	application "github.com/channing771/mornlea/packages/client/cmd/mornlea/app"
 	"github.com/channing771/mornlea/packages/client/cmd/mornlea/benchmark"
 	"github.com/channing771/mornlea/packages/client/cmd/mornlea/capture"
@@ -112,6 +113,12 @@ func runWithDependencies(args []string, dependencies runDependencies) error {
 	options.Application.TexturePackPath = effective.TexturePackPath
 	options.Application.ResolvedTexturePackPath = effective.ResolvedTexturePackPath
 	options.Application.WindowSize = effective.WindowSize
+	// 本地视角随配置下传：越界值（手改配置）落回第一人称；benchmark 与抓帧
+	// 路径不设 ConfigPath，退出时跳过落盘，内存初值不影响确定性画面。
+	options.Application.CameraMode = client.CameraMode(effective.CameraMode)
+	if !options.Application.CameraMode.Valid() {
+		options.Application.CameraMode = client.CameraFirstPerson
+	}
 	// 注水门控与用户配置的解耦由 resolveConfig 负责：benchmark 与抓帧两条路径
 	// 都强制返回 config.Defaults()，因此这里的 effective.FluidEnabled 在这两条
 	// 路径上是编译期常量，不会随谁的配置文件漂移。

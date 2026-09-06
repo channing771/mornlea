@@ -36,6 +36,10 @@ type Dependencies struct {
 	// 设置页拥有的三个 raw JSON 顶层成员，不重写同文件的其他字段。返回的
 	// `PersistenceResult` 明确标记 rename 是否已提交，防止目录同步警告被误判。
 	PatchSettings func(string, config.SettingsPatch) (config.PersistenceResult, error)
+	// `PatchCameraMode` 是视角模式落盘的可测试边界；生产实现只原子 patch
+	// 顶层成员「cameraMode」，不触碰设置页拥有的三个成员。nil 时回落到
+	// `config.PatchCameraMode`（与 `PatchSettings` 同口径）。
+	PatchCameraMode func(string, int) (config.PersistenceResult, error)
 	// CaptureCoordinator 是开发捕获服务的可空协调器（实现住
 	// `packages/client/cmd/mornlea/devcapture`）。它不是构造工厂而是注入实例：main 经
 	// `SetCaptureCoordinator` 在 app 构造后写入 `NewWithDependencies` 保存的
@@ -86,6 +90,7 @@ func defaultDependencies() Dependencies {
 			player := audio.NewPlayer(volume)
 			return player.Play, player.Close
 		},
-		PatchSettings: config.PatchSettings,
+		PatchSettings:   config.PatchSettings,
+		PatchCameraMode: config.PatchCameraMode,
 	}
 }

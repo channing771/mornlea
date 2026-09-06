@@ -71,6 +71,11 @@ type Options struct {
 	// WindowSize 是交互式窗口的固定逻辑尺寸预设；benchmark/capture 只携带
 	// 配置默认值但不消费它，继续走固定离屏尺寸。
 	WindowSize config.WindowSize
+	// CameraMode 是本地三态视角的装配初值（0=第一人称、1=第三人称背面、
+	// 2=第三人称正面），由 main 从加载后的 config.Config 下传；越界值在
+	// `NewWithDependencies` 落回第一人称。会话内经 F5 循环推进，退出世界时
+	// 落盘，跨世界保留。
+	CameraMode client.CameraMode
 	// FluidEnabled 是配置 fluidEnabled 的生效值，下传给本地权威世界的
 	// worldgen.New 门控海平面注水。远程连接模式下不使用它——世界内容由
 	// 服务端权威决定。
@@ -204,9 +209,17 @@ type Application struct {
 	predictor       *client.Predictor
 	mesher          *client.Mesher
 	camera          client.Camera
-	center          core.ChunkPos
-	sequence        uint64
-	loadedChunks    map[core.ChunkPos]struct{}
+	// cameraMode 是本地三态视角（0=第一人称、1=第三人称背面、2=第三人称
+	// 正面）：纯本地呈现状态，随 F5 上升沿循环，不进服务端消息与权威字段；
+	// 会话重置与世界重装配不碰它，跨世界保留，退出世界时经 persistCameraMode
+	// 落盘。
+	cameraMode client.CameraMode
+	// f5WasDown 是 F5 上一帧的电平：游戏循环内其他按键边沿暂存是函数局部
+	// 变量，它住在结构上，供 `handleCameraModeKey` 做可单测的上升沿检测。
+	f5WasDown    bool
+	center       core.ChunkPos
+	sequence     uint64
+	loadedChunks map[core.ChunkPos]struct{}
 	// loadingMeshBase 是本会话装配点记录的网格化完成计数基线:mesher 跨会话
 	// 复用(单调计数不归零),退回主菜单再进入时若不从基线起算,上一世界的完成
 	// 数会让加载屏网格进度起步即饱和——进度条从高位直接跳满格,随后在网格

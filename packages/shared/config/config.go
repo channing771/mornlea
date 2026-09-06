@@ -156,6 +156,10 @@ type Config struct {
 	//
 	// 显式写 false 仍然有效，用来生成不含水的世界（例如复现旧存档的地形）。
 	FluidEnabled bool `json:"fluidEnabled"`
+	// CameraMode 是本地三态视角的持久值：0=第一人称、1=第三人称背面、
+	// 2=第三人称正面。它是纯本地呈现偏好，不进设置页、不参与服务端权威；
+	// 缺失时默认为第一人称，越界值在加载时落回第一人称。
+	CameraMode int `json:"cameraMode,omitempty"`
 }
 
 // SettingsPatch 是设置页唯一允许持久化的三个顶层字段。
@@ -367,6 +371,19 @@ func decodeConfig(path string, contents []byte) (Config, error) {
 		if err := json.Unmarshal(raw, &cfg.FluidEnabled); err != nil {
 			return Config{}, fmt.Errorf("config: 解析 fluidEnabled 字段: %w", err)
 		}
+	}
+	// cameraMode 是纯本地呈现偏好：类型错误直接报错（与 fluidEnabled 同
+	// 口径，手误应暴露而非静默），数值越界则按既有钳制纪律落回第一人称。
+	if raw, ok := lookupCaseInsensitive(top, "cameraMode"); ok {
+		var mode int
+		if err := json.Unmarshal(raw, &mode); err != nil {
+			return Config{}, fmt.Errorf("config: 解析 cameraMode 字段: %w", err)
+		}
+		if mode < 0 || mode > 2 {
+			slog.Warn("cameraMode 越界已落回默认值", "value", mode, "default", 0)
+			mode = 0
+		}
+		cfg.CameraMode = mode
 	}
 	if err := applyGroups(&cfg, top); err != nil {
 		return Config{}, fmt.Errorf("config: %w", err)
@@ -1006,7 +1023,7 @@ func applyRenderLOD(render *Render, fields map[string]json.RawMessage) error {
 
 // warnUnknownTopLevel 对不认识的顶层分组名 slog.Warn。
 func warnUnknownTopLevel(top map[string]json.RawMessage) {
-	known := map[string]bool{"version": true, "logging": true, "physics": true, "sim": true, "render": true, "ai": true, "texturepackpath": true, "audiovolume": true, "windowsize": true, "fluidenabled": true}
+	known := map[string]bool{"version": true, "logging": true, "physics": true, "sim": true, "render": true, "ai": true, "texturepackpath": true, "audiovolume": true, "windowsize": true, "fluidenabled": true, "cameramode": true}
 	for key := range top {
 		if !known[strings.ToLower(key)] {
 			slog.Warn("配置项未知字段已忽略", "field", key)
@@ -1087,6 +1104,49 @@ func patchSettingsWithFileOps(
 	if strings.ContainsAny(patch.TexturePackPath, "\r\n") {
 		return PersistenceResult{}, errors.New("config: texturePackPath 必须是单行字符串")
 	}
+	return patchOwnedTopLevelMembersWithFileOps(path,
+		[]string{"audioVolume", "texturePackPath", "windowSize"},
+		map[string]any{
+			"audioVolume":     patch.AudioVolume,
+			"texturePackPath": patch.TexturePackPath,
+			"windowSize":      patch.WindowSize,
+		}, ops)
+}
+
+// PatchCameraMode 只原子替换顶层成员「cameraMode」（本地三态视角持久值）。
+// 它与 `PatchSettings` 复用同一套「完整校验 → 只改自有成员 → rename 提交」
+//
+//	machinery，但自有成员集不相交：设置页的三字段契约保持不变，视角退出世界
+//
+// 时的保存不会触碰设置页拥有的任何成员。文件缺失时以 `Defaults` 构造一份可
+// 再次加载的 v1 配置。
+func PatchCameraMode(path string, mode int) (PersistenceResult, error) {
+	return patchCameraModeWithFileOps(path, mode, defaultAtomicFileOps())
+}
+
+func patchCameraModeWithFileOps(
+	path string,
+	mode int,
+	ops atomicFileOps,
+) (PersistenceResult, error) {
+	if mode < 0 || mode > 2 {
+		return PersistenceResult{}, fmt.Errorf("config: cameraMode 必须是 0..2 的视角模式，实际 %d", mode)
+	}
+	return patchOwnedTopLevelMembersWithFileOps(path,
+		[]string{"cameraMode"},
+		map[string]any{"cameraMode": mode}, ops)
+}
+
+// patchOwnedTopLevelMembersWithFileOps 是各 patch 入口共用的文件事务：从磁盘
+// 读取并完整校验当前 v1 配置，只替换 owned 列出的顶层成员，其他成员的
+// json.RawMessage 原样写回；文件缺失时以 `Defaults` 构造。成员名匹配大小写
+// 不敏感，避免同一成员以不同大小写重复出现。
+func patchOwnedTopLevelMembersWithFileOps(
+	path string,
+	owned []string,
+	values map[string]any,
+	ops atomicFileOps,
+) (PersistenceResult, error) {
 
 	contents, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -1117,15 +1177,12 @@ func patchSettingsWithFileOps(
 		}
 	}
 	for key := range top {
-		if strings.EqualFold(key, "audioVolume") || strings.EqualFold(key, "texturePackPath") ||
-			strings.EqualFold(key, "windowSize") {
-			delete(top, key)
+		for _, ownedKey := range owned {
+			if strings.EqualFold(key, ownedKey) {
+				delete(top, key)
+				break
+			}
 		}
-	}
-	values := map[string]any{
-		"audioVolume":     patch.AudioVolume,
-		"texturePackPath": patch.TexturePackPath,
-		"windowSize":      patch.WindowSize,
 	}
 	for key, value := range values {
 		raw, err := json.Marshal(value)
