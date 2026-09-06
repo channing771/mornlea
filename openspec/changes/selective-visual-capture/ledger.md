@@ -23,3 +23,16 @@
   - `go test ./packages/client/cmd/mornlea -run 'TestRun' -count=1` → 17/17 PASS；`-run 'TestTextureGoldenUpdate'` → 2/2 PASS
   - `go build ./packages/client/cmd/mornlea`、gofmt/vet（两包）无输出
   - 环境注记：本机 Rust dylib 陈旧曾致 8 个 GPU 测试报 ABI 不匹配，`make rust` 重建后 capture 包全量通过。
+
+## 2026-09-06 Task 2（CLI flag、接线与 Makefile 透传）
+
+- 实现：提交 `3ca4ca3c`（options.go 两 flag 与 `parseCaptureScenes`、main.go 两调用点组装 `RunOptions`、run_test.go 接线 DeepEqual 断言、Makefile SCENES/GIFS 透传；5 文件 +195/-4）。
+- 评审：全新评审者裁决 **ACCEPT**，无必须修复项（拒绝条款、`--capture-scenes ""` 等价全量与「空项拒绝」不冲突的裁定、Makefile 七种 `make -n` 组合核对均过）。
+- Ruling: `--capture-scenes ""`（显式空值）按「未请求子集」处理、等价全量 — 与 `--capture ""` 既有惯例一致；spec 拒绝的是清单内部空项（`"a,,b"` 类），纯空白值仍被切分后以空项拒绝 — 无。
+- Ruling: `$(if $(GIFS),...)` 沿用仓库 `$(if)` 惯用法（任何非空值即开启，`GIFS=0` 不算关闭）— 与 `RACE_BASE` 等既有变量同一语义，注释限定 `GIFS=1` — 无。
+- 文档跟进（并入 Task 3）：`make help` 文案补 `SCENES=`/`GIFS=1`；`packages/client/cmd/mornlea/AGENTS.md` Entry Modes 表补新 flag 措辞。
+- 验证证据（SHA `3ca4ca3c`，实现者与评审者各自真实执行）：
+  - `go test ./packages/client/cmd/mornlea -run 'ParseCapture|CaptureScenes|CaptureGifs|RunCapture' -count=1` → ok（新增 8 测试/子用例全 PASS）
+  - `go test ./packages/client/cmd/mornlea -run 'TestRun' -count=1` → ok
+  - `make -n visual-check SCENES=mining-crack-early,mining-crack-heavy GIFS=1` / `make -n visual-update SCENES=main-menu` / 缺省四种组合 → 展开正确，缺省与改造前 shell 等价
+  - `go build ./packages/client/cmd/mornlea`、gofmt 无输出

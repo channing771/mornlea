@@ -10,9 +10,9 @@
 
 ## 2. CLI flag、接线与 Makefile 透传
 
-- [ ] 2.1 在 `packages/client/cmd/mornlea/options_test.go` 增补：`--capture-scenes` 未搭配 `--capture` 拒绝、未知/重复/空场景名拒绝、合法子集解析成功、`--capture-gifs` 未搭配 `--capture` 拒绝（先 red）。
-- [ ] 2.2 在 `options.go` 实现两个 flag 与校验（场景名经 `capture.ValidateSceneSelection`，逗号切分逐项 trim）；`mainOptions` 增加 `CaptureScenes`/`CaptureGIFs`；`main.go` 两个 `runCapture` 调用点组装 `capture.RunOptions`；`run_test.go` 的 fake 适配签名；`Makefile` 的 `visual-check`/`visual-update` 透传 `SCENES=`、check 侧 `GIFS=1`。focused：`go test ./packages/client/cmd/mornlea -run 'ParseCapture|CaptureScenes|CaptureGifs|RunCapture' -count=1`。
-- [ ] 2.3 任务评审（全新评审者）：对照 spec delta 抽查 parse 拒绝路径与接线；结论记入 `ledger.md`。
+- [x] 2.1 在 `packages/client/cmd/mornlea/options_test.go` 增补：`--capture-scenes` 未搭配 `--capture` 拒绝、未知/重复/空场景名拒绝、合法子集解析成功、`--capture-gifs` 未搭配 `--capture` 拒绝（先 red）。
+- [x] 2.2 在 `options.go` 实现两个 flag 与校验（场景名经 `capture.ValidateSceneSelection`，逗号切分逐项 trim）；`mainOptions` 增加 `CaptureScenes`/`CaptureGIFs`；`main.go` 两个 `runCapture` 调用点组装 `capture.RunOptions`；`run_test.go` 的 fake 适配签名；`Makefile` 的 `visual-check`/`visual-update` 透传 `SCENES=`、check 侧 `GIFS=1`。focused：`go test ./packages/client/cmd/mornlea -run 'ParseCapture|CaptureScenes|CaptureGifs|RunCapture' -count=1`。
+- [x] 2.3 任务评审（全新评审者）：对照 spec delta 抽查 parse 拒绝路径与接线；结论记入 `ledger.md`。
 
 ## 3. 文档与路由说明
 
