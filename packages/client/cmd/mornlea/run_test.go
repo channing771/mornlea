@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	application "github.com/channing771/mornlea/packages/client/cmd/mornlea/app"
+	"github.com/channing771/mornlea/packages/client/cmd/mornlea/capture"
 	"github.com/channing771/mornlea/packages/server/server"
 	"github.com/channing771/mornlea/packages/server/storage"
 	"github.com/channing771/mornlea/packages/shared/companion"
@@ -47,10 +48,10 @@ func TestTextureGoldenUpdateUsesDisposableControlsBeforeFreshCapture(t *testing.
 			}
 			return nil
 		},
-		runCapture: func(app *application.Application, _ string, update bool) error {
+		runCapture: func(app *application.Application, _ string, opts capture.RunOptions) error {
 			events = append(events, "formal")
-			if !update || len(applications) != 3 || app != applications[2] {
-				t.Fatalf("formal capture app=%p update=%v，want fresh 第三次构造结果", app, update)
+			if !opts.UpdateGolden || len(applications) != 3 || app != applications[2] {
+				t.Fatalf("formal capture app=%p update=%v，want fresh 第三次构造结果", app, opts.UpdateGolden)
 			}
 			return nil
 		},
@@ -123,7 +124,7 @@ func TestTextureGoldenUpdateClosesConstructedApplicationsOnEveryFailure(t *testi
 					runGoldenUpdateControl: func(*application.Application, *application.Application, string) error {
 						return test.controlErr
 					},
-					runCapture: func(*application.Application, string, bool) error {
+					runCapture: func(*application.Application, string, capture.RunOptions) error {
 						formalCapture = true
 						return test.captureErr
 					},
@@ -157,7 +158,7 @@ func TestRunOrdinaryCaptureUsesOneApplicationWithoutGoldenControl(t *testing.T) 
 				t.Fatal("ordinary capture 不得运行 golden update control")
 				return nil
 			},
-			runCapture: func(*application.Application, string, bool) error {
+			runCapture: func(*application.Application, string, capture.RunOptions) error {
 				captured++
 				return nil
 			},
