@@ -349,10 +349,11 @@ impl WorldgenParams {
     ///
     /// 同一 `OAK_TREE_SALT` 哈希的不交位域各自确定一项特征,不引入新噪声:
     /// 0 位是生成门槛(偶数生成)、1..3 位是根 X 格内偏移、4..6 位是根 Z
-    /// 格内偏移、7..9 位是普通树高(`5 + 位域 % 3`,取满 5..7)、第 10 位是
-    /// 冠形档(置位为蓬松)、`(hash >> 11) % 12 == 0` 是约 8% 的珍异门槛、
-    /// 珍异树高另取 15..17 位(`8 + 位域 % 5`,取 8..12)、18 位起是分杈条数
-    /// 与方向。冠形位与树高位不交,两者独立确定。
+    /// 格内偏移、7..13 位是普通树高(7 比特 `% 3` 给 43/43/42,近似均匀取
+    /// 满 5..7)、14..21 位是珍异门槛(`< 21`,21/256≈8.2%)、第 22 位是冠形
+    /// 档(置位为蓬松)、23..25 位是珍异树高(`8 + 位域 % 5`,取 8..12)、
+    /// 第 26 位是分杈条数(置位为两条)、27..30 位是两条分杈方向。位域两两
+    /// 不交,树高、冠形、珍异判定相互独立确定。
     ///
     /// 有效性校验使用未截断的 surface 高度,顺序:根格必须是草、树冠不越界
     /// (树冠最高到顶上第二层)、树干路径必须全空。分杈不参与有效性校验:
@@ -365,15 +366,15 @@ impl WorldgenParams {
         }
         let x = (cell_x << OAK_TREE_CELL_SHIFT).wrapping_add(((hash >> 1) & 7) as i32);
         let z = (cell_z << OAK_TREE_CELL_SHIFT).wrapping_add(((hash >> 4) & 7) as i32);
-        let rare = (hash >> 11) % 12 == 0;
+        let rare = ((hash >> 14) & 0xFF) < 21;
         let height = if rare {
-            (8 + ((hash >> 15) & 7) % 5) as i32
+            (8 + ((hash >> 23) & 7) % 5) as i32
         } else {
-            (5 + ((hash >> 7) & 7) % 3) as i32
+            (5 + ((hash >> 7) & 0x7F) % 3) as i32
         };
-        let fluffy = !rare && (hash >> 10) & 1 == 1;
-        let branch_count = if rare { (1 + ((hash >> 18) & 1)) as u8 } else { 0 };
-        let branch_dir = [((hash >> 19) & 3) as u8, ((hash >> 21) & 3) as u8];
+        let fluffy = !rare && (hash >> 22) & 1 == 1;
+        let branch_count = if rare { (1 + ((hash >> 26) & 1)) as u8 } else { 0 };
+        let branch_dir = [((hash >> 27) & 3) as u8, ((hash >> 29) & 3) as u8];
         let surface = self.height_at(x, z);
         let root_y = surface + 1;
         if self.generated_block_at(x, surface, z, surface) != self.materials.grass
@@ -1510,10 +1511,10 @@ mod tests {
 
     #[test]
     fn normal_oak_heights_cover_five_to_seven() {
-        // 普通橡树树高必须在 5..7 内取满三档,冠形标准/蓬松两档都必须出现。
+        // 普通橡树树高必须在 5..7 内均匀取满三档,冠形标准/蓬松两档都必须出现。
         let oaks = collect_oaks(11, 30);
         assert!(!oaks.is_empty(), "夹具失效:语料没有任何橡树");
-        let mut heights = [false; 3];
+        let mut heights = [0usize; 3];
         let mut standard = false;
         let mut fluffy = false;
         let mut normals = 0;
@@ -1527,12 +1528,25 @@ mod tests {
                 "普通树高 {} 越界",
                 tree.height
             );
-            heights[(tree.height - 5) as usize] = true;
+            heights[(tree.height - 5) as usize] += 1;
             fluffy |= tree.fluffy;
             standard |= !tree.fluffy;
         }
         assert!(normals > 0, "夹具失效:语料没有任何普通橡树");
-        assert!(heights.iter().all(|&b| b), "普通树高未取满 5/6/7:{heights:?}");
+        assert!(
+            heights.iter().all(|&c| c > 0),
+            "普通树高未取满 5/6/7:{heights:?}"
+        );
+        // 均匀分布:7 比特位域 %3 给 43/43/42,三档都应落在 1/3 邻域;
+        // 3 比特位域的 3/8、3/8、2/8 偏置会在这里变红。
+        for (grade, count) in heights.iter().enumerate() {
+            let ratio = *count as f64 / normals as f64;
+            assert!(
+                (0.28..0.39).contains(&ratio),
+                "树高 {} 档比例 {ratio:.3} 偏离均匀分布",
+                grade + 5,
+            );
+        }
         assert!(
             standard && fluffy,
             "冠形两档必须都出现(标准={standard}, 蓬松={fluffy})"
@@ -1568,8 +1582,10 @@ mod tests {
         }
         assert!(rare > 0, "语料没有任何珍异大树");
         let ratio = rare as f64 / oaks.len() as f64;
+        // 固定种子语料是确定性的:门槛设计为 21/256≈8.2%,断言收紧到
+        // 5%..12%,3% 或 18% 的实现会在这里变红。
         assert!(
-            (0.02..0.20).contains(&ratio),
+            (0.05..0.12).contains(&ratio),
             "珍异比例 {ratio:.3} 偏离约 8% 的小概率"
         );
     }
@@ -1633,33 +1649,34 @@ mod tests {
                     (cz << OAK_TREE_CELL_SHIFT).wrapping_add(((hash >> 4) & 7) as i32),
                     "根 Z 偏移必须取哈希 4..6 位",
                 );
-                let rare = (hash >> 11) % 12 == 0;
-                assert_eq!(tree.rare, rare, "珍异判定必须取哈希高位约 8% 门槛");
+                let rare = ((hash >> 14) & 0xFF) < 21;
+                assert_eq!(tree.rare, rare, "珍异判定必须取哈希 14..21 位约 8% 门槛");
                 if rare {
                     assert_eq!(
                         tree.height,
-                        (8 + ((hash >> 15) & 7) % 5) as i32,
+                        (8 + ((hash >> 23) & 7) % 5) as i32,
                         "珍异树高必须取 8..12",
                     );
                     assert_eq!(
                         tree.branch_count,
-                        (1 + ((hash >> 18) & 1)) as u8,
+                        (1 + ((hash >> 26) & 1)) as u8,
                         "分杈条数必须取 1..2",
                     );
                     assert_eq!(
                         tree.branch_dir,
-                        [((hash >> 19) & 3) as u8, ((hash >> 21) & 3) as u8],
+                        [((hash >> 27) & 3) as u8, ((hash >> 29) & 3) as u8],
                         "分杈方向必须取哈希高位",
                     );
                 } else {
                     assert_eq!(
                         tree.height,
-                        (5 + ((hash >> 7) & 7) % 3) as i32,
+                        (5 + ((hash >> 7) & 0x7F) % 3) as i32,
                         "普通树高必须取 5..7",
                     );
                     assert_eq!(
-                        tree.fluffy, (hash >> 10) & 1 == 1,
-                        "冠形档必须由哈希第 10 位独立确定",
+                        tree.fluffy,
+                        (hash >> 22) & 1 == 1,
+                        "冠形档必须由哈希第 22 位独立确定",
                     );
                     assert_eq!(tree.branch_count, 0, "普通树不应带分杈");
                 }
