@@ -30,6 +30,7 @@ pub mod quads;
 pub mod shaders;
 #[cfg(test)]
 mod side_tests;
+pub mod viewmodel;
 #[cfg(test)]
 mod water_tests;
 mod world;
@@ -561,6 +562,9 @@ pub struct OffscreenRenderer {
     /// 采掘裂纹 overlay pass(恰 1 实例容量,透明只读深度,bind 随 atlas
     /// 上传重建)。
     crack_pass: CrackPass,
+    /// 第一人称双手 viewmodel 叠加 pass(恒 ≤4 实例,复用 avatar 实例布局
+    /// 与材质分支的不透明变体,bind 随 atlas 上传重建)。
+    viewmodel_pass: EntityPass,
     /// 伤害红边 uniform(16B,strength@0)。
     overlay_uniform: wgpu::Buffer,
     water_tint_uniform: wgpu::Buffer,
@@ -1013,6 +1017,20 @@ impl OffscreenRenderer {
         // `shaders::CRACK`;bind 随 atlas 上传重建,未上传前不绘制。
         let crack_pass = CrackPass::new(&device, &queue, COLOR_FORMAT, DEPTH_FORMAT);
 
+        // 第一人称双手 viewmodel 叠加 pass:恒 ≤4 实例的常驻资源,复用
+        // avatar 的 shader 模块与不透明管线状态(实例布局与材质分支纪律
+        // 与 avatar 同源);bind 随 atlas 上传重建,未上传前不绘制。
+        let viewmodel_pass = EntityPass::new(
+            &device,
+            &queue,
+            &avatar_module,
+            viewmodel::VIEWMODEL_PASS_LABEL,
+            viewmodel::VIEWMODEL_MAX_INSTANCES,
+            EntityPipelineKind::Opaque,
+            COLOR_FORMAT,
+            DEPTH_FORMAT,
+        );
+
         // 全屏叠加:无深度附件的全屏三角管线,镜像 Go damage_overlay.go。
         // 伤害红边与水下水色共用这一条管线与这一份 layout,各自持有一块 32 字节
         // uniform(vec4 颜色 + edge 位 + 三个 pad):同一帧里两者可能都要画,
@@ -1229,6 +1247,7 @@ impl OffscreenRenderer {
             drop_pass,
             outline_pass,
             crack_pass,
+            viewmodel_pass,
             name_tag_pass,
             hud_pass,
             debug_pass,
@@ -1336,6 +1355,8 @@ impl OffscreenRenderer {
         self.drop_pass
             .rebuild_bind(&self.device, &atlas_view, &self.sampler);
         self.outline_pass
+            .rebuild_bind(&self.device, &atlas_view, &self.sampler);
+        self.viewmodel_pass
             .rebuild_bind(&self.device, &atlas_view, &self.sampler);
         self.terrain_bind = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("terrain resources"),
@@ -1773,6 +1794,7 @@ impl OffscreenRenderer {
             || !self.drop_pass.instances_valid(&input.drop_instances)
             || !self.outline_pass.instances_valid(&input.outline)
             || !CrackPass::instances_valid(&input.crack_instances)
+            || !viewmodel::instances_valid(&input.viewmodel_instances)
             || input.overlay_strength.is_nan()
             || input.water_tint.iter().any(|value| value.is_nan())
         {
@@ -2142,7 +2164,7 @@ impl OffscreenRenderer {
             self.outline_pass
                 .record(encoder, frame_view, &self.depth_view, "block outline pass");
         }
-        // 裂纹 pass(帧序:轮廓 → 裂纹 → 名牌;世界实体之后、HUD 之前,与
+        // 裂纹 pass(帧序:轮廓 → 裂纹 → 双手 → 名牌;世界实体之后、HUD 之前,与
         // outline 同带)。atlas 未上传时 record 内部整段跳过(与 terrain_bind
         // 的 Option 跳过同语义),不开始任何 render pass。
         if !input.crack_instances.is_empty() {
@@ -2155,7 +2177,26 @@ impl OffscreenRenderer {
             self.crack_pass
                 .record(encoder, frame_view, &self.depth_view, "crack pass");
         }
-        // 名牌(帧序:裂纹之后、overlay 之前)。
+        // 双手 viewmodel(帧序:裂纹之后、名牌之前)。相机空间叠加层:世界
+        // pass 之后、名牌与全屏叠加、HUD、调试面板之前绘制,不遮挡名牌、
+        // 准星与面板;空段跳过录制,无段帧的 draw 选择与变更前一致。超限已
+        // 在 validate_frame 整段拒绝,此处只处理合法非空流,不做任何摆动
+        // 推测(相位由 Go 编码侧烘焙进实例变换)。
+        if viewmodel::wants_draw(&input.viewmodel_instances) {
+            self.viewmodel_pass.upload(
+                &self.queue,
+                &input.view_proj,
+                input.daylight,
+                &input.viewmodel_instances,
+            );
+            self.viewmodel_pass.record(
+                encoder,
+                frame_view,
+                &self.depth_view,
+                viewmodel::VIEWMODEL_PASS_LABEL,
+            );
+        }
+        // 名牌(帧序:双手之后、overlay 之前)。
         if let Some((uniform, backgrounds, glyphs)) = validated.name_tag_segment {
             self.name_tag_pass.upload_and_record(
                 &self.queue,
