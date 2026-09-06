@@ -161,12 +161,9 @@ func digestChunkBytes(chunk *world.Chunk) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// TestGenerateChunkHasNoCrossChunkState 锁定生成纯度与新旧区块边界:生成器
-// 是 (seed, chunk) 的纯函数,同一实例以逆序生成、与另一种子交错生成,输出
-// 必须与新鲜实例逐字节一致。生成侧因此不可能扫描或改写已保存区块:旧规则
-// 下已保存的字节重载后保持不变(存档往返由
-// `packages/server/storage/chunk` 的 roundtrip 测试锁定,短草不回填旧块由
-// 同目录 backfill 测试锁定),新树规则只作用于尚未生成的区块。
+// TestGenerateChunkHasNoCrossChunkState 锁定生成器无跨块状态:同一实例以逆序
+// 生成、与另一种子交错生成,输出必须与新鲜实例逐字节一致。旧字节重载不变由
+// 存储层测试锁定,新树规则只作用于尚未生成的区块。
 func TestGenerateChunkHasNoCrossChunkState(t *testing.T) {
 	positions := []core.ChunkPos{
 		{X: 0, Z: 0}, {X: 1, Z: 0}, {X: -1, Z: -1}, {X: 37, Z: -104},

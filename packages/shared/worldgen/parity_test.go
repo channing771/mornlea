@@ -97,7 +97,7 @@ func TestOakTreeSpansChunkBorderConsistently(t *testing.T) {
 
 // TestRareOakTreeSpansChunkBorderConsistently 锁定跨区块珍异大树拼合:
 // seed 42 的珍异橡树根列在 (31,*,38)、树高 10,球状大冠宽达 ±3 格、横跨
-// chunk (1,2) 与 (2,2)。除逐格一致外,另断言大冠旁侧突出主干 2 格以上、
+// chunk (1,2) 与 (2,2)。除逐格一致外,另断言大冠旁侧突出主干 3 格、
 // 分杈为横向 1..2 条(顺轴连续、只占原始空气格由合并优先级保证)。
 func TestRareOakTreeSpansChunkBorderConsistently(t *testing.T) {
 	const seed = int64(42)
@@ -126,7 +126,7 @@ func TestRareOakTreeSpansChunkBorderConsistently(t *testing.T) {
 		}
 	}
 	if !wide {
-		t.Fatal("珍异大冠旁侧未突出主干 2 格以上")
+		t.Fatal("珍异大冠旁侧未突出主干 3 格")
 	}
 
 	dirs := branchLogDirections(production, rootX, rootZ, topY)
@@ -188,7 +188,7 @@ func TestRareOakTreeNegativeCoordinatesConsistent(t *testing.T) {
 			}
 		}
 		if !wide {
-			t.Fatalf("根列 (%d,*,%d) 珍异大冠旁侧未突出主干 2 格以上", tc.rootX, tc.rootZ)
+			t.Fatalf("根列 (%d,*,%d) 珍异大冠旁侧未突出主干 3 格", tc.rootX, tc.rootZ)
 		}
 
 		if dirs := branchLogDirections(production, tc.rootX, tc.rootZ, topY); len(dirs) == 0 || len(dirs) > 2 {

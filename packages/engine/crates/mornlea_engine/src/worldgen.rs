@@ -373,7 +373,11 @@ impl WorldgenParams {
             (5 + ((hash >> 7) & 0x7F) % 3) as i32
         };
         let fluffy = !rare && (hash >> 22) & 1 == 1;
-        let branch_count = if rare { (1 + ((hash >> 26) & 1)) as u8 } else { 0 };
+        let branch_count = if rare {
+            (1 + ((hash >> 26) & 1)) as u8
+        } else {
+            0
+        };
         let branch_dir = [((hash >> 27) & 3) as u8, ((hash >> 29) & 3) as u8];
         let surface = self.height_at(x, z);
         let root_y = surface + 1;
@@ -1620,12 +1624,24 @@ mod tests {
                 match (&first, &second) {
                     (Some(a), Some(b)) => assert_eq!(
                         (
-                            a.root_x, a.root_y, a.root_z, a.height,
-                            a.fluffy, a.rare, a.branch_count, a.branch_dir,
+                            a.root_x,
+                            a.root_y,
+                            a.root_z,
+                            a.height,
+                            a.fluffy,
+                            a.rare,
+                            a.branch_count,
+                            a.branch_dir,
                         ),
                         (
-                            b.root_x, b.root_y, b.root_z, b.height,
-                            b.fluffy, b.rare, b.branch_count, b.branch_dir,
+                            b.root_x,
+                            b.root_y,
+                            b.root_z,
+                            b.height,
+                            b.fluffy,
+                            b.rare,
+                            b.branch_count,
+                            b.branch_dir,
                         ),
                         "候选格 ({cx},{cz}) 两次查询不一致",
                     ),
@@ -1774,10 +1790,10 @@ mod tests {
             let p = params(seed);
             for cz in -8..=8 {
                 for cx in -8..=8 {
-                    if let Some(tree) = p.oak_tree_for_cell(cx, cz) {
-                        if tree.rare {
-                            return (p, tree);
-                        }
+                    if let Some(tree) = p.oak_tree_for_cell(cx, cz)
+                        && tree.rare
+                    {
+                        return (p, tree);
                     }
                 }
             }
@@ -1853,8 +1869,7 @@ mod tests {
         let top = tree.root_y + tree.height - 1;
         let mut touched = Vec::new();
         for cz in ((tree.root_z - 3) >> SECTION_SHIFT)..=((tree.root_z + 3) >> SECTION_SHIFT) {
-            for cx in ((tree.root_x - 3) >> SECTION_SHIFT)..=((tree.root_x + 3) >> SECTION_SHIFT)
-            {
+            for cx in ((tree.root_x - 3) >> SECTION_SHIFT)..=((tree.root_x + 3) >> SECTION_SHIFT) {
                 touched.push((cx, cz));
             }
         }
@@ -1869,11 +1884,7 @@ mod tests {
                             continue;
                         }
                         assert_eq!(
-                            dense[dense_index(
-                                x & (SECTION_SIZE - 1),
-                                y,
-                                z & (SECTION_SIZE - 1)
-                            )],
+                            dense[dense_index(x & (SECTION_SIZE - 1), y, z & (SECTION_SIZE - 1))],
                             p.base_block_at(x, y, z),
                             "({x},{y},{z})",
                         );

@@ -101,7 +101,7 @@ func TestDefaultOptions(t *testing.T) {
 }
 
 func TestServerProtocolV26IsCurrent(t *testing.T) {
-	// 字面量随 `network.ProtocolVersion` 的现行契约同步（v35 放牧位）；
+	// 字面量随 `network.ProtocolVersion` 的现行契约同步（v35 死亡原因位）；
 	// 函数名保留历史编号先例，仅钉住「专用服务端跟随当前协议」。
 	if network.ProtocolVersion != 36 {
 		t.Fatalf("专用服务端协议版本 = %d，想要 36", network.ProtocolVersion)

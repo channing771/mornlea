@@ -291,11 +291,12 @@ func TestOakTrunkColumnsAreContinuous(t *testing.T) {
 // TestTreeColumnsRespectWorldHeightBounds 锁定世界高度上界语义:统一上界
 // 守卫要求根加树高加冠顶两层落在有效范围内(即树干顶上两层仍在界内),
 // 触界候选整体丢弃,因此任何实际生成的树冠顶都不触界;世界高度外的单点
-// 查询一律为空,整块输出天然只含界内 Y(单点与整块一致由一致性测试锁定)。
-// 自然地形远低于上界,触界拒绝是防御性分支,这里锁定的是其可观察包络。
+// 查询一律为空,整块输出天然只含界内 Y。这里锁定的是连续性包络,单点与
+// 整块一致由一致性测试锁定。
 func TestTreeColumnsRespectWorldHeightBounds(t *testing.T) {
 	const seed = int64(42)
 	production := worldgen.New(seed, false)
+	trees := 0
 	for cx := int32(-2); cx < 2; cx++ {
 		for cz := int32(-2); cz < 2; cz++ {
 			chunk := production.GenerateChunk(core.ChunkPos{X: cx, Z: cz})
@@ -310,6 +311,7 @@ func TestTreeColumnsRespectWorldHeightBounds(t *testing.T) {
 					if chunk.BlockAt(lx, surface+1, lz) != core.OakLogID {
 						continue
 					}
+					trees++
 					top := surface + 1
 					for top+1 < core.MaxY && chunk.BlockAt(lx, top+1, lz) == core.OakLogID {
 						top++
@@ -320,6 +322,9 @@ func TestTreeColumnsRespectWorldHeightBounds(t *testing.T) {
 				}
 			}
 		}
+	}
+	if trees == 0 {
+		t.Fatal("语料失效:扫描区内没有树干")
 	}
 	for wx := int32(-32); wx < 32; wx++ {
 		for wz := int32(-32); wz < 32; wz++ {
