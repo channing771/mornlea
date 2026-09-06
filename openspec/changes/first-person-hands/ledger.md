@@ -87,3 +87,30 @@
 
 - 评审 Spec ❌ Quality ❌：capture 只调 `ArmCombatMarker` 从不设 `AttackTick` 边沿，hand-attack 实为空心；生产路径不受影响。姿态数值自洽但截图轮次未入库致观感不可验证；passive-death GIF 属合法耦合转任务 5 重录；bed-night 3-skip 可接受。
 - Ruling: 批准 fix round 加 capture 缝 `ObserveCombatHit`（调既有 `Observe`，`ArmCombatMarker` 先例，零生产语义变化）；V1 由控制会话亲自目检最终 PNG 后关闭。
+
+## Ruling：任务 7 fix 轮并入任务 8 合并评审
+
+- 用户二次评审（静态禁手/HUD 一体/passive-death 并 motion）到达时 Task 7 fix（`1ce0d4f2` 攻击缝）尚未 re-review；其 diff 完整落入任务 8 合并评审区间，任务 7 findings 转输入清单，无覆盖损失。
+- 产物同步：spec（HUD 一体 + 静态无手臂）/ proposal / design / tasks §8；validate 96/96（`2a095ffa`）。
+
+## Task 7 修 + Task 8：合并评审关闭
+
+- Task 7 fix（`1ce0d4f2`）：capture 战斗缝 + GIF 真实挥动；Task 8（`c1e042e8` + `943413b0`）：HUD 门、静态抑制、四景回退、passive-death 并 motion、world golden 恢复本 change 前基线。
+- 合并评审 Spec ✅ Quality ✅：A1（缝为 capture-only，生产零触碰）/ V1（28° 右主导 屏角外 准星净空）/ P1（零悬空引用，world 与 `da148639` 逐字节一致）/ B1（skip 保留有据）/ H1（门信号正确，HUD 未动）/ S1（scope clean）；Minor M-a（moot）、M-b（接受）。
+- Task 7: complete; Task 8: complete (commits f28ff7e..943413b0, review clean)
+
+## Ruling：目检不通过，姿态第二轮迭代
+
+- 控制会话目检最终 PNG/GIF：全长板条（超半屏）、工具被臂遮挡、f0/f6 挥动不可见——V1 数值验收≠视觉验收，打回。
+- 追加验收（可测）：可见臂段 ≤1/3 屏高、刃像素非遮挡可断言、GIF 挥动帧手区差显著；臂尺寸不动，只调落位与持物前置；摆幅可在六档表内调并记录。
+
+## Task 7 R2+R3：目检关闭
+
+- R2 落位 + R3 镐头前置着色（新 implementer，1 视觉轮；根因为天空伪装非遮挡）；目检：静息镐/攻击剑均清晰，臂短斜，准星净空。
+- Scoped re-review 15 项全过，无新 breakage。Task 7: complete。
+
+## Task 5 终跑（姿态修复后最终 SHA `a75742c7`）：全绿收官
+
+- rust ✅ / visual-check 24/24 零差异 ✅ / gofmt ✅ / dev-check ✅ / test-race 六模块 45 包 ✅ / validate 96/0 ✅ / scenario v22 保持（静态零差异 + 姿态只进 motion GIF）。
+- Ruling: 零改动纯门禁轮由控制会话直接验证据（SHA 一致 + exit code 表完整），不再派子代理评审——无 diff 可审，前例（5rrr）同形。
+- 本 change 代码工作全部完成：T1/T2/T3/T4/T6/T7(R3)/T8 + 三次门禁轮，breaker 从未触发，无 parked 项。待办（需用户授权）：推送 → PR → CI 全绿 → 合并 → sync/archive → planner 注册 backlog 行。
