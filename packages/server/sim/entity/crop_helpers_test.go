@@ -120,7 +120,7 @@ func readyCropWorldAt(t *testing.T, anchors ...core.ChunkPos) (*Engine, []Sessio
 	}
 	advanceActorsTick(engine)
 	for _, session := range sessions {
-		if player, ok := engine.Player(session); !ok || !player.Ready {
+		if player, ok := engine.Player(session, core.WeatherClear); !ok || !player.Ready {
 			t.Fatalf("会话 %d 的玩家未 Ready: %+v", session, player)
 		}
 	}

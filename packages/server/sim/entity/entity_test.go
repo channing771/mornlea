@@ -48,7 +48,7 @@ func TestEntityReceivesMutationAndTunables(t *testing.T) {
 	if !activation.AdvanceActors() {
 		t.Fatal("恢复玩家未改变实体订阅输入")
 	}
-	player, ok := state.Player(session, 0, 0, view)
+	player, ok := state.Player(session, 0, 0, core.WeatherClear, view)
 	if !ok || !player.Ready {
 		t.Fatalf("恢复玩家未激活：%+v ok=%v", player, ok)
 	}

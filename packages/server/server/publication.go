@@ -251,13 +251,14 @@ func (server *Server) publishLocalResult(
 			MiningHarvestable:   playerUpdate.Mining.Harvestable,
 			// 生命值、氧气与饥饿值只随本人的权威玩家状态下发，不进入任何
 			// 远端玩家消息。饱和度归零位与饥饿值同频、仅驱动 HUD 抖动；
-			// 显示相位偏移是世界单值，与绝对世界时间同源同频下发。
+			// 显示相位偏移与天气是世界单值，与绝对世界时间同源同频下发。
 			Health:         playerUpdate.Health,
 			Oxygen:         playerUpdate.Oxygen,
 			Hunger:         playerUpdate.Hunger,
 			SaturationZero: playerUpdate.SaturationZero,
 			DayPhaseOffset: playerUpdate.DayPhaseOffset,
 			WorldTimeTicks: playerUpdate.WorldTimeTicks,
+			WeatherKind:    playerUpdate.WeatherKind,
 		}) {
 			server.closePublicationSessionLocked(current, errSessionOutboxFull)
 			return

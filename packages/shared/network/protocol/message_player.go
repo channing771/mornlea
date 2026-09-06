@@ -49,6 +49,9 @@ type PlayerState struct {
 	DayPhaseOffset uint16
 	// WorldTimeTicks 是本 tick 结束时的权威绝对世界时间，协议 v9 起随玩家状态同步。
 	WorldTimeTicks uint64
+	// WeatherKind 是本 tick 结束时的权威天气（wire 上紧跟 `WorldTimeTicks`
+	// 之后，占 1 字节）；合法值域是 0..2（晴/雨/雷暴），越界值由编解码层拒绝。
+	WeatherKind core.WeatherKind
 }
 
 type RemotePlayerSpawn struct {

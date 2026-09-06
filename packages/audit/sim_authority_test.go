@@ -46,6 +46,8 @@ var expectedRuntimeEngineFields = map[string]string{
 	"tick":               "atomic.Uint64",
 	"worldTime":          "atomic.Uint64",
 	"dayPhaseOffset":     "atomic.Uint64",
+	"weatherKind":        "core.WeatherKind",
+	"weatherRemaining":   "uint32",
 	"stepPhaseObserver":  "func(stepPhase)",
 	"tunables":           "tuning.Tunables",
 	"physicsTunables":    "physics.Tunables",
@@ -140,6 +142,8 @@ type Engine struct {
 	tick atomic.Uint64
 	worldTime atomic.Uint64
 	dayPhaseOffset atomic.Uint64
+	weatherKind core.WeatherKind
+	weatherRemaining uint32
 	stepPhaseObserver func(stepPhase)
 	tunables tuning.Tunables
 	physicsTunables physics.Tunables

@@ -53,6 +53,12 @@ type Engine struct {
 	tick             atomic.Uint64
 	// worldTime 是权威绝对世界时间，只由 simulation owner 在 Step 中推进。
 	worldTime atomic.Uint64
+	// weatherKind/weatherRemaining 是权威天气时钟（种类与剩余时长）：唯一写者是
+	// `StepWithTunables` 尾部的天气推进（与 `advanceWorldTime` 同位置同模式，
+	// 见 `advanceWeatherClock`），读者只在 tick 串行路径（发布装配与 `Player`
+	// 查询）上串行访问——与无锁的实体状态同纪律，不设原子或互斥。
+	weatherKind      core.WeatherKind
+	weatherRemaining uint32
 	// dayPhaseOffset 是 `core.DisplayDayPhase` 的显示相位偏移（值域钳 0..23999），
 	// 只进入显示相位计算，绝不影响 `worldTime` 的推进。唯一写者是全员入睡时的
 	// 跳夜结算（sleep.go），单值原子读写让判夜读取点无需额外同步；持久化由世界
@@ -87,6 +93,10 @@ func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
 		wanted:        make(map[core.ChunkKey]struct{}),
 	}
 	engine.worldTime.Store(worldTime)
+	// 天气从晴天起步：初始剩余时长按晴段分布掷骰（种子派生、tick 取 0，
+	// 与任何完成 tick 号都不碰撞），重放确定。
+	engine.weatherKind = core.WeatherClear
+	engine.weatherRemaining = rollWeatherDuration(seed, 0, core.WeatherClear)
 	// 初始化快照，使未经 Step 就被调用的方法（例如 RegisterPlayer 的出生扫描）
 	// 也有可用的参数快照。
 	initialTunables := ActiveTickTunables()

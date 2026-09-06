@@ -150,9 +150,17 @@ func (engine *Engine) StepWithTunables(tickTunables TickTunables) TickResult {
 
 	result.Tick = currentTick + 1
 	result.WorldTimeTicks = currentWorldTime + 1
+	// 天气与绝对时间同源同频下发：先算出本 tick 结束时的权威值进结果，
+	// 发布（`Publish` 内按人复制）之后再落回引擎——与 `advanceWorldTime`
+	// 先后发布后推进的模式一致。
+	nextWeatherKind, nextWeatherRemaining := advanceWeatherClock(
+		engine.weatherKind, engine.weatherRemaining, engine.seed, result.Tick,
+	)
+	result.WeatherKind = nextWeatherKind
 	engine.dayPhaseOffset.Store(uint64(tick.Publish(&result)))
 	result.Tick = engine.tick.Add(1)
 	result.WorldTimeTicks = engine.advanceWorldTime()
+	engine.weatherKind, engine.weatherRemaining = result.WeatherKind, nextWeatherRemaining
 	return result
 }
 

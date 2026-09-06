@@ -200,7 +200,7 @@ func twoPlayerWorld(t *testing.T) *Engine {
 		advanceActorsTick(engine)
 	}
 	for session := SessionID(1); session <= 2; session++ {
-		if player, ok := engine.Player(session); !ok || !player.Ready {
+		if player, ok := engine.Player(session, core.WeatherClear); !ok || !player.Ready {
 			t.Fatalf("会话 %d 未激活: %+v", session, player)
 		}
 	}
@@ -234,7 +234,7 @@ func respawnWhenDead(t *testing.T, engine *Engine, session SessionID) PlayerUpda
 	advanceHostilesTick(engine, nil) // 死亡阶段：`settleDeaths` 落位、转入待重生。
 	for range 8 {
 		advanceActorsTick(engine)
-		if player, ok := engine.Player(session); ok && player.Ready {
+		if player, ok := engine.Player(session, core.WeatherClear); ok && player.Ready {
 			return player
 		}
 	}
