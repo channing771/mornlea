@@ -156,6 +156,12 @@ func (state PlayerState) Validate() error {
 	if state.DayPhaseOffset >= core.DayLengthTicks {
 		return errors.New("network: player state has out-of-range day phase offset")
 	}
+	// 天气是服务端权威三态（wire 上 `WorldTimeTicks` 之后 1 字节 u8）：合法值域
+	// 是 0..`core.WeatherThunder`，越界值在 Validate、编码与解码三处都被拒绝，
+	// 不得静默截断——与显示相位偏移同为从严拒绝的 wire 单值。
+	if state.WeatherKind > core.WeatherThunder {
+		return errors.New("network: player state has out-of-range weather")
+	}
 	if !state.MiningActive {
 		if state.MiningTarget != (core.BlockPos{}) || state.MiningProgressTicks != 0 ||
 			state.MiningRequiredTicks != 0 || state.MiningHarvestable {
