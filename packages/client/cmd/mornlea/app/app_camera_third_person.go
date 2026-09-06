@@ -21,6 +21,11 @@ func (a *Application) resolveRenderCamera() client.Camera {
 // 之外的格由 `Mirror.BlockAt` 直接报空气，同为空。
 func (a *Application) thirdPersonSolid() func(core.BlockPos) (bool, error) {
 	return func(position core.BlockPos) (bool, error) {
+		// 生产装配恒持有非空镜像（`NewWithDependencies` 与世界重装配创建，
+		// 会话重置不置空）；测试替身可能为 nil，按开阔地处理。
+		if a.mirror == nil {
+			return false, nil
+		}
 		id, loaded := a.mirror.BlockAt(core.Overworld, position)
 		if !loaded {
 			return false, nil

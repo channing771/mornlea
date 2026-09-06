@@ -9,6 +9,8 @@ import (
 
 	"github.com/channing771/mornlea/packages/client/client"
 	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
+	"github.com/channing771/mornlea/packages/shared/physics"
 	"github.com/channing771/mornlea/packages/shared/world"
 )
 
@@ -45,6 +47,32 @@ func TestResolveRenderCameraPullsInBeforeWall(t *testing.T) {
 	got := app.resolveRenderCamera()
 	if got.Pos.Z() <= 0.5 || got.Pos.Z() >= 1 {
 		t.Fatalf("渲染相机 = %v，想要眼睛与墙面(z=1)之间", got.Pos)
+	}
+}
+
+// TestMovementInputReadsEyeYawInThirdPerson 锁定移动方向与第一人称一致：
+// 第三人称下上行输入的 yaw 仍是眼睛 yaw，而非回望的渲染位姿 yaw。
+func TestMovementInputReadsEyeYawInThirdPerson(t *testing.T) {
+	app, serverEndpoint := newInteractiveTestApplication(t)
+	if err := app.predictor.Begin(network.PlayerState{
+		ServerTick: 1, Dimension: core.Overworld,
+		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true, Ready: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	const eyeYaw = 0.75
+	app.camera.Yaw = eyeYaw
+	app.cameraMode = client.CameraThirdPersonFront
+	front := app.resolveRenderCamera()
+	if front.Yaw == eyeYaw {
+		t.Fatalf("正面渲染 yaw = %v，想要翻转（眼睛 yaw 不得被渲染位姿污染）", front.Yaw)
+	}
+	app.cameraMode = client.CameraThirdPersonBack
+	app.applyInteractiveInput(physics.FixedDelta, client.Movement{MoveZ: 1}, client.Actions{}, true)
+	message := receiveInteractiveClientMessage(t, serverEndpoint)
+	input, ok := message.(network.PlayerInput)
+	if !ok || input.Yaw != eyeYaw {
+		t.Fatalf("第三人称上行输入 = %#v，想要眼睛 yaw %v（与第一人称一致）", message, eyeYaw)
 	}
 }
 

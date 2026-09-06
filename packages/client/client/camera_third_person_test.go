@@ -69,6 +69,43 @@ func TestResolveThirdPersonCameraFullyBlockedCollapsesToEye(t *testing.T) {
 	}
 }
 
+// TestResolveThirdPersonCameraFrontOpposesEyeForwardAtNonZeroPitch 锁定正面
+// 非零俯仰下的回望语义：渲染前向恰为眼睛前向的反方向（点积约 -1），
+// 俯仰取反（仅 yaw+Pi 不够，俯仰非零时会偏）。
+func TestResolveThirdPersonCameraFrontOpposesEyeForwardAtNonZeroPitch(t *testing.T) {
+	base := client.Camera{Pos: mgl32.Vec3{1.5, 65.25, -3.75}, Yaw: 0.7, Pitch: -0.25, FovY: 1.22173, Aspect: 16.0 / 9.0, Near: 0.1, Far: 1536}
+	front := client.ResolveThirdPersonCamera(base, client.CameraThirdPersonFront, openSolid)
+	if front.Pitch != -base.Pitch {
+		t.Fatalf("正面 pitch = %v，想要眼睛 pitch 取反 %v", front.Pitch, -base.Pitch)
+	}
+	sum := front.Forward().Add(base.Forward())
+	if sum.Len() > 1e-5 {
+		t.Fatalf("正面与眼睛前向之和 = %v（模 %v），想要约零向量（点积约 -1）", sum, sum.Len())
+	}
+}
+
+// TestResolveThirdPersonCameraIgnoresTransparentBlocks 锁定透明方块不触发
+// 后拉：树叶/玻璃按 `core.BlockOpaque` 非完全不透明，相机保持完整的 4 格距离。
+func TestResolveThirdPersonCameraIgnoresTransparentBlocks(t *testing.T) {
+	eye := mgl32.Vec3{0.5, 10, 0.5}
+	base := client.Camera{Pos: eye, Yaw: 0, Pitch: 0, FovY: 1.2, Aspect: 1.6, Near: 0.1, Far: 100}
+	for _, id := range []core.BlockID{core.LeavesID, core.GlassID} {
+		blocks := map[core.BlockPos]core.BlockID{{X: 0, Y: 10, Z: 1}: id}
+		solid := func(pos core.BlockPos) (bool, error) {
+			block, ok := blocks[pos]
+			if !ok {
+				return false, nil
+			}
+			return core.BlockOpaque(block), nil
+		}
+		got := client.ResolveThirdPersonCamera(base, client.CameraThirdPersonBack, solid)
+		want := eye.Add(mgl32.Vec3{0, 0, client.ThirdPersonCameraDistance})
+		if got.Pos.Sub(want).Len() > 1e-4 {
+			t.Fatalf("透明方块 %d 后相机 = %v，想要完整距离 %v（不后拉）", id, got.Pos, want)
+		}
+	}
+}
+
 // TestResolveThirdPersonCameraFirstPersonKeepsEye 锁定第一人称直通：
 // 相机即眼睛，不做后拉与射线查询（solid 为 nil 也不触碰）。
 func TestResolveThirdPersonCameraFirstPersonKeepsEye(t *testing.T) {
