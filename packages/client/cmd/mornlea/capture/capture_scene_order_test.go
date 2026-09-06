@@ -31,11 +31,10 @@ func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 		"target-block-feedback", "grass-closeup", "oak-grove", "ai-companion", "sword-combat",
 		"hostile-mob", "passive-herd", "passive-graze", "water-surface-slope", "mining-crack-early", "mining-crack-heavy",
 		"main-menu", "settings-menu", "avatar-detail",
-		"hand-tool", "hand-block", "hand-mining", "hand-attack",
 		"far-horizon", "water-underwater",
 	}
-	if len(captureScenes) != 28 {
-		t.Fatalf("正式场景数=%d，想要 28", len(captureScenes))
+	if len(captureScenes) != 24 {
+		t.Fatalf("正式场景数=%d，想要 24", len(captureScenes))
 	}
 	gotNames := make([]string, len(captureScenes))
 	for index, scene := range captureScenes {
@@ -104,42 +103,6 @@ func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 	}
 	if len(uniqueRunes) > 32 {
 		t.Fatalf("ai-companion 独特 rune=%d，想要不超过 32", len(uniqueRunes))
-	}
-}
-
-// TestHandCaptureScenePosition 锁住四个手持基线场景的表内位置：依次紧随
-// avatar-detail、先于 far-horizon（far-horizon 仍为倒数第二、
-// water-underwater 仍为唯一末场景，视觉验证主规格的尾序不变量保持）。
-func TestHandCaptureScenePosition(t *testing.T) {
-	indexOf := func(name string) int {
-		for index, scene := range captureScenes {
-			if scene.Name == name {
-				return index
-			}
-		}
-		t.Fatalf("场景 %q 不存在", name)
-		return -1
-	}
-	avatarDetail := indexOf("avatar-detail")
-	handTool := indexOf("hand-tool")
-	handBlock := indexOf("hand-block")
-	handMining := indexOf("hand-mining")
-	handAttack := indexOf("hand-attack")
-	farHorizon := indexOf("far-horizon")
-	waterUnderwater := indexOf("water-underwater")
-	if handTool != avatarDetail+1 || handBlock != handTool+1 ||
-		handMining != handBlock+1 || handAttack != handMining+1 {
-		t.Fatalf("手持四景必须依次紧随 avatar-detail：tool=%d block=%d mining=%d attack=%d（avatar-detail=%d）",
-			handTool, handBlock, handMining, handAttack, avatarDetail)
-	}
-	if farHorizon != handAttack+1 {
-		t.Fatalf("far-horizon=%d 必须紧随 hand-attack=%d", farHorizon, handAttack)
-	}
-	if farHorizon != len(captureScenes)-2 {
-		t.Fatalf("far-horizon=%d 必须是倒数第二（共 %d 项）", farHorizon, len(captureScenes))
-	}
-	if waterUnderwater != len(captureScenes)-1 {
-		t.Fatalf("water-underwater=%d 必须是唯一末场景（共 %d 项）", waterUnderwater, len(captureScenes))
 	}
 }
 

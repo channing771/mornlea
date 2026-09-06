@@ -37,6 +37,17 @@ func (a *Application) deriveViewmodelInput(panorama bool, crack render.BlockCrac
 	if panorama || a.clientSessionClosed {
 		return nil
 	}
+	// 双手与 HUD 常显层一体：背包/容器打开或切出游戏相位（暂停/菜单）时
+	// 无输入，与血条、饥饿、快捷栏同隐同现（门控形状与 `updateItemPopup`
+	// 同形）；回到游戏相位且界面关闭后下一帧恢复。HUD 前端本体不在此派生内。
+	if a.inventoryOpen || a.menu.phase != MenuPhaseGame {
+		return nil
+	}
+	// 静态抓帧抑制：用户裁决静态画面一律无双手像素，静态 runner 装配后置
+	// 位；动作 GIF 经 motion runner 录制，不经此门。
+	if a.viewmodelSuppressed {
+		return nil
+	}
 	hotbar, confirmed := a.inventory.Hotbar()
 	if !confirmed {
 		return nil

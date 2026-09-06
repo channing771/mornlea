@@ -22,7 +22,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/go-gl/mathgl/mgl32"
+
+	"github.com/channing771/mornlea/packages/client/client"
+	application "github.com/channing771/mornlea/packages/client/cmd/mornlea/app"
 	"github.com/channing771/mornlea/packages/client/render/hud"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 const (
@@ -79,8 +85,9 @@ func applyHandSwingMotionFrame(app SceneApplication, scene string, frame int) er
 }
 
 // handSwingMotionStage 返回指定剧本的收敛场景值：仅本文件内部使用，绝不追
-// 加进 `captureScenes`。世界夹具与呈现装入复用静态四景的 Apply（同一机位、
-// 同一背包、同一裂纹/标记语义），动态只来自合成 tick 与重武装。
+// 加进 `captureScenes`。世界夹具与呈现装入由本文件的舞台装入函数完成（与
+// 战斗场景同一机位、同一背包、同一裂纹/标记语义），动态只来自合成 tick 与
+// 重武装。静态画面一律禁手（用户裁决），这些装入只服务动作 GIF 录制。
 func handSwingMotionStage(scene string) (captureScene, error) {
 	switch scene {
 	case "hand-mining":
@@ -100,6 +107,78 @@ func handSwingMotionStage(scene string) (captureScene, error) {
 	default:
 		return captureScene{}, fmt.Errorf("未知挥动剧本 %q", scene)
 	}
+}
+
+// applyHandCaptureFraming 钉死挥动舞台共用的呈现帧：公共清场、正午、固定
+// 机位与中心同步；背包由各剧本自行确认（选中变化不触发弹条基线污染）。
+func applyHandCaptureFraming(app SceneApplication) error {
+	if err := resetCapturePresentation(app); err != nil {
+		return err
+	}
+	app.SetWorldTimeTicks(6000)
+	// 与战斗场景同一机位：两剧本的双手落点可比，差异只来自持物与动作。
+	*app.Camera() = client.Camera{
+		Pos: mgl32.Vec3{5.5, 3.2, 9.5}, Yaw: 0, Pitch: -0.05,
+		FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
+		Near: 0.1, Far: 2000,
+	}
+	app.SetCenter(application.CameraChunk(app.Camera().Pos))
+	app.SetBlockTargetReset(false)
+	if app.Panel() != nil {
+		app.Panel().SetVisible(false)
+	}
+	// 静态确认状态，不是选中变化；丢弃前序场景的选中基线，避免确认持物
+	// 时触发弹条（与战斗场景同一理由）。
+	app.ResetItemPopupBaseline()
+	app.SetInventoryOpen(false)
+	return nil
+}
+
+// confirmHandCaptureBackpack 确认挥动舞台的背包：2 号槽选中指定持物栈。
+func confirmHandCaptureBackpack(app SceneApplication, stack core.ItemStack) error {
+	inv := core.Inventory{}
+	inv.Hotbar.Selected = 2
+	inv.Hotbar.Slots[2] = stack
+	if err := app.Inventory().Apply(network.InventoryState{Inventory: inv}); err != nil {
+		return fmt.Errorf("装入挥动舞台背包: %w", err)
+	}
+	return nil
+}
+
+// applyHandMiningCaptureState 装入挖掘舞台：裂纹场景的固定环境、铁镐选中
+// 态、采掘镜像钉在浅阶段（6/30，阶段 2）。
+func applyHandMiningCaptureState(app SceneApplication) error {
+	if err := applyMiningCrackCaptureState(app); err != nil {
+		return err
+	}
+	// 静态确认状态，不是选中变化；丢弃裂纹清场留下的选中基线（与战斗场景
+	// 同一理由），否则确认铁镐时触发弹条。
+	app.ResetItemPopupBaseline()
+	if err := confirmHandCaptureBackpack(app,
+		core.ItemStack{Item: core.ItemIronPickaxe, Count: 1, Durability: 125}); err != nil {
+		return err
+	}
+	// 采掘镜像经 SetMiningOverlay 直装：Target/HasTarget/进度二元组驱动世
+	// 界裂纹（与裂纹场景同一语义）。
+	app.SetMiningOverlay(hud.MiningOverlay{
+		Active: true, HasTarget: true,
+		Target:        captureMiningCrackTarget,
+		ProgressTicks: 6, RequiredTicks: 30,
+	})
+	return nil
+}
+
+// applyHandAttackCaptureState 装入打击舞台：半耐久铁剑选中态并武装标记。
+func applyHandAttackCaptureState(app SceneApplication) error {
+	if err := applyHandCaptureFraming(app); err != nil {
+		return err
+	}
+	if err := confirmHandCaptureBackpack(app,
+		core.ItemStack{Item: core.ItemIronSword, Count: 1, Durability: 125}); err != nil {
+		return err
+	}
+	app.ArmCombatMarker()
+	return nil
 }
 
 // captureHandSwingMotionFrame 是挥动时间线单帧的生产抓帧缝：合成 tick 直写

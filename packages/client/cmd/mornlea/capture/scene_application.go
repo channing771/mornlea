@@ -109,6 +109,10 @@ type SceneApplication interface {
 
 	// UI 相位与菜单覆盖。
 	SetInventoryOpen(open bool)
+	// SetViewmodelSuppressed 打开/关闭静态抓帧的双手抑制：静态 runner 装
+	// 配后调用一次置位；motion/GIF runner 不调用，手臂只保留在用手击碎方
+	// 块系列动作 GIF 中。
+	SetViewmodelSuppressed(suppressed bool)
 
 	SetMenuPhase(phase application.MenuPhase)
 	SetSettings(settings application.SettingsState)

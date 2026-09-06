@@ -277,6 +277,10 @@ func (a *Application) InventoryOpen() bool { return a.inventoryOpen }
 // SetInventoryOpen 写入容器/背包 UI 开合状态。
 func (a *Application) SetInventoryOpen(open bool) { a.inventoryOpen = open }
 
+// SetViewmodelSuppressed 打开/关闭静态抓帧的双手抑制：唯一调用方是静态
+// runner 装配（capture 包），生产与动作 GIF 路径永不调用。
+func (a *Application) SetViewmodelSuppressed(suppressed bool) { a.viewmodelSuppressed = suppressed }
+
 // Center 读取相机所在的中心区块。
 func (a *Application) Center() core.ChunkPos { return a.center }
 

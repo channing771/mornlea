@@ -110,6 +110,85 @@ func TestDeriveViewmodelInputNilWhenPanoramaOrSessionClosed(t *testing.T) {
 	}
 }
 
+// TestDeriveViewmodelInputHiddenWithHUD 锁定双手随 HUD 常显层隐藏：背包
+// 打开或切出游戏相位（暂停/菜单）时当帧起无 viewmodel 输入，关包回游戏相
+// 位后下一帧恢复；HUD 前端本体不在本派生内，本门只管双手输入。
+func TestDeriveViewmodelInputHiddenWithHUD(t *testing.T) {
+	app := &Application{}
+	applyViewmodelHotbar(t, app, viewmodelStoneStack, 0)
+	app.serverTick = 10
+	if !app.combatFeedback.Observe(7) {
+		t.Fatal("前置战斗确认未被接受")
+	}
+	visible := render.BlockCrack{Visible: true}
+	if input := app.deriveViewmodelInput(false, visible); input == nil {
+		t.Fatal("游戏相位关包派生为 nil，想要非 nil（前置失败）")
+	}
+	app.inventoryOpen = true
+	if input := app.deriveViewmodelInput(false, visible); input != nil {
+		t.Fatalf("开包派生=%+v，想要 nil（随 HUD 隐藏）", input)
+	}
+	app.inventoryOpen = false
+	app.menu.phase = menuPhasePaused
+	if input := app.deriveViewmodelInput(false, visible); input != nil {
+		t.Fatalf("暂停派生=%+v，想要 nil（随 HUD 隐藏）", input)
+	}
+	app.menu.phase = MenuPhaseMenu
+	if input := app.deriveViewmodelInput(false, visible); input != nil {
+		t.Fatalf("菜单派生=%+v，想要 nil（随 HUD 隐藏）", input)
+	}
+	app.menu.phase = MenuPhaseGame
+	if input := app.deriveViewmodelInput(false, visible); input == nil {
+		t.Fatal("关包回游戏相位派生为 nil，想要恢复呈现")
+	}
+}
+
+// TestDeriveViewmodelInputNilWhenStaticallySuppressed 锁定静态抓帧抑制：
+// 静态 runner 装配后即使满确认（已确认选中 + 可见裂纹 + 已武装标记）派生
+// 仍为 nil，静态画面一律无双手像素；抑制默认关闭，生产与动作 GIF 路径零影响。
+func TestDeriveViewmodelInputNilWhenStaticallySuppressed(t *testing.T) {
+	app := &Application{}
+	applyViewmodelHotbar(t, app, viewmodelStoneStack, 0)
+	app.serverTick = 10
+	if !app.combatFeedback.Observe(7) {
+		t.Fatal("前置战斗确认未被接受")
+	}
+	visible := render.BlockCrack{Visible: true}
+	if input := app.deriveViewmodelInput(false, visible); input == nil {
+		t.Fatal("未抑制派生为 nil，想要非 nil（前置失败）")
+	}
+	app.SetViewmodelSuppressed(true)
+	if input := app.deriveViewmodelInput(false, visible); input != nil {
+		t.Fatalf("抑制后派生=%+v，想要 nil（静态禁手）", input)
+	}
+	app.SetViewmodelSuppressed(false)
+	if input := app.deriveViewmodelInput(false, visible); input == nil {
+		t.Fatal("解除抑制后派生为 nil，想要恢复呈现")
+	}
+}
+
+// TestRenderFrameSuppressedViewmodelStreamEmpty 锁定抑制的端到端效果：已
+// 确认手持进抑制帧得空 viewmodel 段（静态画面无双手像素的段级证据）。
+func TestRenderFrameSuppressedViewmodelStreamEmpty(t *testing.T) {
+	app := newRemoteRenderApplication(t, &IntegrationGlyphSource{})
+	if err := app.predictor.Begin(network.PlayerState{
+		ServerTick: 5, Dimension: core.Overworld,
+		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true, Ready: true,
+		Health: 12, Oxygen: core.MaxOxygenTicks, Hunger: core.MaxHunger,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	applyViewmodelHotbar(t, app, viewmodelStoneStack, 0)
+	app.SetServerTick(10)
+	app.SetViewmodelSuppressed(true)
+	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
+		t.Fatalf("抑制帧 RenderFrame=(%v,%v)", rendered, err)
+	}
+	if len(app.viewmodelStream) != 0 {
+		t.Fatalf("抑制帧 viewmodel 流 %d 字节，想要 0（无双手段）", len(app.viewmodelStream))
+	}
+}
+
 // TestValidateViewmodelInstanceCount 锁定计数门：空与 1..4 实例放行，超限
 // 与非对齐字节流稳定拒绝。
 func TestValidateViewmodelInstanceCount(t *testing.T) {

@@ -578,42 +578,6 @@ var captureScenes = []captureScene{
 	},
 	{Name: "avatar-detail", WarmupFrames: 8, Prepare: prepareAvatarStage, Apply: applyAvatarDetail},
 	{
-		// hand-tool 是工具手持的静态基线：半耐久铁镐选中态、中立持握。与
-		// 战斗场景同一机位，四景的双手落点可比，差异只来自持物与动作。
-		Name:         "hand-tool",
-		WarmupFrames: 8,
-		Prepare:      prepareAICompanion,
-		Apply:        applyHandToolCaptureState,
-	},
-	{
-		// hand-block 是方块手持的静态基线：泥土微缩立方在右手上方、中立持握；
-		// 立方顶面/侧面材质与世界同源，本景即该契约的像素基线。
-		Name:         "hand-block",
-		WarmupFrames: 8,
-		Prepare:      prepareAICompanion,
-		Apply:        applyHandBlockCaptureState,
-	},
-	{
-		// hand-mining 是挖掘基线：铁镐在手、浅阶段世界裂纹在目标砖上同框。
-		// 机位与夹具复用裂纹场景；挥动相位随收敛 tick 漂移，由 PinVolatile
-		// 清零后最终帧恒为挖掘上升沿（中立镐 + 可见裂纹），逐次一致。
-		Name:         "hand-mining",
-		WarmupFrames: 8,
-		Prepare:      prepareTargetBlockFeedback,
-		Apply:        applyHandMiningCaptureState,
-		PinVolatile:  pinHandMiningVolatile,
-	},
-	{
-		// hand-attack 是打击基线：铁剑在手、标记收敛后重武装并合成确认沿，
-		// 最终帧落在攻击窗第 1 帧（首帧即起挥）；不带受击远端玩家（带目标
-		// 对照由战斗场景覆盖）。
-		Name:         "hand-attack",
-		WarmupFrames: 8,
-		Prepare:      prepareAICompanion,
-		Apply:        applyHandAttackCaptureState,
-		PinVolatile:  pinHandAttackVolatile,
-	},
-	{
 		// far-horizon 是远环 LOD 的长期视觉门禁(spec delta「MUST 新增
 		// far-horizon 视觉场景」):相机钉在近环边缘 -z 内侧的高空,朝
 		// 地平线观察,单帧同时覆盖近景地形(画面底部)、远环壳带(地平线
@@ -658,12 +622,19 @@ const (
 	captureMenuVistaTickSettingsMenu = application.MenuVistaYawPeriodTicks / 8 * 3
 )
 
+// suppressStaticViewmodel 是静态 runner 装配后的单点双手抑制：用户裁决静
+// 态画面一律无双手像素，`RunCapture` 内调用一次；motion/GIF runner 不经此
+// 函数，手臂只保留在用手击碎方块系列动作 GIF 中。独立成函数只为让装配接线
+// 可被锁定测试直接断言。
+func suppressStaticViewmodel(app SceneApplication) { app.SetViewmodelSuppressed(true) }
+
 // RunCapture 依次跑完全部视觉场景。updateGolden 为真时把抓到的图写进 golden 基线；
 // 为假时与已有基线比对，超阈值的场景把实拍图与差异图写进 dir 并返回错误。
 func RunCapture(app SceneApplication, dir string, updateGolden bool) error {
 	if err := prepareCaptureApplication(app); err != nil {
 		return err
 	}
+	suppressStaticViewmodel(app)
 	// 场景 Apply 用 SetWorldTimeTicks 钉住的昼夜值必须在收敛帧期间保持:
 	// 权威状态里的服务端时间随真实时间前进,不冻结的话最终帧的天空光随
 	// 进程启动漂移,逐像素 golden 门禁在天空光渗入的画面上整片翻色。

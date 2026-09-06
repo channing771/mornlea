@@ -138,8 +138,9 @@ func settleGIFMesher(app SceneApplication) error {
 	return fmt.Errorf("GIF 写块后 120 帧内未收敛")
 }
 
-// captureGIFOne 录制一条剧本并落盘/比对：实拍 GIF 无条件写进 dir；更新模式
-// 写基线，否则逐帧解码比对（双阈值，全部帧通过方为通过）。
+// captureGIFOne 录制一条剧本并落盘：实拍 GIF 无条件写进 dir；更新模式同
+// 步写进 motion 基线目录。像素比对已退役（用户裁决过程基线只保留生成、人工
+// 审查，不进比对阈值），录制恒成功，错误只来自录制与编码本身。
 func captureGIFOne(app SceneApplication, dir string, script gifScript, updateGolden bool) error {
 	frames, err := recordGIFScript(app, script)
 	if err != nil {
@@ -153,15 +154,14 @@ func captureGIFOne(app SceneApplication, dir string, script gifScript, updateGol
 		return err
 	}
 	if updateGolden {
-		if err := writeGIFFile(passiveDeathGoldenDir, script.Name, data); err != nil {
+		if err := writeGIFFile(passiveDeathMotionDir, script.Name, data); err != nil {
 			return err
 		}
 		fmt.Printf("已抓取 GIF 剧本 %s(写入基线)\n", script.Name)
 		return nil
 	}
-	diff, err := compareGIFAgainstGolden(passiveDeathGoldenDir, dir, script.Name, frames, captureThresholds)
-	fmt.Printf("已抓取 GIF 剧本 %s: %s\n", script.Name, diff)
-	return err
+	fmt.Printf("已生成 GIF 剧本 %s（不进比对）\n", script.Name)
+	return nil
 }
 
 func writeGIFFile(dir, name string, data []byte) error {
