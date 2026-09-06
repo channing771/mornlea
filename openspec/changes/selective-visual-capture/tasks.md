@@ -24,4 +24,4 @@
 
 ## 5. 收尾门禁
 
-- [ ] 5.1 `gofmt -l .` 无输出；六模块 `go vet`（`go vet ./packages/contracts/... ./packages/shared/... ./packages/server/... ./packages/client/... ./packages/tools/... ./packages/audit/...`）；`make test-race`；`openspec validate --all --strict --no-interactive`。结果记入 `ledger.md`。
+- [x] 5.1 `gofmt -l .` 无输出；六模块 `go vet`（`go vet ./packages/contracts/... ./packages/shared/... ./packages/server/... ./packages/client/... ./packages/tools/... ./packages/audit/...`）；`make test-race`；`openspec validate --all --strict --no-interactive`。结果记入 `ledger.md`。

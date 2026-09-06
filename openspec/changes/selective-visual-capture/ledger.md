@@ -58,3 +58,12 @@
 - Ruling: 跨场景状态残留风险实测未成立 — 首景/中段/菜单相位/唯一末景的子集运行与全量运行对同一 golden 全部 0 差异像素，warmup+收敛判据+场景 reset 纪律足以保证子集等价 — 无需子集不安全名单。
 - 性能结论（如实记录）：固定下限为世界加载+渲染器初始化 ≈ 47-48s（约 240-270s user CPU、~500% 并行），每景边际 ≈ 0.5s，GIF 四条 ≈ 5.7s。改动前全量 check ≈ 66s；改动后全量 60.3s（省 GIF），子集 48-53s（较改动前省约 20-28%）。世界加载下限由规格钉死（抓帧视距必须与真实客户端一致），攻击该下限属另一独立 change（如持久化世界快照复用），不在本 change 范围。
 - 验证证据（SHA `43fd840a` 工作区，控制会话真实执行，日志 /tmp/visual-*.log）。
+
+## 2026-09-06 Task 5（收尾门禁）
+
+- `gofmt -l .`（排除他人 worktrees）→ 无输出。
+- 六模块 `go vet`（contracts/shared/server/client/tools/audit）→ 无输出。
+- `make test-race`（六模块全量 race）→ EXIT=0（585.6s user / 6:52 wall，全部 ok；日志 /tmp/test-race.log）。
+- `make rust` → 双 dylib 重建部署正常（Task 4 前置时执行）。
+- `openspec validate --all --strict --no-interactive` → 98 passed / 0 failed。
+- 工作树仅余他人并发改动（`.superpowers/sdd/tasks/progress.md` 与未跟踪 `openspec/changes/weather-camera-tree-diversity/`），全程未触碰、未入提交。
