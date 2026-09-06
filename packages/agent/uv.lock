@@ -605,6 +605,7 @@ dependencies = [
     { name = "mornlea-agent-app" },
     { name = "mornlea-extension-api" },
     { name = "mornlea-harness" },
+    { name = "pydantic" },
 ]
 
 [package.dev-dependencies]
@@ -620,6 +621,7 @@ requires-dist = [
     { name = "mornlea-agent-app", editable = "app" },
     { name = "mornlea-extension-api", editable = "extension-api" },
     { name = "mornlea-harness", editable = "harness" },
+    { name = "pydantic", specifier = ">=2.13.5" },
 ]
 
 [package.metadata.requires-dev]

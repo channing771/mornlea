@@ -21,6 +21,8 @@ type CloudOffset struct {
 }
 
 // CloudOffsetAt 从权威世界时间计算精确的云层偏移，避免绝对时间转 float32。
+// 双偏移语义不变：`Local` 与 `MacroX` 仍按既有口径拆分，细节层相对漂移由
+// 天空 shader 内部派生，本函数输出口径不因此改变。
 func CloudOffsetAt(worldTime uint64) CloudOffset {
 	blocks := worldTime / cloudTicksPerBlock
 	return CloudOffset{
@@ -50,11 +52,21 @@ type DayNight struct {
 	StarVisibility float32
 }
 
+// smoothstep 是 `t*t*(3-2t)` 的手写实现（`t` 已钳制到 0..1），不引入新依赖。
+func smoothstep(t float32) float32 {
+	return t * t * (3 - 2*t)
+}
+
 // DayNightAt 按固定曲线计算给定绝对世界时间与显示相位偏移下的昼夜状态：
 //
 //	phase    = (worldTime mod 24000 + offset) mod 24000（经 `core.DisplayDayPhase`）
 //	sun      = max(0, sin(2π·phase/24000))
-//	daylight = 0.15 + 0.85*sun
+//	daylight = 0.12 + 0.88*smoothstep(sun)（晨昏 shoulder：低太阳压暗更快）
+//
+// 低太阳色温近似（非真实黑体辐射）：暖光 (1.0,0.55,0.30) 按
+// `1-warmth` 向白光过渡，`warmth = 1-smoothstep(sun/0.5)`；`ClearColor`
+// 在既有夜昼 lerp 后乘该暖色，并用 `smoothstep((daylight-0.12)/0.28)`
+// 门控强度——夜间 `Daylight` 为 0.12 时强度为 0，天空保持纯净夜色。
 //
 // 偏移是服务端随权威玩家状态下发、客户端只读的显示相位单值（跳夜交付）：
 // 全仓相位算式收敛在 `core.DisplayDayPhase`，客户端不得自建。云层漂移等绝对
@@ -66,13 +78,28 @@ func DayNightAt(worldTime uint64, dayPhaseOffset uint16) DayNight {
 	if sun < 0 {
 		sun = 0
 	}
+	sunClip := float32(sun)
+	daylight := 0.12 + 0.88*smoothstep(sunClip)
+	warmParam := sunClip / 0.5
+	if warmParam > 1 {
+		warmParam = 1
+	}
+	sunTint := [3]float32{1, 0.55 + 0.45*smoothstep(warmParam), 0.30 + 0.70*smoothstep(warmParam)}
+	tintParam := (daylight - 0.12) / 0.28
+	if tintParam < 0 {
+		tintParam = 0
+	}
+	if tintParam > 1 {
+		tintParam = 1
+	}
+	tintStrength := smoothstep(tintParam)
 	starVisibility := 1 - (sun/0.25)*(sun/0.25)*(3-2*(sun/0.25))
 	if sun >= 0.25 {
 		starVisibility = 0
 	}
 	result := DayNight{
-		Sun:            float32(sun),
-		Daylight:       float32(0.15 + 0.85*sun),
+		Sun:            sunClip,
+		Daylight:       daylight,
 		SunDirection:   [3]float32{float32(math.Cos(theta)), float32(math.Sin(theta)), 0},
 		MoonDirection:  [3]float32{-float32(math.Cos(theta)), -float32(math.Sin(theta)), 0},
 		StarVisibility: float32(starVisibility),
@@ -80,6 +107,9 @@ func DayNightAt(worldTime uint64, dayPhaseOffset uint16) DayNight {
 	for index := range result.ClearColor {
 		night, day := nightSkyColor[index], daySkyColor[index]
 		result.ClearColor[index] = night + (day-night)*result.Sun
+	}
+	for index, tint := range sunTint {
+		result.ClearColor[index] *= 1 - tintStrength*(1-tint)
 	}
 	return result
 }

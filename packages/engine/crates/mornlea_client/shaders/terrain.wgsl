@@ -48,6 +48,16 @@ fn face_shade(face: u32) -> f32 {
     }
 }
 
+// 半球环境光：按面法线在地面色与天空色之间混合。顶面取天空环境 1.0，
+// 底面取 0.38，侧面取 0.69；植物交叉面没有朝向可言，固定 0.95 不打折
+// （与 `face_shade` 里交叉面取满值的先例一致）。
+fn hemi_factor(face: u32) -> f32 {
+    if (face >= 6u) { return 0.95; }
+    var ny = 0.0;
+    if (face == 3u) { ny = 1.0; } else if (face == 2u) { ny = -1.0; }
+    return mix(0.38, 1.0, ny * 0.5 + 0.5);
+}
+
 // 耕地材质层闭区间（干/湿两态）。material 落入区间 ⟺ 这条 quad 是 registry
 // block_top_raw 非零的短方块，bit 12..19/55..62 是角高度原值而不是 w/h 尺寸。
 //
@@ -213,7 +223,15 @@ fn vs_main(
     let sky = f32((light >> 4u) & 0xFu) / 15.0;
     let block = f32(light & 0xFu) / 15.0;
     let daylight = clamp(camera.cam_pos.w, 0.0, 1.0);
-    let sky_base = 0.08 + sky * (daylight - 0.08);
+    // 夜晚氛围门控：`daylight`≤0.15 全额生效、≥0.5 零效应，之间手写
+    // 三次过渡（`t*t*(3-2t)`）。夜间把天空环境基压到 0.3、总曝光压到
+    // 0.5：无光面回到夜色，火把方块光主导的池面与火芯仍远高于可辨门限；
+    // 正午两系数恒为 1.0，输出与门控前逐位一致。
+    let t = clamp((daylight - 0.15) / 0.35, 0.0, 1.0);
+    let day_t = t * t * (3.0 - 2.0 * t);
+    let night_amb = mix(0.3, 1.0, day_t);
+    let night_expo = mix(0.5, 1.0, day_t);
+    let sky_base = (0.08 + sky * (daylight - 0.08)) * night_amb;
     let base = max(sky_base, block);
 
     // 交叉斜面的 uv 显式取 (world.x, -world.y)：一片斜面在这两轴上恰好各跨一格，
@@ -230,13 +248,25 @@ fn vs_main(
     out.clip  = camera.view_proj * vec4f(world, 1.0);
     out.uv    = uv;
     out.layer = f32(mat);
-    out.shade = face_shade(face) * ao_factor * base;
+    out.shade = face_shade(face) * ao_factor * base * hemi_factor(face) * night_expo;
     return out;
+}
+
+fn aces_approx(x: vec3f) -> vec3f {
+    // Narkowicz 近似，把高光柔和地卷进 0..1。
+    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), vec3f(0.0), vec3f(1.0));
+}
+
+fn linear_to_srgb(x: vec3f) -> vec3f {
+    return mix(x * 12.92, 1.055 * pow(clamp(x, vec3f(0.0), vec3f(1.0)), vec3f(1.0 / 2.4)) - 0.055, step(vec3f(0.0031308), x));
 }
 
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4f {
     let c = textureSample(atlas, atlas_smp, in.uv, i32(in.layer));
     if (c.a < 0.5) { discard; }
-    return vec4f(c.rgb * in.shade, 1.0);
+    // atlas 存的是 sRGB 纹素，先平方回线性光再乘 `in.shade`，最后走
+    // ACES 近似（曝光钉死 1.0）与线性→sRGB 回到输出空间。
+    let linear = pow(c.rgb, vec3f(2.2)) * in.shade;
+    return vec4f(linear_to_srgb(aces_approx(linear * 1.0)), 1.0);
 }

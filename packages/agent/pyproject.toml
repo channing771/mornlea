@@ -7,6 +7,7 @@ dependencies = [
   "mornlea-agent-app",
   "mornlea-extension-api",
   "mornlea-harness",
+  "pydantic>=2.13.5",
 ]
 
 [tool.uv]

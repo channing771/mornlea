@@ -6,7 +6,7 @@
 ## Requirements
 ### Requirement: 当前项目身份统一为 Mornlea
 
-系统 MUST 以 `Mornlea` 作为当前产品名，以 `github.com/channing771/mornlea` 作为 Go module，以 `mornlea`、`mornlea-server` 与 `mornlea-companion-agent` 作为客户端、专用服务端与伙伴 Agent 服务命令。Python distribution、包元数据、日志 module 与帮助文本 MUST 使用 Mornlea 身份，不得恢复旧 `mcgo`/`mcgod` 身份。
+系统 MUST 以 `Mornlea` 作为当前产品名，以 `github.com/channing771/mornlea` 作为 Go module，以 `mornlea`、`mornlea-server` 与 `mornlea-agent` 作为客户端、专用服务端与伙伴 Agent 服务命令；`mornlea-companion-agent` MUST 作为 deprecated 别名继续可用一期。Python distribution、包元数据、日志 module 与帮助文本 MUST 使用 Mornlea 身份，不得恢复旧 `mcgo`/`mcgod` 身份。
 
 #### Scenario: clean checkout 构建当前入口
 
@@ -16,8 +16,9 @@
 #### Scenario: clean checkout 安装 Agent 服务入口
 
 - **GIVEN** Python 3.12 与 uv 可用
-- **WHEN** 在 `packages/agent/companion` 执行 locked sync
-- **THEN** `mornlea-companion-agent serve --config` MUST 可寻址并以 Mornlea 包身份报告版本/帮助
+- **WHEN** 在 `packages/agent` 执行 locked sync
+- **THEN** `mornlea-agent serve --config` MUST 可寻址并以 Mornlea 包身份报告版本/帮助
+- **AND** `mornlea-companion-agent` MUST 仍可寻址并输出弃用提示
 
 #### Scenario: Linux 专服发布为同目录 bundle
 

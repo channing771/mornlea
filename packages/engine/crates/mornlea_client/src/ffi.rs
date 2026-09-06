@@ -2,11 +2,12 @@
 //!
 //! 契约:
 //! - 无参数 `mornlea_client_abi_version()` 只报告当前动态库 identity。
-//! - 其余 29 个接受 `abi_version` 的入口首先拒绝非当前版本并返回
+//! - 其余 30 个接受 `abi_version` 的入口首先拒绝非当前版本并返回
 //!   `MORNLEA_CLIENT_STATUS_ABI_VERSION`;当前版本见 [`CLIENT_ABI_VERSION`]
 //!   (v6 起远环 tile 出口加入,v7 起雾 setter 出口加入,v9 起结构化 UI 事件,
 //!   v11 起离屏 benchmark batch,v12 起菜单桥出口,v13 起窗口合成捕获,
-//!   v14 起 render world update 出口,v15 起 avatar 贴图实例布局)。
+//!   v14 起 render world update 出口,v15 起 avatar 贴图实例布局,
+//!   v16 起相机视图投影查询出口)。
 //! - 窗口句柄存放在 thread-local 表中:句柄只在创建线程有效,跨线程调用
 //!   查不到句柄而返回 `MORNLEA_CLIENT_STATUS_WINDOW`——这同时兜住了 winit
 //!   macOS 的主线程约束(Go 侧已 `LockOSThread`)。
@@ -50,7 +51,8 @@ use crate::window::ClientWindow;
 /// v11:新增离屏 benchmark batch prepare/submit 入口。
 /// v10:avatar 通道容量扩至 75 具身体(450 实例)并新增敌怪身份域。
 /// v15:avatar 实例扩至 96 字节并新增材质槽与 atlas 采样(容量不变)。
-pub const CLIENT_ABI_VERSION: u32 = 15;
+/// v16:新增无状态相机视图投影查询出口(位姿→列主序视图投影矩阵＋6 平面视锥)。
+pub const CLIENT_ABI_VERSION: u32 = 16;
 
 /// 调用成功。
 pub const MORNLEA_CLIENT_STATUS_OK: u32 = 0;
@@ -99,6 +101,69 @@ fn with_window(handle: u64, operation: impl FnOnce(&mut ClientWindow) -> u32) ->
 #[unsafe(no_mangle)]
 pub extern "C" fn mornlea_client_abi_version() -> u32 {
     CLIENT_ABI_VERSION
+}
+
+/// 相机视图投影与视锥查询（client ABI v16 新增的无状态纯计算出口）：以相机
+/// 位姿求解列主序视图投影矩阵与 6 平面视锥（左、右、下、上、近、远），分别
+/// 写进 `out_viewproj`（16 个 `f32`）与 `out_frustum`（24 个 `f32`）；数值
+/// 与 Go `Camera::ViewProj`＋`core::FrustumFrom` 同语义。
+///
+/// 校验顺序镜像既有入口（ABI 版本→指针）：`pos_xyz`（3 个 `f32`）、
+/// `out_viewproj`、`out_frustum` 均须非空且对齐；失败不写任何输出。计算是
+/// 纯数学、无句柄、无线程局部状态，`panic` 只经 `catch` 折叠为状态码。
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn mornlea_client_camera_viewproj(
+    abi_version: u32,
+    pos_xyz: *const f32,
+    yaw: f32,
+    pitch: f32,
+    fov_y: f32,
+    aspect: f32,
+    near: f32,
+    far: f32,
+    out_viewproj: *mut f32,
+    out_frustum: *mut f32,
+) -> u32 {
+    if abi_version != CLIENT_ABI_VERSION {
+        return MORNLEA_CLIENT_STATUS_ABI_VERSION;
+    }
+    if pos_xyz.is_null() || out_viewproj.is_null() || out_frustum.is_null() {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    }
+    if !pos_xyz.is_aligned()
+        || pos_xyz.addr().checked_add(3 * 4).is_none()
+        || !out_viewproj.is_aligned()
+        || out_viewproj.addr().checked_add(16 * 4).is_none()
+        || !out_frustum.is_aligned()
+        || out_frustum.addr().checked_add(24 * 4).is_none()
+    {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    }
+    catch(|| {
+        // SAFETY: 三指针非空、对齐且地址范围已校验，调用方保证对应长度
+        // 可读/可写；只在同步调用期间借用，不保存 pointer。
+        let pos = unsafe { std::slice::from_raw_parts(pos_xyz, 3) };
+        let view_proj = crate::camera::view_proj(
+            [pos[0], pos[1], pos[2]],
+            yaw,
+            pitch,
+            fov_y,
+            aspect,
+            near,
+            far,
+        );
+        let frustum = crate::camera::frustum_from(view_proj);
+        let mut flat = [0.0f32; 24];
+        for (index, plane) in frustum.iter().enumerate() {
+            flat[index * 4..index * 4 + 4].copy_from_slice(plane);
+        }
+        // SAFETY: 输出指针已判非空、对齐且容量充足，只在完整成功后各写一次。
+        unsafe {
+            std::ptr::copy_nonoverlapping(view_proj.as_ptr(), out_viewproj, 16);
+            std::ptr::copy_nonoverlapping(flat.as_ptr(), out_frustum, 24);
+        }
+        MORNLEA_CLIENT_STATUS_OK
+    })
 }
 
 /// 创建窗口并写出句柄。
@@ -415,10 +480,11 @@ mod tests {
     // 校验拒绝路径:ABI 版本、参数校验与无效句柄。
 
     #[test]
-    fn abi_version_is_fifteen() {
-        // v15 在 v14 render world update 表面上叠加 avatar 贴图实例布局；
-        // identity 必须与完整 29 个 versioned exports 同步切换。
-        assert_eq!(mornlea_client_abi_version(), 15);
+    fn abi_version_is_sixteen() {
+        // v15 在 v14 render world update 表面上叠加 avatar 贴图实例布局与
+        // 相机可见性两段式出口；v16 与 v15 同表面，仅版本号提升；
+        // identity 必须与完整 31 个 versioned exports 同步切换。
+        assert_eq!(mornlea_client_abi_version(), 16);
     }
 
     #[test]
@@ -1149,8 +1215,8 @@ mod render_ffi_tests {
                 assert_eq!($call, MORNLEA_CLIENT_STATUS_ABI_VERSION)
             }};
         }
-        let bad = 14;
-        assert_eq!(CLIENT_ABI_VERSION, bad + 1, "被测版本必须是 v15 的直接前代");
+        let bad = 15;
+        assert_eq!(CLIENT_ABI_VERSION, bad + 1, "被测版本必须是 v16 的直接前代");
 
         assert_bad_abi!(unsafe {
             mornlea_client_window_create(bad, 0, 0, std::ptr::null(), 0, std::ptr::null_mut())
@@ -1233,7 +1299,21 @@ mod render_ffi_tests {
         });
         assert_bad_abi!(mornlea_client_render_resize(bad, 0, 0, 0));
         assert_bad_abi!(unsafe { mornlea_client_render_readback(bad, 0, std::ptr::null_mut(), 0) });
-        assert_eq!(checked, 29, "必须逐一覆盖全部 versioned exports");
+        assert_bad_abi!(unsafe {
+            mornlea_client_camera_viewproj(
+                bad,
+                std::ptr::null(),
+                0.0,
+                0.0,
+                1.0,
+                1.0,
+                0.1,
+                100.0,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        });
+        assert_eq!(checked, 30, "必须逐一覆盖全部 versioned exports");
     }
 
     fn reset_and_single_section_batch() -> Vec<u8> {
@@ -2657,5 +2737,130 @@ mod ui_ffi_tests {
             MORNLEA_CLIENT_STATUS_OK
         );
         assert_eq!(marker, 37);
+    }
+}
+
+#[cfg(test)]
+mod camera_viewproj_ffi_tests {
+    use super::*;
+
+    // 相机视图投影是纯计算出口（无窗口句柄），校验前段（ABI→指针）不依赖
+    // 窗口系统；数值与 `crate::camera` 内核直调逐项一致（f32 同语义，位级
+    // 一致由跨语言 parity 测试覆盖）。
+
+    #[test]
+    fn camera_viewproj_rejects_bad_abi_first() {
+        let mut vp = [0xCCu32; 16];
+        let mut fr = [0xCCu32; 24];
+        let pos = [0.0f32; 3];
+        // SAFETY：除被测的错误 ABI 外指针全部有效；ABI 校验优先，不解引用。
+        let status = unsafe {
+            mornlea_client_camera_viewproj(
+                CLIENT_ABI_VERSION + 1,
+                pos.as_ptr(),
+                0.0,
+                0.0,
+                1.0,
+                1.0,
+                0.1,
+                100.0,
+                vp.as_mut_ptr() as *mut f32,
+                fr.as_mut_ptr() as *mut f32,
+            )
+        };
+        assert_eq!(status, MORNLEA_CLIENT_STATUS_ABI_VERSION);
+        assert!(vp.iter().all(|&v| v == 0xCCu32), "失败调用不得写输出");
+        assert!(fr.iter().all(|&v| v == 0xCCu32), "失败调用不得写输出");
+    }
+
+    #[test]
+    fn camera_viewproj_rejects_null_pointers_without_writes() {
+        let pos = [1.0f32, 2.0, 3.0];
+        let mut vp = [0.0f32; 16];
+        let mut fr = [0.0f32; 24];
+        // 三个指针每次仅一个违约；失败路径不得写任何输出。
+        // SAFETY：每次仅一个条件违约，其余指针有效。
+        assert_eq!(
+            unsafe {
+                mornlea_client_camera_viewproj(
+                    CLIENT_ABI_VERSION,
+                    std::ptr::null(),
+                    0.0,
+                    0.0,
+                    1.0,
+                    1.0,
+                    0.1,
+                    100.0,
+                    vp.as_mut_ptr(),
+                    fr.as_mut_ptr(),
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_camera_viewproj(
+                    CLIENT_ABI_VERSION,
+                    pos.as_ptr(),
+                    0.0,
+                    0.0,
+                    1.0,
+                    1.0,
+                    0.1,
+                    100.0,
+                    std::ptr::null_mut(),
+                    fr.as_mut_ptr(),
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_camera_viewproj(
+                    CLIENT_ABI_VERSION,
+                    pos.as_ptr(),
+                    0.0,
+                    0.0,
+                    1.0,
+                    1.0,
+                    0.1,
+                    100.0,
+                    vp.as_mut_ptr(),
+                    std::ptr::null_mut(),
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert!(vp.iter().all(|&v| v == 0.0));
+        assert!(fr.iter().all(|&v| v == 0.0));
+    }
+
+    #[test]
+    fn camera_viewproj_roundtrip_matches_kernel() {
+        let pos = [1.5f32, 65.25, -3.75];
+        let mut vp = [0.0f32; 16];
+        let mut fr = [0.0f32; 24];
+        // SAFETY：指针来自有效局部变量。
+        let status = unsafe {
+            mornlea_client_camera_viewproj(
+                CLIENT_ABI_VERSION,
+                pos.as_ptr(),
+                0.7,
+                -0.25,
+                1.22173,
+                16.0 / 9.0,
+                0.1,
+                1536.0,
+                vp.as_mut_ptr(),
+                fr.as_mut_ptr(),
+            )
+        };
+        assert_eq!(status, MORNLEA_CLIENT_STATUS_OK);
+        let want_vp = crate::camera::view_proj(pos, 0.7, -0.25, 1.22173, 16.0 / 9.0, 0.1, 1536.0);
+        assert_eq!(vp, want_vp, "出口矩阵必须与内核直调逐项一致");
+        let want_fr = crate::camera::frustum_from(want_vp);
+        for (plane, want) in fr.chunks_exact(4).zip(want_fr.iter()) {
+            assert_eq!(plane, want, "出口视锥必须与内核直调逐项一致");
+        }
     }
 }

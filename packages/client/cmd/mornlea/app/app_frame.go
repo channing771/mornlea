@@ -245,7 +245,8 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		posed := vista.pose(a.camera)
 		cam = &posed
 	}
-	viewProj := cam.ViewProj()
+	vpArr, frustum := client.NativeViewProj(cam)
+	viewProj := mgl32.Mat4(vpArr)
 	viewProjInv := viewProj.Inv()
 
 	// 水下视觉:判定复用 Predictor 最近一次 physics.SubmersionFlags 算出的那一个
@@ -263,7 +264,7 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	a.visibleSections = mesh.VisibleSectionsInto(
 		a.visibleSections[:0], &a.visibleScratch,
 		cameraSectionPos(cam.Pos), underwater.VisibleRadius,
-		core.FrustumFrom(viewProj), activeScheduler.Connectivity,
+		frustum, activeScheduler.Connectivity,
 	)
 	a.lastFrameStats = activeScheduler.FrameStats(a.visibleSections)
 	if cap(a.rustVisible) < len(a.visibleSections) {
