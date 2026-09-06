@@ -47,8 +47,8 @@ help:
 		'  make companion-agent-check 运行伙伴 Agent locked 安装、格式、静态检查、类型检查与 Python 单测' \
 		'  make companion-agent-integration 运行无外网 Go/Python 伙伴 Agent 真进程合同' \
 		'  make fmt              格式化全部 Rust 与 Go 源码' \
-		'  make visual-check     跑视觉场景并与 golden 基线比对' \
-		'  make visual-update    重新生成 golden 基线（VISUAL_OUT 覆盖输出目录）' \
+		'  make visual-check     跑视觉场景并与 golden 基线比对（SCENES= 只跑场景子集、GIFS=1 生成 GIF 供人工审查）' \
+		'  make visual-update    重新生成 golden 基线（VISUAL_OUT 覆盖输出目录，SCENES= 只更新所列场景）' \
 		'  make frontend-visual-check    UI 部件视觉基线比对（本机 Chrome，不进 CI）' \
 		'  make frontend-visual-update   覆盖 UI 部件视觉基线 PNG（人工确认后使用）' \
 		'  make clean            删除 bin 目录' \
