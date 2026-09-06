@@ -102,3 +102,49 @@ app 侧 `app_viewmodel_test.go` 新增：
    处理，后续 change 另起通道。
 3. scenario 保持 v22（沿 Task 5 §5 结论：固定输入/被测世界/分辨率全不动，
    性能数值只记录；但逐帧字节已变——升版必要性待收尾 change 按升级纪律重裁）。
+
+## Fix round 1（评审 findings 关闭）
+
+- Fix commit: 见回消息（单行英文，无正文无签名）
+- 范围：评审要求的一处 Important + 一处 Minor；Minor-1（oracle 复制公式）按
+  评审结论接受现状，零改动。
+
+### Important-1：清场直达重置的直接测试（已加，红绿双证）
+
+- 加法：`packages/client/cmd/mornlea/capture/capture_viewmodel_reset_test.go`
+ （单一清场接线主题）。`resetViewmodelRecorder` 内嵌 `SceneApplication` 只
+  计数 `ResetViewmodel` 调用、其余直通真实装配；
+  `TestResetCapturePresentationResetsViewmodel` 走一遍公共清场并断言重置恰
+  被调用一次。既有应用层首帧测试只锁重置语义，本测试锁清场是否调用它。
+- 红证据：注释掉 `capture_scene.go:710` 的 `app.ResetViewmodel()` 后，
+  `ResetViewmodel 调用 = 0，想要 1` 变红；恢复后变绿。
+- Covering：`go test ./packages/client/cmd/mornlea/capture -run
+  TestResetCapturePresentationResetsViewmodel -count=1` 绿；全量 capture 套
+  件除已知 bed-night 探针外无新增红点（见下）。
+
+### Minor-2：非零偏航/俯仰落点覆盖（已加，红绿双证）
+
+- 改法：`viewmodel_projection_test.go` 内 oracle 改为接受位姿参数，落点断言
+  收敛为 `assertHandsLandedOnScreen` 唯一落点；原零偏航用例不动，新增
+  `TestViewmodelLandingProjectionYawedCamera`（位置 (−3,4,7)、偏航 0.6、俯
+  仰 −0.25，同屏内 + 左右半屏断言）。双手定义在相机空间，正确根下两用例
+  NDC 一致；顺序/符号写错即偏离相机空间原位而变红。
+- 红证据：旧根下两用例各红（15.32 米 / 9.38 米 vs 想要 1.5 米内）；实现后
+  双绿。
+
+### Covering tests（含红证明）与命令输出
+
+| 命令 | 输出 |
+|---|---|
+| `go test ./packages/client/render ./packages/client/cmd/mornlea/app -race -count=1` | 双包 ok（render 3.9s、app 68s） |
+| `go test ./packages/audit -count=1` | ok（含注释标识符门禁；新增注释零 backticked 外来标识符、零任务编号） |
+| `go test ./packages/client/cmd/mornlea/capture -race -count=1` | 仅已知 bed-night 探针红（东西向床头亮带，修复生效的预期遮挡，基线收尾前保持）；新增清场测试绿，无其他红点 |
+| `gofmt -l`（两包） | 无输出 |
+| `git status` Rust 文件 | 零修改 |
+
+### 变更文件（本轮）
+
+- 改：`packages/client/render/viewmodel_projection_test.go`（oracle 参数化 +
+  断言收敛 + 新增偏航用例，实现零改动）
+- 增：`packages/client/cmd/mornlea/capture/capture_viewmodel_reset_test.go`
+- 未碰：实现文件、ABI/协议/存档/golden、`progress.md`/`ledger.md`
