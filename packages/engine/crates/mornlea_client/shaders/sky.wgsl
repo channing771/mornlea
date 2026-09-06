@@ -75,10 +75,6 @@ fn star_light(direction: vec3f) -> f32 {
     return point * brightness;
 }
 
-fn cloud_hash(macro_cell: vec2i, macro_offset: u32) -> u32 {
-    return hash_cell(vec3u(bitcast<u32>(macro_cell.x) - macro_offset, bitcast<u32>(macro_cell.y), 0u));
-}
-
 fn cloud_value_noise(p: vec2f) -> f32 {
     let cell = vec2i(floor(p));
     let frac = fract(p);
@@ -93,10 +89,12 @@ fn cloud_value_noise(p: vec2f) -> f32 {
 const CLOUD_OCTAVES: u32 = 3u; // 钉死为 3，不得参数化
 
 fn cloud_density(intersection: vec2f) -> f32 {
-    // 基准格 16 block（与既有 cell 口径一致），macro 每 64 block 覆盖调制
+    // 基准格 16 block；覆盖度取自 128 block 波长的低频连续噪声（随云层同速漂移）
+    // ——不得用量化 macro 散列驱动阈值，量化阈值会在 64 格网格线上产生密度跳变
+    //（云在区块衔接处断裂）。`sky.cloud_macro_x` 保留为帧契约保留字段，不再采样。
     let base = (intersection - vec2f(sky.camera_cloud.w, 0.0)) / 16.0;
     // 细节层同向差速：高频 octave 以 1.7 倍 local 偏移漂移（w 系数恒为 -1.7/16，
-    // 与频率无关）；首 octave 与覆盖调制仍用 `base`（macro 原速）
+    // 与频率无关）；首 octave 仍用 `base`（与覆盖同速）
     var fbm = 0.0;
     var amp = 0.55;
     var freq = 1.0;
@@ -107,9 +105,9 @@ fn cloud_density(intersection: vec2f) -> f32 {
         amp *= 0.5;
         freq *= 2.03;
     }
-    let macro_cell = vec2i(floor(base / 4.0));
-    let cover = f32((cloud_hash(macro_cell, sky.cloud_macro_x) >> 4u) & 255u) / 255.0;
-    let threshold = mix(0.62, 0.38, cover); // macro 覆盖高处阈值低、云多
+    let cover_p = (intersection - vec2f(sky.camera_cloud.w, 0.0)) / 128.0;
+    let cover = smoothstep(0.3, 0.7, cloud_value_noise(cover_p));
+    let threshold = mix(0.62, 0.38, cover); // 覆盖高处阈值低、云多
     return smoothstep(threshold, threshold + 0.25, fbm);
 }
 
