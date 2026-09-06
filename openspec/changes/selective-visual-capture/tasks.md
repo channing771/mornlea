@@ -20,7 +20,7 @@
 
 ## 4. 真机等价性与性能验证
 
-- [ ] 4.1 同一工作区：`make rust` 后先跑全量 `make visual-check`（须全绿、记录墙钟耗时），再跑 `make visual-check SCENES=mining-crack-early,mining-crack-heavy`、`SCENES=main-menu`、`SCENES=water-underwater`（均须对同一 golden 全绿，记录耗时）；`make visual-check GIFS=1` 确认显式 GIF 生成仍可用。任何子集红灯即停下归因：若为跨场景状态残留，在过滤层强制带上前置或拒绝该子集，先更新 delta spec 再改码。全部数值记入 `ledger.md`。
+- [x] 4.1 同一工作区：`make rust` 后先跑全量 `make visual-check`（须全绿、记录墙钟耗时），再跑 `make visual-check SCENES=mining-crack-early,mining-crack-heavy`、`SCENES=main-menu`、`SCENES=water-underwater`（均须对同一 golden 全绿，记录耗时）；`make visual-check GIFS=1` 确认显式 GIF 生成仍可用。任何子集红灯即停下归因：若为跨场景状态残留，在过滤层强制带上前置或拒绝该子集，先更新 delta spec 再改码。全部数值记入 `ledger.md`。
 
 ## 5. 收尾门禁
 

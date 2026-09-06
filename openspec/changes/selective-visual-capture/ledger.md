@@ -45,3 +45,16 @@
   - `make help` 正常渲染；`make -n visual-check GIFS=1 SCENES=terrain-noon` 等抽查展开正确
   - `grep` 核对四处文档 flag/变量拼写与 options.go/Makefile 一致
   - `go test ./packages/audit -count=1` → ok（文档守卫）
+
+## 2026-09-06 Task 4（真机等价性与性能验证，Apple Silicon / Metal）
+
+- 前置：`make rust` 重建并部署双 dylib（签名替换正常）。
+- 等价性（同一工作区、同一 golden、同一双阈值，全部 EXIT=0 且差异像素 0/230400、最大通道差 0）：
+  - 全量 `make visual-check`：24/24 景全绿，**60.3s**（user 285.6s / cpu 504%），GIF 跳过提示正常打印。
+  - `SCENES=mining-crack-early,mining-crack-heavy`：**48.3s**。
+  - `SCENES=main-menu`：**52.2s**（菜单相位含全景管线额外装配等待，符合预期）。
+  - `SCENES=water-underwater`：**48.9s**（唯一末景子集通过，跨场景状态残留未影响等价性）。
+  - `GIFS=1 SCENES=mining-crack-early`：**53.5s**，graze/lure/kill/beef-drop 四条 GIF 生成成功写入 build/visual（"不进比对"提示正常）。
+- Ruling: 跨场景状态残留风险实测未成立 — 首景/中段/菜单相位/唯一末景的子集运行与全量运行对同一 golden 全部 0 差异像素，warmup+收敛判据+场景 reset 纪律足以保证子集等价 — 无需子集不安全名单。
+- 性能结论（如实记录）：固定下限为世界加载+渲染器初始化 ≈ 47-48s（约 240-270s user CPU、~500% 并行），每景边际 ≈ 0.5s，GIF 四条 ≈ 5.7s。改动前全量 check ≈ 66s；改动后全量 60.3s（省 GIF），子集 48-53s（较改动前省约 20-28%）。世界加载下限由规格钉死（抓帧视距必须与真实客户端一致），攻击该下限属另一独立 change（如持久化世界快照复用），不在本 change 范围。
+- 验证证据（SHA `43fd840a` 工作区，控制会话真实执行，日志 /tmp/visual-*.log）。
