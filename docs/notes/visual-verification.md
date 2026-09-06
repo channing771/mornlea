@@ -19,7 +19,7 @@ make visual-update             # 重新生成基线，写入仓库根 testdata/v
 
 `--capture-scenes <逗号分隔场景名>`（make 侧 `SCENES=`）与 `--capture-gifs`（make 侧 `GIFS=1`）把单次运行的开销降到与改动相称，分层用法如下：
 
-- 编辑环（低层门禁）：改动只波及部分场景时（如采掘裂纹 overlay 只影响 `mining-crack-early`/`mining-crack-heavy` 两景），`make visual-check SCENES=mining-crack-early,mining-crack-heavy` 只重跑受影响场景；`make visual-update SCENES=...` 同理只重新生成所列场景的基线。
+- 编辑环（低层门禁）：改动只波及部分场景时（如采掘裂纹 overlay 只影响 `mining-crack-early`/`mining-crack-heavy` 两景），`make visual-check SCENES=mining-crack-early,mining-crack-heavy` 只重跑受影响场景；`make visual-update SCENES=...` 同理只重新生成所列场景的基线，但子集更新仍会先执行 LOD on/off 近环 control 守卫，通过后才写基线。
 - 阶段边界（推送/提交前）：全量 `make visual-check` 仍是权威视觉门禁，子集运行只服务编辑环加速，不能替代全量结论。
 - 子集按场景表固有顺序保序执行（不按书写顺序重排），未知、重复或空场景名在启动前即报错拒绝；场景名清单见 [视觉基线索引](../../testdata/visual-golden/README.md)。
 - GIF 剧本生成时机：纯比对（check）模式缺省不生成（运行时打印一行跳过说明）；人工审查用 `make visual-check GIFS=1` 显式生成到输出目录；`make visual-update`（`--update-golden`）恒生成 GIF 基线。GIF 仍不进任何比对，只供人工审查。

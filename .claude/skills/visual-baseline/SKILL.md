@@ -11,7 +11,7 @@ description: 视觉基线三类路由与更新纪律：窗口型归 ui、单帧�
 - 无头世界单帧稳定态 → `world/`：注册表以 `capture/capture.go` 的 `captureScenes` 为准，无头离屏收敛后抓帧；改动只波及部分场景时优先 `make visual-check SCENES=` 子集验证，全量比对留在推送/提交等阶段边界。
 - 跨 tick 状态迁移 → GIF 全流程（触发前、结算、收敛全覆盖，不得只截片段）：
   - 供人眼审查 → `motion/` 演示，不进任何比对；
-  - 需门禁钉住 → `passive-death/`（或同类门禁 GIF 目录），逐帧比对、全帧通过、帧预算有界。
+  - 需门禁钉住 → `passive-death/`（或同类门禁 GIF 目录），不进自动比对，仅生成供人工审查，帧预算有界。
 
 世界帧不得携带窗口 chrome，UI 夹具不得复刻世界像素；同一行为禁 PNG + GIF 双存，例外必须在 README 注明理由（门禁采样点 vs 全流程审查物）。
 
