@@ -4,9 +4,9 @@
 
 ## 1. capture 层：场景子集与 GIF 门控
 
-- [ ] 1.1 新增 `packages/client/cmd/mornlea/capture/capture_scene_selection_test.go`：钉住 `selectScenes` 保序过滤（乱序/部分输入按表序输出）、`nil/空` 等价全量、未知名与重复名报错、`SceneNames` 与场景表一致、`RunOptions.gifsEnabled` 矩阵（check 缺省否 / check+IncludeGIFs 是 / update 恒是）。先确认测试编译失败（red）。
-- [ ] 1.2 在 `capture/capture.go` 实现 `RunOptions`、`SceneNames`、`ValidateSceneSelection`、内部 `selectScenes`、`gifsEnabled`；`RunCapture` 签名改为 `(app, dir, opts RunOptions)`，场景循环改用过滤结果，GIF 段按门控执行（跳过时打印一行说明）；同步修改 `main.go` 的 `runDependencies.runCapture` 适配器保证编译。focused：`go test ./packages/client/cmd/mornlea/capture -run 'SelectScenes|SceneNames|GifsEnabled|SceneSelection' -count=1` 与 `go test ./packages/client/cmd/mornlea/capture -run 'TestCaptureSceneOrder' -count=1`（缺省路径不回归）。
-- [ ] 1.3 任务评审（全新评审者）：对照本 change 的 delta spec 抽查保序、拒绝与门控行为；结论与修复记入 `ledger.md`。
+- [x] 1.1 新增 `packages/client/cmd/mornlea/capture/capture_scene_selection_test.go`：钉住 `selectScenes` 保序过滤（乱序/部分输入按表序输出）、`nil/空` 等价全量、未知名与重复名报错、`SceneNames` 与场景表一致、`RunOptions.gifsEnabled` 矩阵（check 缺省否 / check+IncludeGIFs 是 / update 恒是）。先确认测试编译失败（red）。
+- [x] 1.2 在 `capture/capture.go` 实现 `RunOptions`、`SceneNames`、`ValidateSceneSelection`、内部 `selectScenes`、`gifsEnabled`；`RunCapture` 签名改为 `(app, dir, opts RunOptions)`，场景循环改用过滤结果，GIF 段按门控执行（跳过时打印一行说明）；同步修改 `main.go` 的 `runDependencies.runCapture` 适配器保证编译。focused：`go test ./packages/client/cmd/mornlea/capture -run 'SelectScenes|SceneNames|GifsEnabled|SceneSelection' -count=1` 与 `go test ./packages/client/cmd/mornlea/capture -run 'TestCaptureSceneOrder' -count=1`（缺省路径不回归）。
+- [x] 1.3 任务评审（全新评审者）：对照本 change 的 delta spec 抽查保序、拒绝与门控行为；结论与修复记入 `ledger.md`。
 
 ## 2. CLI flag、接线与 Makefile 透传
 
