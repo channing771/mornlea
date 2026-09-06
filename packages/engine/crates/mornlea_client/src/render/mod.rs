@@ -156,6 +156,10 @@ pub struct FrameInput {
     /// 采掘裂纹 overlay 实例流(80 字节/实例:mat4 + atlas 层号 f32 + 零
     /// 填充,布局与 Go `EncodeBlockCrackInstances` 一致);空表示本帧无裂纹。
     pub crack_instances: Vec<u8>,
+    /// 第一人称双手 viewmodel 实例流(96 字节/实例:与 avatar 同布局,Go
+    /// `render` 包编码);空表示本帧无双手。本版本只解码入结构,绘制由后续
+    /// change 的相机空间叠加 pass 承担。
+    pub viewmodel_instances: Vec<u8>,
     /// 伤害红边强度(0 表示不绘制)。
     pub overlay_strength: f32,
     /// 相机浸没时的全屏水色叠加 RGBA(A <= 0 表示不绘制)。
@@ -186,6 +190,7 @@ impl FrameInput {
             && self.drop_instances.is_empty()
             && self.outline.is_empty()
             && self.crack_instances.is_empty()
+            && self.viewmodel_instances.is_empty()
             && self.overlay_strength == 0.0
             && self.water_tint[3] == 0.0
             && self.name_tag_vertices.is_empty()

@@ -108,6 +108,10 @@ type RenderFrame struct {
 	// CrackInstances 是采掘裂纹 overlay 的实例流（恰 1 个 80 字节实例：
 	// mat4 + f32 atlas 层号 + 零填充，render 包编码）；空表示本帧无裂纹。
 	CrackInstances []byte
+	// ViewmodelInstances 是第一人称双手 viewmodel 的实例流（96 字节/实例，
+	// 与 avatar 同布局，render 包编码）；空表示本帧无双手，帧字节与本字段
+	// 引入前逐位一致。
+	ViewmodelInstances []byte
 	// OverlayStrength 是伤害红边强度(>0 才绘制)。
 	OverlayStrength float32
 	// WaterTint 是相机浸没时的全屏水色叠加(RGBA)。A <= 0 表示本帧不叠加,
@@ -345,12 +349,17 @@ const (
 	// 先例在帧内追加 TLV tag、不升 client ABI;tag 9 的退役语义被占用故跳过,
 	// 取下一个空闲值 10。段按条件追加:流为空时帧字节与引入前逐位一致。
 	frameTagCrack = 10
+	// frameTagViewmodel 是第一人称双手 viewmodel 实例段(96 字节/实例,与
+	// avatar 同布局,client ABI v17 新增):tag 1..10 已占用(tag 9 退役仍保留
+	// 拒绝语义),取下一个空闲值 11。段按条件追加:流为空时帧字节与 v16 逐位一致。
+	frameTagViewmodel = 11
 )
 
 // hasPassSegments 报告本帧是否携带任一 pass 段(决定 layout 版本)。
 func (frame RenderFrame) hasPassSegments() bool {
 	return len(frame.AvatarInstances) > 0 || len(frame.DropInstances) > 0 ||
 		len(frame.OutlineInstances) > 0 || len(frame.CrackInstances) > 0 ||
+		len(frame.ViewmodelInstances) > 0 ||
 		frame.OverlayStrength > 0 || frame.WaterTint[3] > 0 ||
 		len(frame.NameTagSegment) > 0 || len(frame.HUDSegment) > 0 ||
 		len(frame.DebugSegment) > 0
@@ -419,6 +428,9 @@ func EncodeRenderFrame(frame RenderFrame) []byte {
 	// 裂纹段按条件追加并落在既有段之后:流为空时不写任何字节,保证无裂纹
 	// 帧与本字段引入前逐位一致(既有 golden 的根基)。
 	appendTLV(frameTagCrack, frame.CrackInstances)
+	// 双手段按条件追加并落在裂纹段之后:流为空时不写任何字节,保证无双手
+	// 帧与 v16 逐位一致(回归 golden 的根基)。
+	appendTLV(frameTagViewmodel, frame.ViewmodelInstances)
 	return out
 }
 

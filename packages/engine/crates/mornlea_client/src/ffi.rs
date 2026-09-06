@@ -7,7 +7,7 @@
 //!   (v6 起远环 tile 出口加入,v7 起雾 setter 出口加入,v9 起结构化 UI 事件,
 //!   v11 起离屏 benchmark batch,v12 起菜单桥出口,v13 起窗口合成捕获,
 //!   v14 起 render world update 出口,v15 起 avatar 贴图实例布局,
-//!   v16 起相机视图投影查询出口)。
+//!   v16 起相机视图投影查询出口,v17 起帧 viewmodel TLV 段)。
 //! - 窗口句柄存放在 thread-local 表中:句柄只在创建线程有效,跨线程调用
 //!   查不到句柄而返回 `MORNLEA_CLIENT_STATUS_WINDOW`——这同时兜住了 winit
 //!   macOS 的主线程约束(Go 侧已 `LockOSThread`)。
@@ -52,7 +52,9 @@ use crate::window::ClientWindow;
 /// v10:avatar 通道容量扩至 75 具身体(450 实例)并新增敌怪身份域。
 /// v15:avatar 实例扩至 96 字节并新增材质槽与 atlas 采样(容量不变)。
 /// v16:新增无状态相机视图投影查询出口(位姿→列主序视图投影矩阵＋6 平面视锥)。
-pub const CLIENT_ABI_VERSION: u32 = 16;
+/// v17:帧新增 viewmodel TLV 段(tag 11,定长 viewmodel 实例流,与 avatar 同
+/// 96 字节/实例布局);v17 surface 完整保留 v16 的全部 versioned exports 与语义。
+pub const CLIENT_ABI_VERSION: u32 = 17;
 
 /// 调用成功。
 pub const MORNLEA_CLIENT_STATUS_OK: u32 = 0;
@@ -480,11 +482,12 @@ mod tests {
     // 校验拒绝路径:ABI 版本、参数校验与无效句柄。
 
     #[test]
-    fn abi_version_is_sixteen() {
+    fn abi_version_is_seventeen() {
         // v15 在 v14 render world update 表面上叠加 avatar 贴图实例布局与
-        // 相机可见性两段式出口；v16 与 v15 同表面，仅版本号提升；
+        // 相机可见性两段式出口；v16 与 v15 同表面，仅版本号提升；v17 在 v16
+        // 表面上叠加帧 viewmodel TLV 段(tag 11)；
         // identity 必须与完整 31 个 versioned exports 同步切换。
-        assert_eq!(mornlea_client_abi_version(), 16);
+        assert_eq!(mornlea_client_abi_version(), 17);
     }
 
     #[test]
@@ -967,10 +970,15 @@ const FRAME_TAG_WATER: u32 = 8;
 /// 退役语义(v8–v11 菜单 UI 段)被占用故跳过,取下一个空闲值 10。段按
 /// 条件追加:流为空时帧字节与引入前逐位一致。
 const FRAME_TAG_CRACK: u32 = 10;
+/// 第一人称双手 viewmodel 实例段(96 字节/实例:与 avatar 同布局,绘制由
+/// 后续 change 的相机空间叠加 pass 承担,本版本只解码入结构)。tag 1..10
+/// 已占用(tag 9 退役仍保留拒绝语义),取下一个空闲值 11;空流不编码,保证
+/// 无 viewmodel 输入的帧与 v16 逐字节一致。client ABI v17 起新增。
+const FRAME_TAG_VIEWMODEL: u32 = 11;
 /// 白名单内的最高 TLV tag。client ABI v12 退役了 v8–v11 的 tag 9 UI 段:
-/// 白名单区间虽覆盖到 tag 10,携带 tag 9 段的帧仍由 match 分支与未知 tag
+/// 白名单区间虽覆盖到 tag 11,携带 tag 9 段的帧仍由 match 分支与未知 tag
 /// 同一路径拒绝,不触碰渲染器状态。
-const FRAME_TAG_MAX: u32 = 10;
+const FRAME_TAG_MAX: u32 = 11;
 
 /// 解析 render_frame 输入;违约返回 None。
 ///
@@ -1019,10 +1027,11 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
     let mut hud_vertices = Vec::new();
     let mut debug_vertices = Vec::new();
     let mut crack_instances = Vec::new();
+    let mut viewmodel_instances = Vec::new();
     if layout == 2 {
         let mut cursor = sections_end;
-        // seen 以 tag 为下标,长度覆盖白名单 1..=10(tag 0 不存在,浪费一格)。
-        let mut seen = [false; 11];
+        // seen 以 tag 为下标,长度覆盖白名单 1..=11(tag 0 不存在,浪费一格)。
+        let mut seen = [false; 12];
         while cursor < bytes.len() {
             if bytes.len() - cursor < 8 {
                 return None;
@@ -1066,6 +1075,7 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
                     }
                 }
                 FRAME_TAG_CRACK => crack_instances = payload.to_vec(),
+                FRAME_TAG_VIEWMODEL => viewmodel_instances = payload.to_vec(),
                 _ => return None,
             }
         }
@@ -1090,6 +1100,7 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
         hud_vertices,
         debug_vertices,
         crack_instances,
+        viewmodel_instances,
     })
 }
 
@@ -1215,8 +1226,8 @@ mod render_ffi_tests {
                 assert_eq!($call, MORNLEA_CLIENT_STATUS_ABI_VERSION)
             }};
         }
-        let bad = 15;
-        assert_eq!(CLIENT_ABI_VERSION, bad + 1, "被测版本必须是 v16 的直接前代");
+        let bad = 16;
+        assert_eq!(CLIENT_ABI_VERSION, bad + 1, "被测版本必须是 v17 的直接前代");
 
         assert_bad_abi!(unsafe {
             mornlea_client_window_create(bad, 0, 0, std::ptr::null(), 0, std::ptr::null_mut())
@@ -1991,9 +2002,9 @@ mod frame_v2_tests {
         // 空 pass 段序列同样合法(v2 允许零段)。
         assert_eq!(parse_status(&v2_frame(&[])), MORNLEA_CLIENT_STATUS_WINDOW);
 
-        // 未知 tag(11 超出白名单 1..=10)。
+        // 未知 tag(12 超出白名单 1..=11)。
         assert_eq!(
-            parse_status(&v2_frame(&tlv(11, &[0u8; 4]))),
+            parse_status(&v2_frame(&tlv(12, &[0u8; 4]))),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
         // 已退役 tag 9(v8–v11 的菜单 UI 段):与未知 tag 同路径拒绝,
@@ -2097,6 +2108,107 @@ mod frame_v2_tests {
             parse_status(&v2_frame(&tlv(FRAME_TAG_CRACK, &[0u8; 6]))),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
+    }
+}
+
+#[cfg(test)]
+mod viewmodel_ffi_tests {
+    use super::*;
+
+    /// 构造 layout v2 帧:头 + 零可见 section + 给定 TLV 段字节。
+    fn viewmodel_v2_frame(passes: &[u8]) -> Vec<u8> {
+        let mut frame = vec![0u8; FRAME_HEADER_BYTES];
+        frame[188..192].copy_from_slice(&2u32.to_le_bytes());
+        frame.extend_from_slice(passes);
+        frame
+    }
+
+    fn viewmodel_tlv(tag: u32, payload: &[u8]) -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(&tag.to_le_bytes());
+        out.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        out.extend_from_slice(payload);
+        out
+    }
+
+    /// 经 render_frame 入口驱动解析:解析成功但句柄未知返回 WINDOW——以此
+    /// 区分接受与拒绝,无需 GPU。
+    fn viewmodel_parse_status(frame: &[u8]) -> u32 {
+        // SAFETY: 指针来自有效切片。
+        unsafe {
+            mornlea_client_render_frame(CLIENT_ABI_VERSION, 0xF00D, frame.as_ptr(), frame.len())
+        }
+    }
+
+    #[test]
+    fn viewmodel_tag_is_next_free_value() {
+        // tag 1..10 已占用(tag 9 退役仍保留拒绝语义),viewmodel 取下一个
+        // 空闲值 11,白名单上界同步覆盖到 11。
+        assert_eq!(FRAME_TAG_VIEWMODEL, 11);
+        assert_eq!(FRAME_TAG_MAX, 11);
+    }
+
+    #[test]
+    fn viewmodel_segment_decodes_into_struct() {
+        // 定长 viewmodel 实例流(96 字节/实例,与 avatar 同布局)原样解码入结构。
+        let payload = vec![0x5Au8; 192];
+        let frame = viewmodel_v2_frame(&viewmodel_tlv(FRAME_TAG_VIEWMODEL, &payload));
+        let input = parse_frame(&frame).expect("合法 viewmodel 段必须解析成功");
+        assert_eq!(input.viewmodel_instances, payload);
+        assert!(input.avatar_instances.is_empty());
+        assert!(input.crack_instances.is_empty());
+    }
+
+    #[test]
+    fn viewmodel_segment_absent_leaves_struct_empty() {
+        // 无段帧的结构字段为空:无 viewmodel 输入的帧与旧版本逐字节一致的前提。
+        let mut passes = Vec::new();
+        passes.extend(viewmodel_tlv(FRAME_TAG_AVATAR, &[0u8; 8]));
+        passes.extend(viewmodel_tlv(FRAME_TAG_CRACK, &[0u8; 80]));
+        let input = parse_frame(&viewmodel_v2_frame(&passes)).expect("既有段组合必须解析成功");
+        assert!(input.viewmodel_instances.is_empty());
+    }
+
+    #[test]
+    fn viewmodel_segment_coexists_with_existing_segments() {
+        let mut passes = Vec::new();
+        passes.extend(viewmodel_tlv(FRAME_TAG_AVATAR, &[0u8; 8]));
+        passes.extend(viewmodel_tlv(FRAME_TAG_CRACK, &[0u8; 80]));
+        passes.extend(viewmodel_tlv(FRAME_TAG_VIEWMODEL, &[0xA5u8; 96]));
+        assert_eq!(
+            viewmodel_parse_status(&viewmodel_v2_frame(&passes)),
+            MORNLEA_CLIENT_STATUS_WINDOW,
+            "合法 viewmodel 组合帧应通过解析并因句柄未知被拒"
+        );
+    }
+
+    #[test]
+    fn viewmodel_segment_duplicate_and_unknown_tag_rejected() {
+        // 每类段至多出现一次。
+        let mut dup = viewmodel_tlv(FRAME_TAG_VIEWMODEL, &[0u8; 96]);
+        dup.extend(viewmodel_tlv(FRAME_TAG_VIEWMODEL, &[0u8; 96]));
+        assert_eq!(
+            viewmodel_parse_status(&viewmodel_v2_frame(&dup)),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        // 白名单上界之外(12)拒绝。
+        assert_eq!(
+            viewmodel_parse_status(&viewmodel_v2_frame(&viewmodel_tlv(12, &[0u8; 4]))),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+    }
+
+    #[test]
+    fn viewmodel_wrong_abi_wins_over_bad_content() {
+        // 错误 ABI 优先于 viewmodel 内容检查:版本错即回 ABI_VERSION,不读
+        // viewmodel 输入、不改变渲染器状态(此处负载长度非法也须先报版本错)。
+        let v16 = CLIENT_ABI_VERSION - 1;
+        assert_eq!(v16, 16, "被测旧版本必须是 v17 的直接前代");
+        let frame = viewmodel_v2_frame(&viewmodel_tlv(FRAME_TAG_VIEWMODEL, &[0u8; 6]));
+        // SAFETY: 指针来自有效切片;ABI 校验先于一切解析。
+        let status =
+            unsafe { mornlea_client_render_frame(v16, 0xF00D, frame.as_ptr(), frame.len()) };
+        assert_eq!(status, MORNLEA_CLIENT_STATUS_ABI_VERSION);
     }
 }
 
