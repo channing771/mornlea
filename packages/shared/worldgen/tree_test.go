@@ -239,6 +239,100 @@ func TestBaseBlockAtMatchesGeneratedChunkWithOakTrees(t *testing.T) {
 	}
 }
 
+// TestOakTrunkColumnsAreContinuous 锁定树干整体生成语义:生长在草地上的
+// 每根树干都是一段无空洞的连续原木(树干路径非空则整树丢弃,分杈只跳过
+// 固体格,都不允许留下半截树干),且单点查询与整块输出在树干段逐格一致
+// (原木优先于树叶,合并顺序不改变结果)。扫描 chunk [-2,2)²,结构与多样
+// 性测试的树干发现同源(草地表+表上第一格原木),树高只可能是普通 5..7 或
+// 珍异 8..12。
+func TestOakTrunkColumnsAreContinuous(t *testing.T) {
+	const seed = int64(42)
+	production := worldgen.New(seed, false)
+	trunks := 0
+	for cx := int32(-2); cx < 2; cx++ {
+		for cz := int32(-2); cz < 2; cz++ {
+			chunk := production.GenerateChunk(core.ChunkPos{X: cx, Z: cz})
+			for lx := 0; lx < core.SectionSize; lx++ {
+				for lz := 0; lz < core.SectionSize; lz++ {
+					wx := cx*core.SectionSize + int32(lx)
+					wz := cz*core.SectionSize + int32(lz)
+					surface := production.HeightAt(wx, wz)
+					if chunk.BlockAt(lx, surface, lz) != core.GrassID {
+						continue
+					}
+					if chunk.BlockAt(lx, surface+1, lz) != core.OakLogID {
+						continue
+					}
+					trunks++
+					top := surface + 1
+					for top+1 < core.MaxY && chunk.BlockAt(lx, top+1, lz) == core.OakLogID {
+						top++
+					}
+					if height := top - surface; height < 5 || height > 12 {
+						t.Fatalf("(%d,%d) 树干高 %d 越出 5..12,疑似半截树干", wx, wz, height)
+					}
+					for y := surface + 1; y <= top; y++ {
+						if got := chunk.BlockAt(lx, y, lz); got != core.OakLogID {
+							t.Fatalf("(%d,%d,%d) 树干空洞=%d,想要 OakLogID", wx, y, wz, got)
+						}
+						if got := production.BaseBlockAt(core.BlockPos{X: wx, Y: y, Z: wz}); got != core.OakLogID {
+							t.Fatalf("BaseBlockAt(%d,%d,%d)=%d,树干与整块分叉", wx, y, wz, got)
+						}
+					}
+				}
+			}
+		}
+	}
+	if trunks == 0 {
+		t.Fatal("语料失效:扫描区内没有树干")
+	}
+}
+
+// TestTreeColumnsRespectWorldHeightBounds 锁定世界高度上界语义:统一上界
+// 守卫要求根加树高加冠顶两层落在有效范围内(即树干顶上两层仍在界内),
+// 触界候选整体丢弃,因此任何实际生成的树冠顶都不触界;世界高度外的单点
+// 查询一律为空,整块输出天然只含界内 Y(单点与整块一致由一致性测试锁定)。
+// 自然地形远低于上界,触界拒绝是防御性分支,这里锁定的是其可观察包络。
+func TestTreeColumnsRespectWorldHeightBounds(t *testing.T) {
+	const seed = int64(42)
+	production := worldgen.New(seed, false)
+	for cx := int32(-2); cx < 2; cx++ {
+		for cz := int32(-2); cz < 2; cz++ {
+			chunk := production.GenerateChunk(core.ChunkPos{X: cx, Z: cz})
+			for lx := 0; lx < core.SectionSize; lx++ {
+				for lz := 0; lz < core.SectionSize; lz++ {
+					wx := cx*core.SectionSize + int32(lx)
+					wz := cz*core.SectionSize + int32(lz)
+					surface := production.HeightAt(wx, wz)
+					if chunk.BlockAt(lx, surface, lz) != core.GrassID {
+						continue
+					}
+					if chunk.BlockAt(lx, surface+1, lz) != core.OakLogID {
+						continue
+					}
+					top := surface + 1
+					for top+1 < core.MaxY && chunk.BlockAt(lx, top+1, lz) == core.OakLogID {
+						top++
+					}
+					if top+2 >= core.MaxY {
+						t.Fatalf("(%d,%d) 树冠顶 %d 触及世界高度上界 %d", wx, wz, top+2, core.MaxY)
+					}
+				}
+			}
+		}
+	}
+	for wx := int32(-32); wx < 32; wx++ {
+		for wz := int32(-32); wz < 32; wz++ {
+			if got := production.BaseBlockAt(core.BlockPos{X: wx, Y: core.MaxY, Z: wz}); got != core.AirID {
+				t.Fatalf("上界外 BaseBlockAt(%d,%d,%d)=%d,想要空气", wx, core.MaxY, wz, got)
+			}
+			if got := production.BaseBlockAt(core.BlockPos{X: wx, Y: core.MinY - 1, Z: wz}); got != core.AirID {
+				t.Fatalf("下界外 BaseBlockAt(%d,%d,%d)=%d,想要空气", wx, core.MinY-1, wz, got)
+			}
+		}
+	}
+}
+
 // branchLogDirections 收集顶下第 4/5 层、轴向 1..3 格内的原木格,按水平方向
 // 归组并记录各方向的顺轴距离。方向键是轴向符号 (dx 与 dz 各取 -1/0/1),
 // 普通树该映射为空(分杈是珍异专属),珍异树含 1..2 个方向。判定只用生产

@@ -150,3 +150,49 @@ func TestOakTreeNegativeCoordinatesConsistent(t *testing.T) {
 	assertTreeAcrossChunksConsistent(t, 42, -32, -4,
 		[]core.ChunkPos{{X: -3, Z: -1}, {X: -2, Z: -1}}, 5, 7)
 }
+
+// TestRareOakTreeNegativeCoordinatesConsistent 锁定负坐标珍异大树拼合:
+// seed 42 的两棵珍异树根列分别在 (-31,*,4)(树高 11,冠幅跨 x=-32 区块边)
+// 与 (-7,*,15)(树高 8,冠幅跨 z=16 区块边)。除逐格一致外,另断言大冠旁侧
+// 有 3 格伸展(半径回归非空:该伸展格正是半径不足时会漏扫的格)与分杈
+// 1..2 条。后者根 Z 恰在候选格末位,大冠 +3 侧伸进下一候选格,是覆盖半径
+// 的边界对齐回归。
+func TestRareOakTreeNegativeCoordinatesConsistent(t *testing.T) {
+	const seed = int64(42)
+	production := worldgen.New(seed, false)
+	for _, tc := range []struct {
+		rootX, rootZ int32
+		chunks       []core.ChunkPos
+	}{
+		{-31, 4, []core.ChunkPos{{X: -3, Z: 0}, {X: -2, Z: 0}}},
+		{-7, 15, []core.ChunkPos{{X: -1, Z: 0}, {X: -1, Z: 1}}},
+	} {
+		_, topY := assertTreeAcrossChunksConsistent(t, seed, tc.rootX, tc.rootZ, tc.chunks, 8, 12)
+
+		wide := false
+		for _, y := range []int32{topY - 3, topY - 2, topY - 1} {
+			for dz := int32(-3); dz <= 3 && !wide; dz++ {
+				for dx := int32(-3); dx <= 3; dx++ {
+					radial := absInt32(dx)
+					if other := absInt32(dz); other > radial {
+						radial = other
+					}
+					if radial != 3 {
+						continue
+					}
+					if production.BaseBlockAt(core.BlockPos{X: tc.rootX + dx, Y: y, Z: tc.rootZ + dz}) == core.LeavesID {
+						wide = true
+						break
+					}
+				}
+			}
+		}
+		if !wide {
+			t.Fatalf("根列 (%d,*,%d) 珍异大冠旁侧未突出主干 2 格以上", tc.rootX, tc.rootZ)
+		}
+
+		if dirs := branchLogDirections(production, tc.rootX, tc.rootZ, topY); len(dirs) == 0 || len(dirs) > 2 {
+			t.Fatalf("根列 (%d,*,%d) 珍异分杈必须为横向 1..2 条,实际 %d 个方向 %v", tc.rootX, tc.rootZ, len(dirs), dirs)
+		}
+	}
+}

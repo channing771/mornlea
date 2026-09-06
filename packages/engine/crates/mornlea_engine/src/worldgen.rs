@@ -1882,4 +1882,208 @@ mod tests {
             }
         }
     }
+
+    /// 珍异树形的最大伸展包络:全部非空气格落在根 ±3、树干底到顶上两层内,
+    /// 包络外一圈全是空气;四个分杈方向各有一棵夹具,分杈与大冠的 3 格伸展
+    /// 都被打满(回归非空)。
+    ///
+    /// 这是覆盖半径的形状侧:单点邻域与整块落笔盒都只取 ±3,形状若伸出包络,
+    /// 两条路径会同时漏掉同一格——本测试让这种缺口先在这里变红,而不是等
+    /// 跨界一致性测试用坏运气去撞边界对齐。
+    #[test]
+    fn rare_shape_fits_radius_three_box() {
+        let m = materials();
+        let mut reached_axial = [false; 4];
+        let mut reached_crown = false;
+        for dir in 0..4u8 {
+            let tree = OakTree {
+                root_x: 0,
+                root_y: 100,
+                root_z: 0,
+                height: 12,
+                fluffy: false,
+                rare: true,
+                branch_count: 1,
+                branch_dir: [dir, 0],
+            };
+            let top = 100 + 12 - 1;
+            let (step_x, step_z) = branch_offset(dir);
+            for y in 99..=(top + 3) {
+                for z in -4..=4 {
+                    for x in -4..=4 {
+                        let block = oak_tree_block_at(&tree, &m, x, y, z);
+                        if block == m.air {
+                            continue;
+                        }
+                        let dx = x.abs();
+                        let dz = z.abs();
+                        assert!(dx <= 3 && dz <= 3, "({x},{y},{z}) 水平伸出 ±3");
+                        assert!((100..=(top + 2)).contains(&y), "({x},{y},{z}) 竖直伸出包络");
+                        if block == m.oak_log
+                            && y == top - 4
+                            && x * step_x + z * step_z == 3
+                            && (z * step_x - x * step_z) == 0
+                        {
+                            reached_axial[usize::from(dir)] = true;
+                        }
+                        if block == m.leaves && dx.max(dz) == 3 {
+                            reached_crown = true;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            reached_axial.iter().all(|&hit| hit),
+            "四个方向的分杈都必须打满 3 格:{reached_axial:?}"
+        );
+        assert!(reached_crown, "大冠旁侧必须有 3 格伸展");
+    }
+
+    /// 冠顶上界守卫:根加树高加冠顶两层触及上界时整树形状为空,低一格时冠
+    /// 顶照常生成。守卫对档位一视同仁——标准树顶上第二层本就是空气,仍被
+    /// 整体丢弃:保守但两侧路径共用同一守卫,不可能分叉。
+    #[test]
+    fn crown_top_guard_rejects_at_upper_bound() {
+        let m = materials();
+        // 珍异 12 格:根 306 时顶上第二层 319 在界内,根 307 时触界整树为空。
+        let fitting = OakTree {
+            root_x: 0,
+            root_y: 306,
+            root_z: 0,
+            height: 12,
+            fluffy: false,
+            rare: true,
+            branch_count: 2,
+            branch_dir: [0, 2],
+        };
+        let top = 306 + 12 - 1;
+        assert_eq!(oak_tree_block_at(&fitting, &m, 0, top + 2, 0), m.leaves);
+        let touching = OakTree {
+            root_x: 0,
+            root_y: 307,
+            root_z: 0,
+            height: 12,
+            fluffy: false,
+            rare: true,
+            branch_count: 2,
+            branch_dir: [0, 2],
+        };
+        for y in 307..WORLD_MAX_Y {
+            for z in -3..=3 {
+                for x in -3..=3 {
+                    assert_eq!(
+                        oak_tree_block_at(&touching, &m, x, y, z),
+                        m.air,
+                        "触界珍异树 ({x},{y},{z}) 必须为空"
+                    );
+                }
+            }
+        }
+        // 普通标准 7 格同理:根 311 冠顶正常(顶上第二层回到空气),根 312
+        // 整树为空。
+        let std_fitting = OakTree {
+            root_x: 0,
+            root_y: 311,
+            root_z: 0,
+            height: 7,
+            fluffy: false,
+            rare: false,
+            branch_count: 0,
+            branch_dir: [0, 0],
+        };
+        let std_top = 311 + 7 - 1;
+        assert_eq!(
+            oak_tree_block_at(&std_fitting, &m, 0, std_top + 1, 0),
+            m.leaves
+        );
+        assert_eq!(
+            oak_tree_block_at(&std_fitting, &m, 0, std_top + 2, 0),
+            m.air
+        );
+        let std_touching = OakTree {
+            root_x: 0,
+            root_y: 312,
+            root_z: 0,
+            height: 7,
+            fluffy: false,
+            rare: false,
+            branch_count: 0,
+            branch_dir: [0, 0],
+        };
+        for y in 312..WORLD_MAX_Y {
+            for z in -3..=3 {
+                for x in -3..=3 {
+                    assert_eq!(
+                        oak_tree_block_at(&std_touching, &m, x, y, z),
+                        m.air,
+                        "触界普通树 ({x},{y},{z}) 必须为空"
+                    );
+                }
+            }
+        }
+    }
+
+    /// 找一棵根在负坐标、冠幅跨越区块边界的珍异树(种子固定,结果确定)。
+    fn negative_boundary_crossing_rare_tree() -> (WorldgenParams, OakTree) {
+        for seed in 1..=60 {
+            let p = params(seed);
+            for cz in -16..=16 {
+                for cx in -16..=16 {
+                    if let Some(tree) = p.oak_tree_for_cell(cx, cz) {
+                        if !tree.rare {
+                            continue;
+                        }
+                        if tree.root_x >= 0 && tree.root_z >= 0 {
+                            continue;
+                        }
+                        if (tree.root_x - 3) >> SECTION_SHIFT != (tree.root_x + 3) >> SECTION_SHIFT
+                            || (tree.root_z - 3) >> SECTION_SHIFT
+                                != (tree.root_z + 3) >> SECTION_SHIFT
+                        {
+                            return (p, tree);
+                        }
+                    }
+                }
+            }
+        }
+        panic!("夹具失效:语料里找不到负坐标跨界珍异树");
+    }
+
+    #[test]
+    fn negative_extended_reach_tree_matches_pointwise_across_boundary() {
+        // 负坐标跨界珍异树:整块与单点逐格一致。算术右移即 floor 除法,负坐
+        // 标候选格划分与正坐标同一规则;半径不足会在跨界侧先漏掉一格。
+        let (p, tree) = negative_boundary_crossing_rare_tree();
+        assert!(
+            tree.root_x < 0 || tree.root_z < 0,
+            "夹具失效:该树不在负坐标"
+        );
+        let top = tree.root_y + tree.height - 1;
+        let mut touched = Vec::new();
+        for cz in ((tree.root_z - 3) >> SECTION_SHIFT)..=((tree.root_z + 3) >> SECTION_SHIFT) {
+            for cx in ((tree.root_x - 3) >> SECTION_SHIFT)..=((tree.root_x + 3) >> SECTION_SHIFT) {
+                touched.push((cx, cz));
+            }
+        }
+        assert!(touched.len() > 1, "夹具失效:该树未真正跨界");
+        for (cx, cz) in touched {
+            let mut dense = vec![p.materials.air; CHUNK_VOLUME];
+            p.generate_chunk(cx, cz, &mut dense);
+            for y in tree.root_y..=(top + 2) {
+                for z in tree.root_z - 3..=tree.root_z + 3 {
+                    for x in tree.root_x - 3..=tree.root_x + 3 {
+                        if (x >> SECTION_SHIFT) != cx || (z >> SECTION_SHIFT) != cz {
+                            continue;
+                        }
+                        assert_eq!(
+                            dense[dense_index(x & (SECTION_SIZE - 1), y, z & (SECTION_SIZE - 1))],
+                            p.base_block_at(x, y, z),
+                            "({x},{y},{z})",
+                        );
+                    }
+                }
+            }
+        }
+    }
 }
