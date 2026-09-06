@@ -166,20 +166,29 @@ func ViewmodelAttackAngle(attackAge uint8, tier ViewmodelTier) float32 {
 var (
 	// `viewmodelArmSize` 与第三人称手臂同源：0.1×0.7×0.25。
 	viewmodelArmSize = mgl32.Vec3{0.1, 0.7, 0.25}
-	// viewmodelLeftCenter/viewmodelRightCenter 是相机空间的双手中心：左右
-	// 对称、下沉前置；臂长 0.7 使臂根落在屏底之外，只留前臂入画。
-	viewmodelLeftCenter  = mgl32.Vec3{-0.3, -0.45, -0.8}
-	viewmodelRightCenter = mgl32.Vec3{0.3, -0.45, -0.8}
-	// viewmodelRightPivot 是右手挥动转轴（臂根）：与手臂底面齐平。
-	viewmodelRightPivot = mgl32.Vec3{0.3, -0.8, -0.8}
+	// viewmodelSlantAngle 是双手斜持的倾角：手臂长轴向画面中心倾斜，落在
+	// 20°–35° 契约区间内；左右手取镜像符号，顶端都偏向画面中心。
+	viewmodelSlantAngle = float32(28 * math.Pi / 180)
+	// viewmodelLeftCenter/viewmodelRightCenter 是相机空间的双手中心：右手
+	// 为主手，更靠画面中心、位置更高、离相机更近；臂长 0.7 使臂根落在屏底
+	// 之外，只留前臂入画。
+	viewmodelLeftCenter  = mgl32.Vec3{-0.44, -0.47, -0.82}
+	viewmodelRightCenter = mgl32.Vec3{0.33, -0.39, -0.78}
+	// viewmodelLeftPivot/viewmodelRightPivot 是双手挥动转轴（臂根）：落在
+	// 各自手臂正下方，斜持滚转与挥动旋转都绕它发生。
+	viewmodelLeftPivot  = mgl32.Vec3{-0.44, -0.82, -0.82}
+	viewmodelRightPivot = mgl32.Vec3{0.33, -0.74, -0.78}
 	// viewmodelHeldBlockCenter/viewmodelHeldBlockSize 是手持方块的微缩立方：
 	// 落在右手上方，与世界同源材质。
-	viewmodelHeldBlockCenter = mgl32.Vec3{0.3, 0.03, -0.85}
+	viewmodelHeldBlockCenter = mgl32.Vec3{0.33, -0.10, -0.78}
 	viewmodelHeldBlockSize   = mgl32.Vec3{0.22, 0.22, 0.22}
 	// viewmodelHeldItemCenter/viewmodelHeldItemSize 是手持物品的扁长条：纵
 	// 轴显著长于另两轴，与立方剪影可辨，被右手握持。
-	viewmodelHeldItemCenter = mgl32.Vec3{0.3, -0.05, -0.82}
+	viewmodelHeldItemCenter = mgl32.Vec3{0.33, -0.08, -0.80}
 	viewmodelHeldItemSize   = mgl32.Vec3{0.09, 0.5, 0.12}
+	// viewmodelHeldItemTilt 是长条持物相对手臂的固定前倾：顶端向视线前方微
+	// 倾，刃面透视缩短、不再直立遮屏；与挥动角叠加后相对握持位姿恒定。
+	viewmodelHeldItemTilt = float32(-0.5)
 )
 
 // viewmodelHeldNeutralColor 是未登记基色物品的中性呈现色：`ItemColor` 只覆
@@ -290,6 +299,27 @@ func viewmodelRootFromCameraPose(pos mgl32.Vec3, yaw, pitch float32) mgl32.Mat4 
 		Mul4(mgl32.HomogRotate3DX(pitch))
 }
 
+// viewmodelSlantedLimb 装配带斜持倾角的四肢 cuboid：挥动旋转先绕臂根转轴
+// 发生，再整体绕肢体中心叠加斜持滚转——落点（中心）由调用方显式摆放在屏
+// 角，倾角只转朝向不搬落点。斜持参数取镜像符号（左负右正，顶端都偏向画面
+// 中心）；挥动参数只驱动右手（左手恒零）；前倾参数只作用于长条持物（手臂
+// 与方块恒零，持物顶端向视线前方微倾以缩短屏面投影）。三者全零时退化为旧
+// 链的平移加缩放。
+func viewmodelSlantedLimb(root mgl32.Mat4, pivot, center, size mgl32.Vec3, slant, swing, tilt float32, color [4]float32, material uint32) avatarPart {
+	back := mgl32.Translate3D(center[0]-pivot[0], center[1]-pivot[1], center[2]-pivot[2])
+	forth := mgl32.Translate3D(pivot[0]-center[0], pivot[1]-center[1], pivot[2]-center[2])
+	return avatarPart{
+		transform: root.Mul4(mgl32.Translate3D(center[0], center[1], center[2])).
+			Mul4(mgl32.HomogRotate3DZ(slant)).
+			Mul4(forth).
+			Mul4(mgl32.HomogRotate3DX(swing + tilt)).
+			Mul4(back).
+			Mul4(mgl32.Scale3D(size[0], size[1], size[2])),
+		color:    color,
+		material: material,
+	}
+}
+
 // buildViewmodelParts 装配单帧实例：左手静态占位，右手绕臂根按挥动角旋转，
 // 持物随右手同轴旋转。双手颜色与材质与同身份第三人称手臂同源。根变换由本帧
 // 相机位姿派生：全部相机空间中心与转轴先落根内，挥动旋转仍在相机空间发生，
@@ -304,22 +334,18 @@ func buildViewmodelParts(dst []avatarPart, input *ViewmodelInput, angle float32)
 	}
 	armMaterial := material + 12
 	root := viewmodelRootFromCameraPose(input.CamPos, input.CamYaw, input.CamPitch)
-	dst = append(dst, swungLimb(root, mgl32.Vec3{}, viewmodelLeftCenter, viewmodelArmSize,
-		mgl32.Ident4(), 0, handColor, armMaterial))
-	rotation := mgl32.Ident4()
-	if angle != 0 {
-		rotation = mgl32.HomogRotate3DX(angle)
-	}
-	dst = append(dst, swungLimb(root, viewmodelRightPivot, viewmodelRightCenter, viewmodelArmSize,
-		rotation, angle, handColor, armMaterial))
+	dst = append(dst, viewmodelSlantedLimb(root, viewmodelLeftPivot, viewmodelLeftCenter, viewmodelArmSize,
+		-viewmodelSlantAngle, 0, 0, handColor, armMaterial))
+	dst = append(dst, viewmodelSlantedLimb(root, viewmodelRightPivot, viewmodelRightCenter, viewmodelArmSize,
+		viewmodelSlantAngle, angle, 0, handColor, armMaterial))
 	switch ViewmodelHeldKindOf(input.Selected) {
 	case ViewmodelHeldBlock:
 		heldMaterial, heldColor := viewmodelHeldBlockAppearance(input.Selected.Item)
-		dst = append(dst, swungLimb(root, viewmodelRightPivot, viewmodelHeldBlockCenter, viewmodelHeldBlockSize,
-			rotation, angle, heldColor, heldMaterial))
+		dst = append(dst, viewmodelSlantedLimb(root, viewmodelRightPivot, viewmodelHeldBlockCenter, viewmodelHeldBlockSize,
+			viewmodelSlantAngle, angle, 0, heldColor, heldMaterial))
 	case ViewmodelHeldItem:
-		dst = append(dst, swungLimb(root, viewmodelRightPivot, viewmodelHeldItemCenter, viewmodelHeldItemSize,
-			rotation, angle, viewmodelHeldColor(input.Selected.Item), avatarMaterialSolid))
+		dst = append(dst, viewmodelSlantedLimb(root, viewmodelRightPivot, viewmodelHeldItemCenter, viewmodelHeldItemSize,
+			viewmodelSlantAngle, angle, viewmodelHeldItemTilt, viewmodelHeldColor(input.Selected.Item), avatarMaterialSolid))
 	default:
 	}
 	return dst

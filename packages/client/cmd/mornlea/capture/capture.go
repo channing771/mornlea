@@ -578,6 +578,42 @@ var captureScenes = []captureScene{
 	},
 	{Name: "avatar-detail", WarmupFrames: 8, Prepare: prepareAvatarStage, Apply: applyAvatarDetail},
 	{
+		// hand-tool 是工具手持的静态基线：半耐久铁镐选中态、中立持握。与
+		// 战斗场景同一机位，四景的双手落点可比，差异只来自持物与动作。
+		Name:         "hand-tool",
+		WarmupFrames: 8,
+		Prepare:      prepareAICompanion,
+		Apply:        applyHandToolCaptureState,
+	},
+	{
+		// hand-block 是方块手持的静态基线：泥土微缩立方在右手上方、中立持握；
+		// 立方顶面/侧面材质与世界同源，本景即该契约的像素基线。
+		Name:         "hand-block",
+		WarmupFrames: 8,
+		Prepare:      prepareAICompanion,
+		Apply:        applyHandBlockCaptureState,
+	},
+	{
+		// hand-mining 是挖掘基线：铁镐在手、浅阶段世界裂纹在目标砖上同框。
+		// 机位与夹具复用裂纹场景；挥动相位随收敛 tick 漂移，由 PinVolatile
+		// 清零后最终帧恒为挖掘上升沿（中立镐 + 可见裂纹），逐次一致。
+		Name:         "hand-mining",
+		WarmupFrames: 8,
+		Prepare:      prepareTargetBlockFeedback,
+		Apply:        applyHandMiningCaptureState,
+		PinVolatile:  pinHandMiningVolatile,
+	},
+	{
+		// hand-attack 是打击基线：铁剑在手、标记收敛后重武装；挥动沿需
+		// `CombatHit` 确认才开启（抓帧管线无注入面），像素为中立持剑、
+		// 标记按窗口节奏武装。不带受击远端玩家（带目标对照由战斗场景覆盖）。
+		Name:         "hand-attack",
+		WarmupFrames: 8,
+		Prepare:      prepareAICompanion,
+		Apply:        applyHandAttackCaptureState,
+		PinVolatile:  pinSwordCombatVolatile,
+	},
+	{
 		// far-horizon 是远环 LOD 的长期视觉门禁(spec delta「MUST 新增
 		// far-horizon 视觉场景」):相机钉在近环边缘 -z 内侧的高空,朝
 		// 地平线观察,单帧同时覆盖近景地形(画面底部)、远环壳带(地平线

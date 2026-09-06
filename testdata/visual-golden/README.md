@@ -2,13 +2,13 @@
 
 本目录统一存放视觉回归基线，均为测试夹具二进制。
 
-- `world/`：无窗口世界场景基线 24 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
+- `world/`：无窗口世界场景基线 28 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
 - `passive-death/`：被动牛 GIF 动态基线 4 个，对应 `cmd/mornlea/capture/passive_death_scripts.go` 的 `passiveDeathGIFScripts`（按 tick 步进抓帧，标准库 `image/gif` 编码，逐帧解码沿用双阈值比对）。
 - `ui/`：前端 UI 部件基线 30 张，对应 `packages/engine/crates/mornlea_client/frontend/visual/fixture-names.ts` 的 `fixtureNames`。
 
 旧目录 `cmd/mornlea/capture/testdata/golden/` 与 `engine/crates/mornlea_client/frontend/visual/golden/` 已清空，仅剩空目录，不再写入。
 
-## world（24 张）
+## world（28 张）
 
 文件名即场景名加 `.png` 后缀，场景定义与顺序以 `captureScenes` 为准。
 
@@ -36,6 +36,10 @@
 | `main-menu.png` | `main-menu` | 主菜单相位全景底图，固定自转时刻的纯全景世界画面。 |
 | `settings-menu.png` | `settings-menu` | 设置相位全景底图，同一全景世界的另一自转时刻。 |
 | `avatar-detail.png` | `avatar-detail` | 原创旅人正面、侧面和背面同框，验收服装材质与静态轮廓。 |
+| `hand-tool.png` | `hand-tool` | 半耐久铁镐选中态、中立持握的工具手持基线。 |
+| `hand-block.png` | `hand-block` | 泥土微缩立方在右手上方、中立持握的方块手持基线。 |
+| `hand-mining.png` | `hand-mining` | 铁镐在手、浅阶段世界裂纹同框的挖掘基线（挥动相位钉死在上升沿）。 |
+| `hand-attack.png` | `hand-attack` | 铁剑在手、命中标记按窗口节奏武装的打击基线（抓帧管线无挥动沿注入面，像素为中立持剑）。 |
 | `far-horizon.png` | `far-horizon` | 高空远眺的近景地形、远环壳带、雾过渡与天空四段构图。 |
 | `water-underwater.png` | `water-underwater` | 眼睛浸没的水下视角，水色叠加与穿水衰减同框。 |
 
@@ -76,10 +80,10 @@
 | `hud-chat.png` | `hud-chat` | `HudRoot` 多行聊天。 |
 | `hud-container-open.png` | `hud-container-open` | `HudRoot` 容器打开态翻转构图。 |
 
-## motion（4 个）
+## motion（6 个）
 
 motion 演示产物只验呈现、不进比对：`make visual-check` 与 `--update-golden`
-都不感知本目录，`world/` 的 24 张 PNG 纪律也不含它。
+都不感知本目录，`world/` 的 28 张 PNG 纪律也不含它。
 
 | 演示文件 | 场景 | 帧数/时长 | 生成入口 |
 |---|---|---|---|
@@ -88,9 +92,11 @@ motion 演示产物只验呈现、不进比对：`make visual-check` 与 `--upda
 | `avatar-walk.gif` | 静止→慢走→快走→停稳；慢走40 tick与快走20 tick各走4.3格 | 100帧，20Hz，5秒 | 同上加 `--motion-scene avatar-walk`，输出改为 `avatar-walk.gif` |
 | `drop-scatter.gif` | 触发前空场→四堆正式帧出生→散开下落→着陆 | 80帧，20Hz，4秒 | 同上加 `--motion-scene drop-scatter`，输出改为 `drop-scatter.gif` |
 | `drop-density.gif` | 空场→1→4→9→16→32→移除一半至16堆→稳态 | 160帧，20Hz，8秒 | 同上加 `--motion-scene drop-density`，输出改为 `drop-density.gif` |
+| `hand-mining.gif` | 铁镐在手、浅裂纹恒定，右手以镐档周期10 tick正弦挥动12次 | 120帧，20Hz，6秒 | 同上加 `--motion-scene hand-mining`，输出改为 `hand-mining.gif` |
+| `hand-attack.gif` | 铁剑在手、每12帧重武装一次标记（当前抓帧管线无 `CombatHit` 注入面，逐帧为中立持剑，标记节奏只进呈现状态；挥动像素待注入面落地） | 120帧，20Hz，6秒 | 同上加 `--motion-scene hand-attack`，输出改为 `hand-attack.gif` |
 
 - 新演示的原始关键PNG写在输出路径加 `-frames/` 的旁路审查目录，不纳入golden；GIF是完整过程，PNG只帮助核对编码保真。
-- 演示场景值住 `packages/client/cmd/mornlea/capture/motion_break_burst.go` 与 `motion_experience.go`，不追加进 `captureScenes`。
+- 演示场景值住 `packages/client/cmd/mornlea/capture/motion_break_burst.go`、`motion_experience.go` 与 `motion_hand_swing.go`，不追加进 `captureScenes`。
 - 编码只用标准库 `image/gif`（全片共享自适应调色板，无抖色），固定输入逐字节一致。
 
 ## passive-death（4 个）
