@@ -628,9 +628,96 @@ const (
 // 可被锁定测试直接断言。
 func suppressStaticViewmodel(app SceneApplication) { app.SetViewmodelSuppressed(true) }
 
-// RunCapture 依次跑完全部视觉场景。updateGolden 为真时把抓到的图写进 golden 基线；
-// 为假时与已有基线比对，超阈值的场景把实拍图与差异图写进 dir 并返回错误。
-func RunCapture(app SceneApplication, dir string, updateGolden bool) error {
+// RunOptions 是一次抓帧运行的选项集合。
+//
+// UpdateGolden 决定运行模式：为真把抓到的图写进 golden 基线（update 语义），
+// 为假与已有基线按双阈值比对（check 语义）。Scenes 是调用方显式请求的场景
+// 名子集，nil/空等价请求全部场景——缺省路径的行为因此逐项不变。IncludeGIFs
+// 允许 check 模式显式请求生成 GIF 剧本到输出目录供人工审查；update 模式无视
+// 该字段恒生成（既有行为）。
+type RunOptions struct {
+	UpdateGolden bool
+	Scenes       []string
+	IncludeGIFs  bool
+}
+
+// gifsEnabled 判定本次运行是否生成 GIF 剧本：更新基线恒生成，纯比对仅在
+// 调用方显式请求时生成——GIF 不进自动比对，缺省重新生成纯属浪费。
+func (o RunOptions) gifsEnabled() bool {
+	return o.UpdateGolden || o.IncludeGIFs
+}
+
+// SceneNames 按场景表固有顺序返回全部正式场景名。场景表是唯一事实源，
+// 本函数只是它的名字投影：调用方不得另立第二份清单。
+func SceneNames() []string {
+	names := make([]string, len(captureScenes))
+	for index := range captureScenes {
+		names[index] = captureScenes[index].Name
+	}
+	return names
+}
+
+// ValidateSceneSelection 校验调用方请求的场景名清单：空项、重复名与未知
+// 名一律报错且错误信息点名问题项。写错的子集请求若被静默忽略后照常跑
+// 全量，会把「我以为只跑了两景」的误读留给调用方，因此拒绝优先于降级。
+func ValidateSceneSelection(requested []string) error {
+	known := make(map[string]struct{}, len(captureScenes))
+	for _, scene := range captureScenes {
+		known[scene.Name] = struct{}{}
+	}
+	seen := make(map[string]struct{}, len(requested))
+	for _, name := range requested {
+		if name == "" {
+			return errors.New("场景名清单含空项")
+		}
+		if _, duplicate := seen[name]; duplicate {
+			return fmt.Errorf("场景名 %q 重复请求", name)
+		}
+		if _, ok := known[name]; !ok {
+			return fmt.Errorf("未知场景 %q", name)
+		}
+		seen[name] = struct{}{}
+	}
+	return nil
+}
+
+// selectScenes 把请求的场景名清单解析成待执行场景切片：nil/空清单返回
+// 全量场景表；非空清单先经 `ValidateSceneSelection` 防御校验（正常流程
+// 里 parse 层已先行拒绝非法清单，这里为直接调用方兜底），再按成员集合
+// 过滤场景表——以表序遍历、命中即收，输出天然保持场景表固有顺序且不
+// 重排，far-horizon 倒数第二、water-underwater 唯一末景等顺序条款因此
+// 在子集路径原样成立。
+func selectScenes(requested []string) ([]captureScene, error) {
+	if len(requested) == 0 {
+		return captureScenes, nil
+	}
+	if err := ValidateSceneSelection(requested); err != nil {
+		return nil, err
+	}
+	members := make(map[string]struct{}, len(requested))
+	for _, name := range requested {
+		members[name] = struct{}{}
+	}
+	selected := make([]captureScene, 0, len(requested))
+	for _, scene := range captureScenes {
+		if _, ok := members[scene.Name]; ok {
+			selected = append(selected, scene)
+		}
+	}
+	return selected, nil
+}
+
+// RunCapture 依次跑完选定的视觉场景并按模式落盘或比对。opts.UpdateGolden
+// 为真时把抓到的图写进 golden 基线；为假时与已有基线比对，超阈值的场景把
+// 实拍图与差异图写进 dir 并返回错误。opts.Scenes 非空时只跑该保序子集；
+// GIF 剧本仅在更新基线或显式请求（opts.IncludeGIFs）时生成。
+func RunCapture(app SceneApplication, dir string, opts RunOptions) error {
+	// 子集校验先于世界加载：清单非法立即失败，不白白等一套
+	// prepareCaptureApplication 的固定场景加载。
+	scenes, err := selectScenes(opts.Scenes)
+	if err != nil {
+		return fmt.Errorf("选择抓帧场景: %w", err)
+	}
 	if err := prepareCaptureApplication(app); err != nil {
 		return err
 	}
@@ -648,15 +735,20 @@ func RunCapture(app SceneApplication, dir string, updateGolden bool) error {
 	// 着色器或格式类改动通常会让多个场景同时变红，只看到第一个红的场景
 	// 会漏掉其余场景的信息，也漏跑它们各自的图像产出。
 	var errs []error
-	for _, scene := range captureScenes {
-		if err := captureOne(app, dir, scene, updateGolden); err != nil {
+	for _, scene := range scenes {
+		if err := captureOne(app, dir, scene, opts.UpdateGolden); err != nil {
 			errs = append(errs, fmt.Errorf("场景 %s: %w", scene.Name, err))
 		}
 	}
 	// GIF 动态基线与 PNG 场景表共用同一个已预热 application（世界时间仍冻结）：
-	// 新基线只进独立目录，既有 PNG 逐字节不动。
-	if err := RunPassiveDeathGIFs(app, dir, updateGolden); err != nil {
-		errs = append(errs, err)
+	// 新基线只进独立目录，既有 PNG 逐字节不动。GIF 比对已退役、产物仅供人工
+	// 审查，纯比对运行缺省跳过生成，只有显式请求或更新基线时执行。
+	if opts.gifsEnabled() {
+		if err := RunPassiveDeathGIFs(app, dir, opts.UpdateGolden); err != nil {
+			errs = append(errs, err)
+		}
+	} else {
+		fmt.Println("本次为纯比对运行，已跳过 GIF 剧本生成；如需人工审查 GIF，请加 --capture-gifs 重新运行")
 	}
 	return errors.Join(errs...)
 }

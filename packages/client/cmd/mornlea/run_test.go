@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	application "github.com/channing771/mornlea/packages/client/cmd/mornlea/app"
+	"github.com/channing771/mornlea/packages/client/cmd/mornlea/capture"
 	"github.com/channing771/mornlea/packages/server/server"
 	"github.com/channing771/mornlea/packages/server/storage"
 	"github.com/channing771/mornlea/packages/shared/companion"
@@ -47,10 +48,10 @@ func TestTextureGoldenUpdateUsesDisposableControlsBeforeFreshCapture(t *testing.
 			}
 			return nil
 		},
-		runCapture: func(app *application.Application, _ string, update bool) error {
+		runCapture: func(app *application.Application, _ string, opts capture.RunOptions) error {
 			events = append(events, "formal")
-			if !update || len(applications) != 3 || app != applications[2] {
-				t.Fatalf("formal capture app=%p update=%v，want fresh 第三次构造结果", app, update)
+			if !opts.UpdateGolden || len(applications) != 3 || app != applications[2] {
+				t.Fatalf("formal capture app=%p update=%v，want fresh 第三次构造结果", app, opts.UpdateGolden)
 			}
 			return nil
 		},
@@ -123,7 +124,7 @@ func TestTextureGoldenUpdateClosesConstructedApplicationsOnEveryFailure(t *testi
 					runGoldenUpdateControl: func(*application.Application, *application.Application, string) error {
 						return test.controlErr
 					},
-					runCapture: func(*application.Application, string, bool) error {
+					runCapture: func(*application.Application, string, capture.RunOptions) error {
 						formalCapture = true
 						return test.captureErr
 					},
@@ -157,7 +158,7 @@ func TestRunOrdinaryCaptureUsesOneApplicationWithoutGoldenControl(t *testing.T) 
 				t.Fatal("ordinary capture 不得运行 golden update control")
 				return nil
 			},
-			runCapture: func(*application.Application, string, bool) error {
+			runCapture: func(*application.Application, string, capture.RunOptions) error {
 				captured++
 				return nil
 			},
@@ -168,6 +169,51 @@ func TestRunOrdinaryCaptureUsesOneApplicationWithoutGoldenControl(t *testing.T) 
 	}
 	if constructed != 1 || captured != 1 || closed != 1 {
 		t.Fatalf("constructed=%d captured=%d closed=%d，want 1/1/1", constructed, captured, closed)
+	}
+}
+
+// TestRunPassesCaptureScenesAndGifsIntoRunOptions 钉住 parse 出的场景子集与
+// GIF 请求要原样进入两个 runCapture 调用点（update 与 check）组装的
+// `capture.RunOptions`：漏传任一字段都会让 CLI 选项静默失效。
+func TestRunPassesCaptureScenesAndGifsIntoRunOptions(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		extraArgs []string
+		wantOpts  capture.RunOptions
+	}{
+		{
+			name:      "纯比对携带子集与 GIF 请求",
+			extraArgs: []string{"--capture-scenes", "main-menu", "--capture-gifs"},
+			wantOpts:  capture.RunOptions{Scenes: []string{"main-menu"}, IncludeGIFs: true},
+		},
+		{
+			name:      "更新基线携带子集",
+			extraArgs: []string{"--update-golden", "--capture-scenes", "mining-crack-early,mining-crack-heavy"},
+			wantOpts:  capture.RunOptions{UpdateGolden: true, Scenes: []string{"mining-crack-early", "mining-crack-heavy"}},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			args := append([]string{"--capture", t.TempDir()}, test.extraArgs...)
+			args = append(args, absentConfigArgs(t)...)
+			err := runWithDependencies(args, runDependencies{
+				loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
+				newApplication: func(application.Options) (*application.Application, error) {
+					return application.NewCloseTrackedApplicationForTest(func() {}), nil
+				},
+				runGoldenUpdateControl: func(*application.Application, *application.Application, string) error {
+					return nil
+				},
+				runCapture: func(_ *application.Application, _ string, opts capture.RunOptions) error {
+					if !reflect.DeepEqual(opts, test.wantOpts) {
+						t.Fatalf("RunOptions = %+v，want %+v", opts, test.wantOpts)
+					}
+					return nil
+				},
+			})
+			if err != nil {
+				t.Fatalf("runWithDependencies: %v", err)
+			}
+		})
 	}
 }
 
