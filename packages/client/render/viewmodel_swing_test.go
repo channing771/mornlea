@@ -172,3 +172,97 @@ func TestViewmodelSwordAndBlockAnglesDiffer(t *testing.T) {
 		t.Fatalf("方块旋转角 %v 超出参数表标定区间 [-%v,%v]", block, blockAmp, blockAmp)
 	}
 }
+
+func TestViewmodelRollbackClearsAttackEdge(t *testing.T) {
+	player := core.PlayerID{17}
+	stack := core.ItemStack{Item: core.ItemIronSword, Count: 1}
+	triggerAt := func(encoder *ViewmodelEncoder, tick, attack uint64) []byte {
+		input := viewmodelTestInput(player, stack, tick)
+		input.AttackTick = attack
+		return append([]byte(nil), encoder.EncodeViewmodelInstances(nil, input)...)
+	}
+	encoder := &ViewmodelEncoder{}
+	triggerAt(encoder, 900, 900)
+	// tick 回退到新会话：旧触发沿不得污染新会话。
+	triggerAt(encoder, 100, 0)
+	hit := triggerAt(encoder, 100, 100)
+	neutral := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, viewmodelTestInput(player, stack, 100))
+	if bytes.Equal(hit, neutral) {
+		t.Fatalf("回退后新会话首个命中未起挥，想要触发沿随回退清零")
+	}
+	fresh := &ViewmodelEncoder{}
+	want := triggerAt(fresh, 100, 100)
+	if !bytes.Equal(hit, want) {
+		t.Fatalf("回退后状态与新编码器不一致，想要旧会话挥动不延续")
+	}
+}
+
+func TestViewmodelResetViewmodelReanchors(t *testing.T) {
+	player := core.PlayerID{19}
+	stack := core.ItemStack{Item: core.ItemStonePickaxe, Count: 1}
+	encoder := &ViewmodelEncoder{}
+	mining := viewmodelTestInput(player, stack, 950)
+	mining.Mining = true
+	encoder.EncodeViewmodelInstances(nil, mining)
+	trigger := viewmodelTestInput(player, stack, 951)
+	trigger.Mining = true
+	trigger.AttackTick = 951
+	encoder.EncodeViewmodelInstances(nil, trigger)
+	// 会话重置后编码器与全新编码器同输入逐字节一致。
+	encoder.ResetViewmodel()
+	after := viewmodelTestInput(player, stack, 60)
+	after.Mining = true
+	got := append([]byte(nil), encoder.EncodeViewmodelInstances(nil, after)...)
+	fresh := &ViewmodelEncoder{}
+	wantInput := viewmodelTestInput(player, stack, 60)
+	wantInput.Mining = true
+	want := append([]byte(nil), fresh.EncodeViewmodelInstances(nil, wantInput)...)
+	if !bytes.Equal(got, want) {
+		t.Fatalf("Reset 后状态与新编码器不一致，想要重新锚定")
+	}
+	// Reset 同样掐断进行中的窗口：窗内触发沿在 Reset 后不再延续。
+	encoder.ResetViewmodel()
+	encoder.EncodeViewmodelInstances(nil, mining)
+	quiet := viewmodelTestInput(player, stack, 952)
+	afterReset := encoder.EncodeViewmodelInstances(nil, quiet)
+	idle := &ViewmodelEncoder{}
+	idleNeutral := idle.EncodeViewmodelInstances(nil, quiet)
+	if !bytes.Equal(afterReset, idleNeutral) {
+		t.Fatalf("Reset 后旧窗口延续，想要直接关闭")
+	}
+}
+
+func TestViewmodelAttackOverridesMining(t *testing.T) {
+	player := core.PlayerID{23}
+	stack := core.ItemStack{Item: core.ItemStonePickaxe, Count: 1}
+	attackAt := func(encoder *ViewmodelEncoder, tick, attack uint64, mining bool) []byte {
+		input := viewmodelTestInput(player, stack, tick)
+		input.Mining = mining
+		input.AttackTick = attack
+		return append([]byte(nil), encoder.EncodeViewmodelInstances(nil, input)...)
+	}
+	// 同一 tick 下挖掘叠加攻击与纯攻击逐字节一致：窗内攻击优先。
+	withMining := &ViewmodelEncoder{}
+	attackOnly := &ViewmodelEncoder{}
+	for frame := uint64(0); frame < ViewmodelAttackFrames; frame++ {
+		tick := 800 + frame
+		attack := uint64(800)
+		if frame == 0 {
+			// 首帧同时开挖：挖掘锚落在触发同 tick，不影响攻击优先断言。
+		}
+		got := attackAt(withMining, tick, attack, true)
+		want := attackAt(attackOnly, tick, attack, false)
+		if !bytes.Equal(got, want) {
+			t.Fatalf("第 %d 帧挖掘叠加改变了攻击相位，想要窗内攻击优先", frame+1)
+		}
+	}
+	// 窗外挖掘恢复：窗满后叠加帧回到同锚纯挖掘相位。
+	mineOnly := &ViewmodelEncoder{}
+	for frame := uint64(0); frame <= ViewmodelAttackFrames; frame++ {
+		attackAt(mineOnly, 800+frame, 0, true)
+	}
+	tick := uint64(800 + ViewmodelAttackFrames)
+	if got, want := attackAt(withMining, tick, 0, true), attackAt(mineOnly, tick, 0, true); !bytes.Equal(got, want) {
+		t.Fatalf("窗满后未回到挖掘相位")
+	}
+}

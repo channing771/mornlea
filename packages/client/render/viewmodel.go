@@ -81,7 +81,8 @@ func ViewmodelHeldKindOf(stack core.ItemStack) ViewmodelHeldKind {
 
 // ViewmodelTierOf 把已确认选中槽映射为挥动档：空槽与未注册物品走空手档；
 // 可放置物品走方块档；剑（含损坏形态）走剑档；镐（含损坏形态）走镐档；锄
-// （含损坏形态）走锄档；其余已注册非工具物品沿用空手档。
+// （含损坏形态）走锄档；其余已注册非工具物品沿用空手档。斧档不可经物品到
+// 达：核心尚无斧物品，`ViewmodelTierAxe` 只供参数表占位与未来扩展。
 func ViewmodelTierOf(stack core.ItemStack) ViewmodelTier {
 	if stack.Count == 0 || stack.Item == core.ItemNone || !core.RegisteredItem(stack.Item) {
 		return ViewmodelTierEmptyHand
@@ -157,7 +158,7 @@ func ViewmodelAttackAngle(attackAge uint8, tier ViewmodelTier) float32 {
 }
 
 var (
-	// viewmodelArmSize 与第三人称手臂同源：0.1×0.7×0.25。
+	// `viewmodelArmSize` 与第三人称手臂同源：0.1×0.7×0.25。
 	viewmodelArmSize = mgl32.Vec3{0.1, 0.7, 0.25}
 	// viewmodelLeftCenter/viewmodelRightCenter 是相机空间的双手中心：左右
 	// 对称、下沉前置；臂长 0.7 使臂根落在屏底之外，只留前臂入画。
@@ -233,14 +234,18 @@ func (e *ViewmodelEncoder) ResetViewmodel() {
 //
 // 边沿语义：挖掘上升沿以本 tick 为锚，持续期间相位随 tick 循环，下降沿回
 // 中立；命中触发沿（严格递增的 `AttackTick`）开启 6 帧窗口，窗内攻击挥动
-// 优先于挖掘，窗满自闭；tick 回退时挖掘重锚、攻击窗清空。
+// 优先于挖掘，窗满自闭；tick 回退时挖掘重锚、攻击窗与触发沿一起清空。
 func (e *ViewmodelEncoder) EncodeViewmodelInstances(dst []byte, input *ViewmodelInput) []byte {
 	if input == nil {
 		return dst[:0]
 	}
 	if input.Tick < e.lastTick {
+		// 回退即新会话：挖掘重锚、攻击窗与触发沿一起清空，否则旧大值会
+		// 把新会话的小 tick 命中误判为陈旧而丢掉首挥。
 		e.miningAnchor = input.Tick
 		e.attackOpen = false
+		e.attackAge = 0
+		e.lastAttackTick = 0
 	}
 	if input.Mining && !e.mining {
 		e.miningAnchor = input.Tick

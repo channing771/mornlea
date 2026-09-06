@@ -1,8 +1,10 @@
 package render
 
 import (
+	"bytes"
 	"testing"
 
+	"github.com/channing771/mornlea/packages/client/assets"
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
@@ -111,5 +113,94 @@ func TestViewmodelEncodeHeldSilhouette(t *testing.T) {
 	toolSize := decodedPartSize(tool, 2)
 	if !(toolSize[1] > 2*toolSize[0] && toolSize[1] > 2*toolSize[2]) {
 		t.Fatalf("持剑几何 = %v，想要扁长条（纵轴显著长于另两轴）", toolSize)
+	}
+}
+
+func TestViewmodelHeldSwitchesOnlyOnConfirmedSelection(t *testing.T) {
+	player := core.PlayerID{5}
+	stone := core.ItemStack{Item: core.ItemStone, Count: 1}
+	sword := core.ItemStack{Item: core.ItemIronSword, Count: 1}
+	encoder := &ViewmodelEncoder{}
+	encode := func(stack core.ItemStack, tick uint64) []byte {
+		return append([]byte(nil), encoder.EncodeViewmodelInstances(nil, viewmodelTestInput(player, stack, tick))...)
+	}
+	// 确认到达前调用方继续传入旧确认栈：形态保持方块，不切换。
+	first := encode(stone, 70)
+	withheld := encode(stone, 71)
+	if got := ViewmodelHeldKindOf(stone); got != ViewmodelHeldBlock {
+		t.Fatalf("前置条件崩了：石头形态 = %d", got)
+	}
+	if !bytes.Equal(first, withheld) {
+		t.Fatalf("确认未到达时形态变化，想要保持旧确认值")
+	}
+	// 确认到达后下一帧传入新确认栈：形态恰在该帧切换为扁长条。
+	switched := encode(sword, 72)
+	if got := ViewmodelHeldKindOf(sword); got != ViewmodelHeldItem {
+		t.Fatalf("前置条件崩了：剑形态 = %d", got)
+	}
+	if bytes.Equal(withheld, switched) {
+		t.Fatalf("确认到达后形态未切换，想要下一帧切换")
+	}
+	if count := len(switched) / avatarInstanceBytes; count != 3 {
+		t.Fatalf("切换后实例数 = %d，想要 3", count)
+	}
+	if size := decodedPartSize(switched, 2); !(size[1] > 2*size[0] && size[1] > 2*size[2]) {
+		t.Fatalf("切换后持物几何 = %v，想要扁长条", size)
+	}
+}
+
+func TestViewmodelEncodeUnregisteredSelection(t *testing.T) {
+	player := core.PlayerID{6}
+	encoder := &ViewmodelEncoder{}
+	input := viewmodelTestInput(player, core.ItemStack{Item: core.ItemIDMax, Count: 1}, 75)
+	input.Mining = true
+	input.AttackTick = 75
+	var out []byte
+	func() {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				t.Fatalf("编码未注册选中引起 panic：%v", recovered)
+			}
+		}()
+		out = encoder.EncodeViewmodelInstances(nil, input)
+	}()
+	if count := len(out) / avatarInstanceBytes; count != 2 {
+		t.Fatalf("未注册选中实例数 = %d，想要 2（双手、无持物）", count)
+	}
+}
+
+func TestViewmodelHeldBlockAppearance(t *testing.T) {
+	// 完整立方体取世界顶面代表层，颜色走贴图采样中性白。
+	material, color := viewmodelHeldBlockAppearance(core.ItemStone)
+	if material != uint32(assets.LayerStone) {
+		t.Fatalf("持方块材质 = %d，想要世界顶面代表层 %d", material, uint32(assets.LayerStone))
+	}
+	if color != [4]float32{1, 1, 1, 1} {
+		t.Fatalf("持方块颜色 = %v，想要贴图采样中性白", color)
+	}
+	// 非完整立方放置物（种子）取图标同源层，同样六面采样。
+	seedsMaterial, seedsColor := viewmodelHeldBlockAppearance(core.ItemWheatSeeds)
+	if seedsMaterial != uint32(assets.LayerItemWheatSeeds) {
+		t.Fatalf("持种子材质 = %d，想要图标同源层 %d", seedsMaterial, uint32(assets.LayerItemWheatSeeds))
+	}
+	if seedsColor != [4]float32{1, 1, 1, 1} {
+		t.Fatalf("持种子颜色 = %v，想要贴图采样中性白", seedsColor)
+	}
+}
+
+func TestViewmodelHeldColorFallback(t *testing.T) {
+	// 已登记基色的物品复用共享色。
+	if color := viewmodelHeldColor(core.ItemStonePickaxe); color != ItemColor(core.ItemStonePickaxe) {
+		t.Fatalf("持镐颜色 = %v，想要共享基色 %v", color, ItemColor(core.ItemStonePickaxe))
+	}
+	// 未覆盖的已注册物品回落中性不透明色，而非透明黑。
+	for _, item := range []core.ItemID{core.ItemBread, core.ItemStick, core.ItemTorch} {
+		color := viewmodelHeldColor(item)
+		if color != viewmodelHeldNeutralColor {
+			t.Fatalf("持物(物品 %d)颜色 = %v，想要中性色 %v", item, color, viewmodelHeldNeutralColor)
+		}
+		if color[3] != 1 {
+			t.Fatalf("持物(物品 %d)不透明度 = %v，想要 1", item, color[3])
+		}
 	}
 }
