@@ -4,12 +4,13 @@
 
 ## What Changes
 
-- 新增第一人称 viewmodel 渲染：屏幕左右两侧呈现双手，几何/颜色/材质与第三人称手臂同源（`avatar.go` 臂尺寸 `0.1×0.7×0.25`、`avatarShade(base, 0.82)`、头层 `+12` 的臂层）。
+- 新增第一人称 viewmodel 渲染：屏幕左右两侧呈现双手，几何/颜色/材质与第三人称手臂同源（`avatar.go` 臂尺寸 `0.1×0.7×0.25`、`avatarShade(base, 0.82)`、头层 `+12` 的臂层）；双手自左下/右下屏角斜向入画（向中心倾斜，右手为主手，不遮挡准星）。
 - 右手持物三形态：空手（只有手）、手持方块（微缩立方）、手持工具/物品（扁长条程序化几何，不依赖 HUD sprite，不阻塞 D-11 也不代替 D-11）。
 - 左手本闭环为空手姿态占位，编码保留副手字段，**不加**任何协议/存档字段（副手交互另行 change）。
 - 挖掘动作：`miningOverlay` active 期间按裂纹进度驱动右手挥动；攻击动作：`CombatHit` marker 6 帧窗内右手一次挥动；两者都只消费既有呈现信号，不新增权威语义。
 - 工具六档摆幅/节奏参数表：空手/方块/剑/镐/铲/斧；斧铲在 B-36 落地前取镐默认占位，落地后只改表不动管线。
 - client ABI v16→v17：frame 新增 viewmodel TLV 段（tag 取下一个空闲值），header/Rust/Go 三端同步；无段帧与变更前逐字节一致。
+- 视觉基线：静态 golden 追加 `hand-tool`/`hand-block`/`hand-mining`/`hand-attack` 四景；动作 GIF 基线新增 `hand-mining`/`hand-attack` 两剧本（入库人工审查，不进比对阈值）。
 
 ## Non-Goals
 

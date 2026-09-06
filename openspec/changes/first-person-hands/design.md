@@ -16,6 +16,14 @@
 6. 跨语言常量同一 Task 改齐：ABI 17 的 header/Rust/Go 三处与一致性测试在同一任务组内完成，杜绝半截 ABI。
 7. 否决“HUD 前端 DOM 画手”：双手是 3D 世界空间叠加（透视、遮挡、光照与世界一致），DOM 画不出透视持物；也否决“复用掉落物薄片画工具”：持物需要体块感，走程序化立方/长条几何。
 
+## Pose（斜持精化，用户评审后追加）
+
+竖直柱状双手被用户否决（“两根柱子”）。新姿态：双手自左下/右下屏角斜向入画，手臂长轴向画面中心倾斜约 20°–35°（roll 向中心 + 轻微 pitch，右手为主手更靠中心、持物位更高），臂根落在屏角之外只留前臂与持物入画。实现仍是世界烘焙（根变换多乘斜持旋转，无新通道）；角度/偏移以上线数值为初值，落点以 capture 实拍 PNG 目检为准迭代（3–5 轮内锁定，逐轮记录数值与截图结论，锁定后写死为常量 + 落点测试钉死）。
+
+## 视觉基线（追加）
+
+静态 golden 在 `captureScenes` 尾部（`water-underwater` 恒末位之前）追加四景：`hand-tool`（持剑近景）、`hand-block`（持方块近景）、`hand-mining`（采掘挥动中段 + 裂纹同框）、`hand-attack`（命中 marker 窗内）；同步 `testdata/visual-golden/README.md` 索引与顺序测试。动作 GIF 基线新增两剧本（`hand-mining`、`hand-attack`，复用 180 帧录制循环与 `--motion-scene` 机制，`options.go` 白名单与测试同步扩展）：GIF 不进比对阈值，作为人工审查基线入库。姿态变更会改写既有含手场景的 golden，任务 5 再次重跑 `visual-update` + `visual-check`。
+
 ## Risks / Trade-offs
 
 - client ABI 升版是破坏性面：旧动态库 + 新 bridge 在 bind 阶段硬失败，符合既有“无兼容层”纪律；回退即撤销本 change 提交，ABI 回 16。
