@@ -132,16 +132,16 @@ func (engine *Engine) WeatherTicksRemaining() uint32 { return engine.weatherRema
 // 是 tick 尾部的天气推进，恢复先于一切命令与 tick，因此不构成第二个并发写者。
 //
 // 越界种类归一为晴天（非 tick 查询路径直接读引擎值下发，不经过推进归一）；
-// 剩余时长为零表示旧版本存档未记录天气，按与新世界相同的默认值掷骰
+// 剩余时长为零表示旧版本存档未记录天气，按该种类的分布掷骰补一段默认时长
 // （种子派生、tick 取 0，与 `NewEngine` 初值同源），使迁移世界与同种子
-// 新世界行为一致。v4 存档写出的剩余时长恒大于零，正常恢复不受此分支影响。
+// 新世界行为一致——零值分支只补时长，不改动已归一的种类。v4 存档写出的
+// 剩余时长恒大于零，正常恢复不受此分支影响。
 func (engine *Engine) RestoreWeather(kind core.WeatherKind, remaining uint32) {
 	if kind > core.WeatherThunder {
 		kind = core.WeatherClear
 	}
 	if remaining == 0 {
-		remaining = rollWeatherDuration(engine.seed, 0, core.WeatherClear)
-		kind = core.WeatherClear
+		remaining = rollWeatherDuration(engine.seed, 0, kind)
 	}
 	engine.weatherKind = kind
 	engine.weatherRemaining = remaining

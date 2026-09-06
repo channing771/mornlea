@@ -52,6 +52,28 @@ func TestRestoreWeatherDefaultsZeroRemainingToFreshSegment(t *testing.T) {
 	}
 }
 
+// TestRestoreWeatherZeroRemainingPreservesKind 锁定零值分支只补时长、不改种类：
+// 假设的 v4 `(Rain,0)` 恢复后种类仍为雨，剩余时长按雨段分布掷骰；
+// 迁移 `(Clear,0)` 的行为不变（由上一测试覆盖）。
+func TestRestoreWeatherZeroRemainingPreservesKind(t *testing.T) {
+	engine := NewEngine(0, 0, 42)
+	engine.RestoreWeather(core.WeatherRain, 0)
+	if got := engine.WeatherKind(); got != core.WeatherRain {
+		t.Fatalf("零剩余时长恢复后天气 = %d，想要雨 %d", got, core.WeatherRain)
+	}
+	want := rollWeatherDuration(42, 0, core.WeatherRain)
+	if got := engine.WeatherTicksRemaining(); got != want {
+		t.Fatalf("零剩余时长恢复后剩余时长 = %d，想要雨段默认值 %d", got, want)
+	}
+	result := engine.Step()
+	if result.WeatherKind != core.WeatherRain {
+		t.Fatalf("恢复后首个 tick 天气 = %d，想要雨 %d", result.WeatherKind, core.WeatherRain)
+	}
+	if got := engine.WeatherTicksRemaining(); got != want-1 {
+		t.Fatalf("恢复后首个 tick 剩余时长 = %d，想要 %d", got, want-1)
+	}
+}
+
 // TestRestoreWeatherClampsIllegalKind 锁定损坏防御：非法种类不得进入权威状态
 // （非 tick 查询路径不经过推进归一，直接读引擎值下发）。
 func TestRestoreWeatherClampsIllegalKind(t *testing.T) {
