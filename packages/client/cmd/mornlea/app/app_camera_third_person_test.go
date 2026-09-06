@@ -67,12 +67,16 @@ func TestMovementInputReadsEyeYawInThirdPerson(t *testing.T) {
 	if front.Yaw == eyeYaw {
 		t.Fatalf("正面渲染 yaw = %v，想要翻转（眼睛 yaw 不得被渲染位姿污染）", front.Yaw)
 	}
-	app.cameraMode = client.CameraThirdPersonBack
+	// 正面模式下驱动输入：渲染 yaw 与眼睛 yaw 差 Pi，此时若实现误读渲染
+	// 位姿，上行 yaw 即为 front.Yaw 而非 eyeYaw，测试必红。
 	app.applyInteractiveInput(physics.FixedDelta, client.Movement{MoveZ: 1}, client.Actions{}, true)
 	message := receiveInteractiveClientMessage(t, serverEndpoint)
 	input, ok := message.(network.PlayerInput)
 	if !ok || input.Yaw != eyeYaw {
 		t.Fatalf("第三人称上行输入 = %#v，想要眼睛 yaw %v（与第一人称一致）", message, eyeYaw)
+	}
+	if input.Yaw == front.Yaw {
+		t.Fatalf("上行 yaw = %v，与正面渲染 yaw 相同，想要眼睛 yaw %v", input.Yaw, eyeYaw)
 	}
 }
 
