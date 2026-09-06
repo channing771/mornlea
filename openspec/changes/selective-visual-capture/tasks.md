@@ -16,7 +16,7 @@
 
 ## 3. 文档与路由说明
 
-- [ ] 3.1 更新 `docs/notes/visual-verification.md`：子集使用纪律（编辑环 `SCENES=` 子集 check、推送/提交前全量 `make visual-check` 为权威门禁、GIF 人工审查用 `make visual-check GIFS=1`）；核对 `.claude/skills/visual-baseline/SKILL.md` 与 `testdata/visual-golden/README.md` 中与 GIF 生成时机相关的陈述并同步。focused：人工核对引用的命令与 flag 名一致。
+- [x] 3.1 更新 `docs/notes/visual-verification.md`：子集使用纪律（编辑环 `SCENES=` 子集 check、推送/提交前全量 `make visual-check` 为权威门禁、GIF 人工审查用 `make visual-check GIFS=1`）；核对 `.claude/skills/visual-baseline/SKILL.md` 与 `testdata/visual-golden/README.md` 中与 GIF 生成时机相关的陈述并同步。focused：人工核对引用的命令与 flag 名一致。
 
 ## 4. 真机等价性与性能验证
 

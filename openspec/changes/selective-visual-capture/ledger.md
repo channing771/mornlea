@@ -36,3 +36,12 @@
   - `go test ./packages/client/cmd/mornlea -run 'TestRun' -count=1` → ok
   - `make -n visual-check SCENES=mining-crack-early,mining-crack-heavy GIFS=1` / `make -n visual-update SCENES=main-menu` / 缺省四种组合 → 展开正确，缺省与改造前 shell 等价
   - `go build ./packages/client/cmd/mornlea`、gofmt 无输出
+
+## 2026-09-06 Task 3（文档与路由说明）
+
+- 实现：提交 `cefd9f38`（docs/notes/visual-verification.md 新增「子集运行与分层纪律」、SKILL.md 路由与 GIF 时机、golden README 陈旧 GIF 陈述同步、make help 文案、局部 AGENTS.md Entry Modes 表）；评审修正提交 `416647fd`（子集更新仍先执行 LOD 近环 control 的一句说明；SKILL.md「逐帧比对、全帧通过」旧路由行改为与"GIF 不进自动比对"现状一致）。
+- 评审：全新评审者裁决 **ACCEPT**，两条观察以 `416647fd` 收口（见上）。
+- 验证证据（SHA `cefd9f38`/`416647fd`，实现者与评审者各自真实执行）：
+  - `make help` 正常渲染；`make -n visual-check GIFS=1 SCENES=terrain-noon` 等抽查展开正确
+  - `grep` 核对四处文档 flag/变量拼写与 options.go/Makefile 一致
+  - `go test ./packages/audit -count=1` → ok（文档守卫）
