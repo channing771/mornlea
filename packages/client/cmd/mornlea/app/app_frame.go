@@ -238,7 +238,17 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	if vista != nil {
 		worldTime, dayPhaseOffset = menuVistaWorldTimeTicks, 0
 	}
+	// 天气呈现只消费最后确认的权威天气（与世界时间同一接受纪律）：雨/雷暴
+	// 压暗昼夜亮度上限并灰化天空，雷暴叠加固定上限的闪光；晴天恢复既有天空
+	// 与亮度。全景相位强制晴天：全景没有权威天气，前序会话的天气不得渗入
+	// 菜单底图。
+	weather := a.weather
+	if vista != nil {
+		weather = core.WeatherClear
+	}
 	dayNight := render.DayNightAt(worldTime, dayPhaseOffset)
+	daylight := render.ApplyWeatherDaylight(dayNight.Daylight, weather, a.serverTick)
+	skyColor := render.WeatherSkyColor(dayNight.ClearColor, weather)
 	cloud := render.CloudOffsetAt(worldTime)
 	cam := &a.camera
 	if vista != nil {
@@ -302,6 +312,10 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	if err := validateViewmodelInstanceCount(a.viewmodelStream); err != nil {
 		return false, fmt.Errorf("准备第一人称双手: %w", err)
 	}
+	// 降水：位置是（序号，权威 tick）的纯函数、无跨帧状态，晴天两段恒为空
+	// （帧字节与天气引入前逐位一致）；雨/雷暴形态只由粒子高度相对雪线选形。
+	a.weatherStream = a.entityEncoder.EncodeWeatherInstances(a.weatherStream, cam.Pos, cam.Yaw, a.serverTick, weather)
+	a.weatherState = render.EncodeWeatherState(a.weatherState, weather)
 
 	right := mgl32.Vec3{
 		float32(math.Cos(float64(cam.Yaw))),
@@ -327,10 +341,10 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		ViewProj:           viewProj,
 		ViewProjInv:        viewProjInv,
 		Pos:                cam.Pos,
-		Daylight:           dayNight.Daylight,
+		Daylight:           daylight,
 		SunDirection:       dayNight.SunDirection,
 		StarVisibility:     dayNight.StarVisibility,
-		SkyColor:           dayNight.ClearColor,
+		SkyColor:           skyColor,
 		CloudMacroX:        cloud.MacroX,
 		CloudLocal:         cloud.Local,
 		Visible:            a.rustVisible,
@@ -339,6 +353,8 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		OutlineInstances:   a.outlineStream,
 		CrackInstances:     a.crackStream,
 		ViewmodelInstances: a.viewmodelStream,
+		WeatherSegment:     a.weatherState,
+		PrecipInstances:    a.weatherStream,
 		OverlayStrength:    a.damageStrength,
 		WaterTint:          underwater.Tint,
 		NameTagSegment:     nameTagSegment,

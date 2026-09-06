@@ -451,6 +451,7 @@ func (a *Application) startWorld() error {
 	a.serverTick = 0
 	a.worldTimeTicks = 0
 	a.dayPhaseOffset = 0
+	a.weather = core.WeatherClear
 	a.observerFloor = 0
 	a.clientSessionClosed = false
 	// hud 分节随会话一并复位：上一台已析构世界的下行基线不得拦截本会话的

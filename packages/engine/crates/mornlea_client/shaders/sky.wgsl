@@ -3,7 +3,9 @@ struct Sky {
     sun_daylight:    vec4f,
     star_visibility: f32,
     cloud_macro_x:   u32,
-    padding:         vec2u,
+    // 天气灰度（x 分量，y 保留零）：雨/雷暴遮蔽日月星云，整体向亮度灰靠拢。
+    // 沿用旧 `padding: vec2u` 的 8 字节位，总量与既有字段偏移不变。
+    weather:         vec2f,
     camera_cloud:    vec4f,
 };
 
@@ -177,5 +179,9 @@ fn fs_main(in: VsOut) -> @location(0) vec4f {
     color += vec3f(1.0, 0.75, 0.5) * glow * 0.35;
     let density = cloud_mask(direction);
     color = mix(color, cloud_light(density), clamp(density, 0.0, 1.0) * 0.9);
+    // 天气灰化：整体向亮度灰靠拢（雨/雷暴遮蔽日月星云，晴天灰度为零恒等）。
+    let gray = clamp(sky.weather.x, 0.0, 1.0);
+    let luma = dot(color, vec3f(0.299, 0.587, 0.114));
+    color = mix(color, vec3f(luma), gray);
     return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)), 1.0);
 }

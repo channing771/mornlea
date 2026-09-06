@@ -4,7 +4,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* v17:帧新增 viewmodel TLV 段(tag 11,定长 viewmodel 实例流,与 avatar
+/* v18:帧新增天气状态 TLV 段(tag 12,4 字节灰度 f32,经 sky uniform 预留位
+ * 灰化天空与云)与降水实例段(tag 13,定长降水实例流,与 avatar 同 96 字节/
+ * 实例布局;空流不编码,晴天帧与 v17 逐字节一致)。
+ * v17:帧新增 viewmodel TLV 段(tag 11,定长 viewmodel 实例流,与 avatar
  * 同 96 字节/实例布局;空流不编码,无段帧与 v16 逐字节一致)。
  * v16:新增无状态相机视图投影查询出口 mornlea_client_camera_viewproj
  * (位姿→列主序视图投影矩阵＋6 平面视锥，无窗口句柄)。
@@ -29,7 +32,7 @@
  * 契约);v6:新增远环 LOD tile 出口(render_upload_lod_tile/drop_lod_tile)。
  * 变基重编:远环两项出口在旧基线上原编号 v5/v6,main 的 water pass
  * (按 material 分流 + 半透明 water pass)占用 v5 后整体顺延一格。 */
-#define MORNLEA_CLIENT_ABI_VERSION 17u
+#define MORNLEA_CLIENT_ABI_VERSION 18u
 
 #define MORNLEA_CLIENT_STATUS_OK 0u
 #define MORNLEA_CLIENT_STATUS_ABI_VERSION 1u

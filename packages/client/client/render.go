@@ -8,7 +8,7 @@ package client
 // render world update 入口；v15 增补 avatar 贴图实例布局(96 字节/实例):R2a 的离屏
 // Rust client 是生产 GPU 渲染的唯一实现；Go 保留 CPU mesh、visibility
 // 与 frame input 准备。v14 RenderWorld cache 当前只由测试驱动，尚未接入
-// production app 消息路径。
+// production app 消息路径。v18 增补天气状态段(tag 12)与降水实例段(tag 13)。
 // 链接与 include 标志在 window.go 的 cgo 序言中声明,此处只补 render
 // 入口的逃逸与回调指令。
 
@@ -112,6 +112,12 @@ type RenderFrame struct {
 	// 与 avatar 同布局，render 包编码）；空表示本帧无双手，帧字节与本字段
 	// 引入前逐位一致。
 	ViewmodelInstances []byte
+	// WeatherSegment 是天气状态段（4 字节小端灰度 f32，render 包编码）；
+	// 晴天恒为空，帧字节与本字段引入前逐位一致。
+	WeatherSegment []byte
+	// PrecipInstances 是降水实例流（96 字节/实例，与 avatar 同布局，render
+	// 包按高度相对雪线选形编码）；晴天恒为空，帧字节与本字段引入前逐位一致。
+	PrecipInstances []byte
 	// OverlayStrength 是伤害红边强度(>0 才绘制)。
 	OverlayStrength float32
 	// WaterTint 是相机浸没时的全屏水色叠加(RGBA)。A <= 0 表示本帧不叠加,
@@ -353,13 +359,22 @@ const (
 	// avatar 同布局,client ABI v17 新增):tag 1..10 已占用(tag 9 退役仍保留
 	// 拒绝语义),取下一个空闲值 11。段按条件追加:流为空时帧字节与 v16 逐位一致。
 	frameTagViewmodel = 11
+	// frameTagWeather 是天气状态段(4 字节:灰度 f32 小端,client ABI v18
+	// 新增):tag 1..11 已占用(tag 9 退役仍保留拒绝语义),取下一个空闲值 12。
+	// 段按条件追加:晴天恒为空,晴天帧与 v17 逐位一致。
+	frameTagWeather = 12
+	// frameTagPrecip 是降水实例段(96 字节/实例,与 avatar 同布局,client ABI
+	// v18 新增):取天气段之后的下一个空闲值 13。段按条件追加:晴天恒为空,
+	// 晴天帧与 v17 逐位一致。
+	frameTagPrecip = 13
 )
 
 // hasPassSegments 报告本帧是否携带任一 pass 段(决定 layout 版本)。
 func (frame RenderFrame) hasPassSegments() bool {
 	return len(frame.AvatarInstances) > 0 || len(frame.DropInstances) > 0 ||
 		len(frame.OutlineInstances) > 0 || len(frame.CrackInstances) > 0 ||
-		len(frame.ViewmodelInstances) > 0 ||
+		len(frame.ViewmodelInstances) > 0 || len(frame.WeatherSegment) > 0 ||
+		len(frame.PrecipInstances) > 0 ||
 		frame.OverlayStrength > 0 || frame.WaterTint[3] > 0 ||
 		len(frame.NameTagSegment) > 0 || len(frame.HUDSegment) > 0 ||
 		len(frame.DebugSegment) > 0
@@ -431,6 +446,10 @@ func EncodeRenderFrame(frame RenderFrame) []byte {
 	// 双手段按条件追加并落在裂纹段之后:流为空时不写任何字节,保证无双手
 	// 帧与 v16 逐位一致(回归 golden 的根基)。
 	appendTLV(frameTagViewmodel, frame.ViewmodelInstances)
+	// 天气状态与降水段按条件追加并落在双手段之后:晴天两段恒为空,保证晴天
+	// 帧与 v17 逐位一致(既有 golden 的根基)。
+	appendTLV(frameTagWeather, frame.WeatherSegment)
+	appendTLV(frameTagPrecip, frame.PrecipInstances)
 	return out
 }
 

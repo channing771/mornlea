@@ -109,14 +109,18 @@ type Application struct {
 	// 跨帧存续挥动边沿（挖掘锚、攻击窗），会话重置时清零。
 	viewmodelStream  []byte
 	viewmodelEncoder render.ViewmodelEncoder
-	billboardBytes   []byte
-	entityEncoder    render.InstanceEncoder
-	lastFrameStats   render.FrameStats
-	remotePlayers    *client.RemotePlayers
-	companions       *client.Companions
-	hostiles         *client.Hostiles
-	chatEvents       *client.ChatEvents
-	chatInput        chatInput
+	// weatherStream/weatherState 是本帧降水实例流与天气状态段的复用缓冲；
+	// 降水无跨帧跟踪表，会话重置无需清理。
+	weatherStream  []byte
+	weatherState   []byte
+	billboardBytes []byte
+	entityEncoder  render.InstanceEncoder
+	lastFrameStats render.FrameStats
+	remotePlayers  *client.RemotePlayers
+	companions     *client.Companions
+	hostiles       *client.Hostiles
+	chatEvents     *client.ChatEvents
+	chatInput      chatInput
 	// chatEventBuffer 是 refreshChatLines 的复用缓冲，容量与 client.ChatEventCapacity
 	// 同源（E9/C9）：事件环最多回放 32 条，缓冲按同一常量分配保证零扩容刷新。
 	chatEventBuffer [client.ChatEventCapacity]network.ChatEvent
@@ -183,6 +187,9 @@ type Application struct {
 	// 同一接受纪律：偏移只平移昼夜呈现，绝不回写绝对时间。
 	worldTimeTicks uint64
 	dayPhaseOffset uint16
+	// weather 是最后确认的权威天气，只在接受更新状态时前进，与世界时间同一
+	// 接受纪律与冻结开关：呈现侧降水/天空/亮度的唯一输入，不读本地随机或墙钟。
+	weather core.WeatherKind
 	// worldTimeFrozen 冻结权威状态对昼夜呈现量的覆盖(capture 钉住天空状态,
 	// 见 SetWorldTimeFrozen);生产恒为 false。
 	worldTimeFrozen bool

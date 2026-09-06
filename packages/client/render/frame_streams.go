@@ -9,6 +9,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/packages/client/assets"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // 本文件为 rust-client-render-entities 提供最小导出面:把各 pass 已有的
@@ -162,6 +163,20 @@ func (e *InstanceEncoder) ResetBursts() {
 // ResetFalls 清空掉落物下落的首现表:会话重置后旧首次 tick 不得带入新会话。
 func (e *InstanceEncoder) ResetFalls() {
 	e.falls.Reset()
+}
+
+// EncodeWeatherInstances 把降水编码为 96 字节/实例的字节流:晴天返回空,
+// 雨/雷暴返回固定上限数量（形态由粒子高度相对雪线选形，位置是权威 tick 的
+// 纯函数）。降水无跨帧跟踪表，会话重置无需清理。dst 会被重置复用，稳定天气
+// 帧零分配。
+func (e *InstanceEncoder) EncodeWeatherInstances(dst []byte, cam mgl32.Vec3, yaw float32, serverTick uint64, kind core.WeatherKind) []byte {
+	if kind != core.WeatherRain && kind != core.WeatherThunder {
+		return dst[:0]
+	}
+	e.parts = BuildWeatherParts(e.parts[:0], cam, yaw, serverTick, kind)
+	dst = growEncodeBuffer(dst, len(e.parts)*avatarInstanceBytes)
+	encodeAvatarPartsInto(dst, e.parts)
+	return dst
 }
 
 // EncodeBlockOutlineInstances 把目标方块轮廓编码为 12×96 字节实例流;
