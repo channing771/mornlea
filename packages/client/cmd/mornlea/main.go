@@ -166,7 +166,11 @@ func runWithDependencies(args []string, dependencies runDependencies) error {
 			return fmt.Errorf("启动正式视觉基线抓帧: %w", err)
 		}
 		return errors.Join(
-			dependencies.runCapture(app, options.CaptureDir, capture.RunOptions{UpdateGolden: true}),
+			dependencies.runCapture(app, options.CaptureDir, capture.RunOptions{
+				UpdateGolden: true,
+				Scenes:       options.CaptureScenes,
+				IncludeGIFs:  options.CaptureGIFs,
+			}),
 			app.Close(),
 		)
 	}
@@ -193,7 +197,11 @@ func runWithDependencies(args []string, dependencies runDependencies) error {
 
 	if options.CaptureDir != "" {
 		return errors.Join(
-			dependencies.runCapture(app, options.CaptureDir, capture.RunOptions{UpdateGolden: options.UpdateGolden}),
+			dependencies.runCapture(app, options.CaptureDir, capture.RunOptions{
+				UpdateGolden: options.UpdateGolden,
+				Scenes:       options.CaptureScenes,
+				IncludeGIFs:  options.CaptureGIFs,
+			}),
 			app.Close(),
 		)
 	}

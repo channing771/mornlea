@@ -179,11 +179,14 @@ fmt:
 		-not -path './.worktrees/*' \
 		-exec gofmt -w {} +
 
+# visual-check：SCENES= 传逗号分隔场景子集（如 SCENES=mining-crack-early,mining-crack-heavy）
+# 只比对所列场景；GIFS=1 让纯比对运行也生成 GIF 剧本到输出目录供人工审查。缺省跑全部场景且不生成 GIF。
 visual-check:
-	$(GO) run $(APP) --capture $(or $(VISUAL_OUT),build/visual)
+	$(GO) run $(APP) --capture $(or $(VISUAL_OUT),build/visual) $(if $(SCENES),--capture-scenes $(SCENES)) $(if $(GIFS),--capture-gifs)
 
+# visual-update：SCENES= 传逗号分隔场景子集，只更新所列场景的 golden；GIF 基线恒生成，不受子集影响。
 visual-update:
-	$(GO) run $(APP) --capture $(or $(VISUAL_OUT),build/visual) --update-golden
+	$(GO) run $(APP) --capture $(or $(VISUAL_OUT),build/visual) --update-golden $(if $(SCENES),--capture-scenes $(SCENES))
 
 clean:
 	rm -rf bin

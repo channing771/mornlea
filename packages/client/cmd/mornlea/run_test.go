@@ -172,6 +172,51 @@ func TestRunOrdinaryCaptureUsesOneApplicationWithoutGoldenControl(t *testing.T) 
 	}
 }
 
+// TestRunPassesCaptureScenesAndGifsIntoRunOptions 钉住 parse 出的场景子集与
+// GIF 请求要原样进入两个 runCapture 调用点（update 与 check）组装的
+// `capture.RunOptions`：漏传任一字段都会让 CLI 选项静默失效。
+func TestRunPassesCaptureScenesAndGifsIntoRunOptions(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		extraArgs []string
+		wantOpts  capture.RunOptions
+	}{
+		{
+			name:      "纯比对携带子集与 GIF 请求",
+			extraArgs: []string{"--capture-scenes", "main-menu", "--capture-gifs"},
+			wantOpts:  capture.RunOptions{Scenes: []string{"main-menu"}, IncludeGIFs: true},
+		},
+		{
+			name:      "更新基线携带子集",
+			extraArgs: []string{"--update-golden", "--capture-scenes", "mining-crack-early,mining-crack-heavy"},
+			wantOpts:  capture.RunOptions{UpdateGolden: true, Scenes: []string{"mining-crack-early", "mining-crack-heavy"}},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			args := append([]string{"--capture", t.TempDir()}, test.extraArgs...)
+			args = append(args, absentConfigArgs(t)...)
+			err := runWithDependencies(args, runDependencies{
+				loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
+				newApplication: func(application.Options) (*application.Application, error) {
+					return application.NewCloseTrackedApplicationForTest(func() {}), nil
+				},
+				runGoldenUpdateControl: func(*application.Application, *application.Application, string) error {
+					return nil
+				},
+				runCapture: func(_ *application.Application, _ string, opts capture.RunOptions) error {
+					if !reflect.DeepEqual(opts, test.wantOpts) {
+						t.Fatalf("RunOptions = %+v，want %+v", opts, test.wantOpts)
+					}
+					return nil
+				},
+			})
+			if err != nil {
+				t.Fatalf("runWithDependencies: %v", err)
+			}
+		})
+	}
+}
+
 // absentConfigArgs 返回指向本次测试临时目录下一个不存在文件的 --config 参数。
 // 它让普通运行测试走显式 config.Load 的 Defaults 回落，避免读写开发者的默认目录。
 func absentConfigArgs(t *testing.T) []string {
