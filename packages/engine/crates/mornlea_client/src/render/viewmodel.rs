@@ -11,18 +11,19 @@
 //!   `ENTITY_INSTANCE_BYTES`：mat4 + RGBA + 材质 u32 + 保留零填充），纯色
 //!   分支走哨兵材质的原纯色路径，贴图分支经材质层号采样同一方块 atlas；
 //! - GPU 资源直接复用 `EntityPass`（容量取 [`VIEWMODEL_MAX_INSTANCES`] 的
-//!   不透明变体），不新增管线、几何与渲染遍历发起点——半透明阶段预算与
-//!   pass 名单门禁保持不变；
-//! - 超限整段拒绝（`validate_frame` 经 [`instances_valid`] 判否，帧以
-//!   `Invalid` 退回且不触碰 target），不断言、不 panic、不截断绘制；计数门
-//!   由 Go 装配侧承担，本侧只做防御性丢弃。
+//!   不透明变体），不新增管线、几何与通道创建——录制经既有实体通道的同一
+//!   录制入口，半透明阶段预算与 pass 名单门禁保持不变；
+//! - 超限整帧拒绝（`validate_frame` 经 [`instances_valid`] 判否，整帧以
+//!   `Invalid` 退回且不触碰 target——世界与其它 pass 本帧一并丢弃，与
+//!   avatar/drop/轮廓/裂纹的门禁纪律同形），不断言、不 panic、不截断绘制；
+//!   计数门由 Go 装配侧承担，本侧只做防御性丢弃。
 //!
 //! 帧序：世界 pass（地形、水面、avatar、掉落物、轮廓、裂纹）之后，名牌与
 //! 全屏叠加、HUD、调试面板之前；空段跳过录制，无段帧的 draw 选择与变更前
 //! 一致。
 
 /// 单帧 viewmodel 实例恒定上限：左手、右手、持物各一，另保留一位副手扩展
-/// 占位；与 Go 编码侧的同名上限同值，超限整段拒绝。
+/// 占位；与 Go 编码侧的同名上限同值，超限整帧拒绝（整帧 `Invalid`）。
 pub const VIEWMODEL_MAX_INSTANCES: usize = 4;
 /// 每实例字节数：与 avatar 实例逐字节同布局（mat4 + RGBA + 材质 u32 +
 /// 保留零填充），绘制复用 `EntityPass` 的同一套材质分支。
@@ -73,7 +74,7 @@ mod tests {
     }
 
     /// 实例段校验锁：空流合法（本帧无双手），1..=4 实例合法；错位长度与
-    /// 第 5 个实例整段拒绝，拒绝语义与 avatar/drop/轮廓/裂纹门一致。
+    /// 第 5 个实例整帧拒绝，拒绝语义与 avatar/drop/轮廓/裂纹门一致。
     #[test]
     fn instances_valid_locks_count_and_alignment() {
         assert!(instances_valid(&[]), "空流合法（本帧无双手）");
@@ -82,7 +83,7 @@ mod tests {
             assert!(instances_valid(&stream), "{count} 实例合法");
         }
         let oversized = vec![0u8; (VIEWMODEL_MAX_INSTANCES + 1) * VIEWMODEL_INSTANCE_BYTES];
-        assert!(!instances_valid(&oversized), "第 5 个实例必须整段拒绝");
+        assert!(!instances_valid(&oversized), "第 5 个实例必须整帧拒绝");
         let misaligned = vec![0u8; VIEWMODEL_INSTANCE_BYTES + 1];
         assert!(!instances_valid(&misaligned), "非 96 倍数必须拒绝");
         assert!(!instances_valid(&[0u8; 79]), "错位短流必须拒绝");
@@ -144,7 +145,7 @@ mod render_tests {
     }
 
     /// 双手叠加层真实参与成像：atlas 预热后同一实例必须改变图像；超限
-    /// （5 实例）与错位流在渲染前整段拒绝且不触碰 target。
+    /// （5 实例）与错位流在渲染前整帧拒绝且不触碰 target。
     #[test]
     fn viewmodel_renders_and_invalid_rejects_without_touching_target() {
         use super::super::FrameResult;
@@ -201,5 +202,53 @@ mod render_tests {
         let mut without_draw = vec![0u8; 64 * 64 * 4];
         assert!(renderer.readback(&mut without_draw));
         assert_eq!(base, without_draw, "无段帧不得引入额外绘制");
+    }
+
+    /// 叠压顺序锁：全屏叠加画在双手之后——同一双手实例上再叠加均匀水色，
+    /// 手部区域像素必须改变。双手是不透明覆盖，若它画在叠加之后，手部像
+    /// 素将与纯双手帧逐字节相同。用 edge = 0 的均匀水色而非伤害红边：红边
+    /// 是边缘渐变，恒等相机下双手落在零覆盖的画面中央，锁不住顺序；水色与
+    /// 红边共用同一条 pass 与管线，顺序结论互通。名牌/HUD/调试面板的其后
+    /// 顺序由代码位置保证，交场景 golden 覆盖。
+    #[test]
+    fn water_tint_covers_viewmodel_hand() {
+        use super::super::FrameResult;
+        let Some(mut renderer) = renderer_or_skip_pub(64, 64) else {
+            return;
+        };
+        let bytes_per_layer: usize = (0..super::super::ATLAS_MIPS)
+            .map(|m| {
+                let s = (super::super::ATLAS_TEX_SIZE >> m).max(1) as usize;
+                s * s * 4
+            })
+            .sum();
+        assert!(renderer.upload_atlas(1, &vec![128u8; bytes_per_layer]));
+        let empty = empty_frame_pub();
+        assert_eq!(renderer.render_frame(&empty), FrameResult::Rendered);
+        let mut base = vec![0u8; 64 * 64 * 4];
+        assert!(renderer.readback(&mut base));
+
+        let mut hand = empty_frame_pub();
+        hand.viewmodel_instances = viewmodel_instance();
+        assert_eq!(renderer.render_frame(&hand), FrameResult::Rendered);
+        let mut hand_pixels = vec![0u8; 64 * 64 * 4];
+        assert!(renderer.readback(&mut hand_pixels));
+        assert_ne!(hand_pixels, base, "双手实例必须先改变图像");
+
+        let mut tinted_hand = empty_frame_pub();
+        tinted_hand.viewmodel_instances = viewmodel_instance();
+        tinted_hand.water_tint = [0.1, 0.2, 0.8, 0.5];
+        assert_eq!(renderer.render_frame(&tinted_hand), FrameResult::Rendered);
+        let mut tinted_pixels = vec![0u8; 64 * 64 * 4];
+        assert!(renderer.readback(&mut tinted_pixels));
+
+        // 手部区域 = 纯双手帧中区别于空帧的像素；叠加之后其中至少一处须变。
+        let covered = hand_pixels
+            .chunks_exact(4)
+            .zip(tinted_pixels.chunks_exact(4))
+            .zip(base.chunks_exact(4))
+            .filter(|((hand, tinted), empty)| hand != empty && tinted != hand)
+            .count();
+        assert!(covered > 0, "全屏叠加必须盖在双手之上");
     }
 }

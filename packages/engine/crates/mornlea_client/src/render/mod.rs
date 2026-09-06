@@ -2180,9 +2180,10 @@ impl OffscreenRenderer {
         // 双手 viewmodel(帧序:裂纹之后、名牌之前)。相机空间叠加层:世界
         // pass 之后、名牌与全屏叠加、HUD、调试面板之前绘制,不遮挡名牌、
         // 准星与面板;空段跳过录制,无段帧的 draw 选择与变更前一致。超限已
-        // 在 validate_frame 整段拒绝,此处只处理合法非空流,不做任何摆动
+        // 在 validate_frame 整帧拒绝,此处只处理合法非空流,不做任何摆动
         // 推测(相位由 Go 编码侧烘焙进实例变换)。
         if viewmodel::wants_draw(&input.viewmodel_instances) {
+            debug_assert!(viewmodel::instances_valid(&input.viewmodel_instances));
             self.viewmodel_pass.upload(
                 &self.queue,
                 &input.view_proj,
