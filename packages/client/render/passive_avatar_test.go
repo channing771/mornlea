@@ -141,6 +141,34 @@ func TestPassiveAvatarLowersHeadWhenGrazing(t *testing.T) {
 	}
 }
 
+// TestPassiveAvatarHeadBasisPointsAlongPhysicsForward 锁定「装配后世界朝向」
+// 的几何半边：模型局部姿态不变（仍面朝 +X，见放牧低头测试），装配层把权威
+// yaw 加 π/2 后作为渲染 yaw 驱动本包；渲染根矩阵 Translate·HomogRotate3DY(θ)
+// （mathgl 列主序）把头部 +X 基映到 (cos θ, 0, -sin θ)，θ = yaw + π/2 时恰为
+// 物理前进方向 (-sin yaw, 0, -cos yaw)（yaw=0 面向 -Z，见 shared/physics 的
+// movementTargetFromYaw）。方向提取含头部 0.45 缩放（缩放是头部几何的一部分，
+// 一并锁定，先例见放牧低头测试）；+π/2 映射的装配侧数值契约由 app 包的装配
+// 测试锁定，此处不关心归一化区间。
+func TestPassiveAvatarHeadBasisPointsAlongPhysicsForward(t *testing.T) {
+	const headScale = float32(0.45)
+	for _, yaw := range []float32{0, math.Pi / 2, math.Pi, -math.Pi / 4, 3 * math.Pi / 4} {
+		renderYaw := yaw + float32(math.Pi/2)
+		parts := buildAvatarParts(nil, []Avatar{{Key: PassiveEntityKey(13), Yaw: renderYaw}})
+		facing := transformedDirection(parts[0].transform, mgl32.Vec3{1, 0, 0})
+		want := mgl32.Vec3{
+			headScale * float32(-math.Sin(float64(yaw))),
+			0,
+			headScale * float32(-math.Cos(float64(yaw))),
+		}
+		// 用绝对距离比较：`ApproxEqualThreshold` 对近零分量走相对语义
+		// （ε² 与相对除法），正交轴残差 ~1e-8 会被误判为不等。
+		if delta := facing.Sub(want).Len(); delta > 1e-5 {
+			t.Fatalf("权威 yaw=%v（渲染 yaw=%v）：头部基=%v，想要物理前进方向×头部缩放 %v（偏差 %v）",
+				yaw, renderYaw, facing, want, delta)
+		}
+	}
+}
+
 // TestAvatarSolidBranchesUseSentinelMaterial 锁定夜行者保留纯色哨兵路径。
 func TestAvatarSolidBranchesUseSentinelMaterial(t *testing.T) {
 	avatars := []Avatar{

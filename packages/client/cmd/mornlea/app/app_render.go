@@ -119,10 +119,26 @@ func AppendHostileRenderPresentationsInto(
 	return avatars
 }
 
+// passiveRenderYaw 把被动牛的权威 yaw 映射为牛模型的渲染朝向。牛模型静止
+// 姿态面朝局部 +X（躯干长轴为 X、头在 +X），而物理约定 yaw=0 面向 -Z，前进
+// 方向为 (-sin yaw, 0, -cos yaw)；渲染根矩阵为 Translate·HomogRotate3DY(θ)
+// （mathgl 列主序），θ 把局部 +X 基映到 (cos θ, 0, -sin θ)，令其等于前进方向
+// 即解得 θ = yaw + π/2，牛头因此指向权威朝向的物理前进方向而非身体侧对行进
+// 的横行姿态。偏移后归一化到 [-π, π)。本映射是纯呈现层变换：权威 yaw 与协议
+// wire 值不变，玩家/伙伴/夜行者仍直传自己的朝向。
+func passiveRenderYaw(yaw float32) float32 {
+	normalized := math.Mod(float64(yaw)+math.Pi/2+math.Pi, 2*math.Pi)
+	if normalized < 0 {
+		normalized += 2 * math.Pi
+	}
+	return float32(normalized - math.Pi)
+}
+
 // AppendPassiveRenderPresentationsInto 把被动牛镜像转换为 avatar 记录：
 // 被动牛只进入实体通道，绝不进入名称标签集合（名标容量不随牛群数量变化）；
-// 牛头俯仰由放牧位经 `render.PassiveGrazeHeadPitch` 直通（置位下压、清位时按
-// 权威 tick 叠闲时点头），死亡保留体的侧倒与红闪由 `render.PassiveDeathPhase`
+// 朝向经 `passiveRenderYaw` 做 +π/2 对齐（模型面 +X、物理面 -Z），牛头俯仰
+// 由放牧位经 `render.PassiveGrazeHeadPitch` 直通（置位下压、清位时按权威
+// tick 叠闲时点头），死亡保留体的侧倒与红闪由 `render.PassiveDeathPhase`
 // 按死亡 tick 与当前权威 tick 派生；位姿完全由权威镜像驱动，本函数不做任何
 // 墙钟推测，点头相位只读权威 tick 与牛 ID。
 func AppendPassiveRenderPresentationsInto(
@@ -138,7 +154,7 @@ func AppendPassiveRenderPresentationsInto(
 		avatar := render.Avatar{
 			Key:      render.PassiveEntityKey(presentation.ID),
 			Position: presentation.Position,
-			Yaw:      presentation.Yaw,
+			Yaw:      passiveRenderYaw(presentation.Yaw),
 			Pitch:    pitch,
 		}
 		if presentation.Dying {
