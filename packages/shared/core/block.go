@@ -153,6 +153,16 @@ const (
 	// ShortGrassID 是原创短草的稳定方块编号，只追加在既有床形态之后。短草是
 	// 零碰撞、非完整遮光的野生植物，没有对应物品或通用掉落。
 	ShortGrassID
+	// SnowLayer1BlockID..SnowLayer4BlockID 是四档雪层方块的稳定编号，只能追加
+	// 在 ShortGrassID 之后、BlockIDMax 之前：方块 ID 是协议稳定值，重排会破坏
+	// 既有存档与线上字节。雪层是积雪/消融机制产生的贴地装饰层，厚度逐档渐厚
+	// （档位 n 的 4-bit 顶面高度原值为 n+1，即 2..5；raw=1 刻意留白不用于雪层），
+	// 零碰撞、透明、不发光；没有对应物品：不可由玩家放置、采掘无掉落（光照、
+	// 碰撞与呈现属性分别见 block_properties.go、physics 与 assets 的登记）。
+	SnowLayer1BlockID
+	SnowLayer2BlockID
+	SnowLayer3BlockID
+	SnowLayer4BlockID
 	// BlockIDMax 是合法方块编号的独占上界（最后一个合法 BlockID + 1），本身不是
 	// 方块枚举成员，与物品侧的 ItemIDMax 同形。它供哨兵与穷举测试以
 	// 「id < BlockIDMax」表达「全部已注册方块」，替代「某个具体编号恰为枚举末项」
@@ -203,6 +213,28 @@ func IsDoorOpen(id BlockID) bool {
 	default:
 		return false
 	}
+}
+
+// SnowLayerTier 返回雪层方块的档位 1..4（SnowLayer1BlockID..SnowLayer4BlockID）。
+//
+// 非雪层编号一律返回 (0, false)——包括整块雪（`SnowBlockID`，它是可放置、可掉落
+// 的普通实心方块，与雪层装饰层是两个语义）、短草以及未注册/越界编号。档位即
+// 厚度语义：档位 n 的 4-bit 顶面高度原值为 n+1（雪层占 2..5，raw=1 刻意留白）；
+// 档位推进（积雪升档、消融降档、踩踏降档）就是编号 ±1，调用方必须先经本谓词
+// 确认档位有效再加减，不得对区间外的编号做算术。
+func SnowLayerTier(id BlockID) (uint8, bool) {
+	if id < SnowLayer1BlockID || id > SnowLayer4BlockID {
+		return 0, false
+	}
+	return uint8(id - SnowLayer1BlockID + 1), true
+}
+
+// IsSnowLayer 报告 id 是否是四档雪层方块之一（SnowLayer1BlockID..SnowLayer4BlockID）。
+// 雪层是零碰撞、透明的贴地装饰层，属性判定（光照、碰撞、呈现）以本谓词为唯一
+// 成员依据，不得在别处复制编号区间。
+func IsSnowLayer(id BlockID) bool {
+	_, ok := SnowLayerTier(id)
+	return ok
 }
 
 const (

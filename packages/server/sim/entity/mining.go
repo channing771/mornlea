@@ -65,6 +65,13 @@ func miningRule(block core.BlockID, held core.ItemID) (uint16, bool) {
 	if core.IsWildGrass(block) {
 		return 1, true
 	}
+	// 雪层四档与手持无关：任意状态（空手、普通物品、任一工具）1 tick 采除，
+	// 同短草一样取最小权威量子——spec Scenario「徒手移除无掉落」要求徒手即可。
+	// harvestable=false：雪层没有对应物品，任何手持都没有掉落资格，「无掉落」
+	// 由 completeMining 的雪层分支承担（清块不预留 drop 槽）。
+	if core.IsSnowLayer(block) {
+		return 1, false
+	}
 	switch block {
 	case core.DirtID, core.GrassID, core.SandID, core.GravelID, core.LeavesID,
 		core.GlassID, core.WhiteWoolID, core.ClayID, core.SnowBlockID:
@@ -188,8 +195,11 @@ func companionMineableBlock(block core.BlockID) bool {
 	// 的短草分支），短草今天恰好没有 BlockDrop 登记、通用判据碰巧也会拒绝它，
 	// 但这是巧合不是契约——若未来短草获得 BlockDrop 登记，只有这里的显式谓词
 	// 还站着（change natural-grass-seeds design 决策 1）。
+	// 雪层四档同理必须显式拒绝：雪层只由积雪/消融机制产生，没有掉落语义，
+	// 今天的通用判据同样只是碰巧拒绝（缺 BlockDrop 登记），按短草同一契约
+	// 写成显式谓词。
 	if core.IsCrop(block) || core.IsFarmland(block) || core.IsTorch(block) ||
-		core.IsWildGrass(block) {
+		core.IsWildGrass(block) || core.IsSnowLayer(block) {
 		return false
 	}
 	_, ok := core.BlockDrop(block)
@@ -826,6 +836,21 @@ func (engine *engineContext) completeMining(
 			blockIndex,
 			engine.tunables.DropPickupDelayTicks,
 		)
+		return 0, false
+	}
+
+	// 雪层四档的专用无掉落分支（短草未命中路径的同形）：积雪是纯装饰层，
+	// 没有对应物品与任何掉落，任何手持完成采掘都只清块——不调用
+	// `PrepareDrop`、不需要掉落容量，掉落容量满也必须成功。
+	if core.IsSnowLayer(block) {
+		_, changed, err := dimension.SetBlock(target, core.AirID)
+		if err != nil {
+			return mapSetBlockError(err), true
+		}
+		if !changed {
+			return RejectNoTarget, true
+		}
+		engine.recordChange(dimensionID, target, core.AirID, pending)
 		return 0, false
 	}
 

@@ -14,8 +14,8 @@ func TestShortGrassStableBlockIdentityHasNoItem(t *testing.T) {
 	if got := core.ShortGrassID; got != expectedShortGrassID {
 		t.Fatalf("ShortGrassID = %d，想要 %d", got, expectedShortGrassID)
 	}
-	if got, want := core.BlockIDMax, core.BlockID(85); got != want {
-		t.Fatalf("BlockIDMax = %d，想要只追加短草后的 %d", got, want)
+	if got, want := core.BlockIDMax, core.BlockID(89); got != want {
+		t.Fatalf("BlockIDMax = %d，想要追加短草与四档雪层后的 %d", got, want)
 	}
 	if !core.RegisteredBlock(expectedShortGrassID) {
 		t.Fatalf("短草编号 %d 未注册", expectedShortGrassID)

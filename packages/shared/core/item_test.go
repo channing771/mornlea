@@ -655,7 +655,8 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 		t.Fatalf("DoorUpper = %d，必须紧随 DoorLowerEastOpen(%d)",
 			core.DoorUpper, core.DoorLowerEastOpen)
 	}
-	// 火把五形态紧随门方块追加，床八形态紧随火把追加，短草再追加为 84，方块侧哨兵随之后移到 85。
+	// 火把五形态紧随门方块追加，床八形态紧随火把追加，短草再追加为 84、四档
+	// 雪层 85..88，方块侧哨兵随之后移到 89。
 	if core.TorchStandingID != core.DoorUpper+1 {
 		t.Fatalf("TorchStandingID = %d，必须紧随 DoorUpper(%d)",
 			core.TorchStandingID, core.DoorUpper)
@@ -664,8 +665,8 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 		t.Fatalf("BedFootSouthID = %d，必须紧随 TorchWallNegZID(%d)",
 			core.BedFootSouthID, core.TorchWallNegZID)
 	}
-	if core.ShortGrassID != core.BedHeadEastID+1 || core.BlockIDMax != 85 {
-		t.Fatalf("短草/BlockIDMax = %d/%d，必须紧随 BedHeadEastID(%d) 后移到 84/85",
+	if core.ShortGrassID != core.BedHeadEastID+1 || core.BlockIDMax != 89 {
+		t.Fatalf("短草/BlockIDMax = %d/%d，必须紧随 BedHeadEastID(%d) 为 84、哨兵 89",
 			core.ShortGrassID, core.BlockIDMax, core.BedHeadEastID)
 	}
 }
