@@ -183,3 +183,4 @@ m5e-deferred-clearing 清偿 M5E 归档「延期与放弃」8 项递延中的 6 
 
 - 2026-09-07：归档 `weather-camera-tree-diversity`（权威天气、F5 三态视角、橡树多样性；协议 v36、metadata v4、client ABI v18）。
 - 2026-09-07：归档 `showcase-weather-camera-baselines`（雨天与第三人称场景基线、天气过程演示；场景清单 24→27）。
+- 2026-09-07：归档 `fix-passive-cow-behavior`（牛行为三连修：漫游分段稳定朝向段长 40 tick 消除原地打转、闲时看人只看不靠近（持麦引诱 2.5 格止步不变）、被动牛装配层 +π/2 渲染朝向对齐消除横行；passive-graze-lure 闲时需求更名「牛闲时面向附近玩家」、passive-cattle 漫游需求增分段语义、passive-cattle-presentation 新增渲染朝向需求；穿墙守护测试补玩家 6 格外摆位防冻结掏空。协议 v36、存档 schema、engine ABI v10、client ABI v18 均不变；passive-herd/passive-graze 两景与 graze/kill/lure 三 GIF golden 按预期重录，其余 25 景逐字节不变。PR #163 CI 9/9 全绿合并）。
