@@ -24,6 +24,23 @@ func (source MirrorCollisionSource) CollisionBoxes(position core.BlockPos) physi
 	return physics.BlockCollisionBoxes(chunk.Chunk.BlockAt(x, position.Y, z), true)
 }
 
+// BlockIDAt 让客户端镜像充当 physics.FootBlockSource：与权威侧
+// dimensionCollisionSource.BlockIDAt 逐条对应——缺失或已失同步的区块返回
+// (0, false)，超出世界高度的格视为空气（已加载）。厚雪减速的档位判定不在
+// 这里，而在两侧共用的 physics.Step 落足采样，客户端预测因此与服务端权威
+// 同表一致。
+func (source MirrorCollisionSource) BlockIDAt(position core.BlockPos) (core.BlockID, bool) {
+	if position.Y < core.MinY || position.Y >= core.MaxY {
+		return core.AirID, true
+	}
+	chunk, loaded := source.Mirror.Chunk(source.Dimension, position.Chunk())
+	if !loaded || chunk.Desynced {
+		return 0, false
+	}
+	x, _, z := position.Local()
+	return chunk.Chunk.BlockAt(x, position.Y, z), true
+}
+
 // IsFluidAt 让客户端镜像充当 physics.FluidSource：与权威侧
 // dimensionCollisionSource.IsFluidAt 逐条对应——缺失或已失同步的区块返回
 // false，超出世界高度的格视为空气。判定规则本身不在这里，而在两侧共用的

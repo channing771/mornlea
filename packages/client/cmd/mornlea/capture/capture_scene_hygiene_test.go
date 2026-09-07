@@ -15,9 +15,10 @@ import (
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-// TestCaptureRainAndCameraHygieneAcrossScenes 按真实表序走一遍雨天→双机位的
-// 场景链：雨天场景之后后继场景入口必须回晴，双机位场景之后菜单场景入口
-// （同样经公共清场）必须回到第一人称；后续正式场景不得继承雨天或自身体。
+// TestCaptureRainAndCameraHygieneAcrossScenes 按真实表序走一遍雨天→双机位→
+// 雪景的场景链：雨天场景之后后继场景入口必须回晴，双机位场景之后菜单场景入口
+// （同样经公共清场）必须回到第一人称，雪景场景二次注入的雨（冬季雪形）必须
+// 在菜单场景入口再次回晴；后续正式场景不得继承雨天或自身体。
 func TestCaptureRainAndCameraHygieneAcrossScenes(t *testing.T) {
 	app := newRainNoonTestApplication(t)
 
@@ -47,6 +48,21 @@ func TestCaptureRainAndCameraHygieneAcrossScenes(t *testing.T) {
 	if app.Weather() != core.WeatherClear {
 		t.Fatalf("camera-third-front 后呈现天气 = %d，想要晴天 %d（雨天泄入后继场景）",
 			app.Weather(), core.WeatherClear)
+	}
+
+	// snow-cover 在双机位之后二次注入雨（冬季形态为雪）：切走的第三人称必须
+	// 已由雪景自身的公共清场复位为第一人称，注入的雨随后必须在菜单场景入口
+	// 再次回晴。
+	if err := applySnowCoverCaptureState(app); err != nil {
+		t.Fatalf("应用 snow-cover: %v", err)
+	}
+	if app.CameraMode() != client.CameraFirstPerson {
+		t.Fatalf("snow-cover 入口机位 = %d，想要第一人称 %d（第三人称泄入雪景）",
+			app.CameraMode(), client.CameraFirstPerson)
+	}
+	if app.Weather() != core.WeatherRain {
+		t.Fatalf("snow-cover 后呈现天气 = %d，想要雨天 %d（雪形降水的前置不成立）",
+			app.Weather(), core.WeatherRain)
 	}
 
 	// main-menu 的 `Apply` 经同一公共清场：双机位之后必须回到第一人称，

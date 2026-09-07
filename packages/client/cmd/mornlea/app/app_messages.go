@@ -8,6 +8,7 @@ import (
 
 	"github.com/channing771/mornlea/packages/client/audio"
 	"github.com/channing771/mornlea/packages/client/client"
+	"github.com/channing771/mornlea/packages/client/render"
 	"github.com/channing771/mornlea/packages/client/render/hud"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
@@ -49,10 +50,16 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 				// 权威 reset 是会话边界：双手编码器的边沿状态与 marker 同步丢弃，
 				// 否则残留攻击窗会在重生后继续挥动。
 				a.viewmodelEncoder.ResetViewmodel()
+				// 权威 reset（重生/传送）同样重锚踩雪呈现：旧位置的步频里程与
+				// 踢雪事件锚点不得在重生点继续出声/扬尘。
+				a.snowStep.Reset()
+				a.frameSnowKick = render.SnowKickInput{}
+				a.entityEncoder.ResetSnowKicks()
 				// 权威 reset 是会话边界：hud 分节纪律层丢弃旧基线，回到游戏
 				// 相位后的第一次冲刷无条件下行一份完整分节。
 				a.resetHUDStatePush()
 			} else {
+
 				// 浸没标志在权威位置上对只读镜像就地求值，与预测共用
 				// `physics.SubmersionFlags` 唯一实现；缺块按干燥（宁可漏响不假响）。
 				_, bodyInFluid := physics.SubmersionFlags(state.Position, source)

@@ -88,6 +88,10 @@ var canonicalBlockNames = [...]string{
 	BedHeadNorthID:       "bed_head_north",
 	BedHeadEastID:        "bed_head_east",
 	ShortGrassID:         "short_grass",
+	SnowLayer1BlockID:    "snow_layer_1",
+	SnowLayer2BlockID:    "snow_layer_2",
+	SnowLayer3BlockID:    "snow_layer_3",
+	SnowLayer4BlockID:    "snow_layer_4",
 }
 
 // explicitCanonicalItemNames 只登记没有同名完整方块的物品。完整方块物品通过

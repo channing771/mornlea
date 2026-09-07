@@ -29,6 +29,16 @@ type EnvironmentConfig struct {
 	DropPickupDelayTicks    uint8
 	RandomTicksPerSection   uint8
 	CropGrowthChancePercent uint8
+	// Weather/YearPhase/EffectiveDayPhase 是当 tick 的气候束，供随机 tick 的
+	// 积雪/消融判定取局部温度：Weather 是权威天气种类；YearPhase 与
+	// EffectiveDayPhase 沿 `core.YearPhaseAt`/`core.EffectiveDayPhase` 的语义
+	// （0..1 年相位与 0..23999 季节化日内相位），由 runtime 从当 tick 季节快照
+	// 投影——realm 不感知季节偏移或天气时钟，不自建季节算式。零值（晴、春分
+	// 黎明）无降水，不产生任何积雪写入，因此只填 tunables 六项的既有调用方
+	// 行为不变。
+	Weather           core.WeatherKind
+	YearPhase         float64
+	EffectiveDayPhase uint16
 }
 
 // EnvironmentMutation 将环境写入和同 tick 的区块变更收敛到同一事务。
@@ -1055,6 +1065,9 @@ func (state *State) AdvanceCrops(active []core.ChunkKey, mutation *Mutation) {
 	}
 }
 
+// advanceCropCell 是随机 tick 抽中一格后的判定分发器：作物生长、干耕地退化、
+// 积雪/消融共用同一抽样与预算，各分支互斥（作物与耕地命中后直接返回），至多
+// 写 1 格。
 func (state *State) advanceCropCell(
 	dimension *Dimension,
 	dimensionID core.DimensionID,
@@ -1105,7 +1118,11 @@ func (state *State) advanceCropCell(
 			return
 		}
 		mutation.Record(dimensionID, position, core.DirtID)
+		return
 	}
+	// 既非作物也非干耕地：按白名单地表交给积雪/消融判定（内部再拒非白名单与
+	// 非空气上方，多数命中到此为止零额外读取）。
+	state.advanceSnowCover(dimension, dimensionID, chunk, position, block, mutation)
 }
 
 // Torch/Bed support

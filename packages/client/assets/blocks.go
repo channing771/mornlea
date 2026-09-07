@@ -184,7 +184,16 @@ const (
 	LayerHumanClayTorso = LayerHumanSageHead + 30
 	LayerHumanClayArm   = LayerHumanSageHead + 36
 	LayerHumanClayLeg   = LayerHumanSageHead + 42
-	layerCount          = LayerHumanSageHead + 48
+	// LayerSnowLayerTop / LayerSnowLayerSide 是四档雪层方块族共用的顶/侧两张
+	// 原创程序化雪白层（与 LayerSnowTop/LayerSnowSide 同族、独立层号），只能
+	// 追加在人物层（LayerHumanSageHead+42 是末个人物分面层）之后保持全部冻结
+	// 层号（植物 31..54、火把 59、床 60..67、短草 68、裂纹 69..78）不变；显式
+	// 偏移与人物层常量同形，不依赖隐式 iota。四档共用层号、档位差异只由
+	// BlockTopRaw 的呈现高度表达（与 8 个流体编号共用 LayerWater 同形）；两层
+	// 位于 LayerItemCoal 之后的原创内部区，不开放材质包文件覆盖。
+	LayerSnowLayerTop  = LayerHumanSageHead + 48
+	LayerSnowLayerSide = LayerHumanSageHead + 49
+	layerCount         = LayerHumanSageHead + 50
 )
 
 type textureBinding struct {
@@ -363,9 +372,14 @@ func NewRegistry() *Registry {
 		}
 		r.layers[int(layer)] = originalItemTexture(item)
 	}
-	for layer := LayerHumanSageHead; layer < layerCount; layer++ {
+	// 人物层是 8 个部位 × 6 面 = 48 层的固定区间（LayerHumanSageHead 起）；
+	// 上界刻意写 LayerHumanSageHead+48 而不是 layerCount——雪层等后续追加层
+	// 落在人物区间之后，用 layerCount 会把它们的像素误覆盖成人物贴图。
+	for layer := LayerHumanSageHead; layer < LayerHumanSageHead+48; layer++ {
 		r.layers[layer] = originalHumanTexture(int(layer - LayerHumanSageHead))
 	}
+	r.layers[LayerSnowLayerTop] = snowLayerTopTexture()
+	r.layers[LayerSnowLayerSide] = snowLayerSideTexture()
 	r.refreshItemIcons()
 	// ids 覆盖 core 的全部已注册方块编号，上界一律用独占哨兵 core.BlockIDMax
 	// 表达——写死某个具体末位编号（历史上写过 WaterLevel7ID）会在追加新编号时
@@ -560,6 +574,16 @@ func (r *Registry) Material(id world.BlockID, f mesh.Face) uint16 {
 		if core.IsFluid(id) {
 			return LayerWater
 		}
+		// 雪层四档共用同一对顶/侧材质层（与雪块同形的按面分层）：档位差异只
+		// 由 BlockTopRaw 的呈现高度表达，材质不分档（与 8 个流体编号共用
+		// LayerWater 同形）；四档共用两层不会互相串味，几何高度由快照的
+		// BlockTopRaw 常量驱动。
+		if core.IsSnowLayer(id) {
+			if f == mesh.FacePosY {
+				return LayerSnowLayerTop
+			}
+			return LayerSnowLayerSide
+		}
 		// 24 个作物阶段（小麦/马铃薯/胡萝卜各 8）各占一层，六个面共用同一层：交叉斜面没有"朝向"可言，
 		// 而 Rust mesher 正是靠「六个面的 material 都落在植物区间」认出植物格的。
 		if core.IsPotato(id) {
@@ -652,14 +676,22 @@ const farmlandTopRaw = 14
 
 // BlockTopRaw 返回方块的 4-bit 顶面高度原值。实现 mesh.RegistryReader。
 //
-// 只有干/湿耕地返回非零（见 `farmlandTopRaw`）；其余方块——包括全部流体——
-// 返回「满格」哨兵 0。流体的 0 不只是缺省：mesher 对流体的角高度走邻域
-// 平均、对 block_top_raw 走常量，两条几何路径互斥，编码两侧的域校验同样按
-// 「`FluidHeight` 与 `BlockTopRaw` 不同时非零」拒绝（见 packages/client/mesh 的
+// 干/湿耕地返回 14（见 `farmlandTopRaw`）；雪层四档直接返回档位 1..4——第 k 档
+// raw=k、呈现高度 (raw+1)/16 = (k+1)/16，即 spec 钉的可观察厚度 2/16..5/16，
+// 档间差恒为 1/16 逐档可辨；raw=1 是短方块合法域 1..=14 的最低值，雪层是该值
+// 的第一个消费者（mesher 行为由 mesh 的雪层 native parity 测试钉住）。雪层是
+// 贴地装饰层、0 碰撞：呈现高度即档位语义，与物理碰撞解耦（耕地是两者同线，
+// 雪层是只有呈现没有碰撞）。其余方块——包括全部流体——返回「满格」哨兵 0。
+// 流体的 0 不只是缺省：mesher 对流体的角高度走邻域平均、对 block_top_raw 走
+// 常量，两条几何路径互斥，编码两侧的域校验同样按「`FluidHeight` 与
+// `BlockTopRaw` 不同时非零」拒绝（见 packages/client/mesh 的
 // `BuildRegistrySnapshot` 与 Rust 的 `RegistryView::validate`）。
 func (r *Registry) BlockTopRaw(id world.BlockID) uint8 {
 	if id == core.FarmlandDryID || id == core.FarmlandWetID {
 		return farmlandTopRaw
+	}
+	if tier, ok := core.SnowLayerTier(id); ok {
+		return tier
 	}
 	return 0
 }

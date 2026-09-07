@@ -41,6 +41,10 @@ func StepWithTunables(
 	tunables Tunables,
 ) StepResult {
 	validate(state, input)
+	// 厚雪减速在目标速度层生效（snow_slowdown.go）：先按落足格压低本步的
+	// WalkSpeed 快照，随后的 sweep bounds、ABI 编码与 Rust 积分消费的都是
+	// 同一个缩放值，权威与预测不注入第二套判定。
+	tunables = applySnowLayerSlowdown(state, input, source, tunables)
 	yawSin := float32(math.Sin(float64(input.Yaw)))
 	yawCos := float32(math.Cos(float64(input.Yaw)))
 	sweepMin, sweepMax := stepSweepBounds(state, input, tunables, yawSin, yawCos)

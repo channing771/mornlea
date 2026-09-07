@@ -42,8 +42,8 @@ func TestTorchBlockIDsAppendAfterCrops(t *testing.T) {
 		t.Fatalf("ShortGrassID = %d，必须紧随 BedHeadEastID(%d)",
 			core.ShortGrassID, core.BedHeadEastID)
 	}
-	if core.BlockIDMax != 85 {
-		t.Fatalf("BlockIDMax = %d，必须后移到 85", core.BlockIDMax)
+	if core.BlockIDMax != 89 {
+		t.Fatalf("BlockIDMax = %d，必须后移到 89（短草与四档雪层之后）", core.BlockIDMax)
 	}
 	// 形态编号两两不同：五种命中面必须解析为五个不同的方块。
 	seen := map[core.BlockID]bool{}
@@ -120,25 +120,26 @@ func TestBlockLightAttenuationExhaustiveMatrix(t *testing.T) {
 // TestBlockOpaqueExhaustiveMatrix 穷举全部已注册方块的不透明判定，判据以既有
 // internal/assets 的 Registry.Opaque 实际实现为准（迁移单一表时逐值保真，本测试
 // 就是迁移后的权威锚点）：已注册且不是空气、玻璃、树叶、流体、植物、门、火把、
-// 床的方块一律不透明。注意判据比「非 air/glass/leaves/fluid/植物」更严：门是
-// 厚度 3/16 的薄板、火把是零碰撞的发光形态、床是 9/16 半高方块，都不填满格子，
-// 同样判 false；屏障虽不可见，但现行表按普通实心立方体判 true，这里一并锁定
-// 以免迁移走样。
+// 床、雪层的方块一律不透明。注意判据比「非 air/glass/leaves/fluid/植物」更严：门是
+// 厚度 3/16 的薄板、火把是零碰撞的发光形态、床是 9/16 半高方块、雪层是 2..5 个
+// 1/16 档的贴地装饰层，都不填满格子，同样判 false；屏障虽不可见，但现行表按
+// 普通实心立方体判 true，这里一并锁定以免迁移走样。
 // core.BlockOpaque 是全仓唯一的不透明判定表：客户端注册表（internal/assets 的
 // Opaque 只做转调）与服务端夜行者的局部暗度判定都消费这里，不允许出现第二套。
 func TestBlockOpaqueExhaustiveMatrix(t *testing.T) {
 	for id := core.AirID; id < core.BlockIDMax; id++ {
 		want := core.RegisteredBlock(id) && id != core.AirID && id != core.GlassID &&
 			id != core.LeavesID && !core.IsFluid(id) && !core.IsPlant(id) && !core.IsDoor(id) &&
-			!core.IsTorch(id) && !core.IsBed(id)
+			!core.IsTorch(id) && !core.IsBed(id) && !core.IsSnowLayer(id)
 		if got := core.BlockOpaque(id); got != want {
 			t.Fatalf("BlockOpaque(%d) = %v，想要 %v", id, got, want)
 		}
 	}
-	// 关键取值点名：普通实心立方体（含干湿耕地与工作台）不透明；透明类逐类点名。
+	// 关键取值点名：普通实心立方体（含干湿耕地与工作台，以及作为对照的整块雪）
+	// 不透明；透明类逐类点名。
 	for _, id := range []core.BlockID{
 		core.StoneID, core.BedrockID, core.FarmlandDryID, core.FarmlandWetID,
-		core.WorkbenchID, core.BarrierID, core.LightBlockID,
+		core.WorkbenchID, core.BarrierID, core.LightBlockID, core.SnowBlockID,
 	} {
 		if !core.BlockOpaque(id) {
 			t.Fatalf("BlockOpaque(%d) = false，普通实心立方体必须不透明", id)
@@ -150,6 +151,7 @@ func TestBlockOpaqueExhaustiveMatrix(t *testing.T) {
 		core.DoorLowerSouthClosed, core.DoorUpper,
 		core.TorchStandingID, core.TorchWallNegZID,
 		core.BedFootSouthID, core.BedHeadEastID,
+		core.SnowLayer1BlockID, core.SnowLayer4BlockID,
 	} {
 		if core.BlockOpaque(id) {
 			t.Fatalf("BlockOpaque(%d) = true，透明类方块不得判为不透明", id)

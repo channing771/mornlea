@@ -491,6 +491,13 @@ func (tick *TickContext) SettleTramples() {
 	tick.engine.settleTramples(tick.mutation)
 }
 
+// SettleSnowFootprints 提交本 tick 收集的雪层脚印。与 `SettleTramples` 同一
+// 写入区（订阅收敛之后、随机 tick 之前）：玩家侧候选来自物理阶段、被动牛侧
+// 来自被动阶段，两类实体都在这里汇合结算。
+func (tick *TickContext) SettleSnowFootprints() {
+	tick.engine.settleSnowFootprints(tick.mutation)
+}
+
 // FinishWorld 结算容器、采掘与工作台生命周期；realm 的支撑复核由 runtime 编排。
 func (tick *TickContext) FinishWorld(result *TickResult) {
 	engine := &tick.engine

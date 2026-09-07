@@ -140,9 +140,9 @@ func (v companionChunkView) revisionAt(chunkX, chunkZ int32) uint64 {
 	return v.revisions[(chunkZ-v.origin.Z)*3+(chunkX-v.origin.X)]
 }
 
-// productionCompanionPassableBlocks 返回寻路阻挡表的生产映射：空气、植物与
-// 火把五形态可通过，其余一切注册方块阻挡。除流体外，该判定与 collision
-// oracle（physics.BlockCollisionBoxes）逐一对齐——零碰撞体的编号可通过，其余
+// productionCompanionPassableBlocks 返回寻路阻挡表的生产映射：空气、植物、
+// 火把五形态与雪层四档可通过，其余一切注册方块阻挡。除流体外，该判定与
+// collision oracle（physics.BlockCollisionBoxes）逐一对齐——零碰撞体的编号可通过，其余
 // 非空气方块都有碰撞体故阻挡（玻璃、树叶与顶面低 1/16 的耕地都不例外，耕地有
 // 碰撞体正意味着伙伴可以站在农田上）；未注册编号由 NewPathBlockTable 缺省视为
 // 阻挡。
@@ -152,7 +152,11 @@ func (v companionChunkView) revisionAt(chunkX, chunkZ int32) uint64 {
 // 来」，而穿过一株小麦或一枚火把对伙伴没有任何后续状态（不下沉、不扣氧气、
 // 不受伤），把作物当墙只会让伙伴绕开自家农田，或者在农田中央被自己种的小麦
 // 困住；火把与玩家可放置的语义同源（玩家零碰撞可穿行，伙伴寻路同样穿行），
-// 且火把零碰撞即不可支撑，不会出现伙伴踩着悬空火把行走的路径。
+// 且火把零碰撞即不可支撑，不会出现伙伴踩着悬空火把行走的路径。雪层四档是
+// 贴地装饰层，与植物同语义照章放行：零碰撞、无后续状态（穿行不触发任何结算，
+// 削档是权威 tick 里踩踏脚印的机制，不是寻路的副作用）、不可支撑（全档无
+// 碰撞体，实体由下方承载方块支撑，脚部占据雪层格——把雪格当墙只会让伙伴在
+// 积雪地表上无路可走）。
 //
 // 流体是刻意的例外：它在 oracle 下是零碰撞体（实体可自由穿行），却仍在本表里
 // 阻挡。原因是伙伴尚无浮力、屏息或溺水处理，把水面纳入路径会让它走进水里沉底
@@ -173,12 +177,12 @@ func (v companionChunkView) revisionAt(chunkX, chunkZ int32) uint64 {
 //
 // 本表与 TestCompanionManagerPathBlockTableMatchesCollisionOracle 里的豁免
 // 分支是同一条决定的两半，必须同进同出；那里写着同样的两条退出条件。该 oracle
-// 测试逐编号比对「可通过 ⇔ 零碰撞体」，零碰撞编号（作物、火把）漏登本表或
-// 有碰撞编号误入本表都会在那里红掉。
+// 测试逐编号比对「可通过 ⇔ 零碰撞体」，零碰撞编号（作物、火把、雪层）漏登本表
+// 或有碰撞编号误入本表都会在那里红掉。
 func productionCompanionPassableBlocks() map[core.BlockID]bool {
 	passable := map[core.BlockID]bool{core.AirID: true}
 	for id := core.AirID; id < core.BlockIDMax; id++ {
-		if core.IsPlant(id) {
+		if core.IsPlant(id) || core.IsSnowLayer(id) {
 			passable[id] = true
 		}
 	}

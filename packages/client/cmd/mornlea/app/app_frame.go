@@ -332,10 +332,18 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	if err := validateViewmodelInstanceCount(a.viewmodelStream); err != nil {
 		return false, fmt.Errorf("准备第一人称双手: %w", err)
 	}
-	// 降水：位置是（序号，权威 tick）的纯函数、无跨帧状态，晴天两段恒为空
-	// （帧字节与天气引入前逐位一致）；雨/雷暴形态由共享温度公式按粒子高度
-	// 本地求值（yearPhase/effPhase 与昼夜曲线同源）。
+	// 降水与踢雪尘共用 precip 实例流：降水位置是（序号，权威 tick）的纯函数、
+	// 无跨帧状态，雨天恒占满 256 槽；雨/雷暴形态由共享温度公式按粒子高度本地
+	// 求值（yearPhase/effPhase 与昼夜曲线同源）。晴天降水段为空，但踢雪尘仍可
+	// 并入（雪层在放晴后仍存留，疾跑/落地照常扬尘）——实例流非空即由 precip
+	// pass 绘制，与天气状态段（晴天恒空）互不牵连。踢雪尘与降水共享 256 预算，
+	// 超限让位（见 `AppendSnowKickInstances`）；全景相位无本地玩家，恒零输入。
+	snowKick := a.frameSnowKick
+	if vista != nil {
+		snowKick = render.SnowKickInput{}
+	}
 	a.weatherStream = a.entityEncoder.EncodeWeatherInstances(a.weatherStream, cam.Pos, cam.Yaw, a.serverTick, weather, yearPhase, effPhase)
+	a.weatherStream = a.entityEncoder.AppendSnowKickInstances(a.weatherStream, a.serverTick, snowKick)
 	a.weatherState = render.EncodeWeatherState(a.weatherState, weather)
 
 	right := mgl32.Vec3{

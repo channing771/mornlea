@@ -82,13 +82,12 @@ func TestCueWaterSplashSynthesisProperty(t *testing.T) {
 	}
 }
 
-// TestCueCombatHitPCM 锁定命中确认提示音的固定参数与波形。
+// TestCueCombatHitPCM 锁定命中确认提示音的固定参数与波形。cueCount 的尾部
+// 钉子随枚举扩展移交最新 cue 的测试（当前是 `CueSnowStep` 的
+// TestCueSnowStepSynthesisProperty），这里只锁它在 CueWaterSplash 之后的稳定位次。
 func TestCueCombatHitPCM(t *testing.T) {
 	if CueCombatHit != CueWaterSplash+1 {
 		t.Fatalf("CueCombatHit = %d, want %d", CueCombatHit, CueWaterSplash+1)
-	}
-	if cueCount != CueCombatHit+1 {
-		t.Fatalf("cueCount = %d, want %d", cueCount, CueCombatHit+1)
 	}
 	spec := cueSpecs[CueCombatHit]
 	if spec.samples != 1323 || spec.startHz != 520 || spec.endHz != 180 || spec.amplitude != 10500 {

@@ -32,6 +32,9 @@ var blockDisplayNames = [...]string{
 	"床尾_南", "床尾_西", "床尾_北", "床尾_东",
 	"床头_南", "床头_西", "床头_北", "床头_东",
 	"短草",
+	// 四档雪层紧随短草追加，显示名同步补齐，否则 RegisteredBlock 扩容后
+	// BlockDisplayName 会索引越界 panic。
+	"雪层1档", "雪层2档", "雪层3档", "雪层4档",
 }
 
 // BlockDisplayName 返回已注册方块的中文显示名。

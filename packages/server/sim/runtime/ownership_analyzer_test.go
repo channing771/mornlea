@@ -61,6 +61,7 @@ const (
 	stageAdvanceHostiles
 	stageSettleGameplay
 	stageSettleTramples
+	stageSettleSnowFootprints
 	stageFinishWorld
 	stagePublish
 	stageAdvanceFluids
@@ -78,6 +79,7 @@ const completeOwnershipStageMask = stageApplyPlayerCommands |
 	stageAdvanceHostiles |
 	stageSettleGameplay |
 	stageSettleTramples |
+	stageSettleSnowFootprints |
 	stageFinishWorld |
 	stagePublish |
 	stageAdvanceFluids |
@@ -95,6 +97,7 @@ var ownershipStageByCall = map[string]uint64{
 	"AdvanceHostiles":            stageAdvanceHostiles,
 	"SettleGameplay":             stageSettleGameplay,
 	"SettleTramples":             stageSettleTramples,
+	"SettleSnowFootprints":       stageSettleSnowFootprints,
 	"FinishWorld":                stageFinishWorld,
 	"Publish":                    stagePublish,
 	"AdvanceFluids":              stageAdvanceFluids,

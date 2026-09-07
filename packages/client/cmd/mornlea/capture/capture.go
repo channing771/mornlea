@@ -107,8 +107,9 @@ func captureSettled(stats client.MesherStats, pending, lodBusy, vistaPending int
 // 之间），属 spec/brief 硬性例外；`mining-crack-early` 与 `mining-crack-heavy`
 // 同为表中部插入（紧随 water-surface-slope），顺序由 visual-verification
 // delta 的顺序 MUST 条款固定；`rain-noon` 与双机位 `camera-third-back/front`
-// 同为表中部插入（紧随 mining-crack-heavy、先于 main-menu），顺序由展示
-// change 的顺序约定固定。
+// 同为表中部插入（紧随 mining-crack-heavy、先于 main-menu），`snow-cover`
+// 紧随 camera-third-front、先于 main-menu，顺序由 visual-verification 的
+// 顺序 MUST 条款固定。
 var captureScenes = []captureScene{
 	{
 		Name:         "terrain-noon",
@@ -545,6 +546,24 @@ var captureScenes = []captureScene{
 		WarmupFrames: 8,
 		Prepare:      prepareAvatarStage,
 		Apply:        applyCameraThirdFrontCaptureState,
+	},
+	{
+		// snow-cover 是雪层四档的无窗口冬季 capture 场景：复用橡树林种子 42 的
+		// 固定地形与机位（正午天空与日照的相位输入和既有基线逐值一致），季节钉
+		// 冬中（Winter/128 + 昼弧 9454 的相位补偿，季节化相位仍恰 6000），镜头
+		// 前按 z 分区预铺 1..4 档雪层（相邻带边界形成 1/16 格顶面高差对比），再
+		// 注入固定雨天——冬季低地温度 ≤ 雪点，降水形态按共享温度公式逐粒派生为
+		// 全雪，天空带冬季冷色 tint。夹具与注入细节见 capture_snow_cover.go。
+		//
+		// 排序约束：紧随 camera-third-front、先于 main-menu（spec
+		// visual-verification「雪景场景入册」），由
+		// TestRainNoonAndCameraThirdCaptureScenePositions 兜底。注入的雨天（呈现
+		// 侧）由后继菜单场景的公共清场复位为晴天，冬季钉由抓帧管线的分点默认
+		// 锚复位，均不泄入后续场景。
+		Name:         "snow-cover",
+		WarmupFrames: 8,
+		Prepare:      prepareSnowCover,
+		Apply:        applySnowCoverCaptureState,
 	},
 	{
 		// main-menu 是主菜单相位的无窗口 capture 场景：底图由 menu-vista

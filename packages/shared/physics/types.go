@@ -145,13 +145,14 @@ func PlayerBounds(position mgl32.Vec3) core.AABB {
 }
 
 // BlockCollisionBoxes 返回当前方块的局部碰撞体。
-// 流体（core.IsFluid）、植物（core.IsPlant）、火把（core.IsTorch 五形态）与空气
-// 同形状——已加载但零碰撞体：spec Requirement「流体方块编码」要求流体 MUST NOT
-// 提供碰撞体，Requirement「作物不提供碰撞体，耕地略低于满方块」对作物提出同一
-// 要求，可放置火把的需求同样写死五形态零碰撞，实体必须能自由穿行。零碰撞不
-// 豁免瞄准：火把仍是交互射线的合法命中目标，那由射线的目标谓词决定，与碰撞表
-// 无关。耕地（core.IsFarmland）是首个非满立方体碰撞：单盒，顶面压到
-// farmlandCollisionHeight。
+// 流体（core.IsFluid）、植物（core.IsPlant）、火把（core.IsTorch 五形态）、
+// 雪层（core.IsSnowLayer 四档）与空气同形状——已加载但零碰撞体：spec Requirement
+// 「流体方块编码」要求流体 MUST NOT 提供碰撞体，Requirement「作物不提供碰撞
+// 体，耕地略低于满方块」对作物提出同一要求，可放置火把的需求同样写死五形态
+// 零碰撞，雪层是贴地装饰层（厚度 2..5 个 1/16 档），实体必须能自由穿行并由
+// 下方承载方块支撑。零碰撞不豁免瞄准：火把与雪层仍是交互射线的合法命中目标，
+// 那由射线的目标谓词决定，与碰撞表无关。耕地（core.IsFarmland）是首个非满
+// 立方体碰撞：单盒，顶面压到 farmlandCollisionHeight。
 //
 // 门是第二类非满碰撞：关闭时厚 3/16 贴方向边，开启时旋转 90° 薄边；上半无方向，
 // 按空气处理（下半已阻挡时上半无需再阻挡，也避免双格厚度叠加）。
@@ -168,7 +169,8 @@ func BlockCollisionBoxes(id core.BlockID, loaded bool) CollisionBoxSet {
 	if !loaded {
 		return CollisionBoxSet{}
 	}
-	if id == core.AirID || core.IsFluid(id) || core.IsPlant(id) || core.IsTorch(id) {
+	if id == core.AirID || core.IsFluid(id) || core.IsPlant(id) || core.IsTorch(id) ||
+		core.IsSnowLayer(id) {
 		return CollisionBoxSet{Loaded: true}
 	}
 	// 床碰撞：床尾/床头同形，单盒半高、水平占满。

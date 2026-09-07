@@ -7,7 +7,7 @@ import (
 
 func TestOriginalHumanFaceLayers(t *testing.T) {
 	r := NewRegistry()
-	if r.LayerCount() != 160 {
+	if r.LayerCount() != 162 {
 		t.Fatalf("人物分面层缺失: %d", r.LayerCount())
 	}
 	for _, base := range []int{112, 136} {

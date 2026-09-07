@@ -30,12 +30,12 @@ func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 		"materials-showcase",
 		"target-block-feedback", "grass-closeup", "oak-grove", "ai-companion", "sword-combat",
 		"hostile-mob", "passive-herd", "passive-graze", "water-surface-slope", "mining-crack-early", "mining-crack-heavy",
-		"rain-noon", "camera-third-back", "camera-third-front",
+		"rain-noon", "camera-third-back", "camera-third-front", "snow-cover",
 		"main-menu", "settings-menu", "avatar-detail",
 		"far-horizon", "water-underwater",
 	}
-	if len(captureScenes) != 27 {
-		t.Fatalf("正式场景数=%d，想要 27", len(captureScenes))
+	if len(captureScenes) != 28 {
+		t.Fatalf("正式场景数=%d，想要 28", len(captureScenes))
 	}
 	gotNames := make([]string, len(captureScenes))
 	for index, scene := range captureScenes {
@@ -135,10 +135,11 @@ func TestTorchNightCaptureScenePosition(t *testing.T) {
 	}
 }
 
-// TestRainNoonAndCameraThirdCaptureScenePositions 锁住新增三景的表内位置：
-// 依次紧随 mining-crack-heavy、先于 main-menu（三景相对顺序固定），既有
-// 相邻链 mining-crack-heavy→main-menu 被三景展开，其余相对顺序不变。
-// far-horizon 倒数第二、water-underwater 唯一末位的不变量随插入保持。
+// TestRainNoonAndCameraThirdCaptureScenePositions 锁住展示三景与雪景的表内位置：
+// rain-noon/双机位依次紧随 mining-crack-heavy，snow-cover 紧随 camera-third-front
+// 且先于 main-menu（spec visual-verification「雪景场景入册」），既有相邻链被
+// 两批插入展开，其余相对顺序不变。far-horizon 倒数第二、water-underwater 唯一
+// 末位的不变量随插入保持。
 func TestRainNoonAndCameraThirdCaptureScenePositions(t *testing.T) {
 	indexOf := func(name string) int {
 		for index, scene := range captureScenes {
@@ -153,12 +154,17 @@ func TestRainNoonAndCameraThirdCaptureScenePositions(t *testing.T) {
 	rain := indexOf("rain-noon")
 	back := indexOf("camera-third-back")
 	front := indexOf("camera-third-front")
+	snow := indexOf("snow-cover")
 	menu := indexOf("main-menu")
-	if rain != heavy+1 || back != heavy+2 || front != heavy+3 || menu != heavy+4 {
-		t.Fatalf("新增三景必须依次插在 mining-crack-heavy=%d 之后、main-menu 之前：rain=%d back=%d front=%d menu=%d",
-			heavy, rain, back, front, menu)
+	if rain != heavy+1 || back != heavy+2 || front != heavy+3 {
+		t.Fatalf("展示三景必须依次插在 mining-crack-heavy=%d 之后：rain=%d back=%d front=%d",
+			heavy, rain, back, front)
 	}
-	for _, name := range []string{"rain-noon", "camera-third-back", "camera-third-front"} {
+	if snow != front+1 || menu != front+2 {
+		t.Fatalf("snow-cover=%d 必须紧随 camera-third-front=%d，main-menu=%d 必须紧随其后",
+			snow, front, menu)
+	}
+	for _, name := range []string{"rain-noon", "camera-third-back", "camera-third-front", "snow-cover"} {
 		scene := captureSceneByName(t, name)
 		if scene.Prepare == nil || scene.Apply == nil || scene.WarmupFrames != 8 {
 			t.Fatalf("%s 场景不完整: %+v", name, scene)

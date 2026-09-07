@@ -377,7 +377,7 @@ func TestNativeOracleParityFarmlandTopSink(t *testing.T) {
 	}
 
 	// 防空转守卫：若整段输出里根本没有非零角高度的 quad，上面的顶面断言
-	// 就是恒真的空转（例如 block_top_raw 在编码层整体丢失时）。
+	// 就是恒真的空转（例如 block_top_raw 在编码层丢失时）。
 	cornered := 0
 	for _, quad := range quads {
 		if quad.Corners != ([4]uint8{}) {
@@ -386,5 +386,76 @@ func TestNativeOracleParityFarmlandTopSink(t *testing.T) {
 	}
 	if cornered == 0 {
 		t.Fatal("没有任何携带角高度的 quad：block_top_raw 通道整体缺失")
+	}
+}
+
+// TestNativeOracleParitySnowLayerTiers 覆盖雪层四档（registry block_top_raw
+// 逐档 1..4）的跨语言一致性：呈现高度 (raw+1)/16 = 2/16..5/16，与 spec 钉的
+// 可观察高度逐档对齐。raw=1 是短方块合法域 1..=14 的最低值、雪层是它的第一
+// 个消费者（耕地先例只用过 14），本测试同时证明 mesher 对最低值正常工作。
+//
+// 夹具放四组几何：三块孤立雪层（1..3 档各一）钉「顶面四角 + 侧面上缘 +
+// 底面不动」，一对水平相邻 4 档雪层钉「不贪心合并」。一致性断言守端到端
+// 编码事实，行为由形状守卫承重（与耕地 parity 同形）。
+func TestNativeOracleParitySnowLayerTiers(t *testing.T) {
+	registry := assets.NewRegistry()
+	center := world.NewSection()
+	center.Blocks.Set(8, 8, 8, core.SnowLayer1BlockID)
+	center.Blocks.Set(4, 8, 4, core.SnowLayer2BlockID)
+	center.Blocks.Set(11, 8, 11, core.SnowLayer3BlockID)
+	// 相邻对：共享侧面因雪层透明剔除不出面，顶面各自 1×1 不合并。
+	center.Blocks.Set(2, 8, 8, core.SnowLayer4BlockID)
+	center.Blocks.Set(3, 8, 8, core.SnowLayer4BlockID)
+	n := solidNeighbors(center)
+
+	quads := assertNativeOracleParity(t, n, registry)
+
+	// 每档顶面常量角恰好等于档位：1..3 档各 1 条、4 档相邻对 2 条，全部 1×1。
+	topsByRaw := map[uint8]int{}
+	for _, quad := range quads {
+		if quad.Face != mesh.FacePosY {
+			continue
+		}
+		raw := quad.Corners[0]
+		constant := quad.Corners == [4]uint8{raw, raw, raw, raw} && raw >= 1 && raw <= 4
+		if !constant {
+			continue
+		}
+		if quad.W != 1 || quad.H != 1 {
+			t.Fatalf("雪层顶面 %+v 被贪心合并成 %dx%d", quad, quad.W, quad.H)
+		}
+		topsByRaw[raw]++
+	}
+	for raw := uint8(1); raw <= 3; raw++ {
+		if topsByRaw[raw] != 1 {
+			t.Fatalf("raw=%d 的雪层顶面 = %d 条，想要恰好 1", raw, topsByRaw[raw])
+		}
+	}
+	if topsByRaw[4] != 2 {
+		t.Fatalf("raw=4 的雪层顶面 = %d 条，想要相邻对恰好 2（不贪心合并）", topsByRaw[4])
+	}
+
+	// 孤立 1 档雪层（raw=1，短方块域最低值）的侧面上缘两角下沉到 1、底面
+	// 保持整格：与耕地逐面同形的守卫，钉住最低值下「上缘沉、下缘不动」。
+	for _, tc := range []struct {
+		face mesh.Face
+		want [4]uint8
+	}{
+		{mesh.FaceNegX, [4]uint8{0, 1, 1, 0}},
+		{mesh.FaceNegZ, [4]uint8{0, 0, 1, 1}},
+		{mesh.FaceNegY, [4]uint8{}},
+	} {
+		found := false
+		for _, quad := range quads {
+			if quad.Face == tc.face && quad.X == 8 && quad.Y == 8 && quad.Z == 8 {
+				found = true
+				if quad.Corners != tc.want {
+					t.Fatalf("1 档雪层 %v 面 corners=%v，想要 %v", tc.face, quad.Corners, tc.want)
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("孤立 1 档雪层缺少 %v 面", tc.face)
+		}
 	}
 }

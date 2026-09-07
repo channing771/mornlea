@@ -78,6 +78,15 @@ func (source dimensionCollisionSource) CollisionBoxes(
 	return physics.BlockCollisionBoxes(block, ready)
 }
 
+// BlockIDAt 让权威维度充当 physics.FootBlockSource：厚雪减速的落足格采样规则
+// 全部在两侧共用的 physics.Step 里（snow_slowdown.go），这里只交付「这一格是
+// 什么方块」这一份视图，与客户端 MirrorCollisionSource 的同名方法逐条对应。
+// Dimension.BlockAt 已带齐语义：未就绪的区块返回 false（权威侧宁可漏判也不
+// 能凭空造雪），超出世界高度的格视为空气。
+func (source dimensionCollisionSource) BlockIDAt(position core.BlockPos) (core.BlockID, bool) {
+	return source.dimension.BlockAt(position)
+}
+
 // IsFluidAt 让权威维度充当 physics.FluidSource：浸没判定的规则全部在
 // physics.SubmersionFlags 里，这里只交付「这一格是不是流体」这一份方块视图，
 // 与客户端 Mirror 的同名方法逐条对应。未就绪的区块返回 false——权威侧宁可

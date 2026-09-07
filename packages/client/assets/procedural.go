@@ -552,6 +552,31 @@ func snowSideTexture() []byte {
 	return px
 }
 
+// snowLayerTopTexture 是四档雪层共用的新雪顶面：与 snowTopTexture 同族的雪白
+// 噪点，但用独立 salt 与高光点位——新落的层雪比整块雪略带细碎闪点，且两层
+// 必须逐像素可区分（材质层独立是登记契约）。
+func snowLayerTopTexture() []byte {
+	px := noisyTexture(rgb{R: 245, G: 247, B: 246}, 4, 0x6C21)
+	for _, point := range [][2]int{{1, 2}, {5, 6}, {9, 3}, {12, 8}, {3, 12}, {14, 13}} {
+		paint(px, point[0], point[1], rgb{R: 255, G: 255, B: 255})
+	}
+	for _, point := range [][2]int{{7, 10}, {11, 14}} {
+		paint(px, point[0], point[1], rgb{R: 236, G: 240, B: 240})
+	}
+	return px
+}
+
+// snowLayerSideTexture 是四档雪层共用的侧面：比雪块侧面更浅的冷白横纹（层雪
+// 分层堆积的层理感），同样以独立 salt 保证逐像素独立。
+func snowLayerSideTexture() []byte {
+	px := noisyTexture(rgb{R: 222, G: 232, B: 238}, 4, 0x6C25)
+	for x := 0; x < texSize; x++ {
+		paint(px, x, 4, rgb{R: 208, G: 222, B: 232})
+		paint(px, x, 10, rgb{R: 212, G: 226, B: 234})
+	}
+	return px
+}
+
 func mossyCobblestoneTexture() []byte {
 	px := cobblestoneTexture()
 	for y := 0; y < texSize; y++ {

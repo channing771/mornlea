@@ -21,13 +21,17 @@ import (
 // bursts 是破碎 burst 的跨帧跟踪表:调用方每帧以与掉落物同样的输入
 // (serverTick + drops)驱动,状态在编码器内跨帧存续,会话重置时经
 // `ResetBursts` 清空。falls 是掉落物下落的首现 tick 表:同输入驱动,
-// 会话重置时经 `ResetFalls` 清空。
+// 会话重置时经 `ResetFalls` 清空。snowKicks 是踢雪尘的事件锚点:由调用方
+// 每帧传入本地派生的 `SnowKickInput` 驱动,会话重置时经 `ResetSnowKicks`
+// 清空。
 type InstanceEncoder struct {
 	ordered    []Avatar
 	parts      []avatarPart
 	bursts     BreakBursts
 	falls      DropFalls
 	burstBytes []byte
+	kickBytes  []byte
+	snowKicks  SnowKicks
 	// tracks 是摆动速度估计与行进距离累积的呈现位置差分历史：键为实体键，
 	// 值为上次编码的位置/tick/速度/距离；每帧只保留本帧出现的键，有界于单帧
 	// 身体数。
@@ -178,6 +182,34 @@ func (e *InstanceEncoder) EncodeWeatherInstances(dst []byte, cam mgl32.Vec3, yaw
 	dst = growEncodeBuffer(dst, len(e.parts)*avatarInstanceBytes)
 	encodeAvatarPartsInto(dst, e.parts)
 	return dst
+}
+
+// AppendSnowKickInstances 把踢雪尘并入降水实例段：与 `EncodeWeatherInstances`
+// 之后首尾相接，调用方传同一份 serverTick 与本地派生的踢雪驱动输入。降水段
+// 与踢雪尘共享 `WeatherMaxParticles`（256）固定预算——超限时踢雪尘整组让位
+// 降水粒子（雨/雷暴恒占满 256 槽，踢雪尘只在预算尚余时并入），总实例数恒不
+// 超限，超限帧会被 Rust 侧 precip pass 整帧拒绝。dst 会被重置复用，稳定帧
+// 零分配。
+func (e *InstanceEncoder) AppendSnowKickInstances(dst []byte, serverTick uint64, input SnowKickInput) []byte {
+	e.parts = e.snowKicks.BuildParts(e.parts[:0], serverTick, input)
+	budget := WeatherMaxParticles*avatarInstanceBytes - len(dst)
+	if budget < 0 {
+		budget = 0
+	}
+	keep := len(e.parts)
+	if max := budget / avatarInstanceBytes; keep > max {
+		keep = max
+	}
+	tail := e.parts[len(e.parts)-keep:]
+	e.kickBytes = growEncodeBuffer(e.kickBytes, len(tail)*avatarInstanceBytes)
+	encodeAvatarPartsInto(e.kickBytes, tail)
+	return append(dst, e.kickBytes...)
+}
+
+// ResetSnowKicks 清空踢雪尘的事件锚点：会话重置与场景切换后旧锚点不得在新
+// 会话首帧继续老化出扬尘。
+func (e *InstanceEncoder) ResetSnowKicks() {
+	e.snowKicks.Reset()
 }
 
 // EncodeBlockOutlineInstances 把目标方块轮廓编码为 12×96 字节实例流;

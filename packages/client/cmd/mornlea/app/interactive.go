@@ -497,6 +497,7 @@ func (a *Application) applyInteractiveInput(
 		// 疾跑键按住即上行意图，门控在服务端/预测侧（饥饿≥6/地面/前移/非浸没）统一判定。
 		Sprinting: allowActions && a.window != nil && (a.window.KeyDown(client.KeyLeftControl) || a.window.KeyDown(client.KeyLeftShift)),
 	}
+	before, _ := a.predictor.State()
 	if err := a.predictor.Advance(
 		elapsed,
 		control,
@@ -506,6 +507,10 @@ func (a *Application) applyInteractiveInput(
 	); err != nil {
 		slog.Warn("推进玩家预测失败", "error", err)
 	}
+	// 踩雪音效与踢雪尘在本地预测推进后就地观测（app_snow.go）：读一次落足格，
+	// 步频出声、事件沿写入本帧踢雪输入，供随后的 `RenderFrame` 装配消费。
+	after, _ := a.predictor.State()
+	a.observeSnowFeedback(before, after, control)
 	if feet, ok := a.predictor.PresentationPosition(elapsed); ok {
 		// 相机视线高度必须与服务端交互射线原点使用同一份参数，否则玩家瞄准的方块
 		// 与服务端判定的方块不是同一个。

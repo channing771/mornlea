@@ -118,6 +118,7 @@ func (a *Application) ResetEntityPresentation() {
 	a.entityEncoder.ResetLocomotion()
 	a.entityEncoder.ResetBursts()
 	a.entityEncoder.ResetFalls()
+	a.entityEncoder.ResetSnowKicks()
 }
 
 // RemoteNameTags 返回名牌批次缓冲。

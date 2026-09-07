@@ -38,6 +38,7 @@ type State struct {
 	hostileLight           *blockLightScratch
 	subscriptionsDirty     bool
 	tramplePending         []tramplePendingCell
+	snowFootprintPending   []snowFootprintCell
 	dropKeySeen            map[core.ChunkKey]struct{}
 	dropKeyScratch         []core.ChunkKey
 	containerViewerScratch []SessionID
