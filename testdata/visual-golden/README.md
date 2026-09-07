@@ -2,13 +2,13 @@
 
 本目录统一存放视觉回归基线，均为测试夹具二进制。
 
-- `world/`：无窗口世界场景基线 27 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
+- `world/`：无窗口世界场景基线 28 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
 - `motion/`：过程 GIF 基线 11 个（被动牛 4 剧本 + motion 演示 7 个），只验呈现、不进比对，对应 `cmd/mornlea/capture/passive_death_scripts.go` 的 `passiveDeathGIFScripts` 与各 motion 演示入口（按 tick 步进抓帧，标准库 `image/gif` 编码）。
 - `ui/`：前端 UI 部件基线 30 张，对应 `packages/engine/crates/mornlea_client/frontend/visual/fixture-names.ts` 的 `fixtureNames`。
 
 旧目录 `cmd/mornlea/capture/testdata/golden/` 与 `engine/crates/mornlea_client/frontend/visual/golden/` 已清空，仅剩空目录，不再写入。
 
-## world（27 张）
+## world（28 张）
 
 文件名即场景名加 `.png` 后缀，场景定义与顺序以 `captureScenes` 为准。
 
@@ -36,6 +36,7 @@
 | `rain-noon.png` | `rain-noon` | 夏至正午雨天固定夹具（相位补偿后显示相位恰 6000，天空与日照和分点基线逐字节一致）：雨粒子、灰天空与压暗后的露天亮度同框；降水形态由温度公式逐粒派生，入画全为雨形。 |
 | `camera-third-back.png` | `camera-third-back` | 同一机位第三人称背面：自身身体可见、无 viewmodel，背部可辨。 |
 | `camera-third-front.png` | `camera-third-front` | 同一机位第三人称正面：自身身体可见、无 viewmodel，脸部可辨。 |
+| `snow-cover.png` | `snow-cover` | 冬中正午雪景固定夹具（Winter/128 + 昼弧 9454 相位补偿，季节化相位恰 6000）：镜头前 1..4 档预铺雪层的分区高差、雪形降水粒子与冬季冷色天空 tint 同框；降水形态由温度公式逐粒派生，入画全为雪。 |
 | `main-menu.png` | `main-menu` | 主菜单相位全景底图，固定自转时刻的纯全景世界画面。 |
 | `settings-menu.png` | `settings-menu` | 设置相位全景底图，同一全景世界的另一自转时刻。 |
 | `avatar-detail.png` | `avatar-detail` | 原创旅人正面、侧面和背面同框，验收服装材质与静态轮廓。 |
@@ -83,7 +84,7 @@
 
 motion 过程 GIF 只验呈现、不进比对：`make visual-check` 只比对 `world/` PNG
 （GIF 剧本不设阈值也不进比对；纯比对运行缺省不生成，`GIFS=1` 显式请求或
-更新基线时才生成），`world/` 的 27 张 PNG 纪律也不含它。
+更新基线时才生成），`world/` 的 28 张 PNG 纪律也不含它。
 
 | 演示文件 | 场景 | 帧数/时长 | 生成入口 |
 |---|---|---|---|
