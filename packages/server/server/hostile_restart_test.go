@@ -16,9 +16,12 @@ import (
 // 运行内路径按当前世界重算、关服屏障写入最新权威快照、第二段启动恢复与第
 // 一段落盘逐字段一致（重启不清怪）。
 
-// hostileRestartNightTicks 把世界时间钉在夜间相位（13000..23000）：灼烧静默，
-// 运行内状态漂移只来自追逐与（视野内的）夜间生成，边界比对保持确定性。
-const hostileRestartNightTicks = uint64(13000)
+// hostileRestartNightTicks 把世界时间钉在夜间相位：灼烧静默，运行内状态漂移
+// 只来自追逐与（视野内的）夜间生成，边界比对保持确定性。季节 warp 后夜间窗
+// 在季节化相位域上判定，未季节化的 13000 不再是全天候夜窗起点（seed 42 在该
+// 时刻昼弧 >12000，季节化相位仍是白昼）；线性相位 18000 在昼弧全值域
+// 8400..15600 下都映射进夜窗（15428..19384），是跨季节稳定的夜间锚。
+const hostileRestartNightTicks = uint64(18000)
 
 // hostileRestartChaserID 是种子中带目标的夜行者：恢复后首个到期 tick 重规划。
 const hostileRestartChaserID = uint64(3)

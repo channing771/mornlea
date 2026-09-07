@@ -12,7 +12,8 @@ import (
 // `internal/storage` 存档 codec 的同值常量保持同源，任何一侧单独调整都必须
 // 同步另一侧。
 const (
-	// 夜间生成窗口（显示相位，含端点）：经 `core.DisplayDayPhase` 折算。
+	// 夜间生成窗口（季节化显示相位，含端点）：经 `core.EffectiveDayPhaseAt`
+	// 折算——昼夜弧随季节伸缩，冬季夜窗在线性相位上更早开始。
 	hostileSpawnPhaseStart = 13000
 	hostileSpawnPhaseEnd   = 23000
 	// 候选到锚点玩家的水平距离窗（含端点）。
@@ -62,7 +63,7 @@ func hostileCandidateHash(seed int64, tick uint64, x, y, z int32) uint64 {
 // 为生成触发同步加载。
 func (engine *engineContext) advanceHostileSpawn() {
 	now := engine.worldTime.Load()
-	phase := core.DisplayDayPhase(now, engine.DayPhaseOffset())
+	phase := core.EffectiveDayPhaseAt(now, engine.DayPhaseOffset(), engine.seasonOffset)
 	if phase < hostileSpawnPhaseStart || phase > hostileSpawnPhaseEnd {
 		return
 	}

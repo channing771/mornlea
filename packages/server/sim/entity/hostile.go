@@ -312,9 +312,11 @@ func (engine *engineContext) advanceHostiles(actions []HostileAction) {
 	engine.advanceHostileMovement()
 }
 
-// phaseIsDay 报告显示相位是否为白昼：与客户端昼夜曲线（sun = sin(2πp/24000)，
-// 见 internal/render 的 `DayNightAt`）一致，太阳在地平线上（sin>0）即相位
-// 1..11999。灼烧与夜间生成共用 `core.DisplayDayPhase` 这一唯一时间源。
+// phaseIsDay 报告季节化显示相位是否为白昼：与客户端昼夜曲线（sun =
+// sin(2πp/24000)，见 internal/render 的 `DayNightAt`）一致，太阳在地平线上
+// （sin>0）即相位 1..11999——warp 把白昼弧与黑夜弧各映射到半周期，正午/午夜
+// 锚点不变。灼烧与夜间生成共用 `core.EffectiveDayPhaseAt` 这一唯一季节化时间
+// 源。
 func phaseIsDay(phase uint16) bool {
 	return phase >= 1 && phase <= 11999
 }
@@ -325,7 +327,7 @@ func phaseIsDay(phase uint16) bool {
 // 「已灼烧的累计从 0 重新开始」）。生命归零的个体由本 tick 稍后的
 // settleHostileDeaths 统一移除与掉落。
 func (engine *engineContext) advanceHostileBurn(worldTime uint64) {
-	phase := core.DisplayDayPhase(worldTime, engine.DayPhaseOffset())
+	phase := core.EffectiveDayPhaseAt(worldTime, engine.DayPhaseOffset(), engine.seasonOffset)
 	if !phaseIsDay(phase) {
 		engine.resetHostileBurnTimers()
 		return

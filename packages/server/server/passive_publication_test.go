@@ -355,8 +355,9 @@ func recordPassiveTranscript(t *testing.T, transport string) passiveTranscriptRe
 	}()
 
 	// 夜间相位抑制被动牛自发生成：录像里只有手工恢复的一头牛，spawn 必然
-	// 唯一。相位值取夜行者重启用例的同源夜间常量区间内。
-	host.world.engine.SetWorldTimeForTest(13000)
+	// 唯一。相位值取夜行者重启用例的同源夜间常量——季节 warp 后夜窗在季节
+	// 化相位域上判定，线性相位 18000 在昼弧全值域下都映射进夜窗，跨季节稳定。
+	host.world.engine.SetWorldTimeForTest(hostileRestartNightTicks)
 
 	mirror := client.NewMirror()
 	record := passiveTranscriptRecord{Ticks: make([][]string, 0, passiveParityTicks)}

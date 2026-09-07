@@ -318,3 +318,76 @@ func TestEffectiveMorningOffsetRejectsInvalidInput(t *testing.T) {
 		}
 	}
 }
+
+// TestEffectiveDayPhaseAtEquinoxIdentity 分点锚（探测 tick 的年相位恰为 0 或
+// 0.5，即 worldTime ≡ 锚 mod YearTicks）：组合入口在昼弧 12000 下对全部 offset
+// 逐值等于未 warp 的 `DisplayDayPhase`——判相位消费点在分点行为不变的算术基础。
+func TestEffectiveDayPhaseAtEquinoxIdentity(t *testing.T) {
+	maxEquinox := uint64(math.MaxUint64) - math.MaxUint64%YearTicks // ≡ 0 (mod YearTicks)
+	for _, anchor := range []uint64{0, 3 * YearTicks, 144000 + 2*YearTicks, maxEquinox} {
+		if phase := YearPhaseAt(anchor, 0); phase != 0 && math.Abs(phase-0.5) > 1e-12 {
+			t.Fatalf("前置失败：锚 %d 的年相位 %v 不是分点", anchor, phase)
+		}
+		// maxEquinox 附近再加 YearTicks 会回绕 uint64，只探自身；其余锚跨年
+		// 复查（年相位与线性相位同时保持，恒等必须跨年成立）。
+		probes := []uint64{anchor, anchor + YearTicks}
+		if anchor > maxEquinox-YearTicks {
+			probes = []uint64{anchor}
+		}
+		for _, worldTime := range probes {
+			for _, offset := range []uint16{0, 1, 12000, 23999} {
+				want := DisplayDayPhase(worldTime, offset)
+				if got := EffectiveDayPhaseAt(worldTime, offset, 0); got != want {
+					t.Fatalf("EffectiveDayPhaseAt(%d, %d, 分点) = %d，想要 %d（分点恒等）",
+						worldTime, offset, got, want)
+				}
+			}
+		}
+	}
+}
+
+// TestEffectiveDayPhaseAtSolsticeAnchors 至点锚：seasonOffset 把 worldTime=72000
+// 钉在夏至（yearPhase=0.25，昼弧 15600）。白昼支路被压缩——线性 13000（未
+// warp 语义的夜窗起点）在夏至仍是白昼（10000）；黑夜支路被拉伸——线性 15600
+// 恰为季节化黑夜起点。这组锚点能区分经/不经季节 warp 的判相位实现。
+func TestEffectiveDayPhaseAtSolsticeAnchors(t *testing.T) {
+	// seasonOffset=0 时 worldTime=72000 的年相位恰为 0.25（夏至，昼弧 15600）；
+	// 线性相位经 offset 控制且 yearIndex 固定，昼弧全程稳定。
+	const summerSolstice = uint64(SeasonLengthTicks) // 72000 ⇒ yearPhase=0.25
+	const seasonOffset = uint64(0)
+	if arc := DayArcTicks(YearPhaseAt(summerSolstice, seasonOffset)); arc != 15600 {
+		t.Fatalf("前置失败：夏至昼弧 = %d，想要 15600", arc)
+	}
+	cases := []struct {
+		worldTime uint64
+		offset    uint16
+		want      uint16
+	}{
+		{72000, 0, 0},         // 白昼始
+		{72000, 7800, 6000},   // 白昼中点（正午）仍是 6000
+		{72000, 13000, 10000}, // 线性夜窗起点在夏至仍是白昼：warp 区分锚
+		{72000, 15600, 12000}, // 季节化黑夜始
+	}
+	for _, tc := range cases {
+		if got := EffectiveDayPhaseAt(tc.worldTime, tc.offset, seasonOffset); got != tc.want {
+			t.Fatalf("EffectiveDayPhaseAt(%d, %d, 夏至) = %d，想要 %d", tc.worldTime, tc.offset, got, tc.want)
+		}
+	}
+}
+
+// TestEffectiveDayPhaseAtIsThinComposition 锁定组合入口是薄组合层而非第二个
+// warp 算式：对覆盖全年与回绕边界的采样，结果必须逐值等于
+// `EffectiveDayPhase(t, off, DayArcTicks(YearPhaseAt(t, seasonOffset)))`。
+func TestEffectiveDayPhaseAtIsThinComposition(t *testing.T) {
+	for _, seasonOffset := range []uint64{0, 1, 72000, 158435, YearTicks - 1} {
+		for _, worldTime := range []uint64{0, 1, 12999, 13000, 23999, 24000, 72000, 144000, 1 << 40, math.MaxUint64} {
+			for _, offset := range []uint16{0, 1, 6000, 23999} {
+				want := EffectiveDayPhase(worldTime, offset, DayArcTicks(YearPhaseAt(worldTime, seasonOffset)))
+				if got := EffectiveDayPhaseAt(worldTime, offset, seasonOffset); got != want {
+					t.Fatalf("EffectiveDayPhaseAt(%d, %d, %d) = %d，想要组合值 %d",
+						worldTime, offset, seasonOffset, got, want)
+				}
+			}
+		}
+	}
+}

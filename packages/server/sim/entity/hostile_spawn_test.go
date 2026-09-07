@@ -160,26 +160,72 @@ func TestHostileSpawnPicksAnchorBySortedSessionAndWorldTime(t *testing.T) {
 	assertAxisAlignedAtDistance(t, spawnedPosition(t, engine), 40, 0)
 }
 
+// tickNearEffectivePhaseWhere 在同一昼夜（线性相位 0..23999）内反查季节化相位
+// 最接近 target 且满足 keep 的时刻，返回该时刻与其季节化相位。昼弧≠12000 的
+// 季节里命中时刻的线性相位与 target 分离——用它探测可区分经/不经季节化入口的
+// 判定；warp 非满射时返回最近可命中值（与 target 差至多几个 tick）。找不到满
+// 足 keep 的时刻时 ok 为假。
+func tickNearEffectivePhaseWhere(
+	engine *Engine, target uint16, keep func(uint16) bool,
+) (tick uint64, phase uint16, ok bool) {
+	best := -1
+	for candidate := uint64(0); candidate < core.DayLengthTicks; candidate++ {
+		candidatePhase := core.EffectiveDayPhaseAt(candidate, 0, engine.seasonOffset)
+		if !keep(candidatePhase) {
+			continue
+		}
+		diff := int(candidatePhase) - int(target)
+		if diff < 0 {
+			diff = -diff
+		}
+		if best < 0 || diff < best {
+			tick, phase, best, ok = candidate, candidatePhase, diff, true
+		}
+	}
+	return tick, phase, ok
+}
+
+// tickNearEffectivePhase 反查季节化相位最接近 target 的夜窗内/夜窗外时刻，
+// 语义见 tickNearEffectivePhaseWhere。
+func tickNearEffectivePhase(engine *Engine, target uint16, wantNight bool) (uint64, uint16) {
+	tick, phase, ok := tickNearEffectivePhaseWhere(
+		engine, target, func(p uint16) bool { return core.IsDisplayNightPhase(p) == wantNight },
+	)
+	if !ok {
+		panic("测试夹具失效：昼夜内不存在满足夜窗条件的时刻")
+	}
+	return tick, phase
+}
+
 func TestHostileSpawnOnlyWithinNightWindow(t *testing.T) {
 	engine, _ := spawnTestEngine(t, 0)
 	loadSpawnArena(t, engine, -48, 48, -48, 48)
+	if arc := core.DayArcTicks(core.YearPhaseAt(13000, engine.seasonOffset)); arc == core.DayLengthTicks/2 {
+		t.Fatal("前置失败：探测时段昼弧恰为分点，探测无法区分季节 warp")
+	}
 
-	// 白昼相位与窗口外相位一律不生成（扫描覆盖大量门槛通过概率）。
-	for _, phase := range []uint64{2400, 12000, 12999, 23001, 23500} {
-		for offset := range 40 {
-			engine.worldTime.Store(phase + uint64(offset)*24000)
+	// 夜窗外的季节化相位一律不生成：探测时刻按「季节化相位最接近目标值且在
+	// 窗外」反查——seed 0 的昼弧≠12000，命中时刻的线性相位与目标值分离，其中
+	// 多个时刻的线性相位已处未季节化夜窗（未季节化判定会给出相反结果）。同一
+	// 探测值跨年复查（+YearTicks 同时保持线性相位与年相位，季节化相位稳定），
+	// 扫描覆盖大量门槛通过概率。
+	for _, target := range []uint16{0, 2400, 12000, 12999, 23001, 23500} {
+		tick, phase := tickNearEffectivePhase(engine, target, false)
+		for year := range 12 {
+			engine.worldTime.Store(tick + uint64(year)*core.YearTicks)
 			before := len(engine.hostiles.entries)
 			engine.advanceHostileSpawn()
 			if len(engine.hostiles.entries) != before {
-				t.Fatalf("显示相位 %d 生成了夜行者，想要拒绝", phase)
+				t.Fatalf("季节化相位 %d（目标 %d）生成了夜行者，想要拒绝", phase, target)
 			}
 		}
 	}
 
-	// 窗口两端（含端点）在门槛通过时必须可以生成。
-	for _, phase := range []uint64{13000, 23000} {
+	// 夜窗内（两端目标值的最近可命中相位，含端点语义）门槛通过时必须可以生成。
+	for _, target := range []uint16{13000, 23000} {
 		clearHostilesForTest(engine)
-		findSpawningTick(t, engine, phase, 24000, 600)
+		tick, _ := tickNearEffectivePhase(engine, target, true)
+		findSpawningTick(t, engine, tick, core.YearTicks, 600)
 	}
 }
 
@@ -361,12 +407,14 @@ func TestHostileSpawnRehashesConflictingID(t *testing.T) {
 
 func TestHostileSpawnReplayIsDeterministic(t *testing.T) {
 	// 相同 seed + tick 序列 + 玩家集合：两只独立引擎的生成序列（ID、位置、
-	// 身体值）必须逐项相同。
+	// 身体值）必须逐项相同。seed 42 的探测时段昼弧 >12000，夜窗探针从季节化
+	// 夜相反查起锚（跨引擎构造相同：夹具对同一 seed 的季节偏移确定性一致）。
 	run := func() []HostileMob {
 		engine, _ := spawnTestEngine(t, 42)
 		loadSpawnArena(t, engine, -48, 48, -48, 48)
+		nightStart, _ := tickNearEffectivePhase(engine, core.DisplayNightBegin, true)
 		for offset := range 240 {
-			engine.worldTime.Store(13000 + uint64(offset))
+			engine.worldTime.Store(nightStart + uint64(offset))
 			engine.advanceHostileSpawn()
 		}
 		return engine.HostileMobs()
@@ -388,12 +436,15 @@ func TestHostileSpawnReplayIsDeterministic(t *testing.T) {
 func TestHostileSpawnGateMatchesHashLowByte(t *testing.T) {
 	// 生成门槛必须钉在候选哈希的低 8 位上：生成个体的 ID 即候选哈希，因此
 	// 每次成功生成的 ID 低 8 位必须 <13（13/256 契约的可观察形态）。每观察
-	// 一次即清空集合，保证个体 ID 未经历冲突重散列。
+	// 一次即清空集合，保证个体 ID 未经历冲突重散列。seed 7 的探测时段昼弧
+	// >12000，未季节化夜窗起点 13000 在夏季仍是季节化白昼——探测序列从夜窗内
+	// 的季节化相位反查起锚。
 	engine, _ := spawnTestEngine(t, 7)
 	loadSpawnArena(t, engine, -48, 48, -48, 48)
+	nightStart, _ := tickNearEffectivePhase(engine, core.DisplayNightBegin, true)
 	spawned := 0
 	for offset := range 600 {
-		engine.worldTime.Store(13000 + uint64(offset))
+		engine.worldTime.Store(nightStart + uint64(offset))
 		engine.advanceHostileSpawn()
 		for index := range engine.hostiles.entries {
 			spawned++

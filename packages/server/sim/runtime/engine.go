@@ -165,12 +165,6 @@ func (engine *Engine) RestoreDayPhaseOffset(offset uint16) {
 	engine.dayPhaseOffset.Store(uint64(offset))
 }
 
-// displayDayPhase 返回当前权威视角下的显示相位：绝对时间与偏移都只经
-// `core.DisplayDayPhase` 组合，判夜读取点不得自建算式。
-func (engine *Engine) displayDayPhase() uint16 {
-	return core.DisplayDayPhase(engine.worldTime.Load(), engine.DayPhaseOffset())
-}
-
 // SetWorldTimeForTest 直接写入权威绝对世界时间，仅供测试把世界拨到特定显示相位
 // （例如夜间的入睡判定与跳夜结算）。生产路径的时间只能经 `advanceWorldTime`
 // 每 tick 恰好 +1，不得有任何旁路写者。

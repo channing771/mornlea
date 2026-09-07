@@ -98,6 +98,17 @@ func EffectiveDayPhase(worldTime uint64, offset uint16, dayArc uint16) uint16 {
 	return uint16(halfDayTicks + (p-arc)*halfDayTicks/(DayLengthTicks-arc))
 }
 
+// EffectiveDayPhaseAt 是「绝对世界时间 + 显示偏移 + 季节偏移」到季节化相位的
+// 组合入口：先由季节偏移经 `YearPhaseAt` 求年相位、`DayArcTicks` 求昼弧，再交给
+// `EffectiveDayPhase` 完成唯一一份 warp。入睡判定、夜行者生成窗口、白昼灼烧与
+// 昼间被动生成等判相位消费点统一经它取季节化相位，不得各自拼接
+// `YearPhaseAt`/`DayArcTicks`——本函数只是薄组合层，dayArc 恒由 `DayArcTicks`
+// 派生，不构成第二个 warp 入口。分点（年相位 0 或 0.5）时昼弧为 12000，结果与
+// `DisplayDayPhase` 逐 tick 恒等。
+func EffectiveDayPhaseAt(worldTime uint64, offset uint16, seasonOffset uint64) uint16 {
+	return EffectiveDayPhase(worldTime, offset, DayArcTicks(YearPhaseAt(worldTime, seasonOffset)))
+}
+
 // EffectiveMorningOffset 反解「希望季节化相位到达 morningPhase」所需的显示
 // 偏移：先把 morningPhase 逆 warp 回线性相位（每支路取不小于精确解的最小整
 // 数），再求 offset = (线性相位 − worldTime%24000) mod 24000。供全员入睡跳夜
