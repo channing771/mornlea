@@ -18,9 +18,12 @@
 
 - 4.2 判相位消费点切换：提交 `800d08f7`（基线 6ba61540）。验证：grep 非 test 生产代码 `DisplayDayPhase(` 直呼清零、`go test ./packages/server/sim/... -race -count=1` 全 ok、`go test ./packages/audit -count=1` ok。评审 APPROVE：五个消费点全部经新组合入口 `core.EffectiveDayPhaseAt`（薄组合层非自建 warp，core 三锚点测试锁定）、entity/runtime 双源 seasonOffset 同 seed 同纯函数必同值且装配链唯一、跳夜 M=0 闭环全年 288000 tick 零违例且分点下与旧算式逐位一致、夜锚 13000→18000 的跨季节论断独立验证（eff 恒落 15428..19384 夜窗）、四个新行为测试经数值模拟回退验证必区分 warp/非 warp、作物/流体/掉落路径零相位引用。Ruling: entity `State` 自带 seasonOffset（NewState 从 seed 派生）而非 runtime 访问器注入 — State 本就持有 seed、零新增跨包接线 — 同一 core 纯函数保证与 runtime 同值。
 
+- 5.2 客户端表现：提交 `f8735a4c` + 裁决落地 `b7121e83` + F-1 修复 `badac4b5`（基线 33071cff）。验证：`go test ./packages/client/... -race -count=1` 12 包全 ok、`make visual-check` 27/27 零差异（rain-noon 相位补偿后重录与既有基线逐字节恒等，10 粒雪尘全在视锥外，由 CPU 侧测试钉住确定性）、weather-cycle GIF 重生成 cmp 逐字节相同。评审 REQUEST_CHANGES→修复后 APPROVE：8 项清单全 PASS（形态链路同源确定性、tint 冬至 1/分点与夏至位级 0、yearPhase 重建误差 <1/1024 年、雪尘视野外几何复核成立），唯一阻塞 F-1（weather-cycle motion 注释失真+语义过期）按裁决路径 (a) 落地：提取 `pinCaptureSummerNoon` 共享 helper、motion 钉夏至+补偿、注释写实证版本（边界 84.8 在柱内、4% 雪尘视野外）。实现者另抓掉首版「补偿偏移泄漏进后续 5 场景」bug（基线钉移至最后 drain 后并复位偏移，深冬+1800 残留测试钉住）。Ruling: F-1 采纳 (a) 夏至钉而非 (b) 重录混合形态 GIF — 该 GIF 职责是演示天气轮转，混入 80% 雪点稀释主题 — 冬季雪景演示留给积雪 change。
 - 5.1 客户端镜像：提交 `33071cff`（基线 800d08f7）。验证：`go test ./packages/client/client -race -count=1` ok（3.4s）、`./packages/client/cmd/mornlea/app -race -count=1` ok（69.5s）。评审 APPROVE：与 weather 镜像六位置逐处同构（Begin 拒绝/写入、和解接受、未就绪重置、纵深拒绝、访问器双返回），去重门后写入不回退、Advance/墙钟路径零引用结构性满足不外插；评审者以四个变异（删写入/去重门<=改</拒绝移写入后/app 移出冻结守卫）验证 7 测试全部抓住对应回归。Ruling: `app_startup.go` 会话复位点补三字段属 5.1 范围 — weather 同点复位先例、缺位则二次装配残留旧值。
 
 - Ruling: `rain-noon` 场景改钉夏至正午 + `DayPhaseOffset` 相位补偿（天空/日照逐字节不变），该景 golden 按预期重录 — 分点正午雨的雪形边界 y=69.6 使其降水柱 80% 变雪，「27 景零重录」与温度形态数学互斥（实现者 5.2 上报，design §5 原「分点+正午 15℃ 仍为雨」为算术错误，海平面实际 7℃、y=70 已 −0.5℃）；夏至正午温度边界 y=84.8，降水主体为雨、柱顶雪尘为温度梯度真实表现 — 26/27 景零差异证明分点恒等锚对其余场景生效，新增 `weather-camera-showcase` delta 同步场景 Requirement 语义（「雪线下无雪」依据已随形态判定温度化失效）。
+
+- 6.1 收尾门禁（控制会话执行，HEAD badac4b5）：`gofmt -l packages/` 无输出；`go test ./packages/audit -count=1` ok（7.1s）；`openspec validate --all --strict --no-interactive` 100 项全过；`make dev-check` 退出码 0；`make visual-check` 27/27 全部零差异（分点恒等锚 + rain-noon/weather-cycle 夏至钉生效，零 golden 重录）；`make test-race` 退出码 0（45 包 ok 零失败）。协议 v36→v37 为唯一版本变更；metadata v4、engine ABI v10、client ABI v18、区块 schema v9 不变；Rust 零改动。
 
 ## 任务进度
 

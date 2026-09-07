@@ -19,8 +19,8 @@
 ## 5. 客户端镜像与表现
 
 - [x] 5.1 失败测试先行：predictor 镜像三字段（起始校验/接受/回退拒绝/Season 越界拒绝）与访问器（`packages/client/client`；`go test ./packages/client/client -race -count=1`）
-- [ ] 5.2 失败测试先行：降水形态温度化（冬低地雪/夏高山雪/分点低地雨、`WeatherSnowLineY` 注释退役为锚点）；`DayNightAt` 季节 warp（冬至昼弧跨度、分点恒等）；冬季冷色 tint 有界且分点为 0；capture 季节相位 override 钉分点（`packages/client/render`、`capture`、`cmd/mornlea/app`；`go test ./packages/client/... -race -count=1`，随后 `make visual-check` 确认 27 景零差异）
+- [x] 5.2 失败测试先行：降水形态温度化（冬低地雪/夏高山雪/分点低地雨、`WeatherSnowLineY` 注释退役为锚点）；`DayNightAt` 季节 warp（冬至昼弧跨度、分点恒等）；冬季冷色 tint 有界且分点为 0；capture 季节相位 override 钉分点（`packages/client/render`、`capture`、`cmd/mornlea/app`；`go test ./packages/client/... -race -count=1`，随后 `make visual-check` 确认 27 景零差异）
 
 ## 6. 收尾门禁
 
-- [ ] 6.1 全量验证与归档就绪（`gofmt -l` 无输出、六模块 `go vet` 与 `make dev-check`、`make test-race`、`go test ./packages/audit -count=1`、`make visual-check` 27 景零差异、`openspec validate --all --strict --no-interactive`；记录 benchmark 数值只记录不改退出态）
+- [x] 6.1 全量验证与归档就绪（`gofmt -l` 无输出、六模块 `go vet` 与 `make dev-check`、`make test-race`、`go test ./packages/audit -count=1`、`make visual-check` 27 景零差异、`openspec validate --all --strict --no-interactive`；记录 benchmark 数值只记录不改退出态）
