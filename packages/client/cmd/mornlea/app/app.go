@@ -195,6 +195,15 @@ type Application struct {
 	// weather 是最后确认的权威天气，只在接受更新状态时前进，与世界时间同一
 	// 接受纪律与冻结开关：呈现侧降水/天空/亮度的唯一输入，不读本地随机或墙钟。
 	weather core.WeatherKind
+	// season/seasonProgress/temperature 是最后确认的权威季节三字段（协议 v37
+	// 起随玩家状态同步），接受纪律与 weather 完全相同：只认更新 `ServerTick`、
+	// 冻结开关一并钉住、客户端不按本地世界时间外插。它们与 predictor 内的同名
+	// 镜像同源同值，供昼夜 warp 与降水形态等呈现侧消费。
+	season         core.Season
+	seasonProgress uint8
+	// temperature 是服务端对玩家所在高度按共享公式求得的权威观察温度，仅作
+	// 呈现输入持有；任意高度/粒子位置的局部温度由呈现层另经共享公式求值。
+	temperature int8
 	// worldTimeFrozen 冻结权威状态对昼夜呈现量的覆盖(capture 钉住天空状态,
 	// 见 SetWorldTimeFrozen);生产恒为 false。
 	worldTimeFrozen bool

@@ -67,6 +67,17 @@ type Predictor struct {
 	// 只由服务端确认写入，客户端不预测、不随机、不按墙钟自选，呈现层
 	// 经 Weather 查询，供降水/天空/亮度表现消费。
 	weather core.WeatherKind
+	// season/seasonProgress/temperature 是最近确认的权威季节三字段（协议
+	// v37 起随玩家状态同步），与 weather 同一镜像纪律：只由服务端确认写入、
+	// 仅前进 `ServerTick` 可改写，客户端绝不按本地世界时间外插——季节是
+	// 「世界时间+seed 偏移」的服务端派生量，回退/重放场景下本地推算会与
+	// 权威派生漂移，镜像值始终持有服务端算出的那一份。
+	season         core.Season
+	seasonProgress uint8
+	// temperature 是服务端对玩家所在高度按共享公式求得的权威观察温度
+	// （int8 摄氏度）。呈现层需要任意高度/粒子位置的局部温度时经共享公式
+	// 对镜像输入另行求值，而不是改写这个单点观察值。
+	temperature int8
 	// eyeInFluid 是最近一次浸没判定给出的眼睛浸没标志。它由 stepWithSubmersion
 	// 与权威状态和解共同写入，是水下视觉唯一的判定来源。见 EyeInFluid。
 	eyeInFluid bool
@@ -105,6 +116,11 @@ func (p *Predictor) Begin(message network.PlayerState) error {
 	if message.WeatherKind > core.WeatherThunder {
 		return errors.New("client: cannot begin prediction from invalid weather")
 	}
+	// 季节是四值枚举（协议 v37 起随状态同步）：合法值域与协议 `Validate`
+	// 同为 0..冬，越界值与天气同形在首帧处拒绝，不进镜像。
+	if message.Season > core.SeasonWinter {
+		return errors.New("client: cannot begin prediction from invalid season")
+	}
 
 	p.ready = true
 	p.dimension = message.Dimension
@@ -124,6 +140,9 @@ func (p *Predictor) Begin(message network.PlayerState) error {
 	p.hunger = message.Hunger
 	p.saturationZero = message.SaturationZero
 	p.weather = message.WeatherKind
+	p.season = message.Season
+	p.seasonProgress = message.SeasonProgress
+	p.temperature = message.Temperature
 	// Begin 只有权威位置、没有方块视图，浸没标志留待第一次固定步或和解算出。
 	p.eyeInFluid = false
 	return nil
@@ -165,6 +184,26 @@ func (p *Predictor) SaturationZero() (bool, bool) {
 // 旧或重复 `ServerTick` 的状态由和解入口的去重门挡掉，不会回退已确认值。
 func (p *Predictor) Weather() (core.WeatherKind, bool) {
 	return p.weather, p.ready
+}
+
+// Season 返回只读镜像持有的权威季节以及预测器是否已就绪。
+// 同天气：季节只接受服务端确认值，客户端不按本地世界时间外插；旧或重复
+// `ServerTick` 的状态由和解入口的去重门挡掉，不会回退已确认季节。
+func (p *Predictor) Season() (core.Season, bool) {
+	return p.season, p.ready
+}
+
+// SeasonProgress 返回只读镜像持有的季内进度量化值（0..255）以及预测器
+// 是否已就绪。接受纪律同 `Season`：仅前进 `ServerTick` 可改写。
+func (p *Predictor) SeasonProgress() (uint8, bool) {
+	return p.seasonProgress, p.ready
+}
+
+// Temperature 返回只读镜像持有的、玩家所在位置的权威观察温度（int8 摄氏
+// 度）以及预测器是否已就绪。客户端不本地外插温度；呈现侧的任意高度局部
+// 温度另经共享公式求值，本镜像只承载服务端对玩家单点的权威观察。
+func (p *Predictor) Temperature() (int8, bool) {
+	return p.temperature, p.ready
 }
 
 // EyeInFluid 报告最近一次浸没判定认为相机所在格是不是流体。
