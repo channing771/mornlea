@@ -50,9 +50,10 @@ func TestCaptureRainAndCameraHygieneAcrossScenes(t *testing.T) {
 	}
 
 	// main-menu 的 `Apply` 经同一公共清场：双机位之后必须回到第一人称，
-	// 自身体不泄入后续场景。这里直调公共清场（与菜单场景同一落点）。
-	if err := resetCapturePresentation(app); err != nil {
-		t.Fatalf("菜单场景入口清场: %v", err)
+	// 自身体不泄入后续场景。这里走真实菜单场景的 `Apply`（与抓帧管线同一
+	// 落点），菜单场景改坏清场时本测试即失败。
+	if err := captureSceneByName(t, "main-menu").Apply(app); err != nil {
+		t.Fatalf("应用 main-menu: %v", err)
 	}
 	if app.CameraMode() != client.CameraFirstPerson {
 		t.Fatalf("菜单场景入口机位 = %d，想要第一人称 %d（自身体泄入后继场景）",

@@ -32,21 +32,22 @@ func applyRainNoonCaptureState(app SceneApplication) error {
 	return injectRainNoonWeather(app)
 }
 
-// injectRainNoonWeather 经抓帧路径注入固定雨天：权威天气夹具走预测器已有的
+// injectFixedWeather 经抓帧路径注入固定天气：权威天气夹具走预测器已有的
 // 接受口径（值域与单调 tick 校验），呈现侧天气取预测器接受后的值，粒子相
-// 位 tick 同步钉死。不碰游戏内权威——调用点只在场景 `Apply`（收敛帧不再
-// drain，夹具不会被真实消息覆盖）。
-func injectRainNoonWeather(app SceneApplication) error {
+// 位 tick 同步钉死。不碰游戏内权威——调用点只在场景 `Apply` 与 motion 演示
+// 的逐帧推进（收敛帧与演示循环都不 drain 真实消息，夹具不会被覆盖）。
+// tick 必须大于预测器已见过的任何真实 tick，否则单调校验静默忽略注入。
+func injectFixedWeather(app SceneApplication, tick uint64, kind core.WeatherKind) error {
 	predictor := app.Predictor()
 	if predictor == nil {
-		return fmt.Errorf("rain-noon 需要预测器，当前为 nil")
+		return fmt.Errorf("固定天气注入需要预测器，当前为 nil")
 	}
 	if app.Mirror() == nil {
-		return fmt.Errorf("rain-noon 需要世界镜像，当前为 nil")
+		return fmt.Errorf("固定天气注入需要世界镜像，当前为 nil")
 	}
 	camera := *app.Camera()
 	state := network.PlayerState{
-		ServerTick:     captureRainNoonServerTick,
+		ServerTick:     tick,
 		Dimension:      core.Overworld,
 		Position:       camera.Pos,
 		Yaw:            camera.Yaw,
@@ -56,19 +57,25 @@ func injectRainNoonWeather(app SceneApplication) error {
 		Oxygen:         core.MaxOxygenTicks,
 		Hunger:         core.MaxHunger,
 		WorldTimeTicks: 6000,
-		WeatherKind:    core.WeatherRain,
+		WeatherKind:    kind,
 	}
 	if _, err := predictor.ApplyPlayerState(state, client.MirrorCollisionSource{
 		Mirror:    app.Mirror(),
 		Dimension: core.Overworld,
 	}); err != nil {
-		return fmt.Errorf("注入雨天权威天气: %w", err)
+		return fmt.Errorf("注入固定权威天气: %w", err)
 	}
 	weather, ready := predictor.Weather()
-	if !ready || weather != core.WeatherRain {
-		return fmt.Errorf("雨天注入后预测器天气=%d/ready=%v，想要 %d/true",
-			weather, ready, core.WeatherRain)
+	if !ready || weather != kind {
+		return fmt.Errorf("固定天气注入后预测器天气=%d/ready=%v，想要 %d/true",
+			weather, ready, kind)
 	}
-	app.SetServerTick(captureRainNoonServerTick)
+	app.SetServerTick(tick)
 	return app.SetCaptureWeather(weather)
+}
+
+// injectRainNoonWeather 经抓帧路径注入固定雨天：调用点只在场景 `Apply`
+// （收敛帧不再 drain，夹具不会被真实消息覆盖）。
+func injectRainNoonWeather(app SceneApplication) error {
+	return injectFixedWeather(app, captureRainNoonServerTick, core.WeatherRain)
 }

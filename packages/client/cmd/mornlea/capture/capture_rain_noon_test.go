@@ -161,11 +161,12 @@ func TestRainNoonWeatherChainEmitsOnlyRain(t *testing.T) {
 			columnTop, render.WeatherSnowLineY)
 	}
 	// 编码输出逐粒断言雨选形：实例布局与 render 侧 avatar 编码同源（96 字节
-	// 定长：0..64 列主序 mat4、64..80 四通道色），纵向尺度取 Y 基向量长度
-	// （雨丝纵向 0.6 的细丝、雪点 0.09 立方体，判形口径与 render 侧单测同式）；
-	// 本场景柱顶在线下，每粒的世界高度都必须在线下且呈雨形，雪形零容忍。
+	// 定长：0..64 列主序 mat4、64..80 四通道色），步长直接引用天气侧常量
+	// （与 avatar 通道同源同值，不在别处复制该字面量）；纵向尺度取 Y 基向量
+	// 长度（雨丝纵向 0.6 的细丝、雪点 0.09 立方体，判形口径与 render 侧单测
+	// 同式）；本场景柱顶在线下，每粒的世界高度都必须在线下且呈雨形，雪形零容忍。
 	const rainFilamentHeight = float32(0.6)
-	stride := render.AvatarInstanceBytes
+	stride := render.WeatherInstanceBytes
 	if len(rainy)%stride != 0 {
 		t.Fatalf("雨天降水流 = %d 字节，不是 %d 字节实例的整数倍", len(rainy), stride)
 	}
