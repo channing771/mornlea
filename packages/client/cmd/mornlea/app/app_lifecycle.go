@@ -8,6 +8,7 @@ import (
 	"log/slog"
 
 	"github.com/channing771/mornlea/packages/client/client"
+	"github.com/channing771/mornlea/packages/client/render"
 	"github.com/channing771/mornlea/packages/client/render/hud"
 	"github.com/channing771/mornlea/packages/shared/network"
 )
@@ -151,4 +152,9 @@ func (a *Application) resetSessionOwnedState() {
 	// 摆动行进距离是纯呈现累积：随会话一并清零，重连后按新消息流重新累积，
 	// 不把旧会话的相位带进新会话。
 	a.entityEncoder.ResetLocomotion()
+	// 踩雪呈现随会话一并清零：步频基线与累计里程不带入新会话，踢雪事件锚点
+	// 也不再老化出旧会话脚位的扬尘。
+	a.snowStep.Reset()
+	a.frameSnowKick = render.SnowKickInput{}
+	a.entityEncoder.ResetSnowKicks()
 }

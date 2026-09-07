@@ -252,6 +252,14 @@ type Application struct {
 	closeAudio func()
 	// audioFeedback 只匹配已应用的服务端确认，零值表示尚未收到本会话的基线。
 	audioFeedback localAudioFeedback
+	// snowStep 是踩雪音效的本地步频累计器（见 app_snow.go）：水平位移跨过
+	// 0.8 格且落足格为雪层才播放一次 `CueSnowStep`；纯本地预测派生，不回写
+	// 权威，会话重置随基线清零。
+	snowStep snowStepFeedback
+	// frameSnowKick 是本帧踢雪尘的驱动输入（疾跑/落地事件沿 + 脚位），由
+	// `observeSnowFeedback` 在本地预测推进后派生，`RenderFrame` 追加进降水
+	// 实例流；零值表示本帧无事件，装配侧不重锚。
+	frameSnowKick render.SnowKickInput
 	// render 是渲染相关的生效配置快照，在构造时从 Options.Render 复制，
 	// 供渲染热路径（DropOutside 视距、鼠标灵敏度等）读取，不随配置文件热更新。
 	render config.Render
