@@ -79,6 +79,26 @@ func TestSeasonOffsetFromSeedDeterministic(t *testing.T) {
 	}
 }
 
+// TestSeasonOffsetFromSeedGolden 把固定 seed 的派生偏移冻结为字面量锚点：季节
+// 偏移盐自称「发布即冻结」，若无 golden 锚点，改盐会静默平移所有既有世界的
+// 季节相位且其余测试仍全绿。三个锚点覆盖零 seed、普通正 seed 与 int64 最小
+// 值（负值位模式参与哈希的路径）。
+func TestSeasonOffsetFromSeedGolden(t *testing.T) {
+	cases := []struct {
+		seed int64
+		want uint64
+	}{
+		{0, 158435},
+		{42, 14818},
+		{math.MinInt64, 186548},
+	}
+	for _, tc := range cases {
+		if got := SeasonOffsetFromSeed(tc.seed); got != tc.want {
+			t.Fatalf("SeasonOffsetFromSeed(%d) = %d，想要冻结锚点 %d（盐被改动？）", tc.seed, got, tc.want)
+		}
+	}
+}
+
 // TestSeasonProgressQuantization 锚定季内进度的三处边界：季首 0、季末最后一
 // tick 255、换季瞬间回绕 0。
 func TestSeasonProgressQuantization(t *testing.T) {
