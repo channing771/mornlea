@@ -51,6 +51,14 @@ func (engine *Engine) StepWithTunables(tickTunables TickTunables) TickResult {
 	currentTick := engine.tick.Load()
 	currentWorldTime := engine.worldTime.Load()
 	config := realmEnvironmentConfig(engine.tunables)
+	// 气候束随环境参数一并下摆：积雪/消融在环境阶段（tick 中段）执行，此刻的
+	// 权威天气与（tick 起点世界时间、当前显示偏移）的季节快照就是本 tick 的判定
+	// 输入。与 tick 尾部发布用的（推进后时间、发布后偏移）快照刻意区分——环境
+	// 推进必须与它正在推进的世界状态同一时刻，跳夜结算的偏移写者在其后。
+	climate := engine.seasonSnapshotAt(currentWorldTime, engine.DayPhaseOffset())
+	config.Weather = engine.weatherKind
+	config.YearPhase = climate.yearPhase
+	config.EffectiveDayPhase = climate.effectiveDayPhase
 	engine.realm.SetEnvironmentTick(currentTick, engine.seed, config)
 	commands, acquired, generated := engine.takeInbox()
 	companionActions := engine.takeCompanionActions()
