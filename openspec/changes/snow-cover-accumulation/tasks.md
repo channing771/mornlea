@@ -14,5 +14,5 @@
 
 ## 4. capture 场景与收尾门禁
 
-- [ ] 4.1 失败测试先行：`snow-cover` 场景（冬季钉+雪形态+预铺 4 档雪层、清单 27→28 插 `camera-third-front` 后）与官方清单守护更新；`SCENES=snow-cover make visual-update` 首录新 golden 后 `make visual-check` 28 景全绿（旧 27 景零差异）（`packages/client/cmd/mornlea/capture`；`go test ./packages/client/cmd/mornlea/capture -race -count=1`）
-- [ ] 4.2 全量验证与归档就绪（`gofmt -l` 无输出、六模块 `go vet` 与 `make dev-check`、`make test-race`、`go test ./packages/audit -count=1`、`make visual-check` 28 景、`openspec validate --all --strict --no-interactive`；记录 benchmark 数值只记录不改退出态）
+- [x] 4.1 失败测试先行：`snow-cover` 场景（冬季钉+雪形态+预铺 4 档雪层、清单 27→28 插 `camera-third-front` 后）与官方清单守护更新；`SCENES=snow-cover make visual-update` 首录新 golden 后 `make visual-check` 28 景全绿（旧 27 景零差异）（`packages/client/cmd/mornlea/capture`；`go test ./packages/client/cmd/mornlea/capture -race -count=1`）
+- [x] 4.2 全量验证与归档就绪（`gofmt -l` 无输出、六模块 `go vet` 与 `make dev-check`、`make test-race`、`go test ./packages/audit -count=1`、`make visual-check` 28 景、`openspec validate --all --strict --no-interactive`；记录 benchmark 数值只记录不改退出态）
