@@ -320,6 +320,44 @@ func snowTierOf(block core.BlockID) uint8 {
 	return tier
 }
 
+// —— 顶盖门：升档继承露天条件，消融不受顶盖影响 ——
+
+// TestSnowUnderCapOnlyMeltsNeverGrows 覆盖机制外状态（玩家在雪层上加顶盖）下的
+// 列顶门：正常态列顶恰为雪层自身、升档照常；顶盖把列顶抬高后，冬季降水中雪层
+// 不再加厚，而回暖消融不受顶盖影响照常逐档降。与 `TestSnowAccumulatesTierByTier`
+// 的开放草地对读——那条证明门不拦正常升档，这条证明门拦得住顶盖。
+func TestSnowUnderCapOnlyMeltsNeverGrows(t *testing.T) {
+	ground := snowWorldPos(8, snowGroundY, 8)
+	build := func(chunk *world.Chunk) {
+		chunk.SetBlock(8, snowGroundY, 8, core.GrassID)
+		chunk.SetBlock(8, 64, 8, core.SnowLayer2BlockID)
+		chunk.SetBlock(8, 65, 8, core.StoneID)
+	}
+
+	// 冬季降水：顶盖把列顶抬到 Y=65，升档被列顶门拒绝，2 档纹丝不动。
+	state, active := readySnowState(t, build)
+	config := snowWinterRainConfig
+	config.RandomTicksPerSection = 16
+	for _, tick := range snowHittingTicks(t, ground, 16, 4) {
+		advanceSnowTick(t, state, active, tick, config)
+	}
+	if tier := snowTierAbove(t, state, ground); tier != 2 {
+		t.Fatalf("顶盖下雪层 = %d 档，想要保持 2 档（升档必须被列顶门拒绝）", tier)
+	}
+
+	// 同一顶盖下回暖：消融分支不吃列顶门，2→1→空气逐档降尽。
+	melt := snowSummerRainConfig
+	melt.RandomTicksPerSection = 16
+	wantTiers := []uint8{1, 0, 0}
+	for index, tick := range snowHittingTicks(t, ground, 16, len(wantTiers)) {
+		advanceSnowTick(t, state, active, tick, melt)
+		if tier := snowTierAbove(t, state, ground); tier != wantTiers[index] {
+			t.Fatalf("回暖第 %d 次命中后顶盖下雪层 = %d 档，想要 %d 档（消融不受顶盖影响）",
+				index+1, tier, wantTiers[index])
+		}
+	}
+}
+
 // —— Scenario：雪点与融点之间保持稳定 ——
 
 // TestSnowStableBetweenSnowAndMeltPoints 覆盖回差滞回带：局部温度 ≈1.13℃ 落在

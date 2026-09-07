@@ -36,9 +36,12 @@ func snowPrecipitating(weather core.WeatherKind) bool {
 // 判定序（与设计钉死的顺序一致）：
 //
 //  1. 上方格已是雪层：温度 > 融点降 1 档（1 档→空气）；温度 ≤ 雪点且降水升 1 档
-//     （≤4 档，到顶不再写入）；0..2℃ 回差区间不动。已有雪层不走放置判定——
-//     heightmap 的列顶此刻是雪层自身（非空气格会抬高列顶），重复套露天检查会
-//     把升档永远误拒，这正是「已有雪层的格不再重复判定」的处理方式。
+//     （≤4 档，到顶不再写入）；0..2℃ 回差区间不动。已有雪层不走放置判定的空
+//     气前置，但升档继承露天条件——列顶门要求本列最高非空气格不高于雪层自身
+//     （`HighestOpaque <= 雪层Y`：正常态列顶恰为雪层，天然通过；玩家在雪层上
+//     加顶盖后列顶被抬高，升档被拒，机制外状态不会在顶盖下继续加厚）。消融分
+//     支刻意不吃列顶门：顶盖下回暖照常逐档消——「升档（同 1）」的露天语义只
+//     约束加厚，不约束消退。
 //  2. 上方格为空气、本格是白名单地表且是本列最高非空气格（heightmap 顶，天空
 //     直射）：温度 ≤ 雪点且降水时上方格置 1 档。上方为流体（水下）、悬挑下
 //     （列顶更高）与非白名单地表都不写。
@@ -65,6 +68,7 @@ func (state *State) advanceSnowCover(
 	if !ready {
 		return
 	}
+	localX, _, localZ := position.Local()
 	climate := state.environment.config
 	temperature := core.TemperatureAt(
 		climate.YearPhase, climate.EffectiveDayPhase, climate.Weather, float32(above.Y),
@@ -78,7 +82,8 @@ func (state *State) advanceSnowCover(
 			} else {
 				next = aboveBlock - 1
 			}
-		case temperature <= core.TemperatureSnowPoint && snowPrecipitating(climate.Weather) && tier < 4:
+		case temperature <= core.TemperatureSnowPoint && snowPrecipitating(climate.Weather) &&
+			tier < 4 && chunk.HighestOpaque(localX, localZ) <= above.Y:
 			next = aboveBlock + 1
 		default:
 			return
@@ -92,7 +97,6 @@ func (state *State) advanceSnowCover(
 	if aboveBlock != core.AirID || temperature > core.TemperatureSnowPoint || !snowPrecipitating(climate.Weather) {
 		return
 	}
-	localX, _, localZ := position.Local()
 	if chunk.HighestOpaque(localX, localZ) != position.Y {
 		return
 	}
