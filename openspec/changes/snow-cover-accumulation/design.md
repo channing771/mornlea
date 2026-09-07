@@ -6,7 +6,7 @@
 
 | 量 | 值 | 说明 |
 |---|---|---|
-| 雪层档位 | 4 个方块 `snow_layer_1..4`，厚度 (raw+1)/16 = 2/16..5/16（`block_top_raw` = 2..5） | raw=1（1/16）留白不用于雪层，档间差 1/16 清晰可辨 |
+| 雪层档位 | 4 个方块 `snow_layer_1..4`，呈现高度 (raw+1)/16 = 2/16..5/16（`block_top_raw` = 1..4，第 k 档 raw=k） | 档间差 1/16 清晰可辨；raw=0 为满格哨兵不可用 |
 | 雪层碰撞 | 全档无碰撞 | 贴地装饰层；实体由下方承载方块支撑，脚部占据雪层格 |
 | 积雪白名单地表 | 草、土、石、沙、砾石、整块雪（`SnowBlockID`）顶面 | 悬挑下/水下/非白名单不积 |
 | 积雪条件 | 权威天气 ∈ {雨, 雷暴} 且该格局部温度 ≤ 雪点 0℃ | 局部温度 = `core.TemperatureAt(yearPhase, effPhase, weather, 格Y)` |
@@ -22,7 +22,7 @@
 - `shared/core/block.go`：`SnowLayer1BlockID..SnowLayer4BlockID` 追加在 `BlockIDMax` 前；谓词 `SnowLayerTier(id) (tier uint8, ok bool)`（0 表非雪层）与 `IsSnowLayer`。
 - `block_properties.go`：emission 0、attenuation 0、opaque false、`PlaceableBlockAtFace` 拒绝（玩家不可放置——雪层只由积雪机制产生；采掘移除可用）。
 - `shared/physics/types.go` `BlockCollisionBoxes`：雪层返回 0 盒。
-- `packages/client/assets/blocks.go`：新材质层 `LayerSnowLayerTop/Side`（程序化雪白像素，与 `LayerSnowTop` 同族可复用噪声但独立层号追加在枚举末位）；`Material`/`Opaque`（false，两面可见）/`FaceVisible`（邻接剔除按透明处理）/`BlockTopRaw`（2..5）/`Model`（普通）。
+- `packages/client/assets/blocks.go`：新材质层 `LayerSnowLayerTop/Side`（程序化雪白像素，与 `LayerSnowTop` 同族可复用噪声但独立层号追加在枚举末位）；`Material`/`Opaque`（false，两面可见）/`FaceVisible`（邻接剔除按透明处理）/`BlockTopRaw`（1..4，第 k 档 raw=k）/`Model`（普通）。
 - `packages/client/mesh/registry.go`：快照自动跟随；守护测试更新（方块数、层号连续性）。
 - `sim/entity/mining.go`：四档采掘掉落映射为无掉落（照短草/无掉落先例），徒手即可。
 
