@@ -127,7 +127,7 @@ func TestRunMotionDemoPropagatesError(t *testing.T) {
 }
 
 func TestMotionSceneSelector(t *testing.T) {
-	for _, scene := range []string{"break-burst", "avatar-walk", "drop-scatter", "drop-density", "hand-mining", "hand-attack"} {
+	for _, scene := range []string{"break-burst", "avatar-walk", "drop-scatter", "drop-density", "hand-mining", "hand-attack", "weather-cycle"} {
 		opts, err := parseMainOptions([]string{"--motion-demo", "x.gif", "--motion-scene", scene})
 		if err != nil || opts.MotionScene != scene {
 			t.Fatalf("scene=%s opts=%+v err=%v", scene, opts, err)

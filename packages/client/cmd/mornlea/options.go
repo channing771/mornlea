@@ -65,7 +65,7 @@ func parseMainOptions(args []string) (mainOptions, error) {
 	updateGolden := flags.Bool("update-golden", false, "把本次抓帧结果写入 golden 基线")
 	captureScenes := flags.String("capture-scenes", "", "逗号分隔的抓帧场景子集；只执行所列场景，执行顺序按场景表固有顺序")
 	captureGIFs := flags.Bool("capture-gifs", false, "纯比对抓帧也生成 GIF 剧本到输出目录供人工审查（更新基线时恒生成）")
-	motionScene := flags.String("motion-scene", "break-burst", "motion 场景：break-burst/avatar-walk/drop-scatter/drop-density/hand-mining/hand-attack")
+	motionScene := flags.String("motion-scene", "break-burst", "motion 场景：break-burst/avatar-walk/drop-scatter/drop-density/hand-mining/hand-attack/weather-cycle")
 	motionDemo := flags.String("motion-demo", "", "motion 演示 GIF 输出路径；非空时走无头 motion 演示模式")
 	dev := flags.Bool("dev", false, "启用调试面板（F3 切换）")
 	configPath := flags.String("config", "", "配置文件路径，留空使用默认路径")
@@ -88,7 +88,7 @@ func parseMainOptions(args []string) (mainOptions, error) {
 	}
 	// motion 演示同样独占无头渲染路径并按自己的 tick 节奏驱动帧循环，
 	// 与其余独占路径组合的语义无法定义，直接拒绝而不是让某一方静默胜出。
-	if *motionScene != "break-burst" && *motionScene != "avatar-walk" && *motionScene != "drop-scatter" && *motionScene != "drop-density" && *motionScene != "hand-mining" && *motionScene != "hand-attack" {
+	if *motionScene != "break-burst" && *motionScene != "avatar-walk" && *motionScene != "drop-scatter" && *motionScene != "drop-density" && *motionScene != "hand-mining" && *motionScene != "hand-attack" && *motionScene != "weather-cycle" {
 		return mainOptions{}, errors.New("未知 --motion-scene")
 	}
 	if *motionDemo == "" && *motionScene != "break-burst" {

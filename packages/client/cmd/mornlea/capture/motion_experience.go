@@ -169,6 +169,9 @@ func RunMotion(app SceneApplication, outPath, scene string) error {
 	if scene == "hand-mining" || scene == "hand-attack" {
 		return RunHandSwingMotion(app, outPath, scene)
 	}
+	if scene == "weather-cycle" {
+		return RunWeatherCycleMotion(app, outPath)
+	}
 	count := 100
 	switch scene {
 	case "avatar-walk":

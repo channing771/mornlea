@@ -271,6 +271,22 @@ func (a *Application) SetWorldTimeTicks(ticks uint64) { a.worldTimeTicks = ticks
 // 画面上整片翻色。`SetWorldTimeTicks` 直写不受冻结影响,场景仍可换钉值。
 func (a *Application) SetWorldTimeFrozen(frozen bool) { a.worldTimeFrozen = frozen }
 
+// Weather 读取抓帧呈现侧的天气输入：生产帧循环只经 `DrainServerMessages`
+// 按更新 tick 纪律推进它，抓帧场景经 `SetCaptureWeather` 直写。
+func (a *Application) Weather() core.WeatherKind { return a.weather }
+
+// SetCaptureWeather 写入抓帧呈现侧的天气输入（capture-only）：值域口径与
+// `Predictor` 和解一致（只接受晴/雨/雷暴三态），越界值拒绝且不污染已钉住
+// 的值。直写不受 `worldTimeFrozen` 影响——冻结只拦权威消息对呈现量的覆盖，
+// 场景在 `Apply` 里换钉自己的值；生产代码不得消费本方法。
+func (a *Application) SetCaptureWeather(kind core.WeatherKind) error {
+	if kind > core.WeatherThunder {
+		return fmt.Errorf("capture 天气 %d 越界，想要 0..%d", kind, core.WeatherThunder)
+	}
+	a.weather = kind
+	return nil
+}
+
 // InventoryOpen 读取容器/背包 UI 开合状态。
 func (a *Application) InventoryOpen() bool { return a.inventoryOpen }
 
@@ -280,6 +296,13 @@ func (a *Application) SetInventoryOpen(open bool) { a.inventoryOpen = open }
 // SetViewmodelSuppressed 打开/关闭静态抓帧的双手抑制：唯一调用方是静态
 // runner 装配（capture 包），生产与动作 GIF 路径永不调用。
 func (a *Application) SetViewmodelSuppressed(suppressed bool) { a.viewmodelSuppressed = suppressed }
+
+// CameraMode 读取本地三态视角（0=第一人称、1=第三人称背面、2=第三人称正面）。
+func (a *Application) CameraMode() client.CameraMode { return a.cameraMode }
+
+// SetCameraMode 写入本地三态视角：调用方传入三态合法值（`Valid`），抓帧场景
+// 经它切第三人称双机位，生产视角切换仍走 F5 上升沿状态机。
+func (a *Application) SetCameraMode(mode client.CameraMode) { a.cameraMode = mode }
 
 // Center 读取相机所在的中心区块。
 func (a *Application) Center() core.ChunkPos { return a.center }

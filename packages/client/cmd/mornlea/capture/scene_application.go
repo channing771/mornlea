@@ -45,6 +45,10 @@ type SceneApplication interface {
 	// 在收敛帧期间保持不被服务端时间改写(服务端时间随真实时间前进,最终
 	// 帧的昼夜参数会随进程启动漂移)。
 	SetWorldTimeFrozen(frozen bool)
+	// Weather 读取抓帧呈现侧的天气输入；SetCaptureWeather 是 capture-only
+	// 的写口（值域口径与 Predictor 和解一致），生产帧循环不消费它。
+	Weather() core.WeatherKind
+	SetCaptureWeather(kind core.WeatherKind) error
 	SetCenter(center core.ChunkPos)
 	SetBlockTargetReset(reset bool)
 	// 菜单全景（menu-vista）：PinVolatile 在收敛后钉住自转时刻，收敛判据
@@ -113,6 +117,13 @@ type SceneApplication interface {
 	// 配后调用一次置位；motion/GIF runner 不调用，手臂只保留在用手击碎方
 	// 块系列动作 GIF 中。
 	SetViewmodelSuppressed(suppressed bool)
+
+	// CameraMode/SetCameraMode 读写本地三态视角：第三人称双机位场景经它切
+	// 背面/正面，后拉、防穿墙、自身身体与双手互斥复用 `Application` 已有
+	// 装配（`resolveRenderCamera`、`appendSelfAvatar`、`deriveViewmodelInput`），
+	// capture 不另起摆拍路径。
+	CameraMode() client.CameraMode
+	SetCameraMode(mode client.CameraMode)
 
 	SetMenuPhase(phase application.MenuPhase)
 	SetSettings(settings application.SettingsState)

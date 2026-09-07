@@ -708,6 +708,14 @@ func resetCapturePresentation(app SceneApplication) error {
 	// 双手挥动边沿随场景一并清零：修复后双手每景在屏，挖掘锚与攻击窗一旦跨
 	// 场景延续即进入像素；与战斗 marker 同落点清理。
 	app.ResetViewmodel()
+	// 天气与机位是跨场景共享的呈现输入：雨天场景注入的雨天（呈现侧）与双机
+	// 位场景切走的第三人称必须在这里复位——场景表没有 teardown 钩子，清场
+	// 落点只能在后一个场景。复位只碰呈现侧：预测器内的权威天气随单调 tick
+	// 前进，后续权威状态自然覆盖，不在此处回写。
+	if err := app.SetCaptureWeather(core.WeatherClear); err != nil {
+		return fmt.Errorf("复位抓帧天气: %w", err)
+	}
+	app.SetCameraMode(client.CameraFirstPerson)
 	app.Furnace().Reset()
 	app.Chest().Reset()
 	app.Crafting().Reset()

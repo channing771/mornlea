@@ -30,11 +30,12 @@ func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 		"materials-showcase",
 		"target-block-feedback", "grass-closeup", "oak-grove", "ai-companion", "sword-combat",
 		"hostile-mob", "passive-herd", "passive-graze", "water-surface-slope", "mining-crack-early", "mining-crack-heavy",
+		"rain-noon", "camera-third-back", "camera-third-front",
 		"main-menu", "settings-menu", "avatar-detail",
 		"far-horizon", "water-underwater",
 	}
-	if len(captureScenes) != 24 {
-		t.Fatalf("正式场景数=%d，想要 24", len(captureScenes))
+	if len(captureScenes) != 27 {
+		t.Fatalf("正式场景数=%d，想要 27", len(captureScenes))
 	}
 	gotNames := make([]string, len(captureScenes))
 	for index, scene := range captureScenes {
@@ -131,6 +132,43 @@ func TestTorchNightCaptureScenePosition(t *testing.T) {
 	}
 	if bedNight <= torchNight {
 		t.Fatalf("bed-night=%d 必须在 torch-night=%d 之后", bedNight, torchNight)
+	}
+}
+
+// TestRainNoonAndCameraThirdCaptureScenePositions 锁住新增三景的表内位置：
+// 依次紧随 mining-crack-heavy、先于 main-menu（三景相对顺序固定），既有
+// 相邻链 mining-crack-heavy→main-menu 被三景展开，其余相对顺序不变。
+// far-horizon 倒数第二、water-underwater 唯一末位的不变量随插入保持。
+func TestRainNoonAndCameraThirdCaptureScenePositions(t *testing.T) {
+	indexOf := func(name string) int {
+		for index, scene := range captureScenes {
+			if scene.Name == name {
+				return index
+			}
+		}
+		t.Fatalf("场景 %q 不存在", name)
+		return -1
+	}
+	heavy := indexOf("mining-crack-heavy")
+	rain := indexOf("rain-noon")
+	back := indexOf("camera-third-back")
+	front := indexOf("camera-third-front")
+	menu := indexOf("main-menu")
+	if rain != heavy+1 || back != heavy+2 || front != heavy+3 || menu != heavy+4 {
+		t.Fatalf("新增三景必须依次插在 mining-crack-heavy=%d 之后、main-menu 之前：rain=%d back=%d front=%d menu=%d",
+			heavy, rain, back, front, menu)
+	}
+	for _, name := range []string{"rain-noon", "camera-third-back", "camera-third-front"} {
+		scene := captureSceneByName(t, name)
+		if scene.Prepare == nil || scene.Apply == nil || scene.WarmupFrames != 8 {
+			t.Fatalf("%s 场景不完整: %+v", name, scene)
+		}
+	}
+	if farHorizon := indexOf("far-horizon"); farHorizon != len(captureScenes)-2 {
+		t.Fatalf("far-horizon=%d 必须是倒数第二（共 %d 项）", farHorizon, len(captureScenes))
+	}
+	if waterUnderwater := indexOf("water-underwater"); waterUnderwater != len(captureScenes)-1 {
+		t.Fatalf("water-underwater=%d 必须是唯一末场景（共 %d 项）", waterUnderwater, len(captureScenes))
 	}
 }
 

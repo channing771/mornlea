@@ -106,7 +106,9 @@ func captureSettled(stats client.MesherStats, pending, lodBusy, vistaPending int
 // `far-horizon` 之前）共同插入表中部（water-surface-slope 与 far-horizon
 // 之间），属 spec/brief 硬性例外；`mining-crack-early` 与 `mining-crack-heavy`
 // 同为表中部插入（紧随 water-surface-slope），顺序由 visual-verification
-// delta 的顺序 MUST 条款固定。
+// delta 的顺序 MUST 条款固定；`rain-noon` 与双机位 `camera-third-back/front`
+// 同为表中部插入（紧随 mining-crack-heavy、先于 main-menu），顺序由展示
+// change 的顺序约定固定。
 var captureScenes = []captureScene{
 	{
 		Name:         "terrain-noon",
@@ -468,8 +470,8 @@ var captureScenes = []captureScene{
 		// 随机器速度变化的读数，位姿在 Apply 钉死，收敛帧内不再
 		// drain，输出无需 PinVolatile 即确定。
 		//
-		// 排序约束：紧随 water-surface-slope、先于 main-menu（后者 Apply 自带
-		// resetCapturePresentation，不继承本场景的呈现状态），由
+		// 排序约束：紧随 water-surface-slope、先于 rain-noon（后者 `Apply` 经
+		// 橡树林装配自带 resetCapturePresentation，不继承本场景的呈现状态），由
 		// TestCaptureSceneOrderAndAICompanionDeterminism 与裂纹夹具测试兜底。
 		Name:         "mining-crack-early",
 		WarmupFrames: 8,
@@ -509,14 +511,48 @@ var captureScenes = []captureScene{
 		},
 	},
 	{
+		// rain-noon 是雨天的无窗口 capture 场景：复用橡树林种子 42 的固定地形
+		// 与雪线下机位（同一地形同一机位，画面差异只来自天气），天气经抓帧
+		// 路径注入固定雨天（预测器接受口径），粒子相位钉死在固定权威 tick。
+		//
+		// 排序约束：紧随 mining-crack-heavy、先于 camera-third-back（展示
+		// change 的顺序约定），由 TestRainNoonAndCameraThirdCaptureScenePositions
+		// 兜底。注入的雨天（呈现侧）由后继场景的公共清场复位为晴天，不泄入
+		// 后续场景。
+		Name:         "rain-noon",
+		WarmupFrames: 8,
+		Prepare:      prepareRainNoon,
+		Apply:        applyRainNoonCaptureState,
+	},
+	{
+		// camera-third-back 与 camera-third-front 是第三人称双机位的无窗口
+		// capture 场景：同一眼睛位姿（人物舞台草顶上一个眼高、朝 -Z），仅机位
+		// 模式不同；后拉、防穿墙、自身身体追加与双手互斥复用已有帧装配。
+		//
+		// 排序约束：依次紧随 rain-noon、先于 main-menu（展示 change 的顺序
+		// 约定），由 TestRainNoonAndCameraThirdCaptureScenePositions 兜底。
+		// 切走的第三人称由后继菜单场景的公共清场复位为第一人称，自身体不泄入
+		// 后续场景。
+		Name:         "camera-third-back",
+		WarmupFrames: 8,
+		Prepare:      prepareAvatarStage,
+		Apply:        applyCameraThirdBackCaptureState,
+	},
+	{
+		Name:         "camera-third-front",
+		WarmupFrames: 8,
+		Prepare:      prepareAvatarStage,
+		Apply:        applyCameraThirdFrontCaptureState,
+	},
+	{
 		// main-menu 是主菜单相位的无窗口 capture 场景：底图由 menu-vista
 		// 全景路径产出（与交互主菜单同一渲染路径——固定种子 worldgen 区块、
 		// 专属镜像/mesher/远环带、正午固定世界时间与整数 tick 自转相机），
 		// 菜单 chrome 由 WebView 呈现且无头零参与。菜单相位抑制准星、弹条
 		// 与生存 HUD，画面是纯全景。
 		//
-		// Apply 里 resetCapturePresentation 清空前序场景（water-surface-slope）
-		// 留下的全部共享呈现状态。相机与世界内容不再由本场景摆拍：全景接管；
+		// Apply 里 resetCapturePresentation 清空前序场景（camera-third-front）
+		// 留下的全部共享呈现状态（含第三人称机位，复位为第一人称）。相机与世界内容不再由本场景摆拍：全景接管；
 		// a.center 保持出生点，后继世界场景（far-horizon）的近环收敛域不受
 		// 全景锚点影响。
 		//

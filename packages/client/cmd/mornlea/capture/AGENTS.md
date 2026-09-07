@@ -51,7 +51,11 @@
   - `TestCaptureSceneOrderAndAICompanionDeterminism`（场景完整顺序与
     ai-companion 夹具确定性）；
   - `TestTorchNightCaptureScenePosition`（torch-night 紧随 block-light-room）、
-    `TestWaterUnderwaterCaptureSceneIsLast`（water-underwater 恒末位）；
+    `TestWaterUnderwaterCaptureSceneIsLast`（water-underwater 恒末位）、
+    `TestRainNoonAndCameraThirdCaptureScenePositions`（新增三景依次紧随
+    mining-crack-heavy、先于 main-menu）；
+  - `TestCaptureRainAndCameraHygieneAcrossScenes`（雨天→双机位→菜单链路的
+    回晴与第一人称复位）；
   - `visual_compare_test.go` 的比对性质测试（`TestCompareImagesIdentical`、
     `TestDiffPixelRatioGate` 等）；
   - `TestCaptureSettled`（场景抓帧前的 settled 判据）。
