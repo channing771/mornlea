@@ -324,7 +324,8 @@ func snowTierOf(block core.BlockID) uint8 {
 
 // TestSnowUnderCapOnlyMeltsNeverGrows 覆盖机制外状态（玩家在雪层上加顶盖）下的
 // 列顶门：正常态列顶恰为雪层自身、升档照常；顶盖把列顶抬高后，冬季降水中雪层
-// 不再加厚，而回暖消融不受顶盖影响照常逐档降。与 `TestSnowAccumulatesTierByTier`
+// 不再加厚，而回暖消融不受顶盖影响照常逐档降。与
+// `TestSnowAccumulatesTierByTierToCapOnExposedGrass`
 // 的开放草地对读——那条证明门不拦正常升档，这条证明门拦得住顶盖。
 func TestSnowUnderCapOnlyMeltsNeverGrows(t *testing.T) {
 	ground := snowWorldPos(8, snowGroundY, 8)

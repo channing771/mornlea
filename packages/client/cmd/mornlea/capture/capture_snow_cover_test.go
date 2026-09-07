@@ -3,8 +3,8 @@
 package capture
 
 // capture_snow_cover_test.go：冬季雪景场景的钉死回归。`prepareSnowCover` 复用
-// 橡树林种子 42 的固定地形，在镜头前按 z 分区预铺 1..4 档雪层；`applySnowCover`
-// `CoverState` 钉住冬中正午（SeasonWinter/128 + 昼弧 9454 的相位补偿，季节化相位
+// 橡树林种子 42 的固定地形，在镜头前按 z 分区预铺 1..4 档雪层；
+// `applySnowCoverCaptureState` 钉住冬中正午（SeasonWinter/128 + 昼弧 9454 的相位补偿，季节化相位
 // 仍恰 6000）并注入雨天——冬季低地局部温度 ≤ 雪点，降水形态按共享温度公式
 // 自验为全雪。本文件断言夹具数据面与 CPU 侧呈现输入（雪层档位、降水形态、
 // 冷色 tint），golden 基线由 visual-check 承接；场景在 `captureScenes` 中紧随
