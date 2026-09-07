@@ -28,9 +28,10 @@ const (
 	// （如 capture 雨天场景的降水柱顶推导）引用它，不在别处复制该字面量。
 	WeatherColumnHeight = weatherColumnHeight
 
-	// WeatherInstanceBytes 导出降水实例的定长字节数：降水复用 avatar 通道的
-	// 实例布局（与 `AvatarInstanceBytes` 同源同值），跨包消费方（如 capture
-	// 雨天场景的编码输出断言）逐实例解码时引用它，不在别处复制该字面量。
+	// WeatherInstanceBytes 导出降水实例的定长字节数：降水实例布局与 avatar
+	// 通道同源同值（列主序 mat4 64 字节 + 四通道色 16 字节 + 材质层号 4 字节
+	// + 保留 12 字节），跨包消费方（如 capture 雨天场景的编码输出断言）逐实例
+	// 解码时引用它，不在别处复制该字面量。
 	WeatherInstanceBytes = avatarInstanceBytes
 )
 
