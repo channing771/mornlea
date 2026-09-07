@@ -29,7 +29,8 @@ import (
 
 const (
 	// weatherCycleMotionFrameCount 是演示 GIF 的固定帧数：晴雨雷暴回晴四段
-	// 各 24 帧，不超过 8fps 乘 12 秒的帧预算。
+	// 各 24 帧。约束口径是帧数不超过 8fps 乘 12 秒的 96 帧，墙钟时长只是示意
+	// （13cs 延迟下 96 帧循环约 12.5 秒）。
 	weatherCycleMotionFrameCount = 96
 	// weatherCycleMotionFrameDelay 是 GIF 单帧延迟（百分之一秒）：约 8fps，
 	// 与采掘演示同口径，96 帧循环约 12.5 秒。

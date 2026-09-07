@@ -149,8 +149,10 @@ func TestWeatherCycleMotionFrameAppliesWeatherThroughPredictor(t *testing.T) {
 	}
 }
 
-// TestWeatherCycleMotionGIFDecodesTo96Frames 钉住编码产物可解码且帧数符合约定。
-func TestWeatherCycleMotionGIFDecodesTo96Frames(t *testing.T) {
+// weatherCycleVariedFrames 构造确定性夹具：96 帧逐帧变色（多色相跨帧），
+// 让共享自适应调色板走多盒切分路径——单色输入会坍缩成单盒子，盖不住调色板
+// 路径的非确定性。
+func weatherCycleVariedFrames() []*image.NRGBA {
 	frames := make([]*image.NRGBA, 0, weatherCycleMotionFrameCount)
 	for index := range weatherCycleMotionFrameCount {
 		img := image.NewNRGBA(image.Rect(0, 0, 4, 3))
@@ -162,6 +164,12 @@ func TestWeatherCycleMotionGIFDecodesTo96Frames(t *testing.T) {
 		}
 		frames = append(frames, img)
 	}
+	return frames
+}
+
+// TestWeatherCycleMotionGIFDecodesTo96Frames 钉住编码产物可解码且帧数符合约定。
+func TestWeatherCycleMotionGIFDecodesTo96Frames(t *testing.T) {
+	frames := weatherCycleVariedFrames()
 	data, err := encodeWeatherCycleMotionGIF(frames)
 	if err != nil {
 		t.Fatalf("编码 motion GIF: %v", err)
@@ -176,12 +184,9 @@ func TestWeatherCycleMotionGIFDecodesTo96Frames(t *testing.T) {
 }
 
 // TestWeatherCycleMotionGIFEncodingIsDeterministic 钉住固定输入→固定字节：
-// 同一份 96 帧两次编码逐字节一致（连跑两次验证的落点）。
+// 同一份多色相 96 帧两次编码逐字节一致（连跑两次验证的落点）。
 func TestWeatherCycleMotionGIFEncodingIsDeterministic(t *testing.T) {
-	frames := make([]*image.NRGBA, 0, weatherCycleMotionFrameCount)
-	for range weatherCycleMotionFrameCount {
-		frames = append(frames, image.NewNRGBA(image.Rect(0, 0, 4, 3)))
-	}
+	frames := weatherCycleVariedFrames()
 	first, err := encodeWeatherCycleMotionGIF(frames)
 	if err != nil {
 		t.Fatalf("首次编码 motion GIF: %v", err)
