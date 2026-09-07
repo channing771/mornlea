@@ -96,8 +96,8 @@ func TestFluidHeightMapsLevelToRawHeightExhaustively(t *testing.T) {
 // TestBlockTopRawSinksFarmlandOnly 钉住顶面高度通道的前两类消费者：干/湿耕地
 // 填 14（呈现高度 15/16，与物理碰撞体 farmlandCollisionHeight 一致），其余全部
 // 已注册方块——含 8 个流体编号——都是「满格」哨兵 0。雪层四档是第二类消费者
-// （raw 2..5），其取值由 snow_layer_test.go 的呈现契约测试钉住，这里只负责
-// 「除耕地与雪层之外一律哨兵 0」的全域扫描。
+// （raw 1..4，呈现高度 (raw+1)/16 = 2/16..5/16），其取值由 snow_layer_test.go
+// 的呈现契约测试钉住，这里只负责「除耕地与雪层之外一律哨兵 0」的全域扫描。
 //
 // 流体的 0 不只是缺省：mesher 对流体走邻域平均角高度、对 block_top_raw 走
 // 常量，两条几何路径互斥，这里从数据源头保证流体永远不进常量路径。

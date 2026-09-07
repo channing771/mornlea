@@ -17,14 +17,16 @@ var snowLayerBlocks = [...]core.BlockID{
 }
 
 // TestSnowLayerPresentationContract 锁定雪层四档的呈现契约：顶面高度原值逐档
-// 2..5（呈现高度 2/16..5/16，档间差 1/16 可辨）、非不透明、零流体高度（不触
+// 1..4（呈现高度 (raw+1)/16 = 2/16..5/16，档间差 1/16 可辨；raw=1 是短方块域
+// 1..=14 的最低值，雪层是该值的第一个消费者）、非不透明、零流体高度（不触
 // 发 FluidHeight 与 BlockTopRaw 互斥校验）、材质按顶/侧两层映射且四档共用，
 // 以及朝空气出面、朝透明邻居按透明剔除的可见性基准。
 func TestSnowLayerPresentationContract(t *testing.T) {
 	registry := assets.NewRegistry()
 	for i, id := range snowLayerBlocks {
-		// 档位 n 的 raw = n+1：1..4 档分别 2..5，呈现高度 (raw+1)/16。
-		if got, want := registry.BlockTopRaw(id), uint8(i+2); got != want {
+		// 档位 k 的 raw = k：1..4 档分别 1..4，呈现高度 (raw+1)/16 即 2/16..5/16
+		//（spec 钉的可观察高度——第 k 档恰厚 (k+1)/16）。
+		if got, want := registry.BlockTopRaw(id), uint8(i+1); got != want {
 			t.Fatalf("雪层档位 %d 的 BlockTopRaw = %d，想要 %d", i+1, got, want)
 		}
 		if got := registry.Opaque(id); got {

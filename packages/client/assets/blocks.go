@@ -674,27 +674,24 @@ func (r *Registry) LightAttenuation(id world.BlockID) uint8 {
 // 1..=14 的上界：15 非法（满格必须用哨兵 0 表达），没有再高的选择余地。
 const farmlandTopRaw = 14
 
-// snowLayerTopRawBase 是雪层档位 → 4-bit 顶面高度原值的基线：raw = 档位 + 基线。
-//
-// 档位 1..4 映射 raw 2..5（snow-cover design 的数值表），档间差恒为 1/16 逐档
-// 可辨；raw=1 刻意留白不用于雪层。雪层是贴地装饰层、0 碰撞：呈现高度即档位
-// 语义，与物理碰撞解耦（耕地是两者同线，雪层是只有呈现没有碰撞）。
-const snowLayerTopRawBase = 1
-
 // BlockTopRaw 返回方块的 4-bit 顶面高度原值。实现 mesh.RegistryReader。
 //
-// 干/湿耕地返回 14（见 `farmlandTopRaw`）；雪层四档按档位返回 2..5（见
-// `snowLayerTopRawBase`，呈现高度由 mesher 按 (raw+1)/16 换算）；其余方块
-// ——包括全部流体——返回「满格」哨兵 0。流体的 0 不只是缺省：mesher 对流体
-// 的角高度走邻域平均、对 block_top_raw 走常量，两条几何路径互斥，编码两侧的
-// 域校验同样按「`FluidHeight` 与 `BlockTopRaw` 不同时非零」拒绝（见
-// packages/client/mesh 的 `BuildRegistrySnapshot` 与 Rust 的 `RegistryView::validate`）。
+// 干/湿耕地返回 14（见 `farmlandTopRaw`）；雪层四档直接返回档位 1..4——第 k 档
+// raw=k、呈现高度 (raw+1)/16 = (k+1)/16，即 spec 钉的可观察厚度 2/16..5/16，
+// 档间差恒为 1/16 逐档可辨；raw=1 是短方块合法域 1..=14 的最低值，雪层是该值
+// 的第一个消费者（mesher 行为由 mesh 的雪层 native parity 测试钉住）。雪层是
+// 贴地装饰层、0 碰撞：呈现高度即档位语义，与物理碰撞解耦（耕地是两者同线，
+// 雪层是只有呈现没有碰撞）。其余方块——包括全部流体——返回「满格」哨兵 0。
+// 流体的 0 不只是缺省：mesher 对流体的角高度走邻域平均、对 block_top_raw 走
+// 常量，两条几何路径互斥，编码两侧的域校验同样按「`FluidHeight` 与
+// `BlockTopRaw` 不同时非零」拒绝（见 packages/client/mesh 的
+// `BuildRegistrySnapshot` 与 Rust 的 `RegistryView::validate`）。
 func (r *Registry) BlockTopRaw(id world.BlockID) uint8 {
 	if id == core.FarmlandDryID || id == core.FarmlandWetID {
 		return farmlandTopRaw
 	}
 	if tier, ok := core.SnowLayerTier(id); ok {
-		return snowLayerTopRawBase + tier
+		return tier
 	}
 	return 0
 }
