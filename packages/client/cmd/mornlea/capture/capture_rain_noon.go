@@ -14,20 +14,45 @@ import (
 // water-underwater 的注入 tick（`1 << 20`），排在后面的末场景仍能单调前进。
 const captureRainNoonServerTick = uint64(1) << 19
 
+// captureRainNoonDayPhaseOffset 是雨天场景的显示相位补偿：场景钉夏至正午
+// （yearPhase=0.25、昼弧 15600），worldTime%24000=6000 时线性相位为
+// (6000+1800)%24000=7800，warp 后 effPhase = 7800·12000/15600 = 6000——正午
+// 天空与日照和分点基线逐字节一致（spec weather-camera-showcase）。
+const captureRainNoonDayPhaseOffset = 1800
+
 // prepareRainNoon 装入雨天场景的固定地形：复用橡树林种子 42 的 3×3 生成
-// 区块。选址理由见 `applyRainNoonCaptureState`：该机位在雪线以下且地形已
-// 验证有树，整列降水只能选雨形。
+// 区块。选址理由见 `applyRainNoonCaptureState`：该机位下降水柱主体落在夏至
+// 正午的温度边界（y=84.8）之下、柱顶少量高出，画面主体为雨、柱顶带温度
+// 梯度真实表现的少量雪尘，且地形已验证有树。
 func prepareRainNoon(app SceneApplication) error {
 	return prepareOakGrove(app)
 }
 
-// applyRainNoonCaptureState 钉死雨天场景的全部呈现状态：正午、雪线下机位与
-// 共享清场复用橡树林（同一地形同一机位，画面差异只来自天气），再经抓帧
-// 路径注入固定雨天。场景已进 `captureScenes`（紧随 mining-crack-heavy），
-// 注入的雨天由后继场景的公共清场复位为晴天。
+// applyRainNoonCaptureState 钉死雨天场景的全部呈现状态：夏至正午（季节钉
+// Summer/0 + 显示相位补偿 1800，季节化相位仍恰 6000）、固定机位与共享清场
+// 复用橡树林（同一地形同一机位，天空与日照和既有基线逐字节一致，画面差异
+// 只来自天气与温度化的降水形态），再经抓帧路径注入固定雨天。场景已进
+// `captureScenes`（紧随 mining-crack-heavy），注入的雨天由后继场景的公共
+// 清场复位为晴天，季节钉由抓帧管线的分点默认锚复位。
 func applyRainNoonCaptureState(app SceneApplication) error {
 	if err := applyOakGroveCaptureState(app); err != nil {
 		return err
+	}
+	// 夏至正午钉 + 相位补偿：抓帧管线已在 Apply 前把季节钉回分点，这里改钉
+	// 夏至（温度边界抬到 y=84.8，低地降水主体保持雨形）并补偿显示相位，使
+	// warp 后的季节化相位仍恰为正午 6000。
+	if err := app.SetCaptureSeason(core.SeasonSummer, 0); err != nil {
+		return fmt.Errorf("钉住 rain-noon 夏至季节: %w", err)
+	}
+	if err := app.SetCaptureDayPhaseOffset(captureRainNoonDayPhaseOffset); err != nil {
+		return fmt.Errorf("补偿 rain-noon 显示相位: %w", err)
+	}
+	// 恒等自验：补偿失效（昼弧或世界时间被改动）时当场失败，不产出错位天空。
+	// 世界时间 6000 由上面的 applyOakGroveCaptureState 钉死、yearPhase 0.25
+	// 由本函数钉死，这里按同一对钉值复算季节化相位。
+	effPhase := core.EffectiveDayPhase(6000, captureRainNoonDayPhaseOffset, core.DayArcTicks(0.25))
+	if effPhase != 6000 {
+		return fmt.Errorf("rain-noon 相位补偿后季节化相位 = %d，想要 6000（正午）", effPhase)
 	}
 	return injectRainNoonWeather(app)
 }

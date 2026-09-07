@@ -53,8 +53,10 @@ type SceneApplication interface {
 	// 和解一致，越界拒绝）：抓帧管线默认把镜像 Season/SeasonProgress 钉在
 	// 春始分点（SeasonSpring/0），呈现侧 yearPhase 因此为 0——昼弧 12000
 	// warp 恒等、冷色 tint 权重 0，golden 不随真实世界（seed 派生）的季节
-	// 相位漂移。生产帧循环不消费它。
+	// 相位漂移。钉住非分点季节的场景（如 rain-noon 的夏至）再经
+	// SetCaptureDayPhaseOffset 把显示相位补偿回目标值。生产帧循环不消费两者。
 	SetCaptureSeason(season core.Season, progress uint8) error
+	SetCaptureDayPhaseOffset(offset uint16) error
 	SetCenter(center core.ChunkPos)
 	SetBlockTargetReset(reset bool)
 	// 菜单全景（menu-vista）：PinVolatile 在收敛后钉住自转时刻，收敛判据

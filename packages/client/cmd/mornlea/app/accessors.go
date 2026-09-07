@@ -258,6 +258,10 @@ func (a *Application) SetClientEndpoint(endpoint network.ClientEndpoint) {
 // WorldTimeTicks 读取最后确认的权威绝对世界时间。
 func (a *Application) WorldTimeTicks() uint64 { return a.worldTimeTicks }
 
+// DayPhaseOffset 读取最后确认的显示相位偏移（0..23999）；抓帧侧经
+// `SetCaptureDayPhaseOffset` 直写后同样经它读回。
+func (a *Application) DayPhaseOffset() uint16 { return a.dayPhaseOffset }
+
 // SetWorldTimeTicks 固定环境光照时间（capture 场景钉住天空状态）。
 func (a *Application) SetWorldTimeTicks(ticks uint64) { a.worldTimeTicks = ticks }
 
@@ -298,6 +302,19 @@ func (a *Application) SetCaptureSeason(season core.Season, progress uint8) error
 	}
 	a.season = season
 	a.seasonProgress = progress
+	return nil
+}
+
+// SetCaptureDayPhaseOffset 写入抓帧呈现侧的显示相位偏移（capture-only）：值域
+// 口径与 wire `PlayerState.DayPhaseOffset` 一致（0..23999，越界拒绝且不污染已
+// 钉住的值）。抓帧场景钉住非分点季节（如 rain-noon 的夏至）时，昼弧 warp 会
+// 平移显示相位，须经它补偿回目标相位；直写不受 `worldTimeFrozen` 影响，生产
+// 代码不得消费本方法。
+func (a *Application) SetCaptureDayPhaseOffset(offset uint16) error {
+	if offset >= core.DayLengthTicks {
+		return fmt.Errorf("capture 显示相位偏移 %d 越界，想要 0..%d", offset, core.DayLengthTicks-1)
+	}
+	a.dayPhaseOffset = offset
 	return nil
 }
 
