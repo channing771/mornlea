@@ -222,6 +222,32 @@ func TestWeatherCycleMotionSceneStaysOutOfCaptureScenes(t *testing.T) {
 	}
 }
 
+// TestWeatherCycleMotionScenePinsSummerNoonWithCompensation 钉住演示机位的
+// 季节钉（与 rain-noon 场景同一钉法，裁决同语义）：夏至钉 + 相位补偿后
+// yearPhase=0.25、季节化相位仍恰 6000——昼夜曲线与无季节基线逐值一致，入库
+// GIF 逐字节不变；夏至正午的温度边界 y=84.8 只把降水柱顶 84.8..85.5 的少量
+// 粒子判为雪尘，它们位于该俯视机位视野之外（rain-noon 同机位基线恒等实证），
+// 入画降水段保持纯雨形。
+func TestWeatherCycleMotionScenePinsSummerNoonWithCompensation(t *testing.T) {
+	app := newRainNoonTestApplication(t)
+	if err := applyWeatherCycleMotionCaptureState(app); err != nil {
+		t.Fatalf("应用演示收敛场景: %v", err)
+	}
+	if got := app.YearPhase(); got != 0.25 {
+		t.Fatalf("演示机位 yearPhase = %v，想要 0.25（夏至钉）", got)
+	}
+	offset := app.DayPhaseOffset()
+	if offset != captureSummerNoonDayPhaseOffset {
+		t.Fatalf("演示机位显示相位偏移 = %d，想要补偿值 %d", offset, captureSummerNoonDayPhaseOffset)
+	}
+	if got := core.EffectiveDayPhase(6000, offset, core.DayArcTicks(0.25)); got != 6000 {
+		t.Fatalf("补偿后的季节化相位 = %d，想要 6000（正午）", got)
+	}
+	if got, want := render.DayNightAt(6000, offset, 0.25), render.DayNightAt(6000, 0); got != want {
+		t.Fatalf("演示机位昼夜状态 = %+v，想要与无季节基线一致 %+v", got, want)
+	}
+}
+
 // TestRunWeatherCycleMotionValidatesInputs 钉住演示入口的前置校验：空路径与
 // 空应用在收敛世界之前失败，不产出半截文件。
 func TestRunWeatherCycleMotionValidatesInputs(t *testing.T) {

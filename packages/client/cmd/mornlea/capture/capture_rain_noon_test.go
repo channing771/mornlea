@@ -98,11 +98,11 @@ func TestRainNoonApplyPinsNoonRainAndFixedTick(t *testing.T) {
 	if got := app.YearPhase(); got != 0.25 {
 		t.Fatalf("rain-noon 的 yearPhase = %v，想要 0.25（夏至钉）", got)
 	}
-	eff := core.EffectiveDayPhase(6000, captureRainNoonDayPhaseOffset, core.DayArcTicks(0.25))
+	eff := core.EffectiveDayPhase(6000, captureSummerNoonDayPhaseOffset, core.DayArcTicks(0.25))
 	if eff != 6000 {
 		t.Fatalf("相位补偿后的季节化相位 = %d，想要 6000（正午）", eff)
 	}
-	if got, want := render.DayNightAt(6000, captureRainNoonDayPhaseOffset, 0.25), render.DayNightAt(6000, 0); got != want {
+	if got, want := render.DayNightAt(6000, captureSummerNoonDayPhaseOffset, 0.25), render.DayNightAt(6000, 0); got != want {
 		t.Fatalf("夏至补偿正午的昼夜状态 = %+v，想要与分点基线一致 %+v", got, want)
 	}
 	if got := app.RemotePlayers().Presentations(); len(got) != 0 {

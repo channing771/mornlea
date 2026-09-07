@@ -33,7 +33,7 @@
 | `water-surface-slope.png` | `water-surface-slope` | 俯视水池的水面高度斜坡与透水可见的池底材质。 |
 | `mining-crack-early.png` | `mining-crack-early` | 同一目标砖块上的浅阶段世界空间采掘裂纹。 |
 | `mining-crack-heavy.png` | `mining-crack-heavy` | 同一目标砖块上的最重阶段裂纹，与浅阶段对照判读加深。 |
-| `rain-noon.png` | `rain-noon` | 正午雨天固定夹具：雨粒子、灰天空与压暗后的露天亮度同框，雪线下机位锁定雨形。 |
+| `rain-noon.png` | `rain-noon` | 夏至正午雨天固定夹具（相位补偿后显示相位恰 6000，天空与日照和分点基线逐字节一致）：雨粒子、灰天空与压暗后的露天亮度同框；降水形态由温度公式逐粒派生，入画全为雨形。 |
 | `camera-third-back.png` | `camera-third-back` | 同一机位第三人称背面：自身身体可见、无 viewmodel，背部可辨。 |
 | `camera-third-front.png` | `camera-third-front` | 同一机位第三人称正面：自身身体可见、无 viewmodel，脸部可辨。 |
 | `main-menu.png` | `main-menu` | 主菜单相位全景底图，固定自转时刻的纯全景世界画面。 |

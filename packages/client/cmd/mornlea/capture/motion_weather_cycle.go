@@ -52,13 +52,32 @@ const (
 
 // weatherCycleMotionScene 是演示的收敛场景值：仅本文件内部使用，绝不追加进
 // `captureScenes`。世界夹具与机位复用雨天场景（橡树林种子 42 的固定地形与
-// 雪线下机位，整列降水只能选雨形），呈现状态钉死沿用橡树林（固定正午 +
-// 同机位 + 晴天基线），动态只来自逐帧的天气与 tick 注入。
+// 机位），呈现状态钉死沿用橡树林（固定正午 + 同机位 + 晴天基线），再钉
+// 「夏至正午 + 相位补偿」（与 rain-noon 场景同一钉法，裁决同语义）：补偿后
+// 季节化相位仍恰 6000，昼夜曲线与无季节基线逐值一致；夏至正午的温度边界
+// y=84.8 只把降水柱 (65.5,85.5] 顶缘 84.8..85.5 的约 4%（10/256 粒）判为
+// 雪尘，它们位于该俯视机位视野之外（rain-noon 同机位 golden 逐字节恒等的
+// 实证），入画降水段保持纯雨形——演示只讲「晴→雨→雷暴→晴」的天气轮转，
+// 冬季雪景留给积雪 change。动态只来自逐帧的天气与 tick 注入。
 var weatherCycleMotionScene = captureScene{
 	Name:         "weather-cycle-motion",
 	WarmupFrames: 8,
 	Prepare:      prepareRainNoon,
-	Apply:        applyOakGroveCaptureState,
+	Apply:        applyWeatherCycleMotionCaptureState,
+}
+
+// applyWeatherCycleMotionCaptureState 钉死演示收敛场景的呈现状态：先走橡树
+// 林的共享清场与正午机位，再钉夏至正午 + 相位补偿（`pinCaptureSummerNoon`
+// 含恒等自验）。抓帧管线在 Apply 前已钉分点基线，这里的改钉只对本演示
+// 生效。
+func applyWeatherCycleMotionCaptureState(app SceneApplication) error {
+	if err := applyOakGroveCaptureState(app); err != nil {
+		return err
+	}
+	if err := pinCaptureSummerNoon(app); err != nil {
+		return fmt.Errorf("钉住 weather-cycle motion 夏至正午: %w", err)
+	}
+	return nil
 }
 
 // weatherCycleMotionTick 把帧号映射为合成 tick：逐帧固定步长压缩推进。
