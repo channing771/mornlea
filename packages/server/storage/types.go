@@ -63,6 +63,12 @@ type Metadata struct {
 	// 它只进入显示相位计算 `(WorldTimeTicks + DayPhaseOffset) % 24000`，
 	// 不影响绝对时间的推进或任何以绝对时间驱动的模拟。
 	DayPhaseOffset uint64
+	// WeatherKind 是服务端权威天气种类，metadata v4 起持久化；v1/v2/v3 世界
+	// 迁移后为晴天。客户端降水形态只按本地高度相对雪线派生，不进权威状态。
+	WeatherKind core.WeatherKind
+	// WeatherTicksRemaining 是当前天气段的剩余权威 tick 数，metadata v4 起
+	// 持久化；旧版本世界迁移后为零，零表示旧档未记录、恢复时按新世界默认值掷骰。
+	WeatherTicksRemaining uint32
 }
 
 // RegionKey 是 region 文件键的别名再导出，定义在 region 格式原语包。

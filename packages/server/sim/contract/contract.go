@@ -152,6 +152,9 @@ type PlayerUpdate struct {
 	SaturationZero    bool
 	DayPhaseOffset    uint16
 	WorldTimeTicks    uint64
+	// WeatherKind 是本 tick 结束时的权威天气（0=晴、1=雨、2=雷暴）：
+	// 世界单值，同一 tick 发给所有玩家的更新里完全一致。
+	WeatherKind core.WeatherKind
 }
 
 type CompanionUpdate struct {
@@ -215,6 +218,9 @@ type TickResult struct {
 	CombatHits         []CombatHit
 	Tick               uint64
 	WorldTimeTicks     uint64
+	// WeatherKind 是本 tick 结束时的权威天气：发布侧按人复制进每份
+	// `PlayerUpdate`，实体结算不消费它。
+	WeatherKind core.WeatherKind
 }
 
 type PlayerLocation struct {

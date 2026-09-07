@@ -79,6 +79,9 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			if !a.worldTimeFrozen {
 				a.worldTimeTicks = state.WorldTimeTicks
 				a.dayPhaseOffset = state.DayPhaseOffset
+				// 天气与世界时间同一呈现量纪律：只认更新 tick（上面的
+				// ServerTick 守卫），冻结开关一并钉住降水/天空/亮度输入。
+				a.weather = state.WeatherKind
 			}
 			if state.Reset || !state.MiningActive {
 				a.miningOverlay = hud.MiningOverlay{}

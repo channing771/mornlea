@@ -101,10 +101,10 @@ func TestDefaultOptions(t *testing.T) {
 }
 
 func TestServerProtocolV26IsCurrent(t *testing.T) {
-	// 字面量随 `network.ProtocolVersion` 的现行契约同步（v34 放牧位）；
+	// 字面量随 `network.ProtocolVersion` 的现行契约同步（v35 死亡原因位）；
 	// 函数名保留历史编号先例，仅钉住「专用服务端跟随当前协议」。
-	if network.ProtocolVersion != 35 {
-		t.Fatalf("专用服务端协议版本 = %d，想要 35", network.ProtocolVersion)
+	if network.ProtocolVersion != 36 {
+		t.Fatalf("专用服务端协议版本 = %d，想要 36", network.ProtocolVersion)
 	}
 }
 
@@ -125,7 +125,7 @@ func TestRunPassesMaxPlayersToHost(t *testing.T) {
 	var got int
 	err := run(context.Background(), append([]string{"--max-players=3"}, absentConfigArgs(t)...), dependencies{
 		openDisk: func(context.Context, string, storage.OpenOptions) (storage.WorldStore, error) {
-			return storage.NewMemory(storage.Metadata{FormatVersion: 3, Seed: 42}), nil
+			return storage.NewMemory(storage.Metadata{FormatVersion: 4, Seed: 42}), nil
 		},
 		listenTCP: func(string) (network.Listener, error) { return mornleaServerTestListener{}, nil },
 		newHost: func(_ context.Context, config server.Config, _ server.Generator, _ storage.WorldStore) (mornleaServerHost, error) {
@@ -160,7 +160,7 @@ func TestRunInjectsAICompanionsIntoDedicatedServer(t *testing.T) {
 	var got []companion.Definition
 	err = run(context.Background(), []string{"--config", path}, dependencies{
 		openDisk: func(context.Context, string, storage.OpenOptions) (storage.WorldStore, error) {
-			return storage.NewMemory(storage.Metadata{FormatVersion: 3, Seed: 42}), nil
+			return storage.NewMemory(storage.Metadata{FormatVersion: 4, Seed: 42}), nil
 		},
 		listenTCP: func(string) (network.Listener, error) { return mornleaServerTestListener{}, nil },
 		newHost: func(_ context.Context, config server.Config, _ server.Generator, _ storage.WorldStore) (mornleaServerHost, error) {
@@ -258,7 +258,7 @@ func TestRunMigrateMaterialsReturnsWorldLockConflict(t *testing.T) {
 	ctx := context.Background()
 	worldPath := filepath.Join(t.TempDir(), "world")
 	store, err := storage.OpenDisk(ctx, worldPath, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 3,
+		FormatVersion: 4,
 		Seed:          42,
 	}})
 	if err != nil {
@@ -301,7 +301,7 @@ func TestRunMigrateMaterialsCompletesAndRerunsWithSameArguments(t *testing.T) {
 	worldPath := filepath.Join(root, "world")
 	backupPath := filepath.Join(root, "backup")
 	store, err := storage.OpenDisk(ctx, worldPath, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion:  3,
+		FormatVersion:  4,
 		Seed:           42,
 		SpawnDimension: core.Overworld,
 	}})
@@ -329,11 +329,11 @@ func TestRunMigrateMaterialsCompletesAndRerunsWithSameArguments(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	if got := reopened.Metadata().FormatVersion; got != 3 {
-		t.Fatalf("迁移后 metadata 版本 = %d，期望 3", got)
+	if got := reopened.Metadata().FormatVersion; got != 4 {
+		t.Fatalf("迁移后 metadata 版本 = %d，期望 4", got)
 	}
-	// 迁移只动世界 metadata，协议契约必须保持现行值（v35）不变。
-	if network.ProtocolVersion != 35 {
+	// 迁移只动世界 metadata，协议契约必须保持现行值（v36）不变。
+	if network.ProtocolVersion != 36 {
 		t.Fatalf("迁移命令改变了协议版本: %d", network.ProtocolVersion)
 	}
 }
@@ -359,7 +359,7 @@ func migrationOnlyDependencies(t *testing.T) dependencies {
 func TestRunOpensWorldBeforeListeningAndUsesStoredSeed(t *testing.T) {
 	var events []string
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion:  3,
+		FormatVersion:  4,
 		Seed:           91,
 		SpawnDimension: core.Overworld,
 	})
@@ -400,7 +400,7 @@ func TestRunOpensWorldBeforeListeningAndUsesStoredSeed(t *testing.T) {
 }
 
 func TestRunClosesWorldWhenListeningFails(t *testing.T) {
-	store := &mornleaServerClosingStore{WorldStore: storage.NewMemory(storage.Metadata{FormatVersion: 3})}
+	store := &mornleaServerClosingStore{WorldStore: storage.NewMemory(storage.Metadata{FormatVersion: 4})}
 	listenErr := errors.New("address already in use")
 	err := run(context.Background(), absentConfigArgs(t), dependencies{
 		openDisk:  func(context.Context, string, storage.OpenOptions) (storage.WorldStore, error) { return store, nil },
@@ -413,7 +413,7 @@ func TestRunClosesWorldWhenListeningFails(t *testing.T) {
 
 func TestNewHostFailureClosesDedicatedListenerAndStore(t *testing.T) {
 	wantErr := errors.New("companion bootstrap failed")
-	store := &mornleaServerClosingStore{WorldStore: storage.NewMemory(storage.Metadata{FormatVersion: 3})}
+	store := &mornleaServerClosingStore{WorldStore: storage.NewMemory(storage.Metadata{FormatVersion: 4})}
 	listener := &mornleaServerClosingListener{}
 	var logs bytes.Buffer
 	ctx := context.WithValue(context.Background(), struct{}{}, "constructor-context")
@@ -439,7 +439,7 @@ func TestNewHostFailureClosesDedicatedListenerAndStore(t *testing.T) {
 func TestRunCancellationDuringHostConstruction(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	store := &mornleaServerClosingStore{WorldStore: storage.NewMemory(storage.Metadata{FormatVersion: 3})}
+	store := &mornleaServerClosingStore{WorldStore: storage.NewMemory(storage.Metadata{FormatVersion: 4})}
 	listener := &mornleaServerClosingListener{}
 	err := run(ctx, absentConfigArgs(t), dependencies{
 		openDisk:  func(context.Context, string, storage.OpenOptions) (storage.WorldStore, error) { return store, nil },
@@ -459,7 +459,7 @@ func TestRunCancellationDuringHostConstruction(t *testing.T) {
 
 func TestRunUncancelledHostConstructionError(t *testing.T) {
 	want := errors.New("host construction failed")
-	store := &mornleaServerClosingStore{WorldStore: storage.NewMemory(storage.Metadata{FormatVersion: 3})}
+	store := &mornleaServerClosingStore{WorldStore: storage.NewMemory(storage.Metadata{FormatVersion: 4})}
 	listener := &mornleaServerClosingListener{}
 	err := run(context.Background(), absentConfigArgs(t), dependencies{
 		openDisk:  func(context.Context, string, storage.OpenOptions) (storage.WorldStore, error) { return store, nil },
@@ -499,7 +499,7 @@ func TestRunHostConstructionCancellationRequiresBothConditions(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			store := &mornleaServerClosingStore{WorldStore: storage.NewMemory(storage.Metadata{FormatVersion: 3})}
+			store := &mornleaServerClosingStore{WorldStore: storage.NewMemory(storage.Metadata{FormatVersion: 4})}
 			listener := &mornleaServerClosingListener{}
 			err := run(test.ctx(), absentConfigArgs(t), dependencies{
 				openDisk:  func(context.Context, string, storage.OpenOptions) (storage.WorldStore, error) { return store, nil },
@@ -524,7 +524,7 @@ func TestRunCancellationDuringHostConstructionRetainsCleanupErrors(t *testing.T)
 	listenerCloseErr := errors.New("listener close failed")
 	storeCloseErr := errors.New("store close failed")
 	store := &mornleaServerClosingStore{
-		WorldStore: storage.NewMemory(storage.Metadata{FormatVersion: 3}),
+		WorldStore: storage.NewMemory(storage.Metadata{FormatVersion: 4}),
 		closeErr:   storeCloseErr,
 	}
 	listener := &mornleaServerClosingListener{closeErr: listenerCloseErr}
@@ -555,7 +555,7 @@ func TestRunCancellationLetsHostPerformSafeShutdown(t *testing.T) {
 	go func() {
 		done <- run(ctx, args, dependencies{
 			openDisk: func(context.Context, string, storage.OpenOptions) (storage.WorldStore, error) {
-				return storage.NewMemory(storage.Metadata{FormatVersion: 3}), nil
+				return storage.NewMemory(storage.Metadata{FormatVersion: 4}), nil
 			},
 			listenTCP: func(string) (network.Listener, error) { return mornleaServerTestListener{addr: "127.0.0.1:9"}, nil },
 			newHost: func(context.Context, server.Config, server.Generator, storage.WorldStore) (mornleaServerHost, error) {
@@ -578,7 +578,7 @@ func TestRunPreservesFlushFailures(t *testing.T) {
 		t.Run(want.Error(), func(t *testing.T) {
 			err := run(context.Background(), absentConfigArgs(t), dependencies{
 				openDisk: func(context.Context, string, storage.OpenOptions) (storage.WorldStore, error) {
-					return storage.NewMemory(storage.Metadata{FormatVersion: 3}), nil
+					return storage.NewMemory(storage.Metadata{FormatVersion: 4}), nil
 				},
 				listenTCP: func(string) (network.Listener, error) { return mornleaServerTestListener{}, nil },
 				newHost: func(context.Context, server.Config, server.Generator, storage.WorldStore) (mornleaServerHost, error) {
@@ -606,7 +606,7 @@ func TestRunCancellationDoesNotMaskFlushFailure(t *testing.T) {
 	go func() {
 		done <- run(ctx, args, dependencies{
 			openDisk: func(context.Context, string, storage.OpenOptions) (storage.WorldStore, error) {
-				return storage.NewMemory(storage.Metadata{FormatVersion: 3}), nil
+				return storage.NewMemory(storage.Metadata{FormatVersion: 4}), nil
 			},
 			listenTCP: func(string) (network.Listener, error) { return mornleaServerTestListener{}, nil },
 			newHost: func(context.Context, server.Config, server.Generator, storage.WorldStore) (mornleaServerHost, error) {

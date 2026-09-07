@@ -229,7 +229,7 @@ func newTwoPlayerChestWorld(t *testing.T) (
 	secondClient, secondServerEndpoint := network.NewMemoryPair(1024)
 	config := hotbarTestConfig(2)
 	running := server.NewWorld(config, server.FlatTestGenerator{}, storage.NewMemory(storage.Metadata{
-		FormatVersion: 3, Seed: config.Seed,
+		FormatVersion: 4, Seed: config.Seed,
 		SpawnDimension: config.SpawnDimension, SpawnAnchor: config.SpawnAnchor,
 	}))
 	restore := contract.PlayerRestore{SpawnDimension: config.SpawnDimension, SpawnAnchor: config.SpawnAnchor}

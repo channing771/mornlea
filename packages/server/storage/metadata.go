@@ -14,8 +14,11 @@ import (
 )
 
 const (
-	currentMetadataVersion uint32 = 3
-	metadataPayloadLength  uint32 = 36
+	currentMetadataVersion uint32 = 4
+	metadataPayloadLength  uint32 = 41
+	// legacyMetadataV3Version 是仍可读取的 v3；v3 只被读取和迁移，不再写出。
+	legacyMetadataV3Version       uint32 = 3
+	legacyMetadataV3PayloadLength uint32 = 36
 	// legacyMetadataVersion 是仍可读取的 v1；v1 只被读取和迁移，不再写出。
 	legacyMetadataVersion       uint32 = 1
 	legacyMetadataPayloadLength uint32 = 20
@@ -70,6 +73,9 @@ func encodeMetadata(metadata Metadata) ([]byte, error) {
 	encoded = binary.LittleEndian.AppendUint64(encoded, metadata.WorldTimeTicks)
 	// 偏移是 v3 相对 v2 的纯尾部追加：v2 载荷的既有段布局一字不动。
 	encoded = binary.LittleEndian.AppendUint64(encoded, metadata.DayPhaseOffset)
+	// 天气是 v4 相对 v3 的纯尾部追加：种类 1 字节在前，剩余时长 u32 紧随其后。
+	encoded = append(encoded, byte(metadata.WeatherKind))
+	encoded = binary.LittleEndian.AppendUint32(encoded, metadata.WeatherTicksRemaining)
 	encoded = binary.LittleEndian.AppendUint32(
 		encoded, crc32.Checksum(encoded, metadataCRCTable),
 	)
@@ -88,12 +94,15 @@ func decodeMetadata(encoded []byte) (Metadata, error) {
 	if version > currentMetadataVersion {
 		return Metadata{}, fmt.Errorf("%w: metadata version %d", ErrFutureVersion, version)
 	}
-	// v1、v2 与 v3 各自有固定 payload 长度；旧版本读取后在内存中规范为当前
-	// 版本：v1 世界时间与偏移均为零，v2 偏移为零。
+	// v1、v2、v3 与 v4 各自有固定 payload 长度；旧版本读取后在内存中规范为当前
+	// 版本：v1 世界时间与偏移均为零，v2 偏移为零，v1/v2/v3 天气均为晴天、
+	// 剩余时长均为零（零表示旧档未记录，恢复时按新世界默认值掷骰）。
 	var wantPayloadLength uint32
 	switch version {
 	case currentMetadataVersion:
 		wantPayloadLength = metadataPayloadLength
+	case legacyMetadataV3Version:
+		wantPayloadLength = legacyMetadataV3PayloadLength
 	case legacyMetadataV2Version:
 		wantPayloadLength = legacyMetadataV2PayloadLength
 	case legacyMetadataVersion:
@@ -130,13 +139,17 @@ func decodeMetadata(encoded []byte) (Metadata, error) {
 			Z: int32(binary.LittleEndian.Uint32(payload[16:20])),
 		},
 	}
-	// 世界时间自 v2 起持久化，偏移自 v3 起持久化：旧版本读入即升级，
-	// 缺失的尾部字段按零值迁移，行为与升级前完全一致。
+	// 世界时间自 v2 起持久化，偏移自 v3 起持久化，天气自 v4 起持久化：
+	// 旧版本读入即升级，缺失的尾部字段按零值迁移，行为与升级前完全一致。
 	if version >= legacyMetadataV2Version {
 		metadata.WorldTimeTicks = binary.LittleEndian.Uint64(payload[20:28])
 	}
-	if version == currentMetadataVersion {
+	if version >= legacyMetadataV3Version {
 		metadata.DayPhaseOffset = binary.LittleEndian.Uint64(payload[28:36])
+	}
+	if version == currentMetadataVersion {
+		metadata.WeatherKind = core.WeatherKind(payload[36])
+		metadata.WeatherTicksRemaining = binary.LittleEndian.Uint32(payload[37:41])
 	}
 	return metadata, nil
 }

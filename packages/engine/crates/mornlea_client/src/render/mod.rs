@@ -33,6 +33,7 @@ mod side_tests;
 pub mod viewmodel;
 #[cfg(test)]
 mod water_tests;
+pub mod weather;
 mod world;
 #[cfg(test)]
 mod world_tests;
@@ -161,6 +162,12 @@ pub struct FrameInput {
     /// `render` 包编码);空表示本帧无双手。本版本只解码入结构,绘制由后续
     /// change 的相机空间叠加 pass 承担。
     pub viewmodel_instances: Vec<u8>,
+    /// 天气灰度(0 表示晴天):Go 侧按权威天气的固定因子编码,经 sky uniform
+    /// 预留位灰化天空与云;晴天恒为零。
+    pub weather_gray: f32,
+    /// 降水 instance 字节流(96 字节/实例:与 avatar 同布局,形态已由 Go 侧按
+    /// 高度相对雪线选形);空表示本帧无降水(晴天)。
+    pub precip_instances: Vec<u8>,
     /// 伤害红边强度(0 表示不绘制)。
     pub overlay_strength: f32,
     /// 相机浸没时的全屏水色叠加 RGBA(A <= 0 表示不绘制)。
@@ -192,6 +199,8 @@ impl FrameInput {
             && self.outline.is_empty()
             && self.crack_instances.is_empty()
             && self.viewmodel_instances.is_empty()
+            && self.weather_gray == 0.0
+            && self.precip_instances.is_empty()
             && self.overlay_strength == 0.0
             && self.water_tint[3] == 0.0
             && self.name_tag_vertices.is_empty()
@@ -565,6 +574,9 @@ pub struct OffscreenRenderer {
     /// 第一人称双手 viewmodel 叠加 pass(恒 ≤4 实例,复用 avatar 实例布局
     /// 与材质分支的不透明变体,bind 随 atlas 上传重建)。
     viewmodel_pass: EntityPass,
+    /// 降水粒子叠加 pass(恒 ≤256 实例,复用 avatar 实例布局与材质分支的
+    /// 不透明变体,bind 随 atlas 上传重建)。
+    weather_pass: EntityPass,
     /// 伤害红边 uniform(16B,strength@0)。
     overlay_uniform: wgpu::Buffer,
     water_tint_uniform: wgpu::Buffer,
@@ -1031,6 +1043,20 @@ impl OffscreenRenderer {
             DEPTH_FORMAT,
         );
 
+        // 降水粒子叠加 pass:恒 ≤256 实例的常驻资源,复用 avatar 的 shader
+        // 模块与不透明管线状态(实例布局与材质分支纪律与 avatar 同源);bind
+        // 随 atlas 上传重建,未上传前不绘制。
+        let weather_pass = EntityPass::new(
+            &device,
+            &queue,
+            &avatar_module,
+            weather::WEATHER_PASS_LABEL,
+            weather::WEATHER_MAX_INSTANCES,
+            EntityPipelineKind::Opaque,
+            COLOR_FORMAT,
+            DEPTH_FORMAT,
+        );
+
         // 全屏叠加:无深度附件的全屏三角管线,镜像 Go damage_overlay.go。
         // 伤害红边与水下水色共用这一条管线与这一份 layout,各自持有一块 32 字节
         // uniform(vec4 颜色 + edge 位 + 三个 pad):同一帧里两者可能都要画,
@@ -1248,6 +1274,7 @@ impl OffscreenRenderer {
             outline_pass,
             crack_pass,
             viewmodel_pass,
+            weather_pass,
             name_tag_pass,
             hud_pass,
             debug_pass,
@@ -1357,6 +1384,8 @@ impl OffscreenRenderer {
         self.outline_pass
             .rebuild_bind(&self.device, &atlas_view, &self.sampler);
         self.viewmodel_pass
+            .rebuild_bind(&self.device, &atlas_view, &self.sampler);
+        self.weather_pass
             .rebuild_bind(&self.device, &atlas_view, &self.sampler);
         self.terrain_bind = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("terrain resources"),
@@ -1795,6 +1824,8 @@ impl OffscreenRenderer {
             || !self.outline_pass.instances_valid(&input.outline)
             || !CrackPass::instances_valid(&input.crack_instances)
             || !viewmodel::instances_valid(&input.viewmodel_instances)
+            || !weather::instances_valid(&input.precip_instances)
+            || !weather::gray_valid(input.weather_gray)
             || input.overlay_strength.is_nan()
             || input.water_tint.iter().any(|value| value.is_nan())
         {
@@ -1884,6 +1915,9 @@ impl OffscreenRenderer {
             ],
         );
         sky_data[84..88].copy_from_slice(&input.cloud_macro_x.to_le_bytes());
+        // 天气灰度进 sky uniform 预留位:总量仍为 112 字节,既有字段偏移不动,
+        // 沿用同一份 fullscreen sky draw(见 `weather::write_sky_weather`)。
+        weather::write_sky_weather(&mut sky_data, input.weather_gray);
         write_f32s(
             &mut sky_data,
             96,
@@ -2195,6 +2229,26 @@ impl OffscreenRenderer {
                 frame_view,
                 &self.depth_view,
                 viewmodel::VIEWMODEL_PASS_LABEL,
+            );
+        }
+        // 降水粒子(帧序:双手之后、名牌之前)。世界空间不透明叠加层:名牌与
+        // 全屏叠加、HUD、调试面板之前绘制,不遮挡名牌、准星与面板;空段跳过
+        // 录制,晴天帧的 draw 选择与变更前一致。超限已在 validate_frame 整帧
+        // 拒绝,此处只处理合法非空流,不做任何天气推测(形态已由 Go 编码侧烘焙
+        // 进实例变换)。
+        if weather::wants_draw(&input.precip_instances) {
+            debug_assert!(weather::instances_valid(&input.precip_instances));
+            self.weather_pass.upload(
+                &self.queue,
+                &input.view_proj,
+                input.daylight,
+                &input.precip_instances,
+            );
+            self.weather_pass.record(
+                encoder,
+                frame_view,
+                &self.depth_view,
+                weather::WEATHER_PASS_LABEL,
             );
         }
         // 名牌(帧序:双手之后、overlay 之前)。

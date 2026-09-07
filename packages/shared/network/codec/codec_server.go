@@ -94,6 +94,9 @@ func encodeServerControlPayload(state protocol.State, packet protocol.ServerPack
 			// 既有字段的位置与字节序保持不变。
 			e.u16(message.DayPhaseOffset)
 			e.u64(message.WorldTimeTicks)
+			// v36：权威天气追加在绝对世界时间之后，占 1 字节（u8，仅 0..2 合法，
+			// 越界由 `Validate` 在编码前置拒绝），既有字段的位置与字节序保持不变。
+			e.u8(uint8(message.WeatherKind))
 		case protocol.CommandRejected:
 			reason, _ := protocol.CommandRejectReasonID(message.Reason)
 			e.u64(message.Sequence)
@@ -379,6 +382,14 @@ func decodeServerControlPayload(state protocol.State, packetID uint32, payload [
 			}
 			if err == nil {
 				statePacket.WorldTimeTicks, err = d.u64()
+			}
+			// v36：权威天气是载荷最末 1 字节；越界值不在此做分支判断，统一由尾部
+			// 的 `validateServerWirePacket` 经 `Validate` 拒绝，保证编解码两侧
+			// 与 `Memory` 传输共用同一值域结论。
+			if err == nil {
+				var weather uint8
+				weather, err = d.u8()
+				statePacket.WeatherKind = core.WeatherKind(weather)
 			}
 			packet = statePacket
 		case 4:

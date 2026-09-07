@@ -63,6 +63,10 @@ type Predictor struct {
 	oxygen              uint16
 	hunger              uint8
 	saturationZero      bool
+	// weather 是最近确认的权威天气。它与生命值、饥饿值同为纯镜像值：
+	// 只由服务端确认写入，客户端不预测、不随机、不按墙钟自选，呈现层
+	// 经 Weather 查询，供降水/天空/亮度表现消费。
+	weather core.WeatherKind
 	// eyeInFluid 是最近一次浸没判定给出的眼睛浸没标志。它由 stepWithSubmersion
 	// 与权威状态和解共同写入，是水下视觉唯一的判定来源。见 EyeInFluid。
 	eyeInFluid bool
@@ -98,6 +102,9 @@ func (p *Predictor) Begin(message network.PlayerState) error {
 	if !core.ValidHunger(message.Hunger) {
 		return errors.New("client: cannot begin prediction from invalid hunger")
 	}
+	if message.WeatherKind > core.WeatherThunder {
+		return errors.New("client: cannot begin prediction from invalid weather")
+	}
 
 	p.ready = true
 	p.dimension = message.Dimension
@@ -116,6 +123,7 @@ func (p *Predictor) Begin(message network.PlayerState) error {
 	p.oxygen = message.Oxygen
 	p.hunger = message.Hunger
 	p.saturationZero = message.SaturationZero
+	p.weather = message.WeatherKind
 	// Begin 只有权威位置、没有方块视图，浸没标志留待第一次固定步或和解算出。
 	p.eyeInFluid = false
 	return nil
@@ -150,6 +158,13 @@ func (p *Predictor) Hunger() (uint8, bool) {
 // 同饥饿值：零提示位只接受服务端确认值，客户端不据本地饱和度推导。
 func (p *Predictor) SaturationZero() (bool, bool) {
 	return p.saturationZero, p.ready
+}
+
+// Weather 返回只读镜像持有的权威天气以及预测器是否已就绪。
+// 同饥饿值：天气只接受服务端确认值，客户端不做任何本地随机或墙钟自选；
+// 旧或重复 `ServerTick` 的状态由和解入口的去重门挡掉，不会回退已确认值。
+func (p *Predictor) Weather() (core.WeatherKind, bool) {
+	return p.weather, p.ready
 }
 
 // EyeInFluid 报告最近一次浸没判定认为相机所在格是不是流体。

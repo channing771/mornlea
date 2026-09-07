@@ -104,7 +104,7 @@ func (engine *Engine) RegisterSession(
 
 func (engine *Engine) Player(id SessionID) (PlayerUpdate, bool) {
 	return engine.entities.Player(
-		id, engine.WorldTime(), engine.DayPhaseOffset(), engine.EntitySessionView(id),
+		id, engine.WorldTime(), engine.DayPhaseOffset(), engine.weatherKind, engine.EntitySessionView(id),
 	)
 }
 

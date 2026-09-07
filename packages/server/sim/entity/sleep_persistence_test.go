@@ -52,7 +52,7 @@ func TestRespawnPointFlowsThroughSnapshotAndRestore(t *testing.T) {
 	for range 8 {
 		advanceActorsTick(restarted)
 	}
-	if player, ok := restarted.Player(restoredSession); !ok || !player.Ready {
+	if player, ok := restarted.Player(restoredSession, core.WeatherClear); !ok || !player.Ready {
 		t.Fatalf("重启后玩家未激活: %+v", player)
 	}
 

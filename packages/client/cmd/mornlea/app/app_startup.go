@@ -43,7 +43,7 @@ func openApplicationStore(
 		return nil, nil
 	}
 	metadata := storage.Metadata{
-		FormatVersion:  3,
+		FormatVersion:  4,
 		Seed:           options.Seed,
 		SpawnDimension: core.Overworld,
 		SpawnAnchor:    core.ChunkPos{},
@@ -121,6 +121,9 @@ func NewWithDependencies(
 	}
 	if dependencies.PatchSettings == nil {
 		dependencies.PatchSettings = config.PatchSettings
+	}
+	if dependencies.PatchCameraMode == nil {
+		dependencies.PatchCameraMode = config.PatchCameraMode
 	}
 	reg, registryErr := dependencies.NewRegistry(options.ResolvedTexturePackPath)
 	if registryErr != nil {
@@ -308,11 +311,14 @@ func NewWithDependencies(
 		chatEvents:     &client.ChatEvents{},
 		remoteNameTags: make([]render.NameTag, 0, MaxFrameNameTags),
 		camera:         camera,
-		center:         CameraChunk(camera.Pos),
-		loadedChunks:   make(map[core.ChunkPos]struct{}),
-		ticks:          ticks,
-		saves:          saves,
-		render:         options.Render,
+		// 视角初值来自启动参数（main 已从配置文件下传）：越界落回第一人称；
+		// 会话重置与 `startWorld` 重装配不碰它，跨世界保留靠内存值持有。
+		cameraMode:   clampCameraMode(options.CameraMode),
+		center:       CameraChunk(camera.Pos),
+		loadedChunks: make(map[core.ChunkPos]struct{}),
+		ticks:        ticks,
+		saves:        saves,
+		render:       options.Render,
 		benchmarkTransport: func() string {
 			if options.BenchmarkTransport == "" {
 				return "memory"
@@ -451,6 +457,7 @@ func (a *Application) startWorld() error {
 	a.serverTick = 0
 	a.worldTimeTicks = 0
 	a.dayPhaseOffset = 0
+	a.weather = core.WeatherClear
 	a.observerFloor = 0
 	a.clientSessionClosed = false
 	// hud 分节随会话一并复位：上一台已析构世界的下行基线不得拦截本会话的

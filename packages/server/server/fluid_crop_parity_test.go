@@ -194,7 +194,7 @@ func recordFluidCropParity(t *testing.T, transport string) fluidCropParityRecord
 	tuning.SetTunables(tunables)
 
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 4, Seed: 42, SpawnDimension: core.Overworld,
 	})
 	config := hostTestConfig()
 	config.ViewRadius = floodCropParityViewRadius

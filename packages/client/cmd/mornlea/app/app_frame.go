@@ -238,12 +238,28 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	if vista != nil {
 		worldTime, dayPhaseOffset = menuVistaWorldTimeTicks, 0
 	}
+	// 天气呈现只消费最后确认的权威天气（与世界时间同一接受纪律）：雨/雷暴
+	// 压暗昼夜亮度上限并灰化天空，雷暴叠加固定上限的闪光；晴天恢复既有天空
+	// 与亮度。全景相位强制晴天：全景没有权威天气，前序会话的天气不得渗入
+	// 菜单底图。
+	weather := a.weather
+	if vista != nil {
+		weather = core.WeatherClear
+	}
 	dayNight := render.DayNightAt(worldTime, dayPhaseOffset)
+	daylight := render.ApplyWeatherDaylight(dayNight.Daylight, weather, a.serverTick)
+	skyColor := render.WeatherSkyColor(dayNight.ClearColor, weather)
 	cloud := render.CloudOffsetAt(worldTime)
 	cam := &a.camera
 	if vista != nil {
 		posed := vista.pose(a.camera)
 		cam = &posed
+	} else {
+		// 第三人称后拉与防穿墙：渲染位姿由眼睛经只读镜像射线推导，
+		// `a.camera` 本身恒为眼睛（瞄准与服务端交互射线同源），见
+		// `resolveRenderCamera`；第一人称直通，帧字节逐位不变。
+		resolved := a.resolveRenderCamera()
+		cam = &resolved
 	}
 	vpArr, frustum := client.NativeViewProj(cam)
 	viewProj := mgl32.Mat4(vpArr)
@@ -279,6 +295,10 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	if renderTiming != nil {
 		started = renderNow()
 	}
+	// 第三人称自身身体：复用远端身体的同一 avatar 管线（上限内追加，满员时
+	// 自身让路，名牌不追加）；第一人称与 HUD 联动隐藏时（背包/菜单/全景/
+	// 断线）不追加，见 `appendSelfAvatar`。
+	avatars = a.appendSelfAvatar(avatars, vista != nil)
 	a.avatarStream = a.entityEncoder.EncodeAvatarInstances(a.avatarStream, a.serverTick, avatars)
 	if renderTiming != nil {
 		renderTiming.recordAvatar(renderNow().Sub(started))
@@ -302,6 +322,10 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	if err := validateViewmodelInstanceCount(a.viewmodelStream); err != nil {
 		return false, fmt.Errorf("准备第一人称双手: %w", err)
 	}
+	// 降水：位置是（序号，权威 tick）的纯函数、无跨帧状态，晴天两段恒为空
+	// （帧字节与天气引入前逐位一致）；雨/雷暴形态只由粒子高度相对雪线选形。
+	a.weatherStream = a.entityEncoder.EncodeWeatherInstances(a.weatherStream, cam.Pos, cam.Yaw, a.serverTick, weather)
+	a.weatherState = render.EncodeWeatherState(a.weatherState, weather)
 
 	right := mgl32.Vec3{
 		float32(math.Cos(float64(cam.Yaw))),
@@ -327,10 +351,10 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		ViewProj:           viewProj,
 		ViewProjInv:        viewProjInv,
 		Pos:                cam.Pos,
-		Daylight:           dayNight.Daylight,
+		Daylight:           daylight,
 		SunDirection:       dayNight.SunDirection,
 		StarVisibility:     dayNight.StarVisibility,
-		SkyColor:           dayNight.ClearColor,
+		SkyColor:           skyColor,
 		CloudMacroX:        cloud.MacroX,
 		CloudLocal:         cloud.Local,
 		Visible:            a.rustVisible,
@@ -339,6 +363,8 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		OutlineInstances:   a.outlineStream,
 		CrackInstances:     a.crackStream,
 		ViewmodelInstances: a.viewmodelStream,
+		WeatherSegment:     a.weatherState,
+		PrecipInstances:    a.weatherStream,
 		OverlayStrength:    a.damageStrength,
 		WaterTint:          underwater.Tint,
 		NameTagSegment:     nameTagSegment,

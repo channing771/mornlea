@@ -56,6 +56,7 @@ func (p *Predictor) ApplyPlayerState(
 	p.oxygen = message.Oxygen
 	p.hunger = message.Hunger
 	p.saturationZero = message.SaturationZero
+	p.weather = message.WeatherKind
 	if p.suspended {
 		p.history = p.history[:0]
 		p.accumulator = 0
@@ -113,6 +114,9 @@ func (p *Predictor) clearForNotReady(message network.PlayerState) {
 	// 就绪前的一帧显示上一条会话的读数。
 	p.hunger = 0
 	p.saturationZero = false
+	// 天气与饥饿值同为会话级镜像值：回到默认晴天，不把上一会话的雨/雷暴
+	// 漏到下一会话就绪前的呈现里（未就绪时查询门本就关闭，这里只清存储）。
+	p.weather = core.WeatherClear
 }
 
 func validatePlayerState(message network.PlayerState, maxSentInput uint64) (physics.State, error) {
@@ -136,6 +140,11 @@ func validatePlayerState(message network.PlayerState, maxSentInput uint64) (phys
 	}
 	if !core.ValidHunger(message.Hunger) {
 		return physics.State{}, errors.New("client: player state has out-of-range hunger")
+	}
+	// 天气是服务端权威三态：合法值域与协议 `Validate` 同为 0..雷暴，
+	// 越界值在这里与首帧处都被拒绝，不进镜像。
+	if message.WeatherKind > core.WeatherThunder {
+		return physics.State{}, errors.New("client: player state has out-of-range weather")
 	}
 	const maxPitch = float32(math.Pi/2 - 0.01)
 	if message.Pitch < -maxPitch || message.Pitch > maxPitch {

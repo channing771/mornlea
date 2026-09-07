@@ -21,20 +21,21 @@ func buildSnapshot(mutate func([]byte)) []byte {
 }
 
 func TestClientABIVersionMatchesHeader(t *testing.T) {
+	// v18 在 v17 表面上叠加帧天气状态 TLV 段（tag 12）与降水实例段（tag 13）；
 	// v17 在 v16 表面上叠加帧 viewmodel TLV 段（tag 11）；v16 在 v15 表面上
 	// 新增无状态相机视图投影查询出口 mornlea_client_camera_viewproj；
 	// v15 在 v14 render world update 表面上叠加 avatar 贴图实例布局；
 	// 动态库 identity 与编译期 header 必须同步切换。
-	if got := ClientABIVersion(); got != 17 {
-		t.Fatalf("client ABI version=%d,想要 17", got)
+	if got := ClientABIVersion(); got != 18 {
+		t.Fatalf("client ABI version=%d,想要 18", got)
 	}
-	if got := clientABIHeaderVersion(); got != 17 {
-		t.Fatalf("client header ABI version=%d,想要 17", got)
+	if got := clientABIHeaderVersion(); got != 18 {
+		t.Fatalf("client header ABI version=%d,想要 18", got)
 	}
 }
 
-func TestClientABIV16RejectedBeforeOtherValidation(t *testing.T) {
-	// client ABI v17 的全部 versioned exports 必须先于其他校验拒绝 v16；
+func TestClientABIV17RejectedBeforeOtherValidation(t *testing.T) {
+	// client ABI v18 的全部 versioned exports 必须先于其他校验拒绝 v17；
 	// 无状态相机出口无需窗口与 GPU，可在无头环境锁定“版本错优先、失败不写
 	// 输出”的顺序。指针合法但版本错：报版本错且输出保持哨兵；指针非法叠加
 	// 版本错：同样先报版本错。
@@ -46,10 +47,10 @@ func TestClientABIV16RejectedBeforeOtherValidation(t *testing.T) {
 	pos := [3]float32{1, 2, 3}
 	viewProj := [16]float32{7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7}
 	frustum := [24]float32{9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9}
-	status := queryCameraABI(16,
+	status := queryCameraABI(17,
 		unsafe.Pointer(&pos[0]), unsafe.Pointer(&viewProj[0]), unsafe.Pointer(&frustum[0]))
 	if status != statusABIVersion {
-		t.Fatalf("v16 调用状态=%d，想要 ABI 版本拒绝", status)
+		t.Fatalf("v17 调用状态=%d，想要 ABI 版本拒绝", status)
 	}
 	for _, value := range viewProj {
 		if value != 7 {
@@ -62,9 +63,9 @@ func TestClientABIV16RejectedBeforeOtherValidation(t *testing.T) {
 		}
 	}
 	// 空指针叠加版本错：仍先报版本错（而非参数非法）。
-	status = queryCameraABI(16, nil, nil, nil)
+	status = queryCameraABI(17, nil, nil, nil)
 	if status != statusABIVersion {
-		t.Fatalf("空指针 v16 调用状态=%d，想要 ABI 版本拒绝", status)
+		t.Fatalf("空指针 v17 调用状态=%d，想要 ABI 版本拒绝", status)
 	}
 }
 

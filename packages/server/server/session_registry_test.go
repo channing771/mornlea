@@ -677,7 +677,7 @@ func testRestore() contract.PlayerRestore {
 
 func testStore() storage.Store {
 	return storage.NewMemory(storage.Metadata{
-		FormatVersion:  3,
+		FormatVersion:  4,
 		Seed:           1,
 		SpawnDimension: core.Overworld,
 		SpawnAnchor:    core.ChunkPos{},

@@ -347,8 +347,18 @@ impl WorldgenParams {
 
     /// 返回固定候选格中的有效橡树,与 Go `oakTreeForCell` 一致。
     ///
-    /// 有效性校验使用未截断的 surface 高度,顺序:根格必须是草、树冠不越界、
-    /// 树干路径必须全空。
+    /// 同一 `OAK_TREE_SALT` 哈希的不交位域各自确定一项特征,不引入新噪声:
+    /// 0 位是生成门槛(偶数生成)、1..3 位是根 X 格内偏移、4..6 位是根 Z
+    /// 格内偏移、7..13 位是普通树高(7 比特 `% 3` 给 43/43/42,近似均匀取
+    /// 满 5..7)、14..21 位是珍异门槛(`< 21`,21/256≈8.2%)、第 22 位是冠形
+    /// 档(置位为蓬松)、23..25 位是珍异树高(`8 + 位域 % 5`,取 8..12)、
+    /// 第 26 位是分杈条数(置位为两条)、27..30 位是两条分杈方向。位域两两
+    /// 不交,树高、冠形、珍异判定相互独立确定。
+    ///
+    /// 有效性校验使用未截断的 surface 高度,顺序:根格必须是草、树冠不越界
+    /// (树冠最高到顶上第二层)、树干路径必须全空。分杈不参与有效性校验:
+    /// 分杈只替换原始空气,撞上固体的格在落笔时跳过(见 `apply_oak_trees`
+    /// 与 `base_block_at` 的层叠顺序),整棵树不因此作废。
     fn oak_tree_for_cell(&self, cell_x: i32, cell_z: i32) -> Option<OakTree> {
         let hash = ore_hash(self.seed, cell_x, 0, cell_z, OAK_TREE_SALT);
         if hash & 1 != 0 {
@@ -356,11 +366,23 @@ impl WorldgenParams {
         }
         let x = (cell_x << OAK_TREE_CELL_SHIFT).wrapping_add(((hash >> 1) & 7) as i32);
         let z = (cell_z << OAK_TREE_CELL_SHIFT).wrapping_add(((hash >> 4) & 7) as i32);
-        let height = (4 + (hash >> 7) % 3) as i32;
+        let rare = ((hash >> 14) & 0xFF) < 21;
+        let height = if rare {
+            (8 + ((hash >> 23) & 7) % 5) as i32
+        } else {
+            (5 + ((hash >> 7) & 0x7F) % 3) as i32
+        };
+        let fluffy = !rare && (hash >> 22) & 1 == 1;
+        let branch_count = if rare {
+            (1 + ((hash >> 26) & 1)) as u8
+        } else {
+            0
+        };
+        let branch_dir = [((hash >> 27) & 3) as u8, ((hash >> 29) & 3) as u8];
         let surface = self.height_at(x, z);
         let root_y = surface + 1;
         if self.generated_block_at(x, surface, z, surface) != self.materials.grass
-            || root_y + height >= WORLD_MAX_Y
+            || root_y + height + 1 >= WORLD_MAX_Y
         {
             return None;
         }
@@ -374,18 +396,25 @@ impl WorldgenParams {
             root_y,
             root_z: z,
             height,
+            fluffy,
+            rare,
+            branch_count,
+            branch_dir,
         })
     }
 
     /// 单点橡树查询:合并全部可能覆盖 (x,y,z) 的候选树,原木优先,与 Go
     /// `treeBlockAt` 的 cellZ 外层、cellX 内层遍历顺序一致。
+    ///
+    /// 邻域半径取 3:珍异大冠旁侧突出主干 3 格、分杈横向伸 3 格,任一候选
+    /// 的影响都落在此半径内;半径不足会让跨界树在单点与整块之间分叉。
     fn tree_block_at(&self, x: i32, y: i32, z: i32) -> u16 {
         let m = self.materials;
         let mut leaf = false;
-        let cell_z_min = (z - 2) >> OAK_TREE_CELL_SHIFT;
-        let cell_z_max = (z + 2) >> OAK_TREE_CELL_SHIFT;
-        let cell_x_min = (x - 2) >> OAK_TREE_CELL_SHIFT;
-        let cell_x_max = (x + 2) >> OAK_TREE_CELL_SHIFT;
+        let cell_z_min = (z - 3) >> OAK_TREE_CELL_SHIFT;
+        let cell_z_max = (z + 3) >> OAK_TREE_CELL_SHIFT;
+        let cell_x_min = (x - 3) >> OAK_TREE_CELL_SHIFT;
+        let cell_x_max = (x + 3) >> OAK_TREE_CELL_SHIFT;
         for cell_z in cell_z_min..=cell_z_max {
             for cell_x in cell_x_min..=cell_x_max {
                 let Some(tree) = self.oak_tree_for_cell(cell_x, cell_z) else {
@@ -490,22 +519,27 @@ impl WorldgenParams {
     /// 把覆盖当前区块的有效候选树写入 dense 数组,与 Go `applyOakTrees` 一致:
     /// 树按 cellZ 外层、cellX 内层顺序应用;单棵树按 y/z/x 顺序写入;
     /// 原木可覆盖空气与树叶,树叶仅覆盖空气。
+    ///
+    /// 落笔盒取根 ±3、顶上两层:珍异大冠与分杈的最大水平伸展都是 3 格,
+    /// 蓬松顶与大冠最高到顶上第二层;盒外不可能有本树的方块,盒内越界 Y
+    /// 逐格跳过。原木(含分杈)只覆盖空气与树叶、树叶只覆盖空气,因此固体
+    /// 地形永远不被改写,分杈撞上固体时自然截断。
     fn apply_oak_trees(&self, chunk_x: i32, chunk_z: i32, dense: &mut [u16]) {
         let m = self.materials;
         let base_x = chunk_x << SECTION_SHIFT;
         let base_z = chunk_z << SECTION_SHIFT;
-        let cell_z_min = (base_z - 2) >> OAK_TREE_CELL_SHIFT;
-        let cell_z_max = (base_z + SECTION_SIZE + 1) >> OAK_TREE_CELL_SHIFT;
-        let cell_x_min = (base_x - 2) >> OAK_TREE_CELL_SHIFT;
-        let cell_x_max = (base_x + SECTION_SIZE + 1) >> OAK_TREE_CELL_SHIFT;
+        let cell_z_min = (base_z - 3) >> OAK_TREE_CELL_SHIFT;
+        let cell_z_max = (base_z + SECTION_SIZE + 2) >> OAK_TREE_CELL_SHIFT;
+        let cell_x_min = (base_x - 3) >> OAK_TREE_CELL_SHIFT;
+        let cell_x_max = (base_x + SECTION_SIZE + 2) >> OAK_TREE_CELL_SHIFT;
         for cell_z in cell_z_min..=cell_z_max {
             for cell_x in cell_x_min..=cell_x_max {
                 let Some(tree) = self.oak_tree_for_cell(cell_x, cell_z) else {
                     continue;
                 };
-                for y in tree.root_y..=tree.root_y + tree.height {
-                    for z in tree.root_z - 2..=tree.root_z + 2 {
-                        for x in tree.root_x - 2..=tree.root_x + 2 {
+                for y in tree.root_y..=tree.root_y + tree.height + 1 {
+                    for z in tree.root_z - 3..=tree.root_z + 3 {
+                        for x in tree.root_x - 3..=tree.root_x + 3 {
                             // 与 Go `pos.Chunk() != chunk.Pos` 判定等价:
                             // 世界坐标算术右移 4 即 floor 除 16。
                             if (x >> SECTION_SHIFT) != chunk_x
@@ -535,29 +569,82 @@ impl WorldgenParams {
     }
 }
 
-/// 候选橡树:根方块世界坐标与树干高度。
+/// 候选橡树:根方块世界坐标、树干高度与哈希确定的形态特征。
+///
+/// `fluffy` 只对普通树有意义(珍异树恒为球状大冠);`branch_count` 为 0
+/// 表示无分杈(全部普通树),珍异树取 1..2;`branch_dir` 的两个方向编码按
+/// `branch_offset` 解释,第二条分杈不存在时其方向位被忽略。
 struct OakTree {
     root_x: i32,
     root_y: i32,
     root_z: i32,
     height: i32,
+    fluffy: bool,
+    rare: bool,
+    branch_count: u8,
+    branch_dir: [u8; 2],
+}
+
+/// 分杈方向编码的水平偏移:0/+X、1/−X、2/+Z、3/−Z。
+///
+/// 位域外的取值不可能出现(调用方只传入哈希低两位);`& 3` 是防御性收敛,
+/// 保证越界输入仍映射到合法水平方向而不是 panic。
+fn branch_offset(dir: u8) -> (i32, i32) {
+    match dir & 3 {
+        0 => (1, 0),
+        1 => (-1, 0),
+        2 => (0, 1),
+        _ => (0, -1),
+    }
 }
 
 /// 树形在指定世界坐标的方块,树干优先于树叶,与 Go `oakTreeBlockAt` 一致。
+///
+/// 普通树冠是冻结的四层:顶下两层去角 5×5、顶层满 3×3、顶上一层十字;
+/// 蓬松档在顶上再加一层去角 3×3(3×3 去角后恰为十字,形状与顶上层同)。
+/// 珍异大冠是以树干顶为中心的多层去角方形叠加:底宽层去角 7×7、中层满
+/// 5×5、上层满 3×3、顶十字,旁侧突出主干 3 格。分杈是横向原木段,第 `i`
+/// 条长在顶下 `4 + i` 层、从主干向 `branch_dir[i]` 方向伸 3 格;分杈与树干
+/// 同为原木优先级,但是否落笔由调用方按原始空气过滤(见 `apply_oak_trees`
+/// 与 `base_block_at`),本函数只做形状判定。
 fn oak_tree_block_at(tree: &OakTree, m: &Materials, x: i32, y: i32, z: i32) -> u16 {
-    if tree.root_y < WORLD_MIN_Y || tree.root_y + tree.height >= WORLD_MAX_Y {
+    if tree.root_y < WORLD_MIN_Y || tree.root_y + tree.height + 1 >= WORLD_MAX_Y {
         return m.air;
     }
     let top_y = tree.root_y + tree.height - 1;
     if x == tree.root_x && z == tree.root_z && (tree.root_y..=top_y).contains(&y) {
         return m.oak_log;
     }
+    for i in 0..tree.branch_count {
+        // 第 `i` 条分杈长在顶下 `4 + i` 层:顺轴投影 1..=3、侧偏为零才命中,
+        // 对角格天然被排除,分杈是严格的横向单列。
+        let (dx, dz) = branch_offset(tree.branch_dir[i as usize]);
+        if y != top_y - 4 - i32::from(i) {
+            continue;
+        }
+        let along = (x - tree.root_x) * dx + (z - tree.root_z) * dz;
+        let side = (z - tree.root_z) * dx - (x - tree.root_x) * dz;
+        if (1..=3).contains(&along) && side == 0 {
+            return m.oak_log;
+        }
+    }
     let dx = (x - tree.root_x).abs();
     let dz = (z - tree.root_z).abs();
+    if tree.rare {
+        return match y - top_y {
+            -3 if dx <= 2 && dz <= 2 && !(dx == 2 && dz == 2) => m.leaves,
+            -2 | -1 if dx <= 3 && dz <= 3 && !(dx == 3 && dz == 3) => m.leaves,
+            0 if dx <= 2 && dz <= 2 => m.leaves,
+            1 if dx <= 1 && dz <= 1 => m.leaves,
+            2 if dx + dz <= 1 => m.leaves,
+            _ => m.air,
+        };
+    }
     match y - top_y {
         -2 | -1 if dx <= 2 && dz <= 2 && !(dx == 2 && dz == 2) => m.leaves,
         0 if dx <= 1 && dz <= 1 => m.leaves,
         1 if dx + dz <= 1 => m.leaves,
+        2 if tree.fluffy && dx + dz <= 1 => m.leaves,
         _ => m.air,
     }
 }
@@ -909,6 +996,10 @@ mod tests {
             root_y: 100,
             root_z: 0,
             height: 4,
+            fluffy: false,
+            rare: false,
+            branch_count: 0,
+            branch_dir: [0, 0],
         };
         let m = materials();
         // 树干整列是原木,冠顶十字是树叶,冠层角落空缺。
@@ -1404,5 +1495,606 @@ mod tests {
         }
         backward.reverse();
         assert_eq!(forward, backward);
+    }
+
+    // ---- 橡树高度/冠形/珍异多样性（确定性树扩展）的契约测试 ----
+
+    /// 在给定种子下收集一片候选格的全部有效橡树。
+    fn collect_oaks(seed: i64, cell_range: i32) -> Vec<OakTree> {
+        let p = params(seed);
+        let mut out = Vec::new();
+        for cz in -cell_range..=cell_range {
+            for cx in -cell_range..=cell_range {
+                if let Some(tree) = p.oak_tree_for_cell(cx, cz) {
+                    out.push(tree);
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn normal_oak_heights_cover_five_to_seven() {
+        // 普通橡树树高必须在 5..7 内均匀取满三档,冠形标准/蓬松两档都必须出现。
+        let oaks = collect_oaks(11, 30);
+        assert!(!oaks.is_empty(), "夹具失效:语料没有任何橡树");
+        let mut heights = [0usize; 3];
+        let mut standard = false;
+        let mut fluffy = false;
+        let mut normals = 0;
+        for tree in &oaks {
+            if tree.rare {
+                continue;
+            }
+            normals += 1;
+            assert!(
+                (5..=7).contains(&tree.height),
+                "普通树高 {} 越界",
+                tree.height
+            );
+            heights[(tree.height - 5) as usize] += 1;
+            fluffy |= tree.fluffy;
+            standard |= !tree.fluffy;
+        }
+        assert!(normals > 0, "夹具失效:语料没有任何普通橡树");
+        assert!(
+            heights.iter().all(|&c| c > 0),
+            "普通树高未取满 5/6/7:{heights:?}"
+        );
+        // 均匀分布:7 比特位域 %3 给 43/43/42,三档都应落在 1/3 邻域;
+        // 3 比特位域的 3/8、3/8、2/8 偏置会在这里变红。
+        for (grade, count) in heights.iter().enumerate() {
+            let ratio = *count as f64 / normals as f64;
+            assert!(
+                (0.28..0.39).contains(&ratio),
+                "树高 {} 档比例 {ratio:.3} 偏离均匀分布",
+                grade + 5,
+            );
+        }
+        assert!(
+            standard && fluffy,
+            "冠形两档必须都出现(标准={standard}, 蓬松={fluffy})"
+        );
+    }
+
+    #[test]
+    fn rare_big_trees_appear_at_small_rate() {
+        // 珍异大树必须以小概率出现,主干高度在 8..12 内,分杈 1..2 条;
+        // 普通树不带分杈。
+        let oaks = collect_oaks(11, 30);
+        assert!(!oaks.is_empty(), "夹具失效:语料没有任何橡树");
+        let mut rare = 0;
+        for tree in &oaks {
+            if !tree.rare {
+                assert_eq!(tree.branch_count, 0, "普通树不应带分杈");
+                continue;
+            }
+            rare += 1;
+            assert!(
+                (8..=12).contains(&tree.height),
+                "珍异树高 {} 越界",
+                tree.height
+            );
+            assert!(
+                (1..=2).contains(&tree.branch_count),
+                "珍异分杈条数 {} 越界",
+                tree.branch_count
+            );
+            for dir in tree.branch_dir {
+                assert!(dir < 4, "分杈方向 {dir} 越界");
+            }
+        }
+        assert!(rare > 0, "语料没有任何珍异大树");
+        let ratio = rare as f64 / oaks.len() as f64;
+        // 固定种子语料是确定性的:门槛设计为 21/256≈8.2%,断言收紧到
+        // 5%..12%,3% 或 18% 的实现会在这里变红。
+        assert!(
+            (0.05..0.12).contains(&ratio),
+            "珍异比例 {ratio:.3} 偏离约 8% 的小概率"
+        );
+    }
+
+    #[test]
+    fn fluffy_crown_has_extra_top_layer() {
+        // 蓬松档必须在标准四层冠之上多一层树叶顶。
+        let oaks = collect_oaks(11, 30);
+        assert!(!oaks.is_empty(), "夹具失效:语料没有任何橡树");
+        let m = materials();
+        let fluffy = oaks
+            .iter()
+            .filter(|t| {
+                oak_tree_block_at(t, &m, t.root_x, t.root_y + t.height + 1, t.root_z) == m.leaves
+            })
+            .count();
+        assert!(fluffy > 0, "语料没有任何带顶层的蓬松橡树");
+    }
+
+    #[test]
+    fn oak_candidate_gate_and_layout_are_hash_determined() {
+        // 候选门槛、根偏移、树高、冠形、珍异与分杈全部由同一哈希的不交位域
+        // 确定;奇数哈希必不生成;重复查询逐字段一致,与遍历顺序、时间无关。
+        let p = params(11);
+        let mut generated = 0;
+        let mut odd_seen = 0;
+        for cz in -8..=8 {
+            for cx in -8..=8 {
+                let hash = ore_hash(11, cx, 0, cz, OAK_TREE_SALT);
+                let first = p.oak_tree_for_cell(cx, cz);
+                let second = p.oak_tree_for_cell(cx, cz);
+                match (&first, &second) {
+                    (Some(a), Some(b)) => assert_eq!(
+                        (
+                            a.root_x,
+                            a.root_y,
+                            a.root_z,
+                            a.height,
+                            a.fluffy,
+                            a.rare,
+                            a.branch_count,
+                            a.branch_dir,
+                        ),
+                        (
+                            b.root_x,
+                            b.root_y,
+                            b.root_z,
+                            b.height,
+                            b.fluffy,
+                            b.rare,
+                            b.branch_count,
+                            b.branch_dir,
+                        ),
+                        "候选格 ({cx},{cz}) 两次查询不一致",
+                    ),
+                    (None, None) => {}
+                    _ => panic!("候选格 ({cx},{cz}) 两次查询不一致"),
+                }
+                if hash & 1 == 1 {
+                    odd_seen += 1;
+                    assert!(first.is_none(), "奇数哈希候选格 ({cx},{cz}) 必须不生成");
+                    continue;
+                }
+                let Some(tree) = first else { continue };
+                generated += 1;
+                assert_eq!(
+                    tree.root_x,
+                    (cx << OAK_TREE_CELL_SHIFT).wrapping_add(((hash >> 1) & 7) as i32),
+                    "根 X 偏移必须取哈希 1..3 位",
+                );
+                assert_eq!(
+                    tree.root_z,
+                    (cz << OAK_TREE_CELL_SHIFT).wrapping_add(((hash >> 4) & 7) as i32),
+                    "根 Z 偏移必须取哈希 4..6 位",
+                );
+                let rare = ((hash >> 14) & 0xFF) < 21;
+                assert_eq!(tree.rare, rare, "珍异判定必须取哈希 14..21 位约 8% 门槛");
+                if rare {
+                    assert_eq!(
+                        tree.height,
+                        (8 + ((hash >> 23) & 7) % 5) as i32,
+                        "珍异树高必须取 8..12",
+                    );
+                    assert_eq!(
+                        tree.branch_count,
+                        (1 + ((hash >> 26) & 1)) as u8,
+                        "分杈条数必须取 1..2",
+                    );
+                    assert_eq!(
+                        tree.branch_dir,
+                        [((hash >> 27) & 3) as u8, ((hash >> 29) & 3) as u8],
+                        "分杈方向必须取哈希高位",
+                    );
+                } else {
+                    assert_eq!(
+                        tree.height,
+                        (5 + ((hash >> 7) & 0x7F) % 3) as i32,
+                        "普通树高必须取 5..7",
+                    );
+                    assert_eq!(
+                        tree.fluffy,
+                        (hash >> 22) & 1 == 1,
+                        "冠形档必须由哈希第 22 位独立确定",
+                    );
+                    assert_eq!(tree.branch_count, 0, "普通树不应带分杈");
+                }
+            }
+        }
+        assert!(generated > 0, "夹具失效:语料没有任何橡树");
+        assert!(odd_seen > 0, "夹具失效:语料没有任何奇数哈希候选格");
+    }
+
+    /// 冠形对比夹具:标准/蓬松只差顶层标志,其余字段一致。
+    fn crown_fixture(fluffy: bool) -> OakTree {
+        OakTree {
+            root_x: 0,
+            root_y: 100,
+            root_z: 0,
+            height: 6,
+            fluffy,
+            rare: false,
+            branch_count: 0,
+            branch_dir: [0, 0],
+        }
+    }
+
+    #[test]
+    fn fluffy_crown_adds_decornered_top_layer() {
+        // 蓬松档 = 标准四层冠 + 去角 3×3 顶;3×3 去角后恰为十字五格。
+        let m = materials();
+        let std = crown_fixture(false);
+        let lush = crown_fixture(true);
+        let top = 100 + 6 - 1;
+        // 标准四层冠逐层钉住:下两层去角 5×5、顶层满 3×3、顶上十字。
+        assert_eq!(oak_tree_block_at(&std, &m, 2, top - 1, 1), m.leaves);
+        assert_eq!(oak_tree_block_at(&std, &m, 2, top - 1, 2), m.air);
+        assert_eq!(oak_tree_block_at(&std, &m, 1, top, 1), m.leaves);
+        assert_eq!(oak_tree_block_at(&std, &m, 1, top + 1, 0), m.leaves);
+        assert_eq!(oak_tree_block_at(&std, &m, 1, top + 1, 1), m.air);
+        // 顶上第二层:标准档为空,蓬松档为十字树叶。
+        assert_eq!(oak_tree_block_at(&std, &m, 0, top + 2, 0), m.air);
+        assert_eq!(oak_tree_block_at(&lush, &m, 0, top + 2, 0), m.leaves);
+        assert_eq!(oak_tree_block_at(&lush, &m, 1, top + 2, 0), m.leaves);
+        assert_eq!(oak_tree_block_at(&lush, &m, 0, top + 2, 1), m.leaves);
+        assert_eq!(oak_tree_block_at(&lush, &m, 1, top + 2, 1), m.air);
+        // 其余层两档必须一致。
+        for (dx, dz) in [(2, 1), (1, 1), (1, 0)] {
+            for dy in -2..=1 {
+                assert_eq!(
+                    oak_tree_block_at(&std, &m, dx, top + dy, dz),
+                    oak_tree_block_at(&lush, &m, dx, top + dy, dz),
+                    "({dx},{dy},{dz})",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rare_crown_reaches_three_with_air_only_branches() {
+        // 珍异球状大冠旁侧突出主干 3 格并去角;分杈为横向原木、定长 3 格。
+        let m = materials();
+        let tree = OakTree {
+            root_x: 0,
+            root_y: 100,
+            root_z: 0,
+            height: 10,
+            fluffy: false,
+            rare: true,
+            branch_count: 2,
+            branch_dir: [0, 2],
+        };
+        let top = 100 + 10 - 1;
+        // 主干穿过树冠处仍是原木(原木优先于树叶)。
+        for y in 100..=top {
+            assert_eq!(oak_tree_block_at(&tree, &m, 0, y, 0), m.oak_log);
+        }
+        // 大冠:宽层去角 7×7、中层满 5×5、上层满 3×3、顶十字。
+        assert_eq!(oak_tree_block_at(&tree, &m, 3, top - 2, 0), m.leaves);
+        assert_eq!(oak_tree_block_at(&tree, &m, 0, top - 2, 3), m.leaves);
+        assert_eq!(oak_tree_block_at(&tree, &m, 3, top - 2, 3), m.air);
+        assert_eq!(oak_tree_block_at(&tree, &m, 3, top - 1, 1), m.leaves);
+        assert_eq!(oak_tree_block_at(&tree, &m, 2, top, 2), m.leaves);
+        assert_eq!(oak_tree_block_at(&tree, &m, 1, top + 1, 1), m.leaves);
+        assert_eq!(oak_tree_block_at(&tree, &m, 0, top + 2, 0), m.leaves);
+        assert_eq!(oak_tree_block_at(&tree, &m, 1, top + 2, 1), m.air);
+        // 分杈:0 号向 +X 长在 top-4,1 号向 +Z 长在 top-5,各伸 3 格。
+        for step in 1..=3 {
+            assert_eq!(oak_tree_block_at(&tree, &m, step, top - 4, 0), m.oak_log);
+            assert_eq!(oak_tree_block_at(&tree, &m, 0, top - 5, step), m.oak_log);
+        }
+        assert_eq!(oak_tree_block_at(&tree, &m, 4, top - 4, 0), m.air);
+        assert_eq!(oak_tree_block_at(&tree, &m, 0, top - 5, 4), m.air);
+    }
+
+    /// 在固定语料里找第一棵珍异树(种子固定,结果确定)。
+    fn first_rare_tree() -> (WorldgenParams, OakTree) {
+        for seed in 1..=60 {
+            let p = params(seed);
+            for cz in -8..=8 {
+                for cx in -8..=8 {
+                    if let Some(tree) = p.oak_tree_for_cell(cx, cz)
+                        && tree.rare
+                    {
+                        return (p, tree);
+                    }
+                }
+            }
+        }
+        panic!("夹具失效:语料里找不到珍异树");
+    }
+
+    #[test]
+    fn tree_writes_never_replace_solid() {
+        // 树(含分杈)只替换原始空气:全石头 dense 落笔后必须逐位不变;
+        // 全空气 dense 里该珍异树的分杈格必须全部落为原木。
+        let (p, tree) = first_rare_tree();
+        assert!((8..=12).contains(&tree.height));
+        assert!((1..=2).contains(&tree.branch_count));
+        let cx = tree.root_x >> SECTION_SHIFT;
+        let cz = tree.root_z >> SECTION_SHIFT;
+        let stone = p.materials.stone;
+        let mut dense = vec![stone; CHUNK_VOLUME];
+        p.apply_oak_trees(cx, cz, &mut dense);
+        assert!(
+            dense.iter().all(|&b| b == stone),
+            "落笔改写了固体格(含分杈只替换空气语义被破坏)"
+        );
+        // 空气底上,分杈几何经真实落笔路径仍然成立。
+        let mut air = vec![p.materials.air; CHUNK_VOLUME];
+        p.apply_oak_trees(cx, cz, &mut air);
+        let top = tree.root_y + tree.height - 1;
+        for i in 0..tree.branch_count {
+            let (dx, dz) = branch_offset(tree.branch_dir[i as usize]);
+            let by = top - 4 - i32::from(i);
+            for step in 1..=3 {
+                let (wx, wz) = (tree.root_x + dx * step, tree.root_z + dz * step);
+                if (wx >> SECTION_SHIFT) != cx || (wz >> SECTION_SHIFT) != cz {
+                    continue;
+                }
+                assert_eq!(
+                    air[dense_index(wx & (SECTION_SIZE - 1), by, wz & (SECTION_SIZE - 1))],
+                    p.materials.oak_log,
+                    "分杈格 ({wx},{by},{wz}) 未落为原木",
+                );
+            }
+        }
+    }
+
+    /// 找一棵树冠/分杈跨越区块边界的珍异树(种子固定,结果确定)。
+    fn boundary_crossing_rare_tree() -> (WorldgenParams, OakTree) {
+        for seed in 1..=60 {
+            let p = params(seed);
+            for cz in -16..=16 {
+                for cx in -16..=16 {
+                    if let Some(tree) = p.oak_tree_for_cell(cx, cz) {
+                        if !tree.rare {
+                            continue;
+                        }
+                        if (tree.root_x - 3) >> SECTION_SHIFT != (tree.root_x + 3) >> SECTION_SHIFT
+                            || (tree.root_z - 3) >> SECTION_SHIFT
+                                != (tree.root_z + 3) >> SECTION_SHIFT
+                        {
+                            return (p, tree);
+                        }
+                    }
+                }
+            }
+        }
+        panic!("夹具失效:语料里找不到跨界珍异树");
+    }
+
+    #[test]
+    fn extended_reach_tree_matches_pointwise_across_boundary() {
+        // 半径 3 的树冠/分杈跨越区块边界时,整块与单点必须逐格一致:
+        // 任一侧漏扫(邻域半径不足)都会在这里变红。
+        let (p, tree) = boundary_crossing_rare_tree();
+        let top = tree.root_y + tree.height - 1;
+        let mut touched = Vec::new();
+        for cz in ((tree.root_z - 3) >> SECTION_SHIFT)..=((tree.root_z + 3) >> SECTION_SHIFT) {
+            for cx in ((tree.root_x - 3) >> SECTION_SHIFT)..=((tree.root_x + 3) >> SECTION_SHIFT) {
+                touched.push((cx, cz));
+            }
+        }
+        assert!(touched.len() > 1, "夹具失效:该树未真正跨界");
+        for (cx, cz) in touched {
+            let mut dense = vec![p.materials.air; CHUNK_VOLUME];
+            p.generate_chunk(cx, cz, &mut dense);
+            for y in tree.root_y..=(top + 2) {
+                for z in tree.root_z - 3..=tree.root_z + 3 {
+                    for x in tree.root_x - 3..=tree.root_x + 3 {
+                        if (x >> SECTION_SHIFT) != cx || (z >> SECTION_SHIFT) != cz {
+                            continue;
+                        }
+                        assert_eq!(
+                            dense[dense_index(x & (SECTION_SIZE - 1), y, z & (SECTION_SIZE - 1))],
+                            p.base_block_at(x, y, z),
+                            "({x},{y},{z})",
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// 珍异树形的最大伸展包络:全部非空气格落在根 ±3、树干底到顶上两层内,
+    /// 包络外一圈全是空气;四个分杈方向各有一棵夹具,分杈与大冠的 3 格伸展
+    /// 都被打满(回归非空)。
+    ///
+    /// 这是覆盖半径的形状侧:单点邻域与整块落笔盒都只取 ±3,形状若伸出包络,
+    /// 两条路径会同时漏掉同一格——本测试让这种缺口先在这里变红,而不是等
+    /// 跨界一致性测试用坏运气去撞边界对齐。
+    #[test]
+    fn rare_shape_fits_radius_three_box() {
+        let m = materials();
+        let mut reached_axial = [false; 4];
+        let mut reached_crown = false;
+        for dir in 0..4u8 {
+            let tree = OakTree {
+                root_x: 0,
+                root_y: 100,
+                root_z: 0,
+                height: 12,
+                fluffy: false,
+                rare: true,
+                branch_count: 1,
+                branch_dir: [dir, 0],
+            };
+            let top = 100 + 12 - 1;
+            let (step_x, step_z) = branch_offset(dir);
+            for y in 99..=(top + 3) {
+                for z in -4..=4 {
+                    for x in -4..=4 {
+                        let block = oak_tree_block_at(&tree, &m, x, y, z);
+                        if block == m.air {
+                            continue;
+                        }
+                        let dx = x.abs();
+                        let dz = z.abs();
+                        assert!(dx <= 3 && dz <= 3, "({x},{y},{z}) 水平伸出 ±3");
+                        assert!((100..=(top + 2)).contains(&y), "({x},{y},{z}) 竖直伸出包络");
+                        if block == m.oak_log
+                            && y == top - 4
+                            && x * step_x + z * step_z == 3
+                            && (z * step_x - x * step_z) == 0
+                        {
+                            reached_axial[usize::from(dir)] = true;
+                        }
+                        if block == m.leaves && dx.max(dz) == 3 {
+                            reached_crown = true;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            reached_axial.iter().all(|&hit| hit),
+            "四个方向的分杈都必须打满 3 格:{reached_axial:?}"
+        );
+        assert!(reached_crown, "大冠旁侧必须有 3 格伸展");
+    }
+
+    /// 冠顶上界守卫:根加树高加冠顶两层触及上界时整树形状为空,低一格时冠
+    /// 顶照常生成。守卫对档位一视同仁——标准树顶上第二层本就是空气,仍被
+    /// 整体丢弃:保守但两侧路径共用同一守卫,不可能分叉。
+    #[test]
+    fn crown_top_guard_rejects_at_upper_bound() {
+        let m = materials();
+        // 珍异 12 格:根 306 时顶上第二层 319 在界内,根 307 时触界整树为空。
+        let fitting = OakTree {
+            root_x: 0,
+            root_y: 306,
+            root_z: 0,
+            height: 12,
+            fluffy: false,
+            rare: true,
+            branch_count: 2,
+            branch_dir: [0, 2],
+        };
+        let top = 306 + 12 - 1;
+        assert_eq!(oak_tree_block_at(&fitting, &m, 0, top + 2, 0), m.leaves);
+        let touching = OakTree {
+            root_x: 0,
+            root_y: 307,
+            root_z: 0,
+            height: 12,
+            fluffy: false,
+            rare: true,
+            branch_count: 2,
+            branch_dir: [0, 2],
+        };
+        for y in 307..WORLD_MAX_Y {
+            for z in -3..=3 {
+                for x in -3..=3 {
+                    assert_eq!(
+                        oak_tree_block_at(&touching, &m, x, y, z),
+                        m.air,
+                        "触界珍异树 ({x},{y},{z}) 必须为空"
+                    );
+                }
+            }
+        }
+        // 普通标准 7 格同理:根 311 冠顶正常(顶上第二层回到空气),根 312
+        // 整树为空。
+        let std_fitting = OakTree {
+            root_x: 0,
+            root_y: 311,
+            root_z: 0,
+            height: 7,
+            fluffy: false,
+            rare: false,
+            branch_count: 0,
+            branch_dir: [0, 0],
+        };
+        let std_top = 311 + 7 - 1;
+        assert_eq!(
+            oak_tree_block_at(&std_fitting, &m, 0, std_top + 1, 0),
+            m.leaves
+        );
+        assert_eq!(
+            oak_tree_block_at(&std_fitting, &m, 0, std_top + 2, 0),
+            m.air
+        );
+        let std_touching = OakTree {
+            root_x: 0,
+            root_y: 312,
+            root_z: 0,
+            height: 7,
+            fluffy: false,
+            rare: false,
+            branch_count: 0,
+            branch_dir: [0, 0],
+        };
+        for y in 312..WORLD_MAX_Y {
+            for z in -3..=3 {
+                for x in -3..=3 {
+                    assert_eq!(
+                        oak_tree_block_at(&std_touching, &m, x, y, z),
+                        m.air,
+                        "触界普通树 ({x},{y},{z}) 必须为空"
+                    );
+                }
+            }
+        }
+    }
+
+    /// 找一棵根在负坐标、冠幅跨越区块边界的珍异树(种子固定,结果确定)。
+    fn negative_boundary_crossing_rare_tree() -> (WorldgenParams, OakTree) {
+        for seed in 1..=60 {
+            let p = params(seed);
+            for cz in -16..=16 {
+                for cx in -16..=16 {
+                    if let Some(tree) = p.oak_tree_for_cell(cx, cz) {
+                        if !tree.rare {
+                            continue;
+                        }
+                        if tree.root_x >= 0 && tree.root_z >= 0 {
+                            continue;
+                        }
+                        if (tree.root_x - 3) >> SECTION_SHIFT != (tree.root_x + 3) >> SECTION_SHIFT
+                            || (tree.root_z - 3) >> SECTION_SHIFT
+                                != (tree.root_z + 3) >> SECTION_SHIFT
+                        {
+                            return (p, tree);
+                        }
+                    }
+                }
+            }
+        }
+        panic!("夹具失效:语料里找不到负坐标跨界珍异树");
+    }
+
+    #[test]
+    fn negative_extended_reach_tree_matches_pointwise_across_boundary() {
+        // 负坐标跨界珍异树:整块与单点逐格一致。算术右移即 floor 除法,负坐
+        // 标候选格划分与正坐标同一规则;半径不足会在跨界侧先漏掉一格。
+        let (p, tree) = negative_boundary_crossing_rare_tree();
+        assert!(
+            tree.root_x < 0 || tree.root_z < 0,
+            "夹具失效:该树不在负坐标"
+        );
+        let top = tree.root_y + tree.height - 1;
+        let mut touched = Vec::new();
+        for cz in ((tree.root_z - 3) >> SECTION_SHIFT)..=((tree.root_z + 3) >> SECTION_SHIFT) {
+            for cx in ((tree.root_x - 3) >> SECTION_SHIFT)..=((tree.root_x + 3) >> SECTION_SHIFT) {
+                touched.push((cx, cz));
+            }
+        }
+        assert!(touched.len() > 1, "夹具失效:该树未真正跨界");
+        for (cx, cz) in touched {
+            let mut dense = vec![p.materials.air; CHUNK_VOLUME];
+            p.generate_chunk(cx, cz, &mut dense);
+            for y in tree.root_y..=(top + 2) {
+                for z in tree.root_z - 3..=tree.root_z + 3 {
+                    for x in tree.root_x - 3..=tree.root_x + 3 {
+                        if (x >> SECTION_SHIFT) != cx || (z >> SECTION_SHIFT) != cz {
+                            continue;
+                        }
+                        assert_eq!(
+                            dense[dense_index(x & (SECTION_SIZE - 1), y, z & (SECTION_SIZE - 1))],
+                            p.base_block_at(x, y, z),
+                            "({x},{y},{z})",
+                        );
+                    }
+                }
+            }
+        }
     }
 }

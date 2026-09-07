@@ -96,7 +96,7 @@ func TestMemoryTCPFluidDamBreakBroadcastParity(t *testing.T) {
 func recordDamParity(t *testing.T, transport string) damParityRecord {
 	t.Helper()
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 4, Seed: 42, SpawnDimension: core.Overworld,
 	})
 	config := hostTestConfig()
 	config.ViewRadius = 1

@@ -226,7 +226,7 @@ func (engine *engineContext) RegisterSession(
 	})
 }
 
-func (engine *engineContext) Player(id SessionID) (PlayerUpdate, bool) {
+func (engine *engineContext) Player(id SessionID, weather core.WeatherKind) (PlayerUpdate, bool) {
 	session := engine.sessions[id]
 	if session == nil || session.player == nil {
 		return PlayerUpdate{}, false
@@ -237,6 +237,7 @@ func (engine *engineContext) Player(id SessionID) (PlayerUpdate, bool) {
 		engine.sessionView(session).Center,
 		engine.WorldTime(),
 		engine.DayPhaseOffset(),
+		weather,
 	), true
 }
 
@@ -390,6 +391,7 @@ func (player *playerState) update(
 	viewCenter core.ChunkPos,
 	worldTime uint64,
 	dayPhaseOffset uint16,
+	weather core.WeatherKind,
 ) PlayerUpdate {
 	// 每 tick 定格饱和度归零提示位：`applyExhaustion`/`eating`/`resetHunger`
 	// 均已在权威阶段内完成写入，此处统一收敛，不在各写者处分散同步。
@@ -397,6 +399,7 @@ func (player *playerState) update(
 	return PlayerUpdate{
 		WorldTimeTicks:    worldTime,
 		DayPhaseOffset:    dayPhaseOffset,
+		WeatherKind:       weather,
 		Session:           id,
 		Dimension:         session.dimension,
 		ViewCenter:        viewCenter,
@@ -425,7 +428,8 @@ func (engine *engineContext) publishPlayers(result *TickResult) {
 	for _, id := range sessions {
 		session := engine.sessions[id]
 		// 偏移在本 tick 已由跳夜结算（先于玩家发布执行）写入，读到的就是随本
-		// 份权威状态下发的值；跳夜 tick 的客户端即刻看到白昼相位。
+		// 份权威状态下发的值；跳夜 tick 的客户端即刻看到白昼相位。天气同理：
+		// 结果里已是本 tick 结束时的权威值，逐人复制保证多人一致。
 		result.Players = append(
 			result.Players, session.player.update(
 				id,
@@ -433,6 +437,7 @@ func (engine *engineContext) publishPlayers(result *TickResult) {
 				engine.sessionView(session).Center,
 				result.WorldTimeTicks,
 				engine.DayPhaseOffset(),
+				result.WeatherKind,
 			),
 		)
 		session.player.reset = false

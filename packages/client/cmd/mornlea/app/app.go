@@ -71,6 +71,11 @@ type Options struct {
 	// WindowSize 是交互式窗口的固定逻辑尺寸预设；benchmark/capture 只携带
 	// 配置默认值但不消费它，继续走固定离屏尺寸。
 	WindowSize config.WindowSize
+	// CameraMode 是本地三态视角的装配初值（0=第一人称、1=第三人称背面、
+	// 2=第三人称正面），由 main 从加载后的 config.Config 下传；越界值在
+	// `NewWithDependencies` 落回第一人称。会话内经 F5 循环推进，退出世界时
+	// 落盘，跨世界保留。
+	CameraMode client.CameraMode
 	// FluidEnabled 是配置 fluidEnabled 的生效值，下传给本地权威世界的
 	// worldgen.New 门控海平面注水。远程连接模式下不使用它——世界内容由
 	// 服务端权威决定。
@@ -109,14 +114,18 @@ type Application struct {
 	// 跨帧存续挥动边沿（挖掘锚、攻击窗），会话重置时清零。
 	viewmodelStream  []byte
 	viewmodelEncoder render.ViewmodelEncoder
-	billboardBytes   []byte
-	entityEncoder    render.InstanceEncoder
-	lastFrameStats   render.FrameStats
-	remotePlayers    *client.RemotePlayers
-	companions       *client.Companions
-	hostiles         *client.Hostiles
-	chatEvents       *client.ChatEvents
-	chatInput        chatInput
+	// weatherStream/weatherState 是本帧降水实例流与天气状态段的复用缓冲；
+	// 降水无跨帧跟踪表，会话重置无需清理。
+	weatherStream  []byte
+	weatherState   []byte
+	billboardBytes []byte
+	entityEncoder  render.InstanceEncoder
+	lastFrameStats render.FrameStats
+	remotePlayers  *client.RemotePlayers
+	companions     *client.Companions
+	hostiles       *client.Hostiles
+	chatEvents     *client.ChatEvents
+	chatInput      chatInput
 	// chatEventBuffer 是 refreshChatLines 的复用缓冲，容量与 client.ChatEventCapacity
 	// 同源（E9/C9）：事件环最多回放 32 条，缓冲按同一常量分配保证零扩容刷新。
 	chatEventBuffer [client.ChatEventCapacity]network.ChatEvent
@@ -183,6 +192,9 @@ type Application struct {
 	// 同一接受纪律：偏移只平移昼夜呈现，绝不回写绝对时间。
 	worldTimeTicks uint64
 	dayPhaseOffset uint16
+	// weather 是最后确认的权威天气，只在接受更新状态时前进，与世界时间同一
+	// 接受纪律与冻结开关：呈现侧降水/天空/亮度的唯一输入，不读本地随机或墙钟。
+	weather core.WeatherKind
 	// worldTimeFrozen 冻结权威状态对昼夜呈现量的覆盖(capture 钉住天空状态,
 	// 见 SetWorldTimeFrozen);生产恒为 false。
 	worldTimeFrozen bool
@@ -197,9 +209,17 @@ type Application struct {
 	predictor       *client.Predictor
 	mesher          *client.Mesher
 	camera          client.Camera
-	center          core.ChunkPos
-	sequence        uint64
-	loadedChunks    map[core.ChunkPos]struct{}
+	// cameraMode 是本地三态视角（0=第一人称、1=第三人称背面、2=第三人称
+	// 正面）：纯本地呈现状态，随 F5 上升沿循环，不进服务端消息与权威字段；
+	// 会话重置与世界重装配不碰它，跨世界保留，退出世界时经 persistCameraMode
+	// 落盘。
+	cameraMode client.CameraMode
+	// f5WasDown 是 F5 上一帧的电平：游戏循环内其他按键边沿暂存是函数局部
+	// 变量，它住在结构上，供 `handleCameraModeKey` 做可单测的上升沿检测。
+	f5WasDown    bool
+	center       core.ChunkPos
+	sequence     uint64
+	loadedChunks map[core.ChunkPos]struct{}
 	// loadingMeshBase 是本会话装配点记录的网格化完成计数基线:mesher 跨会话
 	// 复用(单调计数不归零),退回主菜单再进入时若不从基线起算,上一世界的完成
 	// 数会让加载屏网格进度起步即饱和——进度条从高位直接跳满格,随后在网格

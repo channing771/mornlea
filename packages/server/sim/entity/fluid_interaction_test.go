@@ -14,7 +14,7 @@ import (
 // 夹具承重守卫用它复核「水真的在射线起点那一格」，而不是照抄一个手算常量。
 func eyeBlockOf(t *testing.T, engine *Engine, session SessionID) core.BlockPos {
 	t.Helper()
-	player, ok := engine.Player(session)
+	player, ok := engine.Player(session, core.WeatherClear)
 	if !ok {
 		t.Fatalf("会话 %d 没有玩家", session)
 	}

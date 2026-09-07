@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 	"github.com/channing771/mornlea/packages/shared/worldgen"
 )
 
@@ -142,5 +143,43 @@ func BenchmarkGenerateChunkWithOakTrees(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		worldgen.New(42, false).GenerateChunk(core.ChunkPos{X: -1, Z: -1})
+	}
+}
+
+// digestChunkBytes 把区块全部体素按 golden 相同的 y/z/x 顺序做摘要,用于
+// 锁定生成纯度(不是 golden 本身,golden 仍由 TestGenerateChunkGolden 持有)。
+func digestChunkBytes(chunk *world.Chunk) string {
+	h := sha256.New()
+	for y := int32(core.MinY); y < core.MaxY; y++ {
+		for z := 0; z < core.SectionSize; z++ {
+			for x := 0; x < core.SectionSize; x++ {
+				id := chunk.BlockAt(x, y, z)
+				_, _ = h.Write([]byte{byte(id), byte(id >> 8)})
+			}
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// TestGenerateChunkHasNoCrossChunkState 锁定生成器无跨块状态:同一实例以逆序
+// 生成、与另一种子交错生成,输出必须与新鲜实例逐字节一致。旧字节重载不变由
+// 存储层测试锁定,新树规则只作用于尚未生成的区块。
+func TestGenerateChunkHasNoCrossChunkState(t *testing.T) {
+	positions := []core.ChunkPos{
+		{X: 0, Z: 0}, {X: 1, Z: 0}, {X: -1, Z: -1}, {X: 37, Z: -104},
+	}
+	fresh := worldgen.New(42, false)
+	want := make(map[core.ChunkPos]string, len(positions))
+	for _, pos := range positions {
+		want[pos] = digestChunkBytes(fresh.GenerateChunk(pos))
+	}
+	shared := worldgen.New(42, false)
+	neighborSeed := worldgen.New(43, false)
+	for i := len(positions) - 1; i >= 0; i-- {
+		pos := positions[i]
+		_ = neighborSeed.GenerateChunk(pos)
+		if got := digestChunkBytes(shared.GenerateChunk(pos)); got != want[pos] {
+			t.Fatalf("chunk(%d,%d) 输出受生成顺序/交错种子影响,疑似跨区块状态", pos.X, pos.Z)
+		}
 	}
 }

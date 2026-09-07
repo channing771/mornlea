@@ -38,12 +38,13 @@ func (state *State) Player(
 	id SessionID,
 	worldTime uint64,
 	dayPhaseOffset uint16,
+	weather core.WeatherKind,
 	view SessionView,
 ) (PlayerUpdate, bool) {
 	return state.context(
 		nil, 0, worldTime, dayPhaseOffset, tuning.Tunables{}, physics.Tunables{},
 		singleViewSnapshot(id, view),
-	).Player(id)
+	).Player(id, weather)
 }
 
 func (state *State) PlayerSnapshot(id SessionID) (PlayerSnapshot, bool) {

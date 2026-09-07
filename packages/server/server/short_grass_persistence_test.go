@@ -41,7 +41,7 @@ func TestSavedChunkAcquiresWithoutGeneratorAndShortGrassBackfill(t *testing.T) {
 	key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{}}
 	preUpgrade := preUpgradeSavedChunk(key.Pos)
 
-	store := storage.NewMemory(storage.Metadata{FormatVersion: 3, Seed: 42})
+	store := storage.NewMemory(storage.Metadata{FormatVersion: 4, Seed: 42})
 	if _, err := store.SaveBatch(context.Background(), []storage.ChunkSave{{
 		Key: key, Revision: 7, Chunk: preUpgrade,
 	}}); err != nil {

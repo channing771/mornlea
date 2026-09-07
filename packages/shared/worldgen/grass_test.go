@@ -82,21 +82,25 @@ func TestShortGrassGrowsOnGrassSurfaceWithGaps(t *testing.T) {
 	}
 }
 
-// preUpgradeGoldenDigests 是升级前(自然短草引入前)以同一算法对 seed 42
-// 四个区块记录的 SHA256 摘要——变更实现前从 testdata/golden_seed42.txt
-// 逐字誊写冻结。归一化等价证明:把新输出中的 ShortGrassID 归一为 AirID
-// 后重新计算摘要，必须与这些升级前摘要逐字节一致;这证明既有高度、地形
-// 材料、矿石、橡树与海水方块没有被短草层改写(短草只写在此前的空气格)。
-var preUpgradeGoldenDigests = map[core.ChunkPos]string{
+// shortGrassFreeBaselineDigests 是同一算法对 seed 42 四个区块记录的
+// SHA256 基线:把生成输出中的 ShortGrassID 归一为空气后计算,基线含义是
+// "不含装饰短草的世界字节"。其中 (0,0) 与 (1,0) 两项自自然短草引入前冻结
+// 未变;(-1,-1) 与 (37,-104) 两项在树多样性规则下重订基线(旧值见 git 历史
+// 的 golden 与本文件旧版,差异逐项来自新树:普通树高 4..6→5..7、蓬松顶、
+// 珍异大树,无地形/矿石/其他装饰的附带变化,见对应变更报告)。归一化等价
+// 证明:新输出归一后必须与这些基线逐字节一致;这证明既有高度、地形材料、
+// 矿石、橡树与海水方块没有被短草层改写(短草只写在此前的空气格)。未来若树
+// 规则再变,允许同样只重订受影响区块的基线项并在报告中逐项归因。
+var shortGrassFreeBaselineDigests = map[core.ChunkPos]string{
 	{X: 0, Z: 0}:     "758c980abb0e63edd71b187a461805763f40f816e154ab233cf70cf6c6212c2d",
 	{X: 1, Z: 0}:     "49a4124a04cca24f9033a9569c6d390700204e908132e8342ab1b222e476727d",
-	{X: -1, Z: -1}:   "52355bb97f2a04ded395f65f737f65d6c81177b3a25a748083d7add856630444",
-	{X: 37, Z: -104}: "68532f6abf257f3d874a1bccbd39ee1a305546269820725a7070b2eb04a99576",
+	{X: -1, Z: -1}:   "aa3b5bd610af78af57970cc3b5fb9741cd758b54c98c913be7edae41928efbf8",
+	{X: 37, Z: -104}: "40b38b26eb9ae804eae16032512840623c210fb1ef25048b64baa4ba4798d8fb",
 }
 
-// TestShortGrassNormalizedOutputMatchesPreUpgradeDigests 是兼容性对照:
-// 新输出把 ShortGrassID 归一为 AirID 后，与升级前冻结摘要逐字节相同。
-func TestShortGrassNormalizedOutputMatchesPreUpgradeDigests(t *testing.T) {
+// TestShortGrassOnlyWritesFormerAir 是兼容性对照:新输出把 ShortGrassID
+// 归一为 AirID 后,与无短草基线逐字节相同。
+func TestShortGrassOnlyWritesFormerAir(t *testing.T) {
 	generator := worldgen.New(grassTestSeed, false)
 	for _, pos := range grassTestChunks {
 		chunk := generator.GenerateChunk(pos)
@@ -106,7 +110,7 @@ func TestShortGrassNormalizedOutputMatchesPreUpgradeDigests(t *testing.T) {
 				for x := 0; x < core.SectionSize; x++ {
 					id := chunk.BlockAt(x, y, z)
 					if id == core.ShortGrassID {
-						// 归一化:装饰短草在升级前的世界里是空气。
+						// 归一化:装饰短草在无短草基线里是空气。
 						id = core.AirID
 					}
 					_, _ = digest.Write([]byte{byte(id), byte(id >> 8)})
@@ -114,9 +118,9 @@ func TestShortGrassNormalizedOutputMatchesPreUpgradeDigests(t *testing.T) {
 			}
 		}
 		got := hex.EncodeToString(digest.Sum(nil))
-		if got != preUpgradeGoldenDigests[pos] {
-			t.Fatalf("chunk(%d,%d) 归一化摘要 %s != 升级前摘要 %s：既有方块被短草层改写",
-				pos.X, pos.Z, got, preUpgradeGoldenDigests[pos])
+		if got != shortGrassFreeBaselineDigests[pos] {
+			t.Fatalf("chunk(%d,%d) 归一化摘要 %s != 无短草基线 %s：既有方块被短草层改写",
+				pos.X, pos.Z, got, shortGrassFreeBaselineDigests[pos])
 		}
 	}
 }

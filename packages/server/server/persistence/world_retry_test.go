@@ -195,7 +195,7 @@ func TestFlushFrozenFailureReleasesUnsentPendingJobsForLaterRetry(t *testing.T) 
 	region, _ := storage.RegionFor(keys[0])
 	running := &World{
 		store: storage.NewMemory(storage.Metadata{
-			FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld,
+			FormatVersion: 4, Seed: 42, SpawnDimension: core.Overworld,
 		}),
 		engine:          engine,
 		options:         persistenceTestOptions(),

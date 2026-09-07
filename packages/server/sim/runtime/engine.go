@@ -53,6 +53,12 @@ type Engine struct {
 	tick             atomic.Uint64
 	// worldTime 是权威绝对世界时间，只由 simulation owner 在 Step 中推进。
 	worldTime atomic.Uint64
+	// weatherKind/weatherRemaining 是权威天气时钟（种类与剩余时长）：唯一写者是
+	// `StepWithTunables` 尾部的天气推进（与 `advanceWorldTime` 同位置同模式，
+	// 见 `advanceWeatherClock`），读者只在 tick 串行路径（发布装配与 `Player`
+	// 查询）上串行访问——与无锁的实体状态同纪律，不设原子或互斥。
+	weatherKind      core.WeatherKind
+	weatherRemaining uint32
 	// dayPhaseOffset 是 `core.DisplayDayPhase` 的显示相位偏移（值域钳 0..23999），
 	// 只进入显示相位计算，绝不影响 `worldTime` 的推进。唯一写者是全员入睡时的
 	// 跳夜结算（sleep.go），单值原子读写让判夜读取点无需额外同步；持久化由世界
@@ -87,6 +93,10 @@ func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
 		wanted:        make(map[core.ChunkKey]struct{}),
 	}
 	engine.worldTime.Store(worldTime)
+	// 天气从晴天起步：初始剩余时长按晴段分布掷骰（种子派生、tick 取 0，
+	// 与任何完成 tick 号都不碰撞），重放确定。
+	engine.weatherKind = core.WeatherClear
+	engine.weatherRemaining = rollWeatherDuration(seed, 0, core.WeatherClear)
 	// 初始化快照，使未经 Step 就被调用的方法（例如 RegisterPlayer 的出生扫描）
 	// 也有可用的参数快照。
 	initialTunables := ActiveTickTunables()
@@ -107,6 +117,35 @@ func (engine *Engine) SeedForTest() int64 {
 
 // WorldTime 返回最近一个完成 tick 的绝对世界时间。
 func (engine *Engine) WorldTime() uint64 { return engine.worldTime.Load() }
+
+// WeatherKind 返回当前权威天气种类。天气时钟只在 tick 串行路径上推进，
+// 读者（发布装配、非 tick 查询与持久化快照）同样只在 tick 串行路径或
+// 引擎锁保护下读取，与无锁的实体状态同纪律。
+func (engine *Engine) WeatherKind() core.WeatherKind { return engine.weatherKind }
+
+// WeatherTicksRemaining 返回当前天气段的剩余权威 tick 数，读纪律与
+// `WeatherKind` 相同。
+func (engine *Engine) WeatherTicksRemaining() uint32 { return engine.weatherRemaining }
+
+// RestoreWeather 写入从世界 metadata 恢复的权威天气。它只允许宿主装配阶段
+// 在首个权威 tick 之前调用一次：`weatherKind`/`weatherRemaining` 的常规写者
+// 是 tick 尾部的天气推进，恢复先于一切命令与 tick，因此不构成第二个并发写者。
+//
+// 越界种类归一为晴天（非 tick 查询路径直接读引擎值下发，不经过推进归一）；
+// 剩余时长为零表示旧版本存档未记录天气，按该种类的分布掷骰补一段默认时长
+// （种子派生、tick 取 0，与 `NewEngine` 初值同源），使迁移世界与同种子
+// 新世界行为一致——零值分支只补时长，不改动已归一的种类。v4 存档写出的
+// 剩余时长恒大于零，正常恢复不受此分支影响。
+func (engine *Engine) RestoreWeather(kind core.WeatherKind, remaining uint32) {
+	if kind > core.WeatherThunder {
+		kind = core.WeatherClear
+	}
+	if remaining == 0 {
+		remaining = rollWeatherDuration(engine.seed, 0, kind)
+	}
+	engine.weatherKind = kind
+	engine.weatherRemaining = remaining
+}
 
 // DayPhaseOffset 返回当前显示相位偏移（0..23999）。跳夜结算之外恒为构造初值 0。
 func (engine *Engine) DayPhaseOffset() uint16 { return uint16(engine.dayPhaseOffset.Load()) }
@@ -135,6 +174,14 @@ func (engine *Engine) SetWorldTimeForTest(ticks uint64) { engine.worldTime.Store
 // `RestoreDayPhaseOffset`（恢复 metadata）或跳夜结算写入。
 func (engine *Engine) SetDayPhaseOffsetForTest(offset uint16) {
 	engine.dayPhaseOffset.Store(uint64(offset))
+}
+
+// SetWeatherForTest 直接写入权威天气种类与剩余时长，仅供上层包的测试构造
+// 「已推进」的天气状态来验证持久化接线。生产路径的天气只能经宿主装配的
+// `RestoreWeather`（恢复 metadata）或 tick 尾部的天气推进写入。
+func (engine *Engine) SetWeatherForTest(kind core.WeatherKind, remaining uint32) {
+	engine.weatherKind = kind
+	engine.weatherRemaining = remaining
 }
 
 // advanceWorldTime 把绝对世界时间推进恰好一个 tick 并返回新值。

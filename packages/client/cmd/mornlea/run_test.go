@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/channing771/mornlea/packages/client/client"
 	application "github.com/channing771/mornlea/packages/client/cmd/mornlea/app"
 	"github.com/channing771/mornlea/packages/client/cmd/mornlea/capture"
 	"github.com/channing771/mornlea/packages/server/server"
@@ -800,6 +801,7 @@ func TestRunPassesRawResolvedAndWindowSettingsWithAutomationIsolation(t *testing
 	cfg.TexturePackPath = "packs/local"
 	cfg.WindowSize = config.WindowSize960x540
 	cfg.AudioVolume = 0.25
+	cfg.CameraMode = 1
 	if err := cfg.Save(configPath); err != nil {
 		t.Fatal(err)
 	}
@@ -810,11 +812,12 @@ func TestRunPassesRawResolvedAndWindowSettingsWithAutomationIsolation(t *testing
 		wantResolved    string
 		wantWindow      config.WindowSize
 		wantStartAtMenu bool
+		wantCamera      client.CameraMode
 	}{
-		{name: "local", args: []string{"--config", configPath}, wantRaw: "packs/local", wantResolved: filepath.Join(configDir, "packs/local"), wantWindow: config.WindowSize960x540, wantStartAtMenu: true},
-		{name: "connect", args: []string{"--config", configPath, "--connect", "127.0.0.1:25565"}, wantRaw: "packs/local", wantResolved: filepath.Join(configDir, "packs/local"), wantWindow: config.WindowSize960x540},
-		{name: "benchmark", args: []string{"--config", configPath, "--benchmark", "--perf-output", filepath.Join(t.TempDir(), "perf.json")}, wantWindow: config.WindowSize1280x720},
-		{name: "capture", args: []string{"--config", configPath, "--capture", t.TempDir()}, wantWindow: config.WindowSize1280x720},
+		{name: "local", args: []string{"--config", configPath}, wantRaw: "packs/local", wantResolved: filepath.Join(configDir, "packs/local"), wantWindow: config.WindowSize960x540, wantStartAtMenu: true, wantCamera: client.CameraThirdPersonBack},
+		{name: "connect", args: []string{"--config", configPath, "--connect", "127.0.0.1:25565"}, wantRaw: "packs/local", wantResolved: filepath.Join(configDir, "packs/local"), wantWindow: config.WindowSize960x540, wantCamera: client.CameraThirdPersonBack},
+		{name: "benchmark", args: []string{"--config", configPath, "--benchmark", "--perf-output", filepath.Join(t.TempDir(), "perf.json")}, wantWindow: config.WindowSize1280x720, wantCamera: client.CameraFirstPerson},
+		{name: "capture", args: []string{"--config", configPath, "--capture", t.TempDir()}, wantWindow: config.WindowSize1280x720, wantCamera: client.CameraFirstPerson},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var got application.Options
@@ -828,7 +831,7 @@ func TestRunPassesRawResolvedAndWindowSettingsWithAutomationIsolation(t *testing
 			if err == nil {
 				t.Fatal("want injected construction error")
 			}
-			if got.TexturePackPath != test.wantRaw || got.ResolvedTexturePackPath != test.wantResolved || got.WindowSize != test.wantWindow || got.StartAtMenu != test.wantStartAtMenu {
+			if got.TexturePackPath != test.wantRaw || got.ResolvedTexturePackPath != test.wantResolved || got.WindowSize != test.wantWindow || got.StartAtMenu != test.wantStartAtMenu || got.CameraMode != test.wantCamera {
 				t.Fatalf("settings options=%+v", got)
 			}
 		})

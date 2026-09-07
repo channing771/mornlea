@@ -7,7 +7,8 @@
 //!   (v6 起远环 tile 出口加入,v7 起雾 setter 出口加入,v9 起结构化 UI 事件,
 //!   v11 起离屏 benchmark batch,v12 起菜单桥出口,v13 起窗口合成捕获,
 //!   v14 起 render world update 出口,v15 起 avatar 贴图实例布局,
-//!   v16 起相机视图投影查询出口,v17 起帧 viewmodel TLV 段)。
+//!   v16 起相机视图投影查询出口,v17 起帧 viewmodel TLV 段,
+//!   v18 起帧天气状态/降水 TLV 段)。
 //! - 窗口句柄存放在 thread-local 表中:句柄只在创建线程有效,跨线程调用
 //!   查不到句柄而返回 `MORNLEA_CLIENT_STATUS_WINDOW`——这同时兜住了 winit
 //!   macOS 的主线程约束(Go 侧已 `LockOSThread`)。
@@ -54,7 +55,10 @@ use crate::window::ClientWindow;
 /// v16:新增无状态相机视图投影查询出口(位姿→列主序视图投影矩阵＋6 平面视锥)。
 /// v17:帧新增 viewmodel TLV 段(tag 11,定长 viewmodel 实例流,与 avatar 同
 /// 96 字节/实例布局);v17 surface 完整保留 v16 的全部 versioned exports 与语义。
-pub const CLIENT_ABI_VERSION: u32 = 17;
+/// v18:帧新增天气状态段(tag 12,4 字节灰度 f32)与降水实例段(tag 13,定长
+/// 降水实例流,与 avatar 同 96 字节/实例布局);空段不编码,晴天帧与 v17 逐字
+/// 节一致;v18 surface 完整保留 v17 的全部 versioned exports 与语义。
+pub const CLIENT_ABI_VERSION: u32 = 18;
 
 /// 调用成功。
 pub const MORNLEA_CLIENT_STATUS_OK: u32 = 0;
@@ -482,12 +486,13 @@ mod tests {
     // 校验拒绝路径:ABI 版本、参数校验与无效句柄。
 
     #[test]
-    fn abi_version_is_seventeen() {
+    fn abi_version_is_eighteen() {
         // v15 在 v14 render world update 表面上叠加 avatar 贴图实例布局与
         // 相机可见性两段式出口；v16 与 v15 同表面，仅版本号提升；v17 在 v16
-        // 表面上叠加帧 viewmodel TLV 段(tag 11)；
+        // 表面上叠加帧 viewmodel TLV 段(tag 11)；v18 在 v17 表面上叠加帧天气
+        // 状态段(tag 12)与降水实例段(tag 13)；
         // identity 必须与完整 31 个 versioned exports 同步切换。
-        assert_eq!(mornlea_client_abi_version(), 17);
+        assert_eq!(mornlea_client_abi_version(), 18);
     }
 
     #[test]
@@ -718,6 +723,7 @@ mod capture_ffi_tests {
 
 use crate::render::{
     BENCHMARK_BATCH_MAX_REPETITIONS, FrameInput, FrameResult, OffscreenRenderer, RenderCreateError,
+    weather,
 };
 
 /// 本机无可用 GPU 适配器;调用方(测试)应据此跳过而非失败。
@@ -975,10 +981,18 @@ const FRAME_TAG_CRACK: u32 = 10;
 /// 已占用(tag 9 退役仍保留拒绝语义),取下一个空闲值 11;空流不编码,保证
 /// 无 viewmodel 输入的帧与 v16 逐字节一致。client ABI v17 起新增。
 const FRAME_TAG_VIEWMODEL: u32 = 11;
+/// 天气状态段(4 字节:灰度 f32 小端,经 sky uniform 预留位灰化天空与云)。
+/// tag 1..11 已占用(tag 9 退役仍保留拒绝语义),取下一个空闲值 12;晴天恒
+/// 为空(省略段表达),晴天帧与 v17 逐字节一致。client ABI v18 起新增。
+const FRAME_TAG_WEATHER: u32 = 12;
+/// 降水实例段(96 字节/实例:与 avatar 同布局,形态已由 Go 侧按高度相对雪线
+/// 选形)。取天气段之后的下一个空闲值 13;晴天恒为空,晴天帧与 v17 逐字节
+/// 一致。client ABI v18 起新增。
+const FRAME_TAG_PRECIP: u32 = 13;
 /// 白名单内的最高 TLV tag。client ABI v12 退役了 v8–v11 的 tag 9 UI 段:
-/// 白名单区间虽覆盖到 tag 11,携带 tag 9 段的帧仍由 match 分支与未知 tag
+/// 白名单区间虽覆盖到 tag 13,携带 tag 9 段的帧仍由 match 分支与未知 tag
 /// 同一路径拒绝,不触碰渲染器状态。
-const FRAME_TAG_MAX: u32 = 11;
+const FRAME_TAG_MAX: u32 = 13;
 
 /// 解析 render_frame 输入;违约返回 None。
 ///
@@ -1028,10 +1042,12 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
     let mut debug_vertices = Vec::new();
     let mut crack_instances = Vec::new();
     let mut viewmodel_instances = Vec::new();
+    let mut weather_gray = 0.0f32;
+    let mut precip_instances = Vec::new();
     if layout == 2 {
         let mut cursor = sections_end;
-        // seen 以 tag 为下标,长度覆盖白名单 1..=11(tag 0 不存在,浪费一格)。
-        let mut seen = [false; 12];
+        // seen 以 tag 为下标,长度覆盖白名单 1..=13(tag 0 不存在,浪费一格)。
+        let mut seen = [false; 14];
         while cursor < bytes.len() {
             if bytes.len() - cursor < 8 {
                 return None;
@@ -1051,6 +1067,8 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
                 return None;
             }
             seen[index] = true;
+            // 天气内容门(长度、灰度有限 0..=1)见 `render::weather::state_valid`:
+            // 4 字节灰度在此直接解码,降水流沿既有实例段纪律原样过境。
             match tag {
                 FRAME_TAG_AVATAR => avatar_instances = payload.to_vec(),
                 FRAME_TAG_DROP => drop_instances = payload.to_vec(),
@@ -1076,6 +1094,13 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
                 }
                 FRAME_TAG_CRACK => crack_instances = payload.to_vec(),
                 FRAME_TAG_VIEWMODEL => viewmodel_instances = payload.to_vec(),
+                FRAME_TAG_WEATHER => {
+                    if !weather::state_valid(payload) {
+                        return None;
+                    }
+                    weather_gray = f32::from_le_bytes(payload.try_into().unwrap());
+                }
+                FRAME_TAG_PRECIP => precip_instances = payload.to_vec(),
                 _ => return None,
             }
         }
@@ -1101,6 +1126,8 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
         debug_vertices,
         crack_instances,
         viewmodel_instances,
+        weather_gray,
+        precip_instances,
     })
 }
 
@@ -1226,8 +1253,8 @@ mod render_ffi_tests {
                 assert_eq!($call, MORNLEA_CLIENT_STATUS_ABI_VERSION)
             }};
         }
-        let bad = 16;
-        assert_eq!(CLIENT_ABI_VERSION, bad + 1, "被测版本必须是 v17 的直接前代");
+        let bad = 17;
+        assert_eq!(CLIENT_ABI_VERSION, bad + 1, "被测版本必须是 v18 的直接前代");
 
         assert_bad_abi!(unsafe {
             mornlea_client_window_create(bad, 0, 0, std::ptr::null(), 0, std::ptr::null_mut())
@@ -2002,9 +2029,9 @@ mod frame_v2_tests {
         // 空 pass 段序列同样合法(v2 允许零段)。
         assert_eq!(parse_status(&v2_frame(&[])), MORNLEA_CLIENT_STATUS_WINDOW);
 
-        // 未知 tag(12 超出白名单 1..=11)。
+        // 未知 tag(14 超出白名单 1..=13)。
         assert_eq!(
-            parse_status(&v2_frame(&tlv(12, &[0u8; 4]))),
+            parse_status(&v2_frame(&tlv(14, &[0u8; 4]))),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
         // 已退役 tag 9(v8–v11 的菜单 UI 段):与未知 tag 同路径拒绝,
@@ -2112,6 +2139,144 @@ mod frame_v2_tests {
 }
 
 #[cfg(test)]
+mod weather_ffi_tests {
+    use super::*;
+
+    /// 构造 layout v2 帧:头 + 零可见 section + 给定 TLV 段字节。
+    fn weather_v2_frame(passes: &[u8]) -> Vec<u8> {
+        let mut frame = vec![0u8; FRAME_HEADER_BYTES];
+        frame[188..192].copy_from_slice(&2u32.to_le_bytes());
+        frame.extend_from_slice(passes);
+        frame
+    }
+
+    fn weather_tlv(tag: u32, payload: &[u8]) -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(&tag.to_le_bytes());
+        out.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        out.extend_from_slice(payload);
+        out
+    }
+
+    fn gray_bytes(gray: f32) -> [u8; 4] {
+        gray.to_le_bytes()
+    }
+
+    /// 经 render_frame 入口驱动解析:解析成功但句柄未知返回 WINDOW——以此
+    /// 区分接受与拒绝,无需 GPU。
+    fn weather_parse_status(frame: &[u8]) -> u32 {
+        // SAFETY: 指针来自有效切片。
+        unsafe {
+            mornlea_client_render_frame(CLIENT_ABI_VERSION, 0xF00D, frame.as_ptr(), frame.len())
+        }
+    }
+
+    #[test]
+    fn weather_tags_are_next_free_values() {
+        // tag 1..11 已占用(tag 9 退役仍保留拒绝语义),天气状态取下一个空闲
+        // 值 12,降水实例取 13,白名单上界同步覆盖到 13。
+        assert_eq!(FRAME_TAG_WEATHER, 12);
+        assert_eq!(FRAME_TAG_PRECIP, 13);
+        assert_eq!(FRAME_TAG_MAX, 13);
+    }
+
+    #[test]
+    fn weather_state_decodes_gray_into_struct() {
+        // 4 字节灰度 f32 原样解码入结构,降水段为空。
+        let frame = weather_v2_frame(&weather_tlv(FRAME_TAG_WEATHER, &gray_bytes(0.5)));
+        let input = parse_frame(&frame).expect("合法天气状态段必须解析成功");
+        assert_eq!(input.weather_gray, 0.5);
+        assert!(input.precip_instances.is_empty());
+    }
+
+    #[test]
+    fn precip_segment_decodes_into_struct() {
+        // 定长降水实例流(96 字节/实例,与 avatar 同布局)原样解码入结构。
+        let payload = vec![0x5Au8; 192];
+        let frame = weather_v2_frame(&weather_tlv(FRAME_TAG_PRECIP, &payload));
+        let input = parse_frame(&frame).expect("合法降水段必须解析成功");
+        assert_eq!(input.precip_instances, payload);
+        assert_eq!(input.weather_gray, 0.0);
+    }
+
+    #[test]
+    fn weather_segments_absent_leave_struct_default() {
+        // 无段帧的结构字段为默认(灰度 0、降水空):晴天帧与旧版本逐字节一致的前提。
+        let mut passes = Vec::new();
+        passes.extend(weather_tlv(FRAME_TAG_AVATAR, &[0u8; 8]));
+        passes.extend(weather_tlv(FRAME_TAG_VIEWMODEL, &[0u8; 96]));
+        let input = parse_frame(&weather_v2_frame(&passes)).expect("既有段组合必须解析成功");
+        assert_eq!(input.weather_gray, 0.0);
+        assert!(input.precip_instances.is_empty());
+    }
+
+    #[test]
+    fn weather_segments_coexist_with_existing_segments() {
+        let mut passes = Vec::new();
+        passes.extend(weather_tlv(FRAME_TAG_AVATAR, &[0u8; 8]));
+        passes.extend(weather_tlv(FRAME_TAG_VIEWMODEL, &[0xA5u8; 96]));
+        passes.extend(weather_tlv(FRAME_TAG_WEATHER, &gray_bytes(0.75)));
+        passes.extend(weather_tlv(FRAME_TAG_PRECIP, &[0xA5u8; 96]));
+        assert_eq!(
+            weather_parse_status(&weather_v2_frame(&passes)),
+            MORNLEA_CLIENT_STATUS_WINDOW,
+            "合法天气组合帧应通过解析并因句柄未知被拒"
+        );
+    }
+
+    #[test]
+    fn weather_segments_duplicate_and_bad_content_rejected() {
+        // 每类段至多出现一次。
+        let mut dup = weather_tlv(FRAME_TAG_WEATHER, &gray_bytes(0.5));
+        dup.extend(weather_tlv(FRAME_TAG_WEATHER, &gray_bytes(0.5)));
+        assert_eq!(
+            weather_parse_status(&weather_v2_frame(&dup)),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        // 白名单上界之外(14)拒绝。
+        assert_eq!(
+            weather_parse_status(&weather_v2_frame(&weather_tlv(14, &[0u8; 4]))),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        // 状态段长度非 4、灰度非有限或越界拒绝。
+        assert_eq!(
+            weather_parse_status(&weather_v2_frame(&weather_tlv(
+                FRAME_TAG_WEATHER,
+                &[0u8; 8]
+            ))),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            weather_parse_status(&weather_v2_frame(&weather_tlv(
+                FRAME_TAG_WEATHER,
+                &gray_bytes(f32::NAN)
+            ))),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            weather_parse_status(&weather_v2_frame(&weather_tlv(
+                FRAME_TAG_WEATHER,
+                &gray_bytes(1.5)
+            ))),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+    }
+
+    #[test]
+    fn weather_wrong_abi_wins_over_bad_content() {
+        // 错误 ABI 优先于天气内容检查:版本错即回 ABI_VERSION,不读天气输入、
+        // 不改变渲染器状态(此处负载长度非法也须先报版本错)。
+        let old = CLIENT_ABI_VERSION - 1;
+        assert_eq!(old, 17, "被测旧版本必须是 v18 的直接前代");
+        let frame = weather_v2_frame(&weather_tlv(FRAME_TAG_WEATHER, &[0u8; 6]));
+        // SAFETY: 指针来自有效切片;ABI 校验先于一切解析。
+        let status =
+            unsafe { mornlea_client_render_frame(old, 0xF00D, frame.as_ptr(), frame.len()) };
+        assert_eq!(status, MORNLEA_CLIENT_STATUS_ABI_VERSION);
+    }
+}
+
+#[cfg(test)]
 mod viewmodel_ffi_tests {
     use super::*;
 
@@ -2143,9 +2308,9 @@ mod viewmodel_ffi_tests {
     #[test]
     fn viewmodel_tag_is_next_free_value() {
         // tag 1..10 已占用(tag 9 退役仍保留拒绝语义),viewmodel 取下一个
-        // 空闲值 11,白名单上界同步覆盖到 11。
+        // 空闲值 11;其后天气状态 12、降水 13 跟进,白名单上界同步覆盖到 13。
         assert_eq!(FRAME_TAG_VIEWMODEL, 11);
-        assert_eq!(FRAME_TAG_MAX, 11);
+        assert_eq!(FRAME_TAG_MAX, 13);
     }
 
     #[test]
@@ -2191,9 +2356,9 @@ mod viewmodel_ffi_tests {
             viewmodel_parse_status(&viewmodel_v2_frame(&dup)),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
-        // 白名单上界之外(12)拒绝。
+        // 白名单上界之外(14)拒绝。
         assert_eq!(
-            viewmodel_parse_status(&viewmodel_v2_frame(&viewmodel_tlv(12, &[0u8; 4]))),
+            viewmodel_parse_status(&viewmodel_v2_frame(&viewmodel_tlv(14, &[0u8; 4]))),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
     }
@@ -2202,12 +2367,12 @@ mod viewmodel_ffi_tests {
     fn viewmodel_wrong_abi_wins_over_bad_content() {
         // 错误 ABI 优先于 viewmodel 内容检查:版本错即回 ABI_VERSION,不读
         // viewmodel 输入、不改变渲染器状态(此处负载长度非法也须先报版本错)。
-        let v16 = CLIENT_ABI_VERSION - 1;
-        assert_eq!(v16, 16, "被测旧版本必须是 v17 的直接前代");
+        let v17 = CLIENT_ABI_VERSION - 1;
+        assert_eq!(v17, 17, "被测旧版本必须是 v18 的直接前代");
         let frame = viewmodel_v2_frame(&viewmodel_tlv(FRAME_TAG_VIEWMODEL, &[0u8; 6]));
         // SAFETY: 指针来自有效切片;ABI 校验先于一切解析。
         let status =
-            unsafe { mornlea_client_render_frame(v16, 0xF00D, frame.as_ptr(), frame.len()) };
+            unsafe { mornlea_client_render_frame(v17, 0xF00D, frame.as_ptr(), frame.len()) };
         assert_eq!(status, MORNLEA_CLIENT_STATUS_ABI_VERSION);
     }
 }
