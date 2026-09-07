@@ -676,8 +676,14 @@ func parityReadinessTranscript(
 	}
 	lastState.ServerTick = 0
 	// 两次运行在脚本开始前的 tick 数不同，绝对世界时间不属于业务对等内容；
-	// 同一服务端上多客户端的时间一致性由多人昼夜测试覆盖。
+	// 同一服务端上多客户端的时间一致性由多人昼夜测试覆盖。季节三字段是
+	// （绝对时间、位置）的确定派生观察值，同样随登录阶段的 tick 错位漂移
+	// （进度差 1、温度跨量化边界差 1），与时间同批归一；其逐字段搬运正确性
+	// 由 season publication 测试钉住。
 	lastState.WorldTimeTicks = 0
+	lastState.Season = 0
+	lastState.SeasonProgress = 0
+	lastState.Temperature = 0
 	transcript := []string{fmt.Sprintf("PlayerState:%+v", lastState)}
 	for x := int32(-1); x <= 1; x++ {
 		for z := int32(-1); z <= 1; z++ {
@@ -811,6 +817,10 @@ func parityBusinessMessage(
 	case network.PlayerState:
 		message.ServerTick = 0
 		message.WorldTimeTicks = 0
+		// 季节三字段与绝对时间同批归一：理由见 parityReadinessTranscript。
+		message.Season = 0
+		message.SeasonProgress = 0
+		message.Temperature = 0
 		return []string{fmt.Sprintf("PlayerState:%+v", message)}
 	case network.CommandRejected:
 		return []string{fmt.Sprintf("CommandRejected:%+v", message)}

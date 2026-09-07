@@ -155,6 +155,17 @@ type PlayerUpdate struct {
 	// WeatherKind 是本 tick 结束时的权威天气（0=晴、1=雨、2=雷暴）：
 	// 世界单值，同一 tick 发给所有玩家的更新里完全一致。
 	WeatherKind core.WeatherKind
+	// Season 与 SeasonProgress 是本 tick 结束时的季节派生单值（0..3 枚举与
+	// 0..255 量化进度），由 runtime 按（绝对时间、seed 派生的季节偏移）在
+	// Step 尾部求出后按人复制，与 WeatherKind 同批次；它们不是权威状态，
+	// 接收方重放（时间+seed）必然重现。
+	Season         core.Season
+	SeasonProgress uint8
+	// Temperature 是按本份更新里的玩家 Position.Y、当 tick 天气与季节相位
+	// （`core.TemperatureAt`）求得的观察温度（℃）。就近取整（half away
+	// from zero——.5 恰值远离零）后收窄为 int8，域由 core 在源头 clamp 到
+	// [-40,45]，无二次裁剪。逐人求值、逐人不可变。
+	Temperature int8
 }
 
 type CompanionUpdate struct {
@@ -221,6 +232,12 @@ type TickResult struct {
 	// WeatherKind 是本 tick 结束时的权威天气：发布侧按人复制进每份
 	// `PlayerUpdate`，实体结算不消费它。
 	WeatherKind core.WeatherKind
+	// Season 与 SeasonProgress 是本 tick 结束时的季节派生单值：与
+	// `WeatherKind` 同为世界单值，由 runtime 在 Step 尾部从（绝对时间、
+	// seed 派生偏移）确定性求出，发布侧按人复制；实体结算不消费它们。
+	// 发送成功后连同整个 TickResult 视为不可变。
+	Season         core.Season
+	SeasonProgress uint8
 }
 
 type PlayerLocation struct {
