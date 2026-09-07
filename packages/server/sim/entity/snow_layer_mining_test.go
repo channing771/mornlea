@@ -69,6 +69,39 @@ func TestMiningSnowLayerClearsBlockWithoutDrop(t *testing.T) {
 	}
 }
 
+// TestMiningSnowLayerSucceedsWithFullDropCapacity 覆盖「雪层采掘不预留 drop 槽，
+// 掉落容量满也必须成功」（短草未命中路径的同形守护）：雪层无掉落语义，清块
+// 不得因容量不足而拒绝或改动掉落槽——`DropsHash` 逐字节不变，revision 恰好
+// 推进一次；四档同规则。
+func TestMiningSnowLayerSucceedsWithFullDropCapacity(t *testing.T) {
+	for _, block := range snowLayerMiningBlocks {
+		engine, _, targets := readyMiningPlayers(t, 1)
+		target := targets[0]
+		engine.SetBlockForTest(target, block)
+		fillMiningDrops(engine, target)
+		record := miningTargetRecord(t, engine, target)
+		beforeDrops := record.Chunk.DropsHash()
+		beforeRevision := record.Revision
+
+		result := advanceMiningOnce(engine)
+
+		if len(result.Rejected) != 0 {
+			t.Fatalf("容量满的雪层 %d 采除被拒绝=%+v", block, result.Rejected)
+		}
+		x, _, z := target.Local()
+		if got := record.Chunk.BlockAt(x, target.Y, z); got != core.AirID {
+			t.Fatalf("容量满的雪层 %d 采除后方块=%d，想要空气", block, got)
+		}
+		if got := record.Chunk.DropsHash(); got != beforeDrops {
+			t.Fatalf("雪层 %d 采除修改了掉落槽: %x/%x", block, got, beforeDrops)
+		}
+		if after := miningTargetRecord(t, engine, target).Revision; after != beforeRevision+1 {
+			t.Fatalf("雪层 %d 采除 revision=%d，想要推进一次到 %d",
+				block, after, beforeRevision+1)
+		}
+	}
+}
+
 // TestCompanionMineableBlockRejectsSnowLayers 锁定伙伴防御清单对雪层的拒绝：
 // 雪层只由积雪机制产生、没有 BlockDrop 登记，通用判据今天碰巧也会拒绝它，
 // 但按短草先例契约要求显式拒绝——若未来有人给雪层补上 BlockDrop 登记，只有
