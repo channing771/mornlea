@@ -21,6 +21,7 @@
 
 - `authoritative-daylight`: 显示相位在既有偏移之上叠加季节 warp；判夜消费点切换到季节化入口。
 - `authoritative-weather`: 降水形态派生依据从静态雪线高度改为共享温度公式的局部温度。
+- `weather-camera-showcase`: `rain-noon` 场景改钉夏至正午（相位补偿保天空基线不变），形态语义随温度判定更新（柱顶少量雪尘为温度梯度真实表现）。
 
 ## Impact
 

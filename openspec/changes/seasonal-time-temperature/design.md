@@ -67,7 +67,7 @@
 - **降水形态**：`client/render/weather.go` `BuildWeatherParts` 判定从 `particleY >= WeatherSnowLineY` 换为 `PrecipitationIsSnow(yearPhase, effPhase, weather, particleY)`；`WeatherSnowLineY` 常量退役为校准锚（保留并注释其新角色：Y=88 是夏至正午的等效雪线锚点）。输入（yearPhase/effPhase）由 app 从镜像状态算出传入。
 - **昼夜弧**：`daylight.go` 太阳/亮度/星空全部消费 `EffectiveDayPhase`；冬季天空冷色 tint（`ClearColor` 向冷蓝偏移 ≤0.03，随 yearPhase 正弦权重，分点为 0——保基线）。
 - **Rust 零改动**：sky uniform 输入仍是 Go 计算的 daylight/sky_color（帧 TLV 与 client ABI v18 不动）。
-- **capture 基线零重录裁决**：`capture/scene_application.go` 增加 capture-only 季节相位 override（模式照抄 `SetCaptureWeather`），默认把 yearPhase 钉在 **分点 0（春始，dayFraction=0.5）** → warp 恒等、冷 tint=0 → 既有 27 景 golden 逐字节不变。`rain-noon` 场景（雪线下机位锁雨形）在分点+正午 15℃ 下天然仍为雨，语义保持。
+- **capture 基线裁决**：`capture/scene_application.go` 增加 capture-only 季节相位 override（模式照抄 `SetCaptureWeather`），默认把全部场景钉在 **分点 0（春始，dayFraction=0.5）** → warp 恒等、冷 tint=0 → 无降水场景的 golden 逐字节不变。`rain-noon` 是唯一例外：分点正午雨天局部温度 = 11+0−4−1.25·(y−64)，雪形边界在 y=69.6，其降水柱 (65.5, 85.5] 约 80% 会变雪——「零重录」与温度形态在此景数学互斥。裁决为场景钉**夏至正午**（yearPhase=0.25，温度边界 y=84.8）并补偿 `DayPhaseOffset=+1800` 使季节化相位仍恰 6000（天空/日照/地形逐字节不变），降水主体为雨、仅柱顶 84.8..85.5 少量雪尘（温度梯度真实表现），该景 golden 按预期重录；`weather-camera-showcase` 的场景 Requirement 同步改语义（「雪线下无雪」依据已随形态判定温度化失效）。
 
 ## 6. 并发与预算
 
