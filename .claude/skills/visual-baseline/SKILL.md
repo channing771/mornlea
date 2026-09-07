@@ -8,16 +8,17 @@ description: 视觉基线三类路由与更新纪律：窗口型归 ui、单帧�
 ## 三类路由
 
 - 窗口/WebView 层 → `ui/`：注册表以 `fixture-names.ts` 的 `fixtureNames` 为准，本机 Chrome 抓取比对，不进 CI。
-- 无头世界单帧稳定态 → `world/`：注册表以 `capture/capture.go` 的 `captureScenes` 为准，无头离屏收敛后抓帧。
+- 无头世界单帧稳定态 → `world/`：注册表以 `capture/capture.go` 的 `captureScenes` 为准，无头离屏收敛后抓帧；改动只波及部分场景时优先 `make visual-check SCENES=` 子集验证，全量比对留在推送/提交等阶段边界。
 - 跨 tick 状态迁移 → GIF 全流程（触发前、结算、收敛全覆盖，不得只截片段）：
   - 供人眼审查 → `motion/` 演示，不进任何比对；
-  - 需门禁钉住 → `passive-death/`（或同类门禁 GIF 目录），逐帧比对、全帧通过、帧预算有界。
+  - 需门禁钉住 → `passive-death/`（或同类门禁 GIF 目录），不进自动比对，仅生成供人工审查，帧预算有界。
 
 世界帧不得携带窗口 chrome，UI 夹具不得复刻世界像素；同一行为禁 PNG + GIF 双存，例外必须在 README 注明理由（门禁采样点 vs 全流程审查物）。
 
 ## 入口
 
 - 世界：`make visual-check` 比对，`make visual-update` 显式覆盖，路径常量以 `capture/capture_image.go` 为准。
+- GIF 时机：纯比对运行缺省不生成 GIF 剧本，人工审查用 `make visual-check GIFS=1` 显式生成；`make visual-update` 恒生成。
 - 部件：`make frontend-visual-check` / `make frontend-visual-update`（或在 `frontend/` 内 `corepack pnpm visual-check` / `visual-update`），目录推导以 `visual/visual.mjs` 为准。
 - 演示 GIF：仓库根运行 `--motion-demo` 独立入口，不碰场景表与 PNG 基线。
 

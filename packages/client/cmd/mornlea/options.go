@@ -7,8 +7,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 
 	application "github.com/channing771/mornlea/packages/client/cmd/mornlea/app"
+	"github.com/channing771/mornlea/packages/client/cmd/mornlea/capture"
 	"github.com/channing771/mornlea/packages/client/cmd/mornlea/devcapture"
 	"github.com/channing771/mornlea/packages/shared/config"
 	"github.com/channing771/mornlea/packages/shared/physics"
@@ -24,6 +26,13 @@ type mainOptions struct {
 	// 与 application.Options 无关：它只影响 runCapture 的行为，从
 	// runWithDependencies 直接传给 dependencies.runCapture。
 	UpdateGolden bool
+	// CaptureScenes 是 `--capture-scenes` 解析出的显式场景子集（已逐项去
+	// 首尾空白，保持输入顺序）；nil/空表示请求全部场景。按场景表固有顺序
+	// 的保序过滤由 capture 层完成，parse 层只切分与校验、不重排。
+	CaptureScenes []string
+	// CaptureGIFs 为真时纯比对抓帧也生成 GIF 剧本到输出目录供人工审查；
+	// 更新基线模式无视该字段恒生成（既有行为）。
+	CaptureGIFs bool
 	// MotionDemoPath 非空时走 motion 演示模式：无头装配与抓帧同源，只跑
 	// capture 包的 motion 演示入口并把 GIF 写到该路径，不进场景表与比对。
 	MotionDemoPath string
@@ -54,6 +63,8 @@ func parseMainOptions(args []string) (mainOptions, error) {
 	name := flags.String("name", "", "玩家显示名")
 	capture := flags.String("capture", "", "视觉抓帧输出目录；非空时走无头抓帧模式")
 	updateGolden := flags.Bool("update-golden", false, "把本次抓帧结果写入 golden 基线")
+	captureScenes := flags.String("capture-scenes", "", "逗号分隔的抓帧场景子集；只执行所列场景，执行顺序按场景表固有顺序")
+	captureGIFs := flags.Bool("capture-gifs", false, "纯比对抓帧也生成 GIF 剧本到输出目录供人工审查（更新基线时恒生成）")
 	motionScene := flags.String("motion-scene", "break-burst", "motion 场景：break-burst/avatar-walk/drop-scatter/drop-density/hand-mining/hand-attack/weather-cycle")
 	motionDemo := flags.String("motion-demo", "", "motion 演示 GIF 输出路径；非空时走无头 motion 演示模式")
 	dev := flags.Bool("dev", false, "启用调试面板（F3 切换）")
@@ -106,6 +117,16 @@ func parseMainOptions(args []string) (mainOptions, error) {
 	if *updateGolden && *capture == "" {
 		return mainOptions{}, errors.New("--update-golden 只能与 --capture 同时使用")
 	}
+	if *captureScenes != "" && *capture == "" {
+		return mainOptions{}, errors.New("--capture-scenes 只能与 --capture 同时使用")
+	}
+	if *captureGIFs && *capture == "" {
+		return mainOptions{}, errors.New("--capture-gifs 只能与 --capture 同时使用")
+	}
+	captureSceneList, err := parseCaptureScenes(*captureScenes)
+	if err != nil {
+		return mainOptions{}, err
+	}
 	var worldExplicit, nameExplicit, benchmarkTransportExplicit bool
 	flags.Visit(func(flag *flag.Flag) {
 		worldExplicit = worldExplicit || flag.Name == "world"
@@ -149,6 +170,10 @@ func parseMainOptions(args []string) (mainOptions, error) {
 		}(),
 		CaptureDir:   *capture,
 		UpdateGolden: *updateGolden,
+		// 子集与 GIF 请求只在抓帧路径被消费；缺省 nil/false 让既有全量
+		// 比对路径逐字节不变。
+		CaptureScenes: captureSceneList,
+		CaptureGIFs:   *captureGIFs,
 		// `--update-golden 只能与 --capture 同时使用` 的既有校验已顺带拒绝
 		// `--motion-demo + --update-golden` 组合（此时 capture 为空），这里
 		// 不再重复设限。
@@ -160,6 +185,26 @@ func parseMainOptions(args []string) (mainOptions, error) {
 		DevCapture:     *devCapture,
 		DevCaptureAddr: *devCaptureAddr,
 	}, nil
+}
+
+// parseCaptureScenes 把 `--capture-scenes` 的逗号分隔取值切分为场景名清单：
+// 逐项去除首尾空白后交给 `capture.ValidateSceneSelection` 校验，空项、重复名
+// 与未知名都在启动前被点名拒绝。空串表示未请求子集，返回 nil（等价跑全部
+// 场景）。这里不重排：输出保持输入顺序，按场景表固有顺序的保序过滤由
+// capture 层完成。
+func parseCaptureScenes(raw string) ([]string, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	parts := strings.Split(raw, ",")
+	scenes := make([]string, len(parts))
+	for index, part := range parts {
+		scenes[index] = strings.TrimSpace(part)
+	}
+	if err := capture.ValidateSceneSelection(scenes); err != nil {
+		return nil, fmt.Errorf("无效 --capture-scenes：%w", err)
+	}
+	return scenes, nil
 }
 
 // resolveConfigPath 决定调参配置文件的实际路径：显式 --config 优先，

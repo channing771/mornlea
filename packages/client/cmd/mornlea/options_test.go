@@ -3,6 +3,8 @@
 package main
 
 import (
+	"reflect"
+	"strings"
 	"testing"
 
 	application "github.com/channing771/mornlea/packages/client/cmd/mornlea/app"
@@ -123,6 +125,94 @@ func TestParseMainOptionsWithoutCaptureLeavesDirEmpty(t *testing.T) {
 	}
 	if opts.CaptureDir != "" {
 		t.Fatalf("CaptureDir = %q，想要空", opts.CaptureDir)
+	}
+}
+
+func TestParseMainOptionsCaptureScenesRequiresCapture(t *testing.T) {
+	if _, err := parseMainOptions([]string{"--capture-scenes", "main-menu"}); err == nil {
+		t.Fatal("--capture-scenes 缺少 --capture 时想要报错，实际通过")
+	}
+}
+
+func TestParseMainOptionsCaptureScenesRejectsInvalidSelection(t *testing.T) {
+	// 空项、重复与未知名都必须在启动前被点名拒绝：写错的子集若被静默
+	// 忽略后照常跑全量，会把「我以为只跑了两景」的误读留给调用方。
+	tests := []struct {
+		name    string
+		scenes  string
+		wantErr string
+	}{
+		{"空项", "terrain-noon,,main-menu", "空项"},
+		{"纯空白项", "terrain-noon,  ", "空项"},
+		{"重复场景", "terrain-noon,terrain-noon", "terrain-noon"},
+		{"未知场景", "no-such-scene", "no-such-scene"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseMainOptions([]string{"--capture", "/tmp/shots", "--capture-scenes", tc.scenes})
+			if err == nil {
+				t.Fatalf("--capture-scenes %q 想要报错，实际通过", tc.scenes)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("错误信息 %q 未包含 %q", err.Error(), tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestParseMainOptionsCaptureScenesParsesSubsetInInputOrder(t *testing.T) {
+	// parse 层只切分与校验，不按场景表重排：main-menu 在场景表中晚于
+	// terrain-noon，这里断言输出保持输入顺序，保序过滤由 capture 层完成。
+	opts, err := parseMainOptions([]string{
+		"--capture", "/tmp/shots",
+		"--capture-scenes", " main-menu , terrain-noon ",
+	})
+	if err != nil {
+		t.Fatalf("解析合法子集失败: %v", err)
+	}
+	want := []string{"main-menu", "terrain-noon"}
+	if !reflect.DeepEqual(opts.CaptureScenes, want) {
+		t.Fatalf("CaptureScenes = %v，想要 %v", opts.CaptureScenes, want)
+	}
+}
+
+func TestParseMainOptionsCaptureScenesDefaultNil(t *testing.T) {
+	opts, err := parseMainOptions([]string{"--capture", "/tmp/shots"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.CaptureScenes != nil {
+		t.Fatalf("CaptureScenes = %v，想要 nil（缺省跑全部场景）", opts.CaptureScenes)
+	}
+}
+
+func TestParseMainOptionsCaptureGifsRequiresCapture(t *testing.T) {
+	if _, err := parseMainOptions([]string{"--capture-gifs"}); err == nil {
+		t.Fatal("--capture-gifs 缺少 --capture 时想要报错，实际通过")
+	}
+}
+
+func TestParseMainOptionsCaptureGifsPropagates(t *testing.T) {
+	opts, err := parseMainOptions([]string{"--capture", "/tmp/shots", "--capture-gifs"})
+	if err != nil {
+		t.Fatalf("解析 --capture --capture-gifs 失败: %v", err)
+	}
+	if !opts.CaptureGIFs {
+		t.Fatal("CaptureGIFs = false，想要 true")
+	}
+	// 与 --update-golden 组合合法但冗余（update 恒生成 GIF），不得拒绝。
+	if _, err := parseMainOptions([]string{"--capture", "/tmp/shots", "--update-golden", "--capture-gifs"}); err != nil {
+		t.Fatalf("--capture-gifs 与 --update-golden 组合想要合法: %v", err)
+	}
+}
+
+func TestParseMainOptionsCaptureGifsDefaultOff(t *testing.T) {
+	opts, err := parseMainOptions([]string{"--capture", "/tmp/shots"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.CaptureGIFs {
+		t.Fatal("CaptureGIFs = true，想要默认 false（纯比对缺省不生成 GIF）")
 	}
 }
 

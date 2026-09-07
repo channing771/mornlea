@@ -32,7 +32,7 @@ type runDependencies struct {
 	loadIdentity   func(*string) (network.Identity, error)
 	runInteractive func(*application.Application) error
 	runBenchmark   func(*application.Application, string) error
-	runCapture     func(*application.Application, string, bool) error
+	runCapture     func(*application.Application, string, capture.RunOptions) error
 	// `runMotionDemo` 只服务显式 motion 演示；普通 capture 与游戏不调用。
 	runMotionDemo func(*application.Application, string, string) error
 	// `runGoldenUpdateControl` 只服务显式 baseline update；普通 capture 与游戏不调用。
@@ -47,8 +47,8 @@ func run(args []string) error {
 		runBenchmark:   benchmark.RunBenchmark,
 		// capture 公开入口经其消费端接口 `SceneApplication` 表达；`*application.Application`
 		// 隐式实现该接口，这里的适配只为对齐 `runDependencies` 字段的具体签名。
-		runCapture: func(app *application.Application, dir string, updateGolden bool) error {
-			return capture.RunCapture(app, dir, updateGolden)
+		runCapture: func(app *application.Application, dir string, opts capture.RunOptions) error {
+			return capture.RunCapture(app, dir, opts)
 		},
 		runMotionDemo: func(app *application.Application, outPath, scene string) error {
 			return capture.RunMotion(app, outPath, scene)
@@ -173,7 +173,11 @@ func runWithDependencies(args []string, dependencies runDependencies) error {
 			return fmt.Errorf("启动正式视觉基线抓帧: %w", err)
 		}
 		return errors.Join(
-			dependencies.runCapture(app, options.CaptureDir, true),
+			dependencies.runCapture(app, options.CaptureDir, capture.RunOptions{
+				UpdateGolden: true,
+				Scenes:       options.CaptureScenes,
+				IncludeGIFs:  options.CaptureGIFs,
+			}),
 			app.Close(),
 		)
 	}
@@ -200,7 +204,11 @@ func runWithDependencies(args []string, dependencies runDependencies) error {
 
 	if options.CaptureDir != "" {
 		return errors.Join(
-			dependencies.runCapture(app, options.CaptureDir, options.UpdateGolden),
+			dependencies.runCapture(app, options.CaptureDir, capture.RunOptions{
+				UpdateGolden: options.UpdateGolden,
+				Scenes:       options.CaptureScenes,
+				IncludeGIFs:  options.CaptureGIFs,
+			}),
 			app.Close(),
 		)
 	}

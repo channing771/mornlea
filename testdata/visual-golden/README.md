@@ -82,7 +82,8 @@
 ## motion（11 个）
 
 motion 过程 GIF 只验呈现、不进比对：`make visual-check` 只比对 `world/` PNG
-（GIF 剧本只生成、不设阈值），`world/` 的 27 张 PNG 纪律也不含它。
+（GIF 剧本不设阈值也不进比对；纯比对运行缺省不生成，`GIFS=1` 显式请求或
+更新基线时才生成），`world/` 的 27 张 PNG 纪律也不含它。
 
 | 演示文件 | 场景 | 帧数/时长 | 生成入口 |
 |---|---|---|---|
@@ -119,7 +120,7 @@ motion 过程 GIF 只验呈现、不进比对：`make visual-check` 只比对 `w
 
 ## 更新入口与纪律
 
-- 世界基线比对入口为 `make visual-check`（只比对 `world/` PNG；GIF 剧本只生成、不进比对），覆盖入口为 `make visual-update`，路径常量为 `capture/capture_image.go` 的 `captureGoldenDir` 与 `capture/passive_death_gif.go` 的 `passiveDeathMotionDir`。
+- 世界基线比对入口为 `make visual-check`（只比对 `world/` PNG；GIF 剧本不进比对，纯比对运行缺省不生成，`GIFS=1` 显式请求或更新基线时生成），覆盖入口为 `make visual-update`，路径常量为 `capture/capture_image.go` 的 `captureGoldenDir` 与 `capture/passive_death_gif.go` 的 `passiveDeathMotionDir`。
 - 部件基线比对入口为 `make frontend-visual-check`（或在 `frontend/` 内执行 `corepack pnpm visual-check`），覆盖入口为 `make frontend-visual-update`（或 `corepack pnpm visual-update`），基线目录由 `visual/visual.mjs` 的 `goldenDir` 经 `repoRoot` 推导。
 - 先目检后覆盖：基线只在预期视觉变化已逐图人工确认后更新，普通验证只比较不自动接受差异；漂移先看实拍图与差异图定位，再决定修代码还是更新基线；基线缺失不静默创建，必须显式请求更新。
 - 比对口径为双阈值，定义与取值以源码为准（`capture/visual_compare.go` 与 `visual/visual.mjs` 的比对函数），本文档不复制具体数值。

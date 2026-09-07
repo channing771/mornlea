@@ -47,8 +47,8 @@ help:
 		'  make companion-agent-check 运行伙伴 Agent locked 安装、格式、静态检查、类型检查与 Python 单测' \
 		'  make companion-agent-integration 运行无外网 Go/Python 伙伴 Agent 真进程合同' \
 		'  make fmt              格式化全部 Rust 与 Go 源码' \
-		'  make visual-check     跑视觉场景并与 golden 基线比对' \
-		'  make visual-update    重新生成 golden 基线（VISUAL_OUT 覆盖输出目录）' \
+		'  make visual-check     跑视觉场景并与 golden 基线比对（SCENES= 只跑场景子集、GIFS=1 生成 GIF 供人工审查）' \
+		'  make visual-update    重新生成 golden 基线（VISUAL_OUT 覆盖输出目录，SCENES= 只更新所列场景）' \
 		'  make frontend-visual-check    UI 部件视觉基线比对（本机 Chrome，不进 CI）' \
 		'  make frontend-visual-update   覆盖 UI 部件视觉基线 PNG（人工确认后使用）' \
 		'  make clean            删除 bin 目录' \
@@ -179,11 +179,14 @@ fmt:
 		-not -path './.worktrees/*' \
 		-exec gofmt -w {} +
 
+# visual-check：SCENES= 传逗号分隔场景子集（如 SCENES=mining-crack-early,mining-crack-heavy）
+# 只比对所列场景；GIFS=1 让纯比对运行也生成 GIF 剧本到输出目录供人工审查。缺省跑全部场景且不生成 GIF。
 visual-check:
-	$(GO) run $(APP) --capture $(or $(VISUAL_OUT),build/visual)
+	$(GO) run $(APP) --capture $(or $(VISUAL_OUT),build/visual) $(if $(SCENES),--capture-scenes $(SCENES)) $(if $(GIFS),--capture-gifs)
 
+# visual-update：SCENES= 传逗号分隔场景子集，只更新所列场景的 golden；GIF 基线恒生成，不受子集影响。
 visual-update:
-	$(GO) run $(APP) --capture $(or $(VISUAL_OUT),build/visual) --update-golden
+	$(GO) run $(APP) --capture $(or $(VISUAL_OUT),build/visual) --update-golden $(if $(SCENES),--capture-scenes $(SCENES))
 
 clean:
 	rm -rf bin
