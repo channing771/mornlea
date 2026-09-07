@@ -10,7 +10,7 @@
 | `SeasonIndex` | `floor(yearPhase·4)`，0=春 1=夏 2=秋 3=冬 | 季节边界在 yearPhase 的 1/4 整分点 |
 | 昼弧 tick `D` | `round(dayFraction·24000)` 取偶数 | 一天仍是 24000 tick |
 | 季节基线（海平面） | `11 + 19·sin(2π·yearPhase)` ℃ | 夏至中点 +30、冬至中点 −8 |
-| 日内温差 | `5·sin(2π·(effPhase−6000)/24000)` ℃ | 正午 +5、午夜 −5、晨昏 0 |
+| 日内温差 | `5·sin(2π·(effPhase−6000)/24000)` ℃ | 黄昏(12000) +5 峰值、黎明(0) −5 谷值、正午/午夜为 0（热滞后：最热在午后黄昏、最冷在黎明，与三钢锚点唯一相容） |
 | 降水降温 | 雨/雷暴 −4℃ | 晴 0 |
 | 海拔递减 | 海平面(64) 以上每格 −1.25℃，以下不升温 | 24 格（Y=64→88）恰 −30℃ |
 | 钢锚点 | 夏至正午海平面 30℃；夏至正午 Y=88 = 0℃；冬至正午海平面 −8℃ | 后者保证冬季低地全境降雪 |
@@ -50,8 +50,8 @@
 
 ## 3. 温度（`shared/core` 新文件 `temperature.go`）
 
-- `TemperatureAt(yearPhase, effPhase uint16, weather core.WeatherKind, y float32) float32`：§0 公式合成后 clamp。纯函数。
-- 常量 `TemperatureSnowPoint = 0`、`TemperatureMeltPoint = 2`、`TemperatureLapsePerBlock = 1.25`、`TemperatureSeaLevel = 64`（与 Rust `SEA_LEVEL` 对齐的 Go 侧镜像常量，注释钉住双端语义）。
+- `TemperatureAt(yearPhase float64, effPhase uint16, weather core.WeatherKind, y float32) float32`：§0 公式合成后 clamp。纯函数。
+- 常量 `TemperatureSnowPoint = 0`、`TemperatureMeltPoint = 2`、`TemperatureLapsePerBlock = 1.25`、`TemperatureSeaLevelY = 64`（与 Rust `SEA_LEVEL` 对齐的 Go 侧镜像常量，注释钉住双端语义）。
 - 降水形态判定 `PrecipitationIsSnow(yearPhase, effPhase, weather, y) bool` = `TemperatureAt(...) <= TemperatureSnowPoint`。
 
 ## 4. 协议 v37 与服务端发布

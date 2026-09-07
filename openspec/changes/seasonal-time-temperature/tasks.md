@@ -1,7 +1,7 @@
 ## 1. shared/core 季节与昼长 warp
 
-- [ ] 1.1 失败测试先行：季节推进/回绕/同 seed 偏移稳定、`SeasonProgress` 量化边界（`packages/shared/core/season.go` + 测试；`go test ./packages/shared/core -race -count=1 -run 'Season'`）
-- [ ] 1.2 失败测试先行：`DayFractionAt`/`DayArcTicks`/`EffectiveDayPhase`（分点恒等、夏至昼弧 15600/夜弧 8400、单调连续、换季不跳变、uint 溢出边界）与 `EffectiveMorningOffset` 反解闭环；随后最小实现并扩展 `day_phase.go` 文档注释（`go test ./packages/shared/core -race -count=1 -run 'Day|Phase'`）
+- [x] 1.1 失败测试先行：季节推进/回绕/同 seed 偏移稳定、`SeasonProgress` 量化边界（`packages/shared/core/season.go` + 测试；`go test ./packages/shared/core -race -count=1 -run 'Season'`）
+- [x] 1.2 失败测试先行：`DayFractionAt`/`DayArcTicks`/`EffectiveDayPhase`（分点恒等、夏至昼弧 15600/夜弧 8400、单调连续、换季不跳变、uint 溢出边界）与 `EffectiveMorningOffset` 反解闭环；随后最小实现并扩展 `day_phase.go` 文档注释（`go test ./packages/shared/core -race -count=1 -run 'Day|Phase'`）
 
 ## 2. shared/core 温度公式
 
