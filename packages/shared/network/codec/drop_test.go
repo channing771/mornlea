@@ -65,8 +65,8 @@ func TestProtocolV4DropGolden(t *testing.T) {
 }
 
 func TestProtocolV16ToolDropUsesFiveByteStackWire(t *testing.T) {
-	if protocol.ProtocolVersion != 36 {
-		t.Fatalf("协议版本 = %d，想要 36", protocol.ProtocolVersion)
+	if protocol.ProtocolVersion != 37 {
+		t.Fatalf("协议版本 = %d，想要 37", protocol.ProtocolVersion)
 	}
 	full, _ := core.ItemMaxDurability(core.ItemStonePickaxe)
 	packet := protocol.ItemDropUpserts{ServerTick: 5, Drops: []protocol.ItemDrop{{

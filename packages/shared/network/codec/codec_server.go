@@ -97,6 +97,12 @@ func encodeServerControlPayload(state protocol.State, packet protocol.ServerPack
 			// v36：权威天气追加在绝对世界时间之后，占 1 字节（u8，仅 0..2 合法，
 			// 越界由 `Validate` 在编码前置拒绝），既有字段的位置与字节序保持不变。
 			e.u8(uint8(message.WeatherKind))
+			// v37：季节（u8，仅 0..3 合法，越界由 `Validate` 在编码前置拒绝）、
+			// 季内进度（u8）与玩家位置温度（i8）依次追加在天气之后，既有字段的
+			// 位置与字节序保持不变。
+			e.u8(uint8(message.Season))
+			e.u8(message.SeasonProgress)
+			e.u8(uint8(message.Temperature))
 		case protocol.CommandRejected:
 			reason, _ := protocol.CommandRejectReasonID(message.Reason)
 			e.u64(message.Sequence)
@@ -390,6 +396,22 @@ func decodeServerControlPayload(state protocol.State, packetID uint32, payload [
 				var weather uint8
 				weather, err = d.u8()
 				statePacket.WeatherKind = core.WeatherKind(weather)
+			}
+			// v37：季节、季内进度与温度依次追加在天气之后，温度是载荷最末 1 字节
+			// （i8）；季节越界同样统一由尾部 `validateServerWirePacket` 拒绝，
+			// 进度与温度全域合法不做分支判断。
+			if err == nil {
+				var season uint8
+				season, err = d.u8()
+				statePacket.Season = core.Season(season)
+			}
+			if err == nil {
+				statePacket.SeasonProgress, err = d.u8()
+			}
+			if err == nil {
+				var temperature uint8
+				temperature, err = d.u8()
+				statePacket.Temperature = int8(temperature)
 			}
 			packet = statePacket
 		case 4:
