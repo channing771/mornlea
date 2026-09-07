@@ -118,6 +118,13 @@ type SceneApplication interface {
 	// 块系列动作 GIF 中。
 	SetViewmodelSuppressed(suppressed bool)
 
+	// CameraMode/SetCameraMode 读写本地三态视角：第三人称双机位场景经它切
+	// 背面/正面，后拉、防穿墙、自身身体与双手互斥复用 `Application` 已有
+	// 装配（`resolveRenderCamera`、`appendSelfAvatar`、`deriveViewmodelInput`），
+	// capture 不另起摆拍路径。
+	CameraMode() client.CameraMode
+	SetCameraMode(mode client.CameraMode)
+
 	SetMenuPhase(phase application.MenuPhase)
 	SetSettings(settings application.SettingsState)
 	Panel() *application.PanelState

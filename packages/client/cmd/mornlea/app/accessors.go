@@ -297,6 +297,13 @@ func (a *Application) SetInventoryOpen(open bool) { a.inventoryOpen = open }
 // runner 装配（capture 包），生产与动作 GIF 路径永不调用。
 func (a *Application) SetViewmodelSuppressed(suppressed bool) { a.viewmodelSuppressed = suppressed }
 
+// CameraMode 读取本地三态视角（0=第一人称、1=第三人称背面、2=第三人称正面）。
+func (a *Application) CameraMode() client.CameraMode { return a.cameraMode }
+
+// SetCameraMode 写入本地三态视角：调用方传入三态合法值（`Valid`），抓帧场景
+// 经它切第三人称双机位，生产视角切换仍走 F5 上升沿状态机。
+func (a *Application) SetCameraMode(mode client.CameraMode) { a.cameraMode = mode }
+
 // Center 读取相机所在的中心区块。
 func (a *Application) Center() core.ChunkPos { return a.center }
 
