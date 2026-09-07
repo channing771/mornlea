@@ -11,12 +11,13 @@ import (
 )
 
 // 入睡与跳夜：夜间对床右键使玩家入睡并记录床尾重生点；全员入睡时在 tick 边界
-// 设置显示相位偏移跳到白昼。判夜只经 `core.DisplayDayPhase` 读引擎偏移，与
-// 夜行者行共享同一份夜间定义（13000..23000）；跳夜不查询任何敌怪状态。
+// 设置显示相位偏移跳到白昼。判夜经 `core.EffectiveDayPhaseAt` 读季节化相位
+// （昼夜弧随季节伸缩，冬季更早入夜、夏季更晚），与夜行者行共享同一份夜间定义
+// （季节化相位 13000..23000）；跳夜不查询任何敌怪状态。
 
 // executeInteractBed 处理对床的右键交互（门 `executeInteractDoor` 先例的床版本）：
-// 经权威射线定位目标，命中床时按显示相位判定入睡——夜间窗内置入睡位并把重生点
-// 记录为床尾格，窗外拒绝且零状态变化。命中非床方块与门同构为静默成功（no-op）。
+// 经权威射线定位目标，命中床时按季节化显示相位判定入睡——夜间窗内置入睡位并把
+// 重生点记录为床尾格，窗外拒绝且零状态变化。命中非床方块与门同构为静默成功（no-op）。
 // 入睡不消耗任何物品、不写任何方块。
 func (engine *engineContext) executeInteractBed(command Command) (RejectReason, bool) {
 	session := engine.sessions[command.Session]
@@ -48,7 +49,7 @@ func (engine *engineContext) executeInteractBed(command Command) (RejectReason, 
 		// 非床目标与门交互同构：静默成功，客户端不等待任何结果。
 		return 0, false
 	}
-	if !core.IsDisplayNightPhase(engine.displayDayPhase()) {
+	if !core.IsDisplayNightPhase(engine.effectiveDayPhase()) {
 		// 白天用床拒绝且零状态变化。拒绝原因沿用冻结枚举里「命中方块不接受
 		// 该交互」的既有语义（翻地/骨粉同款），不为时间窗新增 wire 值。
 		return RejectInvalidBlock, true
@@ -69,16 +70,19 @@ func (engine *engineContext) executeInteractBed(command Command) (RejectReason, 
 }
 
 // settleSleepThroughNight 是跳夜的固定结算阶段：当**全部活跃玩家**同时处于入睡
-// 状态时，设置显示相位偏移使本 tick 完成后的显示相位落到周期起点（白昼），并
-// 清除全部入睡状态。只要有任一活跃玩家未入睡（或没有任何活跃玩家），偏移与
-// 入睡状态一律保持不变。
+// 状态时，设置显示相位偏移使本 tick 完成后的季节化显示相位落到当前季节的早晨
+// 段（周期起点），并清除全部入睡状态。只要有任一活跃玩家未入睡（或没有任何
+// 活跃玩家），偏移与入睡状态一律保持不变。
 //
 // 边界与取舍：
 //   - 判定基数是「活跃玩家」（`PlayerActive`）：待重生玩家不在世界里，既不触发
 //     也不阻挡跳夜。
 //   - 偏移按本 tick 完成后的绝对时间计算（`worldTime + 1`，`advanceWorldTime`
-//     尚未执行）：这样跳夜 tick 一结束 `DisplayDayPhase(WorldTimeTicks, offset)`
-//     就恰好是 0，与「服务端完成该 tick 后相位为周期起点」的可观察契约对齐。
+//     尚未执行）：这样跳夜 tick 一结束季节化相位就恰好是早晨段起点，与「服务
+//     端完成该 tick 后相位为周期起点」的可观察契约对齐。反解经
+//     `core.EffectiveMorningOffset`：昼弧随季节伸缩，早晨段的线性位置随季节
+//     移动（目标相位保持既有常量 0——反解在分点与旧线性算式恒等），dayArc 按
+//     落点时刻派生。
 //   - offset 只进入显示相位，`WorldTimeTicks` 的推进节奏与全部绝对时间消费者
 //     （作物/流体/掉落寿命）不受影响；也刻意不查询敌怪状态——跳夜后露天敌怪
 //     按其既有白昼规则自然结算。
@@ -94,9 +98,13 @@ func (engine *engineContext) settleSleepThroughNight() {
 			return
 		}
 	}
-	// 本 tick 完成后的绝对时间：使相位「立即」落在周期起点的是这个值。
+	// 本 tick 完成后的绝对时间：使相位「立即」落到周期起点的是这个值。
 	completed := engine.worldTime.Load() + 1
-	offset := (core.DayLengthTicks - completed%core.DayLengthTicks) % core.DayLengthTicks
+	offset := core.EffectiveMorningOffset(
+		completed,
+		core.DayArcTicks(core.YearPhaseAt(completed, engine.seasonOffset)),
+		0,
+	)
 	engine.dayPhaseOffset.Store(uint64(offset))
 	// 清全部入睡状态，不限于本 tick 活跃名单：任何残留的入睡位都可能在玩家
 	// 重新激活后污染下一次全员判定。

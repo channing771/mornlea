@@ -48,9 +48,13 @@ var expectedRuntimeEngineFields = map[string]string{
 	"dayPhaseOffset":     "atomic.Uint64",
 	"weatherKind":        "core.WeatherKind",
 	"weatherRemaining":   "uint32",
-	"stepPhaseObserver":  "func(stepPhase)",
-	"tunables":           "tuning.Tunables",
-	"physicsTunables":    "physics.Tunables",
+	// seasonOffset 是 seed 派生的季节起点偏移（装配期一次写死、tick 串行只
+	// 读），与 weatherKind 同纪律的引擎时钟族字段；季节/温度本体是每 tick
+	// 派生量，只经 TickResult/PlayerUpdate 契约出境，不进权威字段集。
+	"seasonOffset":      "uint64",
+	"stepPhaseObserver": "func(stepPhase)",
+	"tunables":          "tuning.Tunables",
+	"physicsTunables":   "physics.Tunables",
 }
 
 var expectedRuntimeSubscriptionFields = map[string]string{
@@ -144,6 +148,7 @@ type Engine struct {
 	dayPhaseOffset atomic.Uint64
 	weatherKind core.WeatherKind
 	weatherRemaining uint32
+	seasonOffset uint64
 	stepPhaseObserver func(stepPhase)
 	tunables tuning.Tunables
 	physicsTunables physics.Tunables

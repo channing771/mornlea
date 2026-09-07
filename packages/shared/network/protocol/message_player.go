@@ -52,6 +52,21 @@ type PlayerState struct {
 	// WeatherKind 是本 tick 结束时的权威天气（wire 上紧跟 `WorldTimeTicks`
 	// 之后，占 1 字节）；合法值域是 0..2（晴/雨/雷暴），越界值由编解码层拒绝。
 	WeatherKind core.WeatherKind
+	// Season 是本 tick 结束时玩家所处的权威季节，协议 v37 起随玩家状态同步
+	// （wire 上紧跟 `WeatherKind` 之后，占 1 字节）；合法值域是
+	// 0..`core.SeasonWinter`（春/夏/秋/冬），越界值在 Validate、编码与解码
+	// 三处都被拒绝，模式与 v36 的 `WeatherKind` 相同。
+	Season core.Season
+	// SeasonProgress 是季内进度的 0..255 量化值，协议 v37 起随玩家状态同步
+	// （wire 上紧跟 `Season` 之后，占 1 字节）；由 `core.SeasonProgressAt`
+	// 派生，季首为 0、季末最后一 tick 为 255、换季回绕。u8 全域合法，无
+	// 越界拒绝。
+	SeasonProgress uint8
+	// Temperature 是玩家所在位置按共享温度公式（`core.TemperatureAt`）求得
+	// 的权威观察值（摄氏度，协议 v37 起随玩家状态同步，wire 上是载荷最末
+	// 1 字节 i8）。域由 `core.TemperatureMin`/`core.TemperatureMax` 在源头
+	// clamp 到 [-40,45]，落在 int8 容量内，wire 层不再做二次裁剪或越界拒绝。
+	Temperature int8
 }
 
 type RemotePlayerSpawn struct {
@@ -161,6 +176,12 @@ func (state PlayerState) Validate() error {
 	// 不得静默截断——与显示相位偏移同为从严拒绝的 wire 单值。
 	if state.WeatherKind > core.WeatherThunder {
 		return errors.New("network: player state has out-of-range weather")
+	}
+	// 季节是四值枚举（wire 上 `WeatherKind` 之后 1 字节 u8）：合法值域是
+	// 0..`core.SeasonWinter`，越界值在 Validate、编码与解码三处都被拒绝，
+	// 模式与天气相同。进度与温度是全域合法的 u8/i8，不设子域拒绝。
+	if state.Season > core.SeasonWinter {
+		return errors.New("network: player state has out-of-range season")
 	}
 	if !state.MiningActive {
 		if state.MiningTarget != (core.BlockPos{}) || state.MiningProgressTicks != 0 ||

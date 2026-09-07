@@ -161,6 +161,22 @@ func (engine *Engine) StepWithTunables(tickTunables TickTunables) TickResult {
 	result.Tick = engine.tick.Add(1)
 	result.WorldTimeTicks = engine.advanceWorldTime()
 	engine.weatherKind, engine.weatherRemaining = result.WeatherKind, nextWeatherRemaining
+	// 季节派生与天气同族，但必须在发布之后取快照：effPhase 依赖的显示偏移
+	// 可能已被本 tick 的跳夜结算改写，`tick.Publish` 返回并落回引擎的值才是
+	// 随本份 `PlayerUpdate.DayPhaseOffset` 一致下发的权威偏移。以本 tick 结束
+	// 时的（时间、偏移）求一次季节束，世界单值写进结果、逐人温度按各玩家
+	// Position.Y 与当 tick 天气补写进已组装好的玩家更新——发布侧随后照常
+	// 整批复制，消费方无需感知两步组装。
+	season := engine.seasonSnapshotAt(result.WorldTimeTicks, engine.DayPhaseOffset())
+	result.Season = season.season
+	result.SeasonProgress = season.progress
+	for index := range result.Players {
+		result.Players[index].Season = season.season
+		result.Players[index].SeasonProgress = season.progress
+		result.Players[index].Temperature = season.temperatureAt(
+			result.WeatherKind, result.Players[index].State.Position.Y(),
+		)
+	}
 	return result
 }
 

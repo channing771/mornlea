@@ -6,7 +6,7 @@ import "testing"
 // 版本号会让新旧两端对同一 payload 做出不同的形状解读。命名不编码具体版本
 // （升版只改断言值），与文件内「版本无关命名」的既有约定一致。
 func TestProtocolVersionPinned(t *testing.T) {
-	if ProtocolVersion != 36 {
-		t.Fatalf("协议版本=%d，想要 36", ProtocolVersion)
+	if ProtocolVersion != 37 {
+		t.Fatalf("协议版本=%d，想要 37", ProtocolVersion)
 	}
 }

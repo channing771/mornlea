@@ -69,3 +69,325 @@ func TestIsDisplayNightPhaseBounds(t *testing.T) {
 		}
 	}
 }
+
+// ---- 季节 warp 层（DayFractionAt / DayArcTicks / EffectiveDayPhase / ----
+// ---- EffectiveMorningOffset），数值锚点以 change design 的数值总表为准。 ----
+
+// TestDayFractionAtAnchors 锚定昼弧比例曲线：分点 0.5、夏至 0.65、冬至 0.35，
+// yearPhase 整周期回绕后回到分点值。
+func TestDayFractionAtAnchors(t *testing.T) {
+	cases := []struct {
+		yearPhase float64
+		want      float64
+	}{
+		{0, 0.5},
+		{0.25, 0.65},
+		{0.5, 0.5},
+		{0.75, 0.35},
+		{1, 0.5},
+	}
+	for _, tc := range cases {
+		if got := DayFractionAt(tc.yearPhase); math.Abs(got-tc.want) > 1e-9 {
+			t.Fatalf("DayFractionAt(%v) = %v，想要 %v", tc.yearPhase, got, tc.want)
+		}
+	}
+}
+
+// TestDayArcTicksAnchorsAndEvenness 锚定昼弧 tick：冬至 8400、夏至 15600、
+// 分点 12000；全年逐 tick 扫描结果恒为偶数且落在 [8400,15600]。
+func TestDayArcTicksAnchorsAndEvenness(t *testing.T) {
+	anchors := map[float64]uint16{
+		0:    12000,
+		0.25: 15600,
+		0.5:  12000,
+		0.75: 8400,
+	}
+	for yearPhase, want := range anchors {
+		if got := DayArcTicks(yearPhase); got != want {
+			t.Fatalf("DayArcTicks(%v) = %d，想要 %d", yearPhase, got, want)
+		}
+	}
+	const yearSamples = 288000
+	for k := 0; k <= yearSamples; k++ {
+		arc := DayArcTicks(float64(k) / yearSamples)
+		if arc%2 == 1 {
+			t.Fatalf("DayArcTicks(%v) = %d 为奇数", float64(k)/yearSamples, arc)
+		}
+		if arc < 8400 || arc > 15600 {
+			t.Fatalf("DayArcTicks(%v) = %d 越出 [8400,15600]", float64(k)/yearSamples, arc)
+		}
+	}
+}
+
+// TestEffectiveDayPhaseEquinoxIdentity 分点（dayArc=12000）warp 严格恒等：
+// 对同一批 worldTime×offset 组合（含 uint64 最大值）逐值等于未 warp 的
+// `DisplayDayPhase`——既有全部行为与视觉基线在分点逐字节不变。
+func TestEffectiveDayPhaseEquinoxIdentity(t *testing.T) {
+	worldTimes := []uint64{0, 1, 12999, 13000, 23000, 23001, 23999, 24000, 24001, 1 << 40, math.MaxUint64}
+	offsets := []uint16{0, 1, 12000, 23999}
+	for _, worldTime := range worldTimes {
+		for _, offset := range offsets {
+			want := DisplayDayPhase(worldTime, offset)
+			if got := EffectiveDayPhase(worldTime, offset, 12000); got != want {
+				t.Fatalf("EffectiveDayPhase(%d, %d, 12000) = %d，想要 %d（分点恒等）", worldTime, offset, got, want)
+			}
+		}
+	}
+}
+
+// TestEffectiveDayPhaseSummerAnchors 夏至昼弧 15600：白昼支路 15600→12000 压
+// 缩、黑夜支路 8400→12000 拉伸，关键点值手算钉死（p 由 worldTime=p、offset=0
+// 构造）。
+func TestEffectiveDayPhaseSummerAnchors(t *testing.T) {
+	const dayArc = uint16(15600)
+	cases := []struct {
+		p    uint16
+		want uint16
+	}{
+		{0, 0},       // 白昼始
+		{7800, 6000}, // 7800·12000/15600 = 6000：白昼中点（正午）仍是 6000
+		{15599, 11999},
+		{15600, 12000}, // 黑夜始
+		{19800, 18000}, // 12000 + 4200·12000/8400 = 18000：黑夜中点（午夜）仍是 18000
+		{23999, 23998}, // 黑夜末：10/7 拉伸下 23999 不可命中
+	}
+	for _, tc := range cases {
+		if got := EffectiveDayPhase(uint64(tc.p), 0, dayArc); got != tc.want {
+			t.Fatalf("EffectiveDayPhase(%d, 0, %d) = %d，想要 %d", tc.p, dayArc, got, tc.want)
+		}
+	}
+}
+
+// TestEffectiveDayPhaseWinterAnchors 冬至昼弧 8400：白昼支路 8400→12000 拉伸、
+// 黑夜支路 15600→12000 压缩。
+func TestEffectiveDayPhaseWinterAnchors(t *testing.T) {
+	const dayArc = uint16(8400)
+	cases := []struct {
+		p    uint16
+		want uint16
+	}{
+		{0, 0},
+		{4200, 6000}, // 4200·12000/8400 = 6000：正午仍是 6000
+		{8399, 11998},
+		{8400, 12000},
+		{12000, 14769}, // 12000 + floor(3600·12000/15600) = 14769
+		{23999, 23999}, // 黑夜末恰为周期顶
+	}
+	for _, tc := range cases {
+		if got := EffectiveDayPhase(uint64(tc.p), 0, dayArc); got != tc.want {
+			t.Fatalf("EffectiveDayPhase(%d, 0, %d) = %d，想要 %d", tc.p, dayArc, got, tc.want)
+		}
+	}
+}
+
+// TestEffectiveDayPhaseMonotonicAcrossPhase 对覆盖值域两端的多个昼弧全周期扫
+// 描：季节化相位随线性相位单调不减、起点为 0、全程不越出 23999。
+func TestEffectiveDayPhaseMonotonicAcrossPhase(t *testing.T) {
+	for _, dayArc := range []uint16{2, 8400, 12000, 12002, 15600, 23998, 24000} {
+		if got := EffectiveDayPhase(0, 0, dayArc); got != 0 {
+			t.Fatalf("dayArc=%d 相位 0 处得到 %d，想要 0", dayArc, got)
+		}
+		prev := uint16(0)
+		for p := uint64(1); p < DayLengthTicks; p++ {
+			e := EffectiveDayPhase(p, 0, dayArc)
+			if e < prev {
+				t.Fatalf("dayArc=%d 线性相位 %d 处季节化相位回退：%d -> %d", dayArc, p, prev, e)
+			}
+			prev = e
+		}
+	}
+}
+
+// TestEffectiveDayPhaseRejectsInvalidDayArc 非法昼弧（0、奇数、>24000）按契约
+// 返回 0，绝不除零或越界。
+func TestEffectiveDayPhaseRejectsInvalidDayArc(t *testing.T) {
+	for _, dayArc := range []uint16{0, 1, 3, 12001, 23999, 24001, 65535} {
+		if got := EffectiveDayPhase(12345, 6000, dayArc); got != 0 {
+			t.Fatalf("非法 dayArc=%d 应返回 0，得到 %d", dayArc, got)
+		}
+	}
+}
+
+// TestEffectiveDayPhaseSeasonChangeContinuity 走真实派生链（YearPhaseAt →
+// DayArcTicks → EffectiveDayPhase）扫一整年：昼弧随年相位缓慢漂移，相邻 tick
+// 的季节化相位差不瞬跳（双向 ≤ 5），仅在线性相位回绕到周期起点处归零。
+// 上界推导：支路步进 ≤ ceil(12000/8400) = 2；昼弧「取偶」使舍入值跨过奇整数
+// 时单 tick 至多变 2（全年探测钉死为 2），重映射偏移 < 2·12000/8400 ≈ 2.9；
+// 再加取整松弛，上界恰为 5（多年实测正向最大 = 5）。
+//
+// ±2 昼弧漂移的负向微抖只由昼弧 +2 产生，且只落在白昼支路后半段与黑夜支路
+// 前半段（记 p 为线性相位、A 为昼弧、q=p−A、N=24000−A：白昼支路
+// Δ=12000(A−2p)/(A(A+2)) 仅 p>A/2 为负，黑夜支路 Δ=12000(2q−N)/(N(N−2)) 仅
+// q<N/2 为负，两处 |Δ| < 12000/8400 ≈ 1.43，取整对齐后均实测至多 −2；昼弧
+// −2 只产生正向步进）。这是「取偶」的固有代价，属连续性内的抖动而非瞬跳。
+func TestEffectiveDayPhaseSeasonChangeContinuity(t *testing.T) {
+	const offset = uint16(7700)
+	const seasonOffset = uint64(99)
+	const start = uint64(1_000_000)
+	arcChanges := 0
+	prevArc := DayArcTicks(YearPhaseAt(start, seasonOffset))
+	prevE := EffectiveDayPhase(start, offset, prevArc)
+	for tick := start + 1; tick <= start+YearTicks+DayLengthTicks; tick++ {
+		arc := DayArcTicks(YearPhaseAt(tick, seasonOffset))
+		if arc != prevArc {
+			arcChanges++
+		}
+		e := EffectiveDayPhase(tick, offset, arc)
+		if DisplayDayPhase(tick, offset) == 0 {
+			// 线性相位回绕到周期起点：季节化相位从白昼支路起点重新出发。
+			if e != 0 {
+				t.Fatalf("tick=%d 线性相位回绕处季节化相位 = %d，想要 0", tick, e)
+			}
+		} else {
+			delta := int(e) - int(prevE)
+			if delta < 0 {
+				delta = -delta
+			}
+			if delta > 5 {
+				t.Fatalf("tick=%d（dayArc %d→%d）季节化相位跳变 %d -> %d，差值超过 5", tick, prevArc, arc, prevE, e)
+			}
+		}
+		prevArc = arc
+		prevE = e
+	}
+	if arcChanges == 0 {
+		t.Fatalf("全年扫描未观察到昼弧变化，测试未覆盖漂移路径")
+	}
+}
+
+// TestEffectiveMorningOffsetRoundTrip 反解闭环：可命中的 morningPhase 精确回
+// 到自身；不可命中（warp 非满射）的落到下一个可命中相位（至多 +1；周期顶端
+// 的不可命中值回落到前一个）。可达性只由公开的 `EffectiveDayPhase` 全域扫描
+// 独立判定，不与实现共享算式。
+func TestEffectiveMorningOffsetRoundTrip(t *testing.T) {
+	for _, dayArc := range []uint16{8400, 8402, 12000, 12002, 15600} {
+		reachable := make([]bool, DayLengthTicks)
+		for p := uint64(0); p < DayLengthTicks; p++ {
+			reachable[EffectiveDayPhase(p, 0, dayArc)] = true
+		}
+		for morningPhase := uint16(0); morningPhase < DayLengthTicks; morningPhase++ {
+			ok := reachable[morningPhase]
+			// 不可命中时的期望：下一个可命中相位；若顶端不可命中（昼弧>12000 的
+			// 黑夜支路顶部），则回落到前一个可命中相位。
+			wantNext := morningPhase + 1
+			if !ok && morningPhase == DayLengthTicks-1 {
+				wantNext = morningPhase - 1
+			}
+			for _, worldTime := range []uint64{0, 1, 23999, 123456789, math.MaxUint64} {
+				offset := EffectiveMorningOffset(worldTime, dayArc, morningPhase)
+				e := EffectiveDayPhase(worldTime, offset, dayArc)
+				if ok && e != morningPhase {
+					t.Fatalf("dayArc=%d morningPhase=%d worldTime=%d 可命中但反解得 %d", dayArc, morningPhase, worldTime, e)
+				}
+				if !ok && e != wantNext {
+					t.Fatalf("dayArc=%d morningPhase=%d worldTime=%d 不可命中，期望落在 %d，得到 %d", dayArc, morningPhase, worldTime, wantNext, e)
+				}
+			}
+		}
+	}
+}
+
+// TestEffectiveMorningOffsetHandAnchors 手算钉死两个反解样例：M=0 回到线性相
+// 位 0；M=6000 在夏至昼弧下回到线性相位 7800（白昼中点仍是 6000）。
+func TestEffectiveMorningOffsetHandAnchors(t *testing.T) {
+	if got := EffectiveMorningOffset(777, 15600, 0); got != 23223 {
+		t.Fatalf("EffectiveMorningOffset(777, 15600, 0) = %d，想要 23223", got)
+	}
+	if e := EffectiveDayPhase(777, 23223, 15600); e != 0 {
+		t.Fatalf("闭环校验失败：e = %d，想要 0", e)
+	}
+	if got := EffectiveMorningOffset(0, 15600, 6000); got != 7800 {
+		t.Fatalf("EffectiveMorningOffset(0, 15600, 6000) = %d，想要 7800", got)
+	}
+	if e := EffectiveDayPhase(0, 7800, 15600); e != 6000 {
+		t.Fatalf("闭环校验失败：e = %d，想要 6000", e)
+	}
+}
+
+// TestEffectiveMorningOffsetRejectsInvalidInput 非法昼弧与越界 morningPhase
+// 按契约返回 0。
+func TestEffectiveMorningOffsetRejectsInvalidInput(t *testing.T) {
+	for _, dayArc := range []uint16{0, 1, 3, 12001, 24001, 65535} {
+		if got := EffectiveMorningOffset(12345, dayArc, 6000); got != 0 {
+			t.Fatalf("非法 dayArc=%d 应返回 0，得到 %d", dayArc, got)
+		}
+	}
+	for _, morningPhase := range []uint16{24000, 32768, 65535} {
+		if got := EffectiveMorningOffset(12345, 15600, morningPhase); got != 0 {
+			t.Fatalf("越界 morningPhase=%d 应返回 0，得到 %d", morningPhase, got)
+		}
+	}
+}
+
+// TestEffectiveDayPhaseAtEquinoxIdentity 分点锚（探测 tick 的年相位恰为 0 或
+// 0.5，即 worldTime ≡ 锚 mod YearTicks）：组合入口在昼弧 12000 下对全部 offset
+// 逐值等于未 warp 的 `DisplayDayPhase`——判相位消费点在分点行为不变的算术基础。
+func TestEffectiveDayPhaseAtEquinoxIdentity(t *testing.T) {
+	maxEquinox := uint64(math.MaxUint64) - math.MaxUint64%YearTicks // ≡ 0 (mod YearTicks)
+	for _, anchor := range []uint64{0, 3 * YearTicks, 144000 + 2*YearTicks, maxEquinox} {
+		if phase := YearPhaseAt(anchor, 0); phase != 0 && math.Abs(phase-0.5) > 1e-12 {
+			t.Fatalf("前置失败：锚 %d 的年相位 %v 不是分点", anchor, phase)
+		}
+		// maxEquinox 附近再加 YearTicks 会回绕 uint64，只探自身；其余锚跨年
+		// 复查（年相位与线性相位同时保持，恒等必须跨年成立）。
+		probes := []uint64{anchor, anchor + YearTicks}
+		if anchor > maxEquinox-YearTicks {
+			probes = []uint64{anchor}
+		}
+		for _, worldTime := range probes {
+			for _, offset := range []uint16{0, 1, 12000, 23999} {
+				want := DisplayDayPhase(worldTime, offset)
+				if got := EffectiveDayPhaseAt(worldTime, offset, 0); got != want {
+					t.Fatalf("EffectiveDayPhaseAt(%d, %d, 分点) = %d，想要 %d（分点恒等）",
+						worldTime, offset, got, want)
+				}
+			}
+		}
+	}
+}
+
+// TestEffectiveDayPhaseAtSolsticeAnchors 至点锚：seasonOffset 把 worldTime=72000
+// 钉在夏至（yearPhase=0.25，昼弧 15600）。白昼支路被压缩——线性 13000（未
+// warp 语义的夜窗起点）在夏至仍是白昼（10000）；黑夜支路被拉伸——线性 15600
+// 恰为季节化黑夜起点。这组锚点能区分经/不经季节 warp 的判相位实现。
+func TestEffectiveDayPhaseAtSolsticeAnchors(t *testing.T) {
+	// seasonOffset=0 时 worldTime=72000 的年相位恰为 0.25（夏至，昼弧 15600）；
+	// 线性相位经 offset 控制且 yearIndex 固定，昼弧全程稳定。
+	const summerSolstice = uint64(SeasonLengthTicks) // 72000 ⇒ yearPhase=0.25
+	const seasonOffset = uint64(0)
+	if arc := DayArcTicks(YearPhaseAt(summerSolstice, seasonOffset)); arc != 15600 {
+		t.Fatalf("前置失败：夏至昼弧 = %d，想要 15600", arc)
+	}
+	cases := []struct {
+		worldTime uint64
+		offset    uint16
+		want      uint16
+	}{
+		{72000, 0, 0},         // 白昼始
+		{72000, 7800, 6000},   // 白昼中点（正午）仍是 6000
+		{72000, 13000, 10000}, // 线性夜窗起点在夏至仍是白昼：warp 区分锚
+		{72000, 15600, 12000}, // 季节化黑夜始
+	}
+	for _, tc := range cases {
+		if got := EffectiveDayPhaseAt(tc.worldTime, tc.offset, seasonOffset); got != tc.want {
+			t.Fatalf("EffectiveDayPhaseAt(%d, %d, 夏至) = %d，想要 %d", tc.worldTime, tc.offset, got, tc.want)
+		}
+	}
+}
+
+// TestEffectiveDayPhaseAtIsThinComposition 锁定组合入口是薄组合层而非第二个
+// warp 算式：对覆盖全年与回绕边界的采样，结果必须逐值等于
+// `EffectiveDayPhase(t, off, DayArcTicks(YearPhaseAt(t, seasonOffset)))`。
+func TestEffectiveDayPhaseAtIsThinComposition(t *testing.T) {
+	for _, seasonOffset := range []uint64{0, 1, 72000, 158435, YearTicks - 1} {
+		for _, worldTime := range []uint64{0, 1, 12999, 13000, 23999, 24000, 72000, 144000, 1 << 40, math.MaxUint64} {
+			for _, offset := range []uint16{0, 1, 6000, 23999} {
+				want := EffectiveDayPhase(worldTime, offset, DayArcTicks(YearPhaseAt(worldTime, seasonOffset)))
+				if got := EffectiveDayPhaseAt(worldTime, offset, seasonOffset); got != want {
+					t.Fatalf("EffectiveDayPhaseAt(%d, %d, %d) = %d，想要组合值 %d",
+						worldTime, offset, seasonOffset, got, want)
+				}
+			}
+		}
+	}
+}

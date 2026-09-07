@@ -55,26 +55,44 @@ func passiveCandidateColumn(t *testing.T, engine *Engine) core.BlockPos {
 func TestPassiveSpawnOnlyDuringDay(t *testing.T) {
 	engine, _ := spawnTestEngine(t, 0)
 	loadSpawnArena(t, engine, -48, 48, -48, 48)
+	if arc := core.DayArcTicks(core.YearPhaseAt(1, engine.seasonOffset)); arc == core.DayLengthTicks/2 {
+		t.Fatal("前置失败：探测时段昼弧恰为分点，探测无法区分季节 warp")
+	}
 
-	// 非白昼相位一律不生成：同一相位连查三个昼夜周期。
-	for _, phase := range []uint64{0, 12000, 12999, 13000, 15000, 23000, 23001, 23999} {
-		for cycle := range 3 {
-			engine.worldTime.Store(phase + uint64(cycle)*24000)
+	// 非白昼的季节化相位一律不生成：探测时刻按「季节化相位最接近目标值且非
+	// 白昼」反查——seed 0 的昼弧≠12000，命中时刻的线性相位与目标值分离（多个
+	// 目标的命中时刻在线性相位下仍是白昼，未季节化判定会给出相反结果）。同一
+	// 探测值跨年复查：+YearTicks 同时保持线性相位与年相位，季节化相位稳定。
+	for _, target := range []uint16{0, 12000, 12999, 13000, 15000, 23000, 23001, 23999} {
+		tick, phase, ok := tickNearEffectivePhaseWhere(engine, target, func(p uint16) bool {
+			return !phaseIsDay(p)
+		})
+		if !ok {
+			t.Fatalf("目标 %d 的非白昼反查失败", target)
+		}
+		for year := range 3 {
+			engine.worldTime.Store(tick + uint64(year)*core.YearTicks)
 			before := len(engine.passives.entries)
 			engine.advancePassiveSpawn()
 			if len(engine.passives.entries) != before {
-				t.Fatalf("显示相位 %d 生成了被动牛，想要拒绝", phase)
+				t.Fatalf("季节化相位 %d（目标 %d）生成了被动牛，想要拒绝", phase, target)
 			}
 		}
 	}
 
-	// 白昼两端（含边界）在竞技场就绪时必须可以生成。
-	for _, phase := range []uint64{1, 11999} {
+	// 白昼目标值在竞技场就绪时必须可以生成：探测时刻取白昼内最接近目标的
+	// 季节化相位（昼弧压缩的季节里白昼支路被拉伸，个别目标值不可精确命中，
+	// 取最近可命中值），边界语义在季节化域内保持。
+	for _, target := range []uint16{1, 11999} {
 		clearPassivesForTest(engine)
-		engine.worldTime.Store(phase)
+		tick, phase, ok := tickNearEffectivePhaseWhere(engine, target, phaseIsDay)
+		if !ok {
+			t.Fatalf("目标 %d 的白昼反查失败", target)
+		}
+		engine.worldTime.Store(tick)
 		engine.advancePassiveSpawn()
 		if len(engine.passives.entries) != 1 {
-			t.Fatalf("显示相位 %d 未生成被动牛，想要生成", phase)
+			t.Fatalf("季节化相位 %d（目标 %d）未生成被动牛，想要生成", phase, target)
 		}
 	}
 }
@@ -269,19 +287,26 @@ func TestPassiveSpawnRehashesConflictingID(t *testing.T) {
 
 func TestPassiveSpawnReplayIsDeterministic(t *testing.T) {
 	// 相同种子 + tick 序列 + 玩家集合：两只独立引擎的生成序列（`id`、位置、
-	// 身体值）必须逐项相同；无概率门槛时前 6 个白昼 tick 恰好生成 6 头。
+	// 身体值）必须逐项相同；无概率门槛时 6 个白昼 tick 恰好生成 6 头。seed 42
+	// 的探测时段昼弧 >12000，季节化相位 1 对应的线性时刻不再是 1——白昼探针
+	// 从最接近季节化相位 1 的白昼时刻起锚（夹具对同一 seed 的季节偏移确定性
+	// 一致，两次重放起锚相同）。
 	run := func() []PassiveMob {
 		engine, _ := spawnTestEngine(t, 42)
 		loadSpawnArena(t, engine, -48, 48, -48, 48)
-		for tick := uint64(1); tick <= 6; tick++ {
-			engine.worldTime.Store(tick)
+		dayStart, _, ok := tickNearEffectivePhaseWhere(engine, 1, phaseIsDay)
+		if !ok {
+			t.Fatal("白昼反查失败，夹具失效")
+		}
+		for offset := uint64(0); offset < 6; offset++ {
+			engine.worldTime.Store(dayStart + offset)
 			engine.advancePassiveSpawn()
 		}
 		return engine.PassiveMobs()
 	}
 	first, second := run(), run()
 	if len(first) != 6 {
-		t.Fatalf("前 6 个白昼 tick 生成了 %d 头，想要恰好 6", len(first))
+		t.Fatalf("6 个白昼 tick 生成了 %d 头，想要恰好 6", len(first))
 	}
 	if len(first) != len(second) {
 		t.Fatalf("两次重放数量=%d/%d，想要一致", len(first), len(second))

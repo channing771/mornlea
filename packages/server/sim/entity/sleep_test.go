@@ -78,8 +78,10 @@ func TestBedInteractAtNightSleepsAndRecordsFootRespawn(t *testing.T) {
 }
 
 // TestBedInteractOutsideNightWindowRejected 覆盖 spec 场景「白天使用被拒绝」：
-// 相位不在夜间窗时使用床必须被拒绝（沿用既有冻结拒绝枚举，不新增 wire 值），
-// 入睡状态与重生点都保持原样。
+// 季节化相位不在夜间窗时使用床必须被拒绝（沿用既有冻结拒绝枚举，不新增 wire
+// 值），入睡状态与重生点都保持原样。季节偏移钉在分点（探测 tick 的年相位恰为
+// 0，昼弧恒 12000、warp 恒等），使 12999/23001 的边界断言保持未季节化语义——
+// 分点下行为不变是季节 warp 的恒等锚。
 func TestBedInteractOutsideNightWindowRejected(t *testing.T) {
 	for _, phase := range []uint64{0, 12999, 23001, 23999} {
 		engine, _, _ := doorTestReadyEngine(t, core.Hotbar{})
@@ -89,6 +91,9 @@ func TestBedInteractOutsideNightWindowRejected(t *testing.T) {
 		player.respawnPresent = true
 		player.respawnPos = core.BlockPos{X: 9, Y: 8, Z: 7}
 		player.respawnDim = core.Overworld
+		// 分点对齐：yearIndex(探测 tick) ≡ 0 ⇒ 昼弧 12000 ⇒ 季节化相位恒等
+		// 线性相位。
+		engine.State.seasonOffset = (core.YearTicks - phase%core.YearTicks) % core.YearTicks
 
 		engine.SetWorldTimeForTest(phase)
 		result := settlePlayerInteractionsTick(engine, []Command{{
@@ -103,6 +108,43 @@ func TestBedInteractOutsideNightWindowRejected(t *testing.T) {
 		if !player.respawnPresent || player.respawnPos != (core.BlockPos{X: 9, Y: 8, Z: 7}) {
 			t.Fatalf("相位 %d 拒绝后重生点被改动: (present %v, %+v)",
 				phase, player.respawnPresent, player.respawnPos)
+		}
+	}
+}
+
+// TestBedNightFollowsSeasonalEffectivePhase 锁定判夜消费季节化相位：同一线性
+// 时刻（线性相位 12000）在分点与冬季给出相反判定——分点（昼弧 12000）下
+// 季节化相位 12000 未入夜、入睡被拒；冬季（昼弧 8400）下同一时刻的季节化相位
+// 已被压进夜窗、入睡必须接受。两组夹具只差季节偏移，能区分经/不经季节 warp
+// 的判定。
+func TestBedNightFollowsSeasonalEffectivePhase(t *testing.T) {
+	const linearNoonDusk uint64 = 60000 // 线性相位 = 60000 % 24000 = 12000。
+	// 分点对齐（yearIndex=144000）与冬至对齐（yearIndex=216000）。
+	for _, tc := range []struct {
+		seasonOffset uint64
+		wantRejected bool
+	}{
+		{seasonOffset: 144000 - linearNoonDusk%core.YearTicks, wantRejected: true},
+		{seasonOffset: 216000 - linearNoonDusk%core.YearTicks, wantRejected: false},
+	} {
+		engine := twoPlayerWorld(t)
+		session, yaw, pitch := placeSleepBed(t, engine, sleepBedFoot, 3.5)
+		engine.State.seasonOffset = tc.seasonOffset
+		engine.SetWorldTimeForTest(linearNoonDusk)
+		result := settlePlayerInteractionsTick(engine, []Command{{
+			Session: session, Sequence: 10, Kind: CommandInteractBed, Yaw: yaw, Pitch: pitch,
+		}})
+		if tc.wantRejected {
+			if len(result.Rejected) != 1 {
+				t.Fatalf("分点相位 12000 未入夜，入睡应被拒绝: %+v", result.Rejected)
+			}
+			continue
+		}
+		if len(result.Rejected) != 0 {
+			t.Fatalf("冬季线性相位 12000 的季节化相位已入夜，入睡被拒: %+v", result.Rejected)
+		}
+		if !engine.sessions[session].player.sleeping {
+			t.Fatal("冬季季节化夜间入睡后入睡位未置位")
 		}
 	}
 }
@@ -222,6 +264,39 @@ func sleepWorldTwoPlayers(t *testing.T) (*Engine, SessionID, SessionID, float32,
 	eye2 := player2.state.Position.Add(mgl32.Vec3{0, engine.physicsTunables.EyeHeight, 0})
 	yaw2, pitch2 := lookAtBlockCenter(eye2, foot2)
 	return engine, session1, 2, yaw1, pitch1, yaw2, pitch2
+}
+
+// TestSleepThroughNightLandsOnSeasonalMorning 覆盖 spec 场景「跳夜落在当前季节
+// 的早晨」：冬季（昼弧最短）全员入睡跳夜后，季节化显示相位必须落在冬季昼弧
+// 的早晨段起点，绝对世界时间不被回写（仍由权威 tick 每 tick 恰好 +1 推进）。
+// 冬季是昼弧与分点差最大的季节，反解必须经 `core.EffectiveMorningOffset` 的
+// 季节化算式完成。
+func TestSleepThroughNightLandsOnSeasonalMorning(t *testing.T) {
+	engine := twoPlayerWorld(t)
+	for _, id := range []SessionID{1, 2} {
+		engine.sessions[id].player.sleeping = true
+	}
+	const settleWorldTime uint64 = 18000
+	// 落点时刻 completed=18001 钉在冬至（yearIndex=216000，昼弧 8400）。
+	engine.State.seasonOffset = 216000 + core.YearTicks - (settleWorldTime+1)%core.YearTicks
+	engine.SetWorldTimeForTest(settleWorldTime)
+	engine.settleSleepThroughNight()
+
+	arc := core.DayArcTicks(core.YearPhaseAt(settleWorldTime+1, engine.seasonOffset))
+	if arc >= core.DayLengthTicks/2 {
+		t.Fatalf("前置失败：冬季昼弧 %d 不短于分点 12000", arc)
+	}
+	if got := core.EffectiveDayPhaseAt(settleWorldTime+1, engine.DayPhaseOffset(), engine.seasonOffset); got != 0 {
+		t.Fatalf("冬季跳夜后的季节化相位 = %d，想要落在早晨段起点 0", got)
+	}
+	if got := engine.worldTime.Load(); got != settleWorldTime {
+		t.Fatalf("跳夜回写了绝对世界时间：%d，想要保持 %d", got, settleWorldTime)
+	}
+	for _, id := range []SessionID{1, 2} {
+		if engine.sessions[id].player.sleeping {
+			t.Fatalf("会话 %d 跳夜后入睡位未清除", id)
+		}
+	}
 }
 
 // —— 死亡重生：个人重生点延迟校验 ——

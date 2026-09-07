@@ -20,11 +20,17 @@ type sessionState struct {
 
 // State 是玩家、伙伴、夜行者、被动牛及其玩法结算状态的唯一 owner。
 type State struct {
-	seed       int64
-	sessions   map[SessionID]*sessionState
-	companions map[companion.ID]*companionState
-	hostiles   hostileSet
-	passives   passiveSet
+	seed int64
+	// seasonOffset 是季节起点偏移（0..core.YearTicks-1），装配期由
+	// `core.SeasonOffsetFromSeed(seed)` 一次写死、此后只读——与 runtime 侧的
+	// 同名纪律一致（seed 已持久化，偏移是派生量而非权威状态）。判相位消费点
+	// （入睡判定、夜行者生成窗口、白昼灼烧、昼间被动生成）经它把线性显示相
+	// 位换算成季节化相位。
+	seasonOffset uint64
+	sessions     map[SessionID]*sessionState
+	companions   map[companion.ID]*companionState
+	hostiles     hostileSet
+	passives     passiveSet
 	// passiveDeaths 是本 tick 死亡结算移除的被动牛 ID 集合（ID 升序、有界
 	// ≤32）：发布侧同 tick 取一次投影 despawn 原因位，下次结算先清空，不跨
 	// tick 累积。
@@ -127,6 +133,7 @@ func (views ViewSnapshot) sessionWantsChunk(id SessionID, key core.ChunkKey) boo
 func NewState(seed int64) *State {
 	return &State{
 		seed:         seed,
+		seasonOffset: core.SeasonOffsetFromSeed(seed),
 		sessions:     make(map[SessionID]*sessionState),
 		companions:   make(map[companion.ID]*companionState),
 		hostiles:     newHostileSet(),
@@ -207,8 +214,13 @@ func (engine *engineContext) WorldTime() uint64 {
 	return engine.worldTime.Load()
 }
 
-func (engine *engineContext) displayDayPhase() uint16 {
-	return core.DisplayDayPhase(engine.worldTime.Load(), engine.DayPhaseOffset())
+// effectiveDayPhase 返回当前权威视角的季节化显示相位：绝对时间、显示偏移与
+// State 持有的季节偏移经 `core.EffectiveDayPhaseAt` 组合——判夜/判昼消费点统
+// 一经这里取相位，不得直呼未季节化的线性相位或自建 warp。
+func (engine *engineContext) effectiveDayPhase() uint16 {
+	return core.EffectiveDayPhaseAt(
+		engine.worldTime.Load(), engine.DayPhaseOffset(), engine.seasonOffset,
+	)
 }
 
 // TakeSubscriptionsDirty 返回实体生命周期是否改变订阅输入，并清除提示位。

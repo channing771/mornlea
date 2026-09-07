@@ -458,6 +458,11 @@ func (a *Application) startWorld() error {
 	a.worldTimeTicks = 0
 	a.dayPhaseOffset = 0
 	a.weather = core.WeatherClear
+	// 季节三字段与天气同法复位：新会话的季节镜像只等第一条权威状态带来，
+	// 不携带上一台已析构世界的季节相位。
+	a.season = core.SeasonSpring
+	a.seasonProgress = 0
+	a.temperature = 0
 	a.observerFloor = 0
 	a.clientSessionClosed = false
 	// hud 分节随会话一并复位：上一台已析构世界的下行基线不得拦截本会话的

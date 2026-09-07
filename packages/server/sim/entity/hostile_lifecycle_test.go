@@ -124,6 +124,45 @@ func TestHostileBurnTimerResetsAtNight(t *testing.T) {
 	}
 }
 
+// TestHostileBurnFollowsSeasonalEffectivePhase 锁定灼烧窗口消费季节化相位：
+// 线性相位 9000 在分点（昼弧 12000）下是白昼、灼烧照常进行；在冬季（昼弧
+// 8400）下同一时刻的季节化相位已被压过白昼半程（≥12000），灼烧必须停止并
+// 重置计时。两组夹具只差季节偏移，能区分经/不经季节 warp 的判定。
+func TestHostileBurnFollowsSeasonalEffectivePhase(t *testing.T) {
+	const probe uint64 = 9000
+	burnCase := func(name string, seasonOffset uint64, wantBurn bool) {
+		t.Run(name, func(t *testing.T) {
+			engine, _ := readyMovementPlayer(t)
+			mob := validTestHostile(24)
+			mob.State.Position = mgl32.Vec3{2.5, 1, 2.5}
+			if err := engine.RestoreHostile(mob); err != nil {
+				t.Fatalf("恢复夜行者：%v", err)
+			}
+			engine.State.seasonOffset = seasonOffset
+			// 推进两个完整灼烧周期：分点下第 20/40 tick 各扣 1 点。
+			for range 40 {
+				engine.advanceHostileBurn(probe)
+			}
+			entry := &engine.hostiles.entries[0]
+			if wantBurn {
+				if got := entry.health; got != core.MaxHealth-2 {
+					t.Fatalf("分点白昼灼烧后生命=%d，想要 %d", got, core.MaxHealth-2)
+				}
+				return
+			}
+			if got := entry.health; got != core.MaxHealth {
+				t.Fatalf("冬季季节化非白昼灼烧后生命=%d，想要不变", got)
+			}
+			if got := entry.burnCooldown; got != hostileCooldownPeriodTicks {
+				t.Fatalf("冬季灼烧剩余=%d，想要重置为满周期", got)
+			}
+		})
+	}
+	// 分点：yearIndex(9000)=144000；冬季：yearIndex(9000)=216000（昼弧 8400）。
+	burnCase("equinox_burns", 144000-probe%core.YearTicks, true)
+	burnCase("winter_resets", 216000-probe%core.YearTicks, false)
+}
+
 func TestHostileDistantDespawnAfterSixHundredActiveTicks(t *testing.T) {
 	engine, _ := readyMovementPlayer(t)
 	// 玩家在原点，夜行者水平 80 格（>64）且远离累计已到 599：再推进 1 tick

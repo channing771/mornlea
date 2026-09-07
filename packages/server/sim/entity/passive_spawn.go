@@ -34,7 +34,7 @@ const maxPassivesNearRadius = 48
 // 整个判定只读世界，绝不为生成触发同步加载。
 func (engine *engineContext) advancePassiveSpawn() {
 	now := engine.worldTime.Load()
-	if !phaseIsDay(core.DisplayDayPhase(now, engine.DayPhaseOffset())) {
+	if !phaseIsDay(core.EffectiveDayPhaseAt(now, engine.DayPhaseOffset(), engine.seasonOffset)) {
 		return
 	}
 	sessions := engine.sortedActiveSessions()

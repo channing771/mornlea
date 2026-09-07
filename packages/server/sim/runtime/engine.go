@@ -59,6 +59,12 @@ type Engine struct {
 	// 查询）上串行访问——与无锁的实体状态同纪律，不设原子或互斥。
 	weatherKind      core.WeatherKind
 	weatherRemaining uint32
+	// seasonOffset 是季节起点偏移（0..core.YearTicks-1）：`NewEngine` 装配期
+	// 由 `core.SeasonOffsetFromSeed(seed)` 一次写死，此后只读——与
+	// weatherKind 同纪律，不设原子或互斥。世界 seed 已由 metadata 持久化，
+	// 同 seed 重启偏移必然一致，因此它不落任何持久化字段（派生量而非权威
+	// 状态）；季节/温度每 tick 由它加绝对时间确定性重现。
+	seasonOffset uint64
 	// dayPhaseOffset 是 `core.DisplayDayPhase` 的显示相位偏移（值域钳 0..23999），
 	// 只进入显示相位计算，绝不影响 `worldTime` 的推进。唯一写者是全员入睡时的
 	// 跳夜结算（sleep.go），单值原子读写让判夜读取点无需额外同步；持久化由世界
@@ -87,6 +93,7 @@ func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
 	engine := &Engine{
 		viewRadius:    viewRadius,
 		seed:          seed,
+		seasonOffset:  core.SeasonOffsetFromSeed(seed),
 		realm:         realmState,
 		entities:      entity.NewState(seed),
 		subscriptions: make(map[SessionID]*subscriptionState),
@@ -156,12 +163,6 @@ func (engine *Engine) DayPhaseOffset() uint16 { return uint16(engine.dayPhaseOff
 // 并发写者。
 func (engine *Engine) RestoreDayPhaseOffset(offset uint16) {
 	engine.dayPhaseOffset.Store(uint64(offset))
-}
-
-// displayDayPhase 返回当前权威视角下的显示相位：绝对时间与偏移都只经
-// `core.DisplayDayPhase` 组合，判夜读取点不得自建算式。
-func (engine *Engine) displayDayPhase() uint16 {
-	return core.DisplayDayPhase(engine.worldTime.Load(), engine.DayPhaseOffset())
 }
 
 // SetWorldTimeForTest 直接写入权威绝对世界时间，仅供测试把世界拨到特定显示相位

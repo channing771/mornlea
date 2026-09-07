@@ -259,6 +259,11 @@ func (server *Server) publishLocalResult(
 			DayPhaseOffset: playerUpdate.DayPhaseOffset,
 			WorldTimeTicks: playerUpdate.WorldTimeTicks,
 			WeatherKind:    playerUpdate.WeatherKind,
+			// 季节与温度和天气同批次复制：季节两字段是世界单值，温度已由
+			// sim 按本人 Y 求好，wire 层只搬运、不重算。
+			Season:         playerUpdate.Season,
+			SeasonProgress: playerUpdate.SeasonProgress,
+			Temperature:    playerUpdate.Temperature,
 		}) {
 			server.closePublicationSessionLocked(current, errSessionOutboxFull)
 			return

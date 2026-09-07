@@ -82,6 +82,11 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 				// 天气与世界时间同一呈现量纪律：只认更新 tick（上面的
 				// ServerTick 守卫），冻结开关一并钉住降水/天空/亮度输入。
 				a.weather = state.WeatherKind
+				// 季节三字段与天气同一接受纪律、同一冻结开关：昼夜 warp 与
+				// 降水形态呈现只消费这份权威镜像，不读本地推算。
+				a.season = state.Season
+				a.seasonProgress = state.SeasonProgress
+				a.temperature = state.Temperature
 			}
 			if state.Reset || !state.MiningActive {
 				a.miningOverlay = hud.MiningOverlay{}

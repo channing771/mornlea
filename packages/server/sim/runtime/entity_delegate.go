@@ -103,9 +103,21 @@ func (engine *Engine) RegisterSession(
 }
 
 func (engine *Engine) Player(id SessionID) (PlayerUpdate, bool) {
-	return engine.entities.Player(
-		id, engine.WorldTime(), engine.DayPhaseOffset(), engine.weatherKind, engine.EntitySessionView(id),
+	worldTime := engine.WorldTime()
+	// 季节束与非 tick 查询的其余权威值同快照：当前绝对时间、当前显示偏移、
+	// 当 tick 天气。与 Step 尾部的发布路径共用同一派生入口，两条路径对同一
+	// 时刻必然给出相同季节与温度。
+	season := engine.seasonSnapshotAt(worldTime, engine.DayPhaseOffset())
+	update, ok := engine.entities.Player(
+		id, worldTime, engine.DayPhaseOffset(), engine.weatherKind, engine.EntitySessionView(id),
 	)
+	if !ok {
+		return PlayerUpdate{}, false
+	}
+	update.Season = season.season
+	update.SeasonProgress = season.progress
+	update.Temperature = season.temperatureAt(engine.weatherKind, update.State.Position.Y())
+	return update, true
 }
 
 func (engine *Engine) PlayerSnapshot(id SessionID) (PlayerSnapshot, bool) {
