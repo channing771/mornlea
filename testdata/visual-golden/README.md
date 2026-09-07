@@ -2,13 +2,13 @@
 
 本目录统一存放视觉回归基线，均为测试夹具二进制。
 
-- `world/`：无窗口世界场景基线 24 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
-- `motion/`：过程 GIF 基线 10 个（被动牛 4 剧本 + motion 演示 6 个），只验呈现、不进比对，对应 `cmd/mornlea/capture/passive_death_scripts.go` 的 `passiveDeathGIFScripts` 与各 motion 演示入口（按 tick 步进抓帧，标准库 `image/gif` 编码）。
+- `world/`：无窗口世界场景基线 27 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
+- `motion/`：过程 GIF 基线 11 个（被动牛 4 剧本 + motion 演示 7 个），只验呈现、不进比对，对应 `cmd/mornlea/capture/passive_death_scripts.go` 的 `passiveDeathGIFScripts` 与各 motion 演示入口（按 tick 步进抓帧，标准库 `image/gif` 编码）。
 - `ui/`：前端 UI 部件基线 30 张，对应 `packages/engine/crates/mornlea_client/frontend/visual/fixture-names.ts` 的 `fixtureNames`。
 
 旧目录 `cmd/mornlea/capture/testdata/golden/` 与 `engine/crates/mornlea_client/frontend/visual/golden/` 已清空，仅剩空目录，不再写入。
 
-## world（24 张）
+## world（27 张）
 
 文件名即场景名加 `.png` 后缀，场景定义与顺序以 `captureScenes` 为准。
 
@@ -33,6 +33,9 @@
 | `water-surface-slope.png` | `water-surface-slope` | 俯视水池的水面高度斜坡与透水可见的池底材质。 |
 | `mining-crack-early.png` | `mining-crack-early` | 同一目标砖块上的浅阶段世界空间采掘裂纹。 |
 | `mining-crack-heavy.png` | `mining-crack-heavy` | 同一目标砖块上的最重阶段裂纹，与浅阶段对照判读加深。 |
+| `rain-noon.png` | `rain-noon` | 正午雨天固定夹具：雨粒子、灰天空与压暗后的露天亮度同框，雪线下机位锁定雨形。 |
+| `camera-third-back.png` | `camera-third-back` | 同一机位第三人称背面：自身身体可见、无 viewmodel，背部可辨。 |
+| `camera-third-front.png` | `camera-third-front` | 同一机位第三人称正面：自身身体可见、无 viewmodel，脸部可辨。 |
 | `main-menu.png` | `main-menu` | 主菜单相位全景底图，固定自转时刻的纯全景世界画面。 |
 | `settings-menu.png` | `settings-menu` | 设置相位全景底图，同一全景世界的另一自转时刻。 |
 | `avatar-detail.png` | `avatar-detail` | 原创旅人正面、侧面和背面同框，验收服装材质与静态轮廓。 |
@@ -76,10 +79,10 @@
 | `hud-chat.png` | `hud-chat` | `HudRoot` 多行聊天。 |
 | `hud-container-open.png` | `hud-container-open` | `HudRoot` 容器打开态翻转构图。 |
 
-## motion（10 个）
+## motion（11 个）
 
 motion 过程 GIF 只验呈现、不进比对：`make visual-check` 只比对 `world/` PNG
-（GIF 剧本只生成、不设阈值），`world/` 的 24 张 PNG 纪律也不含它。
+（GIF 剧本只生成、不设阈值），`world/` 的 27 张 PNG 纪律也不含它。
 
 | 演示文件 | 场景 | 帧数/时长 | 生成入口 |
 |---|---|---|---|
@@ -94,9 +97,10 @@ motion 过程 GIF 只验呈现、不进比对：`make visual-check` 只比对 `w
 | `lure.gif` | `lure`：持麦靠近——远端玩家逐帧靠近静立牛，小麦掉落置于牛身前 | 48帧内，约8fps | 同上 |
 | `kill.gif` | `kill`：击杀——第 4 帧死亡 despawn 并刷出生牛肉掉落，随后 20 帧红闪侧倒保留期 | 48帧内，约8fps | 同上 |
 | `beef-drop.gif` | `beef-drop`：牛肉掉落——单个生牛肉掉落的浮动与旋转（权威 tick 派生） | 48帧内，约8fps | 同上 |
+| `weather-cycle.gif` | `weather-cycle`：天气切换全过程——晴 24 帧→雨 24 帧→雷暴 24 帧（含闪光帧）→回晴 24 帧，粒子起落与天空灰度变化同框 | 96帧，每帧 0.13 秒，循环约 12.5 秒 | `go run ./packages/client/cmd/mornlea --motion-demo testdata/visual-golden/motion/weather-cycle.gif --motion-scene weather-cycle`（仓库根运行） |
 
 - 新演示的原始关键PNG写在输出路径加 `-frames/` 的旁路审查目录，不纳入golden；GIF是完整过程，PNG只帮助核对编码保真。
-- 演示场景值住 `packages/client/cmd/mornlea/capture/motion_break_burst.go`、`motion_experience.go` 与 `motion_hand_swing.go`，不追加进 `captureScenes`。
+- 演示场景值住 `packages/client/cmd/mornlea/capture/motion_break_burst.go`、`motion_experience.go`、`motion_hand_swing.go` 与 `motion_weather_cycle.go`，不追加进 `captureScenes`。
 - 编码只用标准库 `image/gif`（全片共享自适应调色板，无抖色），固定输入逐字节一致。
 
 ## 三类边界与选用规则
@@ -105,7 +109,7 @@ motion 过程 GIF 只验呈现、不进比对：`make visual-check` 只比对 `w
 
 - 第一类 UI 窗口型（`ui/`）：窗口与 WebView 层的部件级 PNG。清单以 `fixture-names.ts` 的 `fixtureNames` 为准；本机 Chrome 截图、既有双阈值比对，不进 CI。
 - 第二类世界静态（`world/`）：无头离屏渲染收敛后的单帧稳定态 PNG。场景定义与顺序以 `captureScenes` 为准；`make visual-check` 比对、`make visual-update` 显式覆盖。
-- 第三类过程 GIF（`motion/`）：跨 tick 状态迁移的全流程 GIF，按 tick 步进抓帧，覆盖触发前、结算、收敛全过程，不得只截片段。只验呈现、不进任何比对门禁，供人眼审查全流程；其中被动牛 4 剧本随 `make visual-update` 由 `RunCapture` 内生成，motion 演示 6 个经 `--motion-demo` 显式生成。
+- 第三类过程 GIF（`motion/`）：跨 tick 状态迁移的全流程 GIF，按 tick 步进抓帧，覆盖触发前、结算、收敛全过程，不得只截片段。只验呈现、不进任何比对门禁，供人眼审查全流程；其中被动牛 4 剧本随 `make visual-update` 由 `RunCapture` 内生成，motion 演示 7 个经 `--motion-demo` 显式生成。
 
 路由纪律：窗口 chrome 只进 `ui/`，世界单帧只进 `world/`，时间过程只进 GIF；世界帧不得携带窗口 chrome 像素，UI 夹具不得复刻世界像素。
 
