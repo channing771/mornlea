@@ -143,7 +143,9 @@ func TestPassiveWanderStaysWithinHomeNeighborhood(t *testing.T) {
 	}
 	start := engine.passives.entries[0].state.Position
 	moved := false
-	for range 300 {
+	// 逐 tick 递进权威时钟：漫游朝向按段换向，守护的是换向下的有界漫游。
+	for tick := uint64(0); tick < 300; tick++ {
+		engine.tick.Store(tick)
 		engine.advancePassiveMovement()
 		if len(engine.passives.entries) != 1 {
 			t.Fatal("漫游中被动牛意外消失")
@@ -167,8 +169,12 @@ func TestPassiveWanderStaysWithinHomeNeighborhood(t *testing.T) {
 }
 
 func TestPassiveMovementNeverPassesThroughWalls(t *testing.T) {
-	engine, _ := readyMovementPlayer(t)
+	engine, session := readyMovementPlayer(t)
 	loadFlatChunks(t, engine.dimension(core.Overworld), -1, 1, -1, 1)
+	// 闲时看人只转向不位移：玩家出生点距牛不足 6 格会把牛钉在原地、把穿墙
+	// 守护掏空成恒真断言。把玩家摆到 6 格外（仍在已装载的 chunk -1..1 域
+	// 内），漫游运动重新压到石墙环。
+	placeSessionPlayer(engine, session, mgl32.Vec3{30.5, 1, 30.5})
 	// 以 (2,2) 为中心围一圈两格高的石墙，牛在环内出生。
 	for x := int32(0); x <= 4; x++ {
 		for z := int32(0); z <= 4; z++ {
@@ -184,14 +190,24 @@ func TestPassiveMovementNeverPassesThroughWalls(t *testing.T) {
 	if err := engine.RestorePassive(mob); err != nil {
 		t.Fatalf("恢复被动牛：%v", err)
 	}
-	for range 100 {
+	start := engine.passives.entries[0].state.Position
+	moved := false
+	// 逐 tick 递进权威时钟：换向的漫游仍不得穿出石墙环。
+	for tick := uint64(0); tick < 100; tick++ {
+		engine.tick.Store(tick)
 		engine.advancePassiveMovement()
 		position := engine.passives.entries[0].state.Position
+		if position.Sub(start).Len() > 0.01 {
+			moved = true
+		}
 		x := int32(math.Floor(float64(position.X())))
 		z := int32(math.Floor(float64(position.Z())))
 		if x < 1 || x > 3 || z < 1 || z > 3 {
 			t.Fatalf("被动牛穿墙到 (%d,%d)，想要留在石墙环内", x, z)
 		}
+	}
+	if !moved {
+		t.Fatal("100 tick 内被动牛没有任何位移，想要漫游运动压到石墙")
 	}
 }
 
@@ -260,7 +276,9 @@ func TestPassiveFleeEndsAndResumesWander(t *testing.T) {
 	if engine.passives.entries[0].fleeTicks == 0 {
 		t.Fatal("受击后未进入逃跑")
 	}
-	for range 120 {
+	// 逃跑 60 tick 后恢复的漫游也在推进时钟：换向段中牛仍须存活。
+	for tick := uint64(0); tick < 120; tick++ {
+		engine.tick.Store(tick)
 		engine.advancePassiveMovement()
 	}
 	if got := engine.passives.entries[0].fleeTicks; got != 0 {
