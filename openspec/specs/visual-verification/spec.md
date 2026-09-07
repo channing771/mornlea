@@ -218,7 +218,7 @@
 
 `materials-showcase` MUST 保持既有固定正午、固定相机和确定性夹具，并经与交互客户端相同的完整呈现链路收敛后无窗口抓取，不得创建或聚焦前台游戏窗口。夹具 MUST 同时覆盖 14 种新材料、八格连续草地、相邻玻璃、相邻树叶、原木顶面年轮与侧面树皮，以及干耕地与湿耕地各至少一个可见列（含下沉顶面的完整几何）。既有双阈值 MUST 保持不变。
 
-抓帧场景清单 MUST 按以下完整顺序运行（27 景）：`terrain-noon`、`avatar-nametag`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`torch-night`、`bed-night`、`materials-showcase`、`target-block-feedback`、`grass-closeup`、`oak-grove`、`ai-companion`、`sword-combat`、`hostile-mob`、`passive-herd`、`passive-graze`、`water-surface-slope`、`mining-crack-early`、`mining-crack-heavy`、`rain-noon`、`camera-third-back`、`camera-third-front`、`main-menu`、`settings-menu`、`avatar-detail`、`far-horizon`、`water-underwater`。`hud-hotbar-health`、`hud-survival-feedback` 与 `hud-item-name-popup` 三景随常显层 GPU 呈现退役从清单移除，容器四景已退役并迁前端同名 `panel-*` fixture，清单 MUST NOT 再包含任何只承载常显 HUD 像素或容器面板像素的场景。清单 MUST 保留 `target-block-feedback`、`oak-grove` 与 `ai-companion` 的既有名称及相对顺序，`ai-companion` MUST 继续紧随 `oak-grove`，并 MUST 保持 `sword-combat`、`hostile-mob`、`water-surface-slope` 的相邻顺序，`mining-crack-early` 与 `mining-crack-heavy` MUST 依次紧随 `water-surface-slope`，`rain-noon`、`camera-third-back` 与 `camera-third-front` MUST 依次紧随 `mining-crack-heavy` 且先于 `main-menu`，`settings-menu` MUST 紧随 `main-menu`，`avatar-detail` MUST 紧随 `settings-menu`，`far-horizon` MUST 为倒数第二，`water-underwater` MUST 为唯一末场景。所有场景 MUST 使用与交互客户端相同的完整呈现链路收敛后无窗口抓取，且不得创建或聚焦前台游戏窗口。
+抓帧场景清单 MUST 按以下完整顺序运行（28 景）：`terrain-noon`、`avatar-nametag`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`torch-night`、`bed-night`、`materials-showcase`、`target-block-feedback`、`grass-closeup`、`oak-grove`、`ai-companion`、`sword-combat`、`hostile-mob`、`passive-herd`、`passive-graze`、`water-surface-slope`、`mining-crack-early`、`mining-crack-heavy`、`rain-noon`、`camera-third-back`、`camera-third-front`、`snow-cover`、`main-menu`、`settings-menu`、`avatar-detail`、`far-horizon`、`water-underwater`。`hud-hotbar-health`、`hud-survival-feedback` 与 `hud-item-name-popup` 三景随常显层 GPU 呈现退役从清单移除，容器四景已退役并迁前端同名 `panel-*` fixture，清单 MUST NOT 再包含任何只承载常显 HUD 像素或容器面板像素的场景。清单 MUST 保留 `target-block-feedback`、`oak-grove` 与 `ai-companion` 的既有名称及相对顺序，`ai-companion` MUST 继续紧随 `oak-grove`，并 MUST 保持 `sword-combat`、`hostile-mob`、`water-surface-slope` 的相邻顺序，`mining-crack-early` 与 `mining-crack-heavy` MUST 依次紧随 `water-surface-slope`，`rain-noon`、`camera-third-back` 与 `camera-third-front` MUST 依次紧随 `mining-crack-heavy`，`snow-cover` MUST 紧随 `camera-third-front` 且先于 `main-menu`，`settings-menu` MUST 紧随 `main-menu`，`avatar-detail` MUST 紧随 `settings-menu`，`far-horizon` MUST 为倒数第二，`water-underwater` MUST 为唯一末场景。`snow-cover` 场景 MUST 由冬季、雪形态降水与预铺满档雪层的确定性夹具定义：画面 MUST 呈现积雪地表（短方块雪层几何）、雪形降水粒子与冬季冷色天空 tint。所有场景 MUST 使用与交互客户端相同的完整呈现链路收敛后无窗口抓取，且不得创建或聚焦前台游戏窗口。
 
 #### Scenario: 地形与 HUD 风格变化产生可审查基线
 
@@ -235,127 +235,25 @@
 - **THEN** 画面 MUST NOT 出现任何常显 HUD 像素，与 `survival-hud-presentation`「容器保留面 GPU 资源契约重钉」的关闭态 0 quad/0 glyph 一致
 - **AND** 快捷栏、状态行、氧气、采掘/进食轨道、弹条、准星、聊天与 marker 的呈现验收 MUST 由 `game-overlay-webview` 的前端组件断言与 `frontend/visual` 部件基线承接
 
-#### Scenario: 完整场景顺序扩展为 27 项
+#### Scenario: 完整场景顺序扩展为 28 项
 
 - **GIVEN** 完整无窗口 capture 场景清单
 - **WHEN** 检查全部场景名称与顺序
-- **THEN** 清单 MUST 恰好包含本 requirement 列出的 27 项，且顺序与之逐项一致
+- **THEN** 清单 MUST 恰好包含本 requirement 列出的 28 项，且顺序与之逐项一致
 - **AND** 清单 MUST NOT 包含 `hud-hotbar-health`、`hud-survival-feedback` 或 `hud-item-name-popup`
 - **AND** `far-horizon` MUST 是倒数第二个场景，`water-underwater` MUST 是唯一末场景
 
-#### Scenario: 打开背包场景验证容器 GPU 保留面
+#### Scenario: 雪景场景入册且旧景不变
 
-- **GIVEN** `inventory-crafting` 装入固定背包、个人 2×2 网格中一条已匹配的真实原料形状、非空产物格和一个已选来源格
-- **WHEN** 场景经完整链路收敛并无窗口抓取
-- **THEN** 画面 MUST 同时呈现原创像素框、36 个凹槽、2×2 网格、产物格与背包/合成标题，全部属于容器面板保留面
-- **AND** 画面 MUST NOT 出现生命/饥饿状态行、氧气气泡或快捷栏贴条，容器面板与 tooltip 保留面 MUST NOT 因常显层退役而缺失
-- **AND** 打开态保留面最坏组合 MUST 继续由 `survival-hud-presentation` 的 218 quad/268 glyph 契约钉住
+- **GIVEN** 更新后的官方场景清单
+- **WHEN** 全量抓帧比对
+- **THEN** `snow-cover` MUST 位于 `camera-third-front` 与 `main-menu` 之间产出新 golden，其余 27 景 MUST 与既有 golden 零差异
 
-#### Scenario: 远端玩家场景只继承地形背景变化
+#### Scenario: 雪景内容可辨
 
-- **GIVEN** 远端玩家与名牌的渲染逻辑没有变化，但场景共享的当前产品默认地形背景发生变化
-- **WHEN** 更新本变更影响的视觉基线
-- **THEN** `avatar-nametag` MUST 继承当前地形背景
-- **AND** 远端玩家轮廓、颜色与名牌文字 MUST 保持既有可观察语义（名牌属世界呈现，不随常显层退役消失）
-
-#### Scenario: 材料展示保持既有验收夹具
-
-- **GIVEN** `materials-showcase` 的固定夹具已装入客户端镜像
-- **WHEN** `materials-showcase` 完成网格和上传收敛并抓帧
-- **THEN** 图像 MUST 同时显示 14 种新材料各一个近景样本及多方块表面、跨至少一个 AO 或天空光拆分边界的八格连续草地、两个相邻玻璃方块、两个相邻树叶方块，以及原木顶面年轮与侧面树皮、干耕地与湿耕地各一个可见列（两列顶面呈现在下沉高度而非整格顶面）
-- **AND** 玻璃后方方块 MUST 可见，树叶孔洞和光照 MUST 可辨认，相同 cutout 方块的内部面 MUST 不可见
-
-#### Scenario: 材料展示只走无窗口完整链路
-
-- **GIVEN** `materials-showcase` 使用固定正午与固定相机
-- **WHEN** 生成或比对 `materials-showcase`
-- **THEN** 抓帧 MUST 使用与交互客户端相同的完整呈现链路
-- **AND** MUST NOT 创建或聚焦前台游戏窗口，且 MUST 继续使用现有双阈值
-
-#### Scenario: 全部正式基线需重新生成并完整复核
-
-- **GIVEN** 常显 HUD 的 GPU 呈现退役与 WebView HUD 组件承接已经落地
-- **WHEN** 显式更新视觉基线
-- **THEN** 系统 MUST 按既有完整顺序重新生成全部 27 张正式 golden
-- **AND** 调用方 MUST 逐张人工复核全部 27 张图像后才能接受更新，且既有双阈值 MUST 保持不变
-
-#### Scenario: 伙伴场景与当前末尾顺序并存
-
-- **GIVEN** 完整无窗口场景清单
-- **WHEN** 检查 `target-block-feedback` 之后的场景名称与顺序
-- **THEN** `oak-grove` 与 `ai-companion` MUST 保持既有名称，且 `ai-companion` MUST 紧随 `oak-grove`
-- **AND** `water-surface-slope` MUST 位于 `ai-companion` 之后，`main-menu` 与 `settings-menu` MUST 依次相邻并位于 `far-horizon` 之前，`far-horizon` MUST 是倒数第二个场景，`water-underwater` MUST 是唯一末场景
-
-#### Scenario: 橡树林通过正常渲染链路抓取
-
-- **GIVEN** `oak-grove` 的固定世界种子、生成区块、正午时间与相机已经装入客户端镜像
-- **WHEN** 场景完成预热、网格收敛和上传并抓帧
-- **THEN** 图像 MUST 由与交互客户端相同的完整呈现链路产出，且 MUST 显示固定橡树地貌
-- **AND** 抓帧 MUST NOT 创建或聚焦前台游戏窗口，且 MUST 继续使用既有双阈值
-
-#### Scenario: AI 伙伴通过统一呈现链路抓取
-
-- **GIVEN** `ai-companion` 已重置前一场景的 remote、companion、chat、inventory、panel、container、mining、damage 和 item-drop 状态，并装入固定伙伴和聊天夹具
-- **WHEN** 场景完成预热和上传并抓帧
-- **THEN** 图像 MUST 由统一的人形与名牌呈现链路产出，且 MUST 同时显示伙伴人形与中文名牌“阿木”
-- **AND** accepted 事件与 `@阿木 挖石头` 输入属聊天呈现，已迁 WebView HUD 组件，画面 MUST NOT 出现聊天行或聊天输入框像素；其验收由前端组件断言承接
-- **AND** 抓帧 MUST NOT 创建或聚焦前台游戏窗口，且 MUST 继续使用既有双阈值
-
-#### Scenario: 目标反馈通过正常渲染链路验证遮挡
-
-- **GIVEN** `target-block-feedback` 的固定夹具命中一个已注册材料方块
-- **WHEN** 场景完成预热、网格收敛和上传并抓帧
-- **THEN** 图像 MUST 同时显示该方块的细轮廓、中文名称和被地形正确遮挡的边
-- **AND** 场景 MUST 使用与交互客户端相同的完整呈现链路并保持正确遮挡，不得创建或聚焦前台游戏窗口
-
-#### Scenario: 打开背包的基线不受目标提示影响
-
-- **GIVEN** `inventory-crafting` 场景打开背包
-- **WHEN** 显式更新所有视觉基线
-- **THEN** `inventory-crafting` MUST 不显示目标轮廓或名称
-- **AND** 背包与合成区域的容器保留面语义 MUST 保持不变
-- **AND** 只有经逐图复核确认由常显层退役、当前产品默认材质或共享地形背景变化引起时，它的 golden MAY 更新
-
-#### Scenario: 基线更新不改变阈值或场景尾序
-
-- **GIVEN** 调用方在常显层退役后的基线上更新全部正式 golden
-- **WHEN** 检查生成结果和比较配置
-- **THEN** `water-surface-slope`、`main-menu`、`settings-menu`、倒数第二的 `far-horizon` 与唯一末场景 `water-underwater` 的尾序 MUST 保持不变
-- **AND** 既有双阈值 MUST 保持不变，任何差异 MUST 经逐图人工复核而不得通过放宽阈值接受
-
-#### Scenario: 完整场景顺序加入生存反馈
-
-- **GIVEN** 常显 HUD 像素已迁 WebView 组件（本 change 退役 `hud-survival-feedback` 景）
-- **WHEN** 检查 capture 场景清单
-- **THEN** 生存反馈的呈现验收 MUST 由 `game-overlay-webview` 的前端组件断言与 `frontend/visual` 部件基线承接
-- **AND** 场景顺序约束由「完整场景顺序扩展为 27 项」承载
-
-#### Scenario: 生存反馈场景固定且不污染后续场景
-
-- **GIVEN** 退役场景的状态恢复纪律（临时 predictor、生命、氧气、饥饿和采掘状态在场景结束一并恢复）
-- **WHEN** 保留场景依次运行
-- **THEN** 该纪律 MUST 由保留场景与呈现状态机继续遵守，后续场景 MUST NOT 继承任何夹具值
-
-#### Scenario: 打开背包场景复用同一向外状态栈
-
-- **GIVEN** `inventory-crafting` 保留景验证容器 GPU 保留面
-- **WHEN** 场景呈现打开的背包与状态栈构图
-- **THEN** 状态栈（生命/饥饿/氧气）呈现已迁 WebView，GPU 画面 MUST 只包含容器保留面
-- **AND** 保留面与 WebView 状态栈互不相交的构图由前端组件断言承接
-
-#### Scenario: 合并后的全部正式基线需重新生成并完整复核
-
-- **GIVEN** 常显层退役与容器保留面钉值已落地
-- **WHEN** 显式更新视觉基线
-- **THEN** 系统 MUST 按既有完整顺序重新生成全部 27 张正式 golden
-- **AND** 调用方 MUST 逐张人工复核全部 27 张图像后才能接受更新，且既有双阈值 MUST 保持不变
-
-#### Scenario: 合并基线更新不改变阈值或场景尾序
-
-- **GIVEN** 常显层退役后的基线重生成
-- **WHEN** 检查比较配置与场景尾序
-- **THEN** 既有双阈值 MUST 保持不变，任何差异 MUST 经逐图人工复核而不得通过放宽阈值接受
-- **AND** `far-horizon` MUST 保持倒数第二，`water-underwater` MUST 保持唯一末场景
+- **GIVEN** `snow-cover` 场景夹具（冬季、雪形态降水、预铺 4 档雪层）
+- **WHEN** 完成收敛并抓帧
+- **THEN** 画面 MUST 同时呈现雪白地表（短方块雪层几何）与雪形降水粒子，天空 MUST 带冬季冷色 tint
 
 ### Requirement: 视觉基线覆盖三类容器像素界面
 

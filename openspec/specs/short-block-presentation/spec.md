@@ -5,7 +5,7 @@ TBD - created by archiving change farmland-mesh-top-sink. Update Purpose after a
 ## Requirements
 ### Requirement: 非满格方块按 registry 高度呈现几何
 
-系统 SHALL 让方块 registry 携带每方块的 4-bit 顶面高度原值 `block_top_raw`：`0` 表示满格方块（哨兵），`1..=14` 表示该方块所有可见面的上缘按 `(block_top_raw+1)/16` 下沉，`15` MUST 被输入校验拒绝。携带非零高度的方块（首个消费者为干耕地与湿耕地，填 `14`，即呈现高度 15/16）的顶面与四个侧面的上缘 MUST 呈现在该高度处，与其权威碰撞体一致；其下缘与未下沉方向 MUST 保持整格边界。此类方块 MUST NOT 参与贪心合并，quad 实例 MUST 保持 `u64` / 8 字节。满格方块、流体与植物的既有呈现 MUST 逐位不变。
+系统 SHALL 让方块 registry 携带每方块的 4-bit 顶面高度原值 `block_top_raw`：`0` 表示满格方块（哨兵），`1..=14` 表示该方块所有可见面的上缘按 `(block_top_raw+1)/16` 下沉，`15` MUST 被输入校验拒绝。携带非零高度的方块的顶面与四个侧面的上缘 MUST 呈现在该高度处；其下缘与未下沉方向 MUST 保持整格边界。既有消费者：干耕地与湿耕地填 `14`（呈现高度 15/16，与权威碰撞体一致）；雪层四档填 `1..4`（呈现高度 2/16..5/16，装饰层、无碰撞，视觉高度即档位语义）。此类方块 MUST NOT 参与贪心合并，quad 实例 MUST 保持 `u64` / 8 字节。满格方块、流体与植物的既有呈现 MUST 逐位不变。
 
 #### Scenario: 耕地几何与碰撞体一致
 
@@ -13,6 +13,12 @@ TBD - created by archiving change farmland-mesh-top-sink. Update Purpose after a
 - **WHEN** 该区段被网格化并渲染
 - **THEN** 顶面 quad 与四个侧面 quad 的上缘 MUST 呈现在 y = 15/16 处
 - **AND** 玩家站立其上的脚部位置 MUST 与可见顶面齐平（碰撞体本就是 15/16）
+
+#### Scenario: 雪层档位几何递增
+
+- **GIVEN** 并排的 1..4 档雪层、上方为空气
+- **WHEN** 该区段被网格化并渲染
+- **THEN** 四格顶面 MUST 分别呈现在 y = 2/16、3/16、4/16、5/16 处，逐档可辨
 
 #### Scenario: 下沉方块不贪心合并
 
