@@ -22,6 +22,12 @@ const (
 	maxAvatarParts      = maxAvatars * avatarPartsPerBody
 	avatarInstanceBytes = 96
 
+	// AvatarInstanceBytes 导出 avatar 通道单个实例的定长字节数（列主序 mat4
+	// 64 字节 + 四通道色 16 字节 + 材质层号 4 字节 + 保留 12 字节）：跨包
+	// 消费方（如 capture 雨天场景的编码输出断言）逐实例解码时引用它，不在
+	// 别处复制该字面量。
+	AvatarInstanceBytes = avatarInstanceBytes
+
 	// avatarMaterialSolid 是纯色分支的哨兵材质：与全部有效材质层号不相交，
 	// Rust 侧据此走原纯色路径，像素与变更前逐字节一致。
 	avatarMaterialSolid = ^uint32(0)

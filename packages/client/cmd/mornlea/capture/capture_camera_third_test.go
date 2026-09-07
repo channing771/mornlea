@@ -6,8 +6,9 @@ package capture
 // `applyCameraThirdBackCaptureState` 与 `applyCameraThirdFrontCaptureState`
 // 共用同一眼睛位姿（同世界位置、同朝向），仅 `CameraMode` 不同；呈现复用
 // 已有装配（`resolveRenderCamera` 后拉 + `appendSelfAvatar` 自身身体 +
-// 第三人称 viewmodel 恒 nil），不另起摆拍路径。场景暂不进 `captureScenes`，
-// 由清单扩展任务统一追加；天气不碰（新鲜装配默认晴天）。
+// 第三人称 viewmodel 恒 nil），不另起摆拍路径。场景已进 `captureScenes`
+// （依次紧随 rain-noon）；天气不碰（新鲜装配默认晴天，雨天由公共清场复位），
+// 切走的第三人称同样由后继菜单场景的公共清场复位。
 
 import (
 	"image"
@@ -165,6 +166,9 @@ func TestCameraThirdScenesShowSelfBodyAndFacesThroughFullChain(t *testing.T) {
 		t.Fatalf("抓取 camera-third-back: %v", err)
 	}
 	frontApp := newCaptureSceneRenderApplication(t)
+	if frontApp.Window() != nil {
+		t.Fatal("双机位像素断言必须走无窗口离屏链路，当前存在交互窗口")
+	}
 	frontScene := captureScene{
 		Name: "camera-third-front", WarmupFrames: 8,
 		Prepare: prepareAvatarStage, Apply: applyCameraThirdFrontCaptureState,
@@ -213,14 +217,23 @@ func TestCameraThirdScenesShowSelfBodyAndFacesThroughFullChain(t *testing.T) {
 		}
 	}
 
-	// 确定性：同一场景连抓两次必须零漂移（固定 tick/位姿）。
-	again, err := captureSceneImage(backApp, backScene)
-	if err != nil {
-		t.Fatalf("重复抓取 camera-third-back: %v", err)
-	}
-	if rediff, _, err := compareImages(backImg, again); err != nil {
-		t.Fatal(err)
-	} else if rediff.DiffPixels != 0 {
-		t.Fatalf("同机连跑漂移：%s，想要零漂移", rediff)
+	// 确定性：同一场景连抓两次必须零漂移（固定 tick/位姿），背面与正面各锁一次。
+	for name, tc := range map[string]struct {
+		app   *application.Application
+		scene captureScene
+		img   *image.NRGBA
+	}{
+		"camera-third-back":  {app: backApp, scene: backScene, img: backImg},
+		"camera-third-front": {app: frontApp, scene: frontScene, img: frontImg},
+	} {
+		again, err := captureSceneImage(tc.app, tc.scene)
+		if err != nil {
+			t.Fatalf("重复抓取 %s: %v", name, err)
+		}
+		if rediff, _, err := compareImages(tc.img, again); err != nil {
+			t.Fatal(err)
+		} else if rediff.DiffPixels != 0 {
+			t.Fatalf("%s 同机连跑漂移：%s，想要零漂移", name, rediff)
+		}
 	}
 }

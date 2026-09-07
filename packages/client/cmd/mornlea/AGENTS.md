@@ -66,7 +66,7 @@ packages/client/cmd/mornlea/
 - capture 与 benchmark 都忽略用户材质覆盖（配置强制回落 `config.Defaults()`）、
   不创建交互窗口、也不请求音频设备。
 
-`--capture` 跑的固定场景表住 `capture/capture.go` 的 `captureScenes`（当前 24
+`--capture` 跑的固定场景表住 `capture/capture.go` 的 `captureScenes`（当前 27
 景，完整清单、顺序约束与尾序以 `captureScenes` 与 `capture/AGENTS.md` 为准，
 本总纲不复制会漂移的枚举）。常显 HUD（快捷栏贴条与选中框、状态行、氧气、
 进食轨道、物品名弹条、准星、聊天呈现与命中 marker）的 GPU 呈现已迁

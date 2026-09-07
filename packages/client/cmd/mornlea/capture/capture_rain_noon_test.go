@@ -6,10 +6,11 @@ package capture
 // 种子 42 的固定地形（与橡树林同一批 3×3 生成区块），
 // `applyRainNoonCaptureState` 钉死正午、雪线下机位、雨天权威天气与固定 tick。
 // 本文件只断言夹具数据面与 CPU 侧呈现输入（降水实例、灰化、压暗），
-// golden 基线由后续任务承接；场景暂不进 `captureScenes`（清单扩展另有任务）。
+// golden 基线由后续任务承接；场景已进 `captureScenes`（紧随 mining-crack-heavy）。
 
 import (
 	"bytes"
+	"encoding/binary"
 	"math"
 	"testing"
 
@@ -153,12 +154,35 @@ func TestRainNoonWeatherChainEmitsOnlyRain(t *testing.T) {
 	if again := replayEncoder.EncodeWeatherInstances(nil, rainNoonCameraPos, 0, captureRainNoonServerTick, core.WeatherRain); !bytes.Equal(rainy, again) {
 		t.Fatal("同 tick 降水重放不一致：雨粒子相位没有绑定固定 tick")
 	}
-	// 降水柱半高 10 格（与 render 侧降水列高同值）：柱顶仍在线下，
-	// 整列粒子只能选雨形。
-	const weatherColumnHalfHeight = float32(10)
-	if rainNoonCameraPos.Y()+weatherColumnHalfHeight >= render.WeatherSnowLineY {
+	// 降水柱顶仍在线下：柱半高直接引用 render 侧降水列高的一半，整列粒子
+	// 只能选雨形。
+	if columnTop := rainNoonCameraPos.Y() + render.WeatherColumnHeight/2; columnTop >= render.WeatherSnowLineY {
 		t.Fatalf("降水柱顶 = %v，已触及雪线 %v：高处粒子会选成雪形",
-			rainNoonCameraPos.Y()+weatherColumnHalfHeight, render.WeatherSnowLineY)
+			columnTop, render.WeatherSnowLineY)
+	}
+	// 编码输出逐粒断言雨选形：实例布局与 render 侧 avatar 编码同源（96 字节
+	// 定长：0..64 列主序 mat4、64..80 四通道色），纵向尺度取 Y 基向量长度
+	// （雨丝纵向 0.6 的细丝、雪点 0.09 立方体，判形口径与 render 侧单测同式）；
+	// 本场景柱顶在线下，每粒的世界高度都必须在线下且呈雨形，雪形零容忍。
+	const rainFilamentHeight = float32(0.6)
+	stride := render.AvatarInstanceBytes
+	if len(rainy)%stride != 0 {
+		t.Fatalf("雨天降水流 = %d 字节，不是 %d 字节实例的整数倍", len(rainy), stride)
+	}
+	for index := 0; index < len(rainy)/stride; index++ {
+		base := index * stride
+		f32 := func(offset int) float32 {
+			return math.Float32frombits(binary.LittleEndian.Uint32(rainy[base+offset:]))
+		}
+		if centerY := f32(52); centerY >= render.WeatherSnowLineY {
+			t.Fatalf("粒子 %d 高度 = %v，已触及雪线 %v：该粒会选成雪形",
+				index, centerY, render.WeatherSnowLineY)
+		}
+		yScale := float32(math.Sqrt(float64(f32(16)*f32(16) + f32(20)*f32(20) + f32(24)*f32(24))))
+		if math.Abs(float64(yScale-rainFilamentHeight)) >= 1e-6 {
+			t.Fatalf("粒子 %d 纵向尺度 = %v，想要雨丝 %v（雪形混入）",
+				index, yScale, rainFilamentHeight)
+		}
 	}
 	if gray := render.WeatherSkyGray(core.WeatherRain); gray <= 0 {
 		t.Fatalf("雨天灰度 = %v，想要正值（灰化天空）", gray)

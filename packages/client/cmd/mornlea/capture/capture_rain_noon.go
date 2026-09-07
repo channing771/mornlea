@@ -23,7 +23,8 @@ func prepareRainNoon(app SceneApplication) error {
 
 // applyRainNoonCaptureState 钉死雨天场景的全部呈现状态：正午、雪线下机位与
 // 共享清场复用橡树林（同一地形同一机位，画面差异只来自天气），再经抓帧
-// 路径注入固定雨天。场景暂不进 `captureScenes`，由清单扩展任务统一追加。
+// 路径注入固定雨天。场景已进 `captureScenes`（紧随 mining-crack-heavy），
+// 注入的雨天由后继场景的公共清场复位为晴天。
 func applyRainNoonCaptureState(app SceneApplication) error {
 	if err := applyOakGroveCaptureState(app); err != nil {
 		return err
