@@ -216,8 +216,8 @@ func TestAppendPassiveRenderPresentationsAlignCowHeadingWithPhysicsYaw(t *testin
 			0,
 			float32(-math.Cos(float64(yaw))),
 		}
-		// 用绝对距离比较：`ApproxEqualThreshold` 对近零分量走相对语义
-		// （ε² 与相对除法），正交轴残差 ~1e-8 会被误判为不等。
+		// 用绝对距离比较：mathgl 的 FloatEqualThreshold 对近零分量走
+		// 相对语义（ε² 与相对除法），正交轴残差 ~1e-8 会被误判为不等。
 		if delta := head.Sub(forward).Len(); delta > 1e-5 {
 			t.Fatalf("权威 yaw=%v：渲染 yaw=%v 的头部基=%v，想要物理前进方向 %v（偏差 %v）",
 				yaw, renderYaw, head, forward, delta)
