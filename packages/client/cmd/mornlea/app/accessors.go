@@ -287,6 +287,20 @@ func (a *Application) SetCaptureWeather(kind core.WeatherKind) error {
 	return nil
 }
 
+// SetCaptureSeason 写入抓帧呈现侧的季节镜像两字段（capture-only）：值域口径
+// 与 `Predictor` 和解一致（只接受四季枚举），越界值拒绝且不污染已钉住的
+// 值。直写不受 `worldTimeFrozen` 影响——冻结只拦权威消息对呈现量的覆盖，
+// 抓帧管线在场景 Apply 之后钉自己的值（默认春始分点，昼弧 12000 warp 恒
+// 等、冷色权重 0）；生产代码不得消费本方法。
+func (a *Application) SetCaptureSeason(season core.Season, progress uint8) error {
+	if season > core.SeasonWinter {
+		return fmt.Errorf("capture 季节 %d 越界，想要 0..%d", season, core.SeasonWinter)
+	}
+	a.season = season
+	a.seasonProgress = progress
+	return nil
+}
+
 // InventoryOpen 读取容器/背包 UI 开合状态。
 func (a *Application) InventoryOpen() bool { return a.inventoryOpen }
 

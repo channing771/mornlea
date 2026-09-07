@@ -153,7 +153,18 @@ func TestWeatherSkyColorDesaturatesButKeepsAlpha(t *testing.T) {
 	}
 }
 
-// TestSnowLineMatchesEngineContract 雪线复用既有地表雪线常量：Go 侧判定值
+// TestSnowLineAnchorMatchesSummerClearNoonZeroIsotherm 雪线常量的校准锚语义：
+// 夏至正午、晴天（无降水降温项）下 Y=88 的局部温度恰为雪点 0℃——温度公式
+// 的海拔递减（24 格 × 1.25℃/格 恰抵消 30℃ 基线）与旧静态雪线在同一校准点
+// 连续。本常量已退役为校准锚，不再参与形态判定（判定经
+// `core.PrecipitationIsSnow` 逐粒子求值）。
+func TestSnowLineAnchorMatchesSummerClearNoonZeroIsotherm(t *testing.T) {
+	if got := core.TemperatureAt(0.25, 6000, core.WeatherClear, WeatherSnowLineY); got != 0 {
+		t.Fatalf("夏至正午晴天雪线锚温度 = %v，想要恰为雪点 0℃", got)
+	}
+}
+
+// TestSnowLineMatchesEngineContract 校准锚复用既有地表雪线常量：Go 侧锚值
 // 必须与 Rust 世界生成 `SNOW_LINE` 同值，纯本地只读、不进权威不同步。
 func TestSnowLineMatchesEngineContract(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "engine", "crates", "mornlea_engine", "src", "worldgen.rs"))
@@ -184,7 +195,7 @@ func TestSnowLineMatchesEngineContract(t *testing.T) {
 // TestBuildWeatherPartsClearEmitsNothing 晴天无粒子：输出为空且不触碰复用
 // 缓冲的已有内容长度之外。
 func TestBuildWeatherPartsClearEmitsNothing(t *testing.T) {
-	parts := BuildWeatherParts(nil, mgl32.Vec3{0, 70, 0}, 0, 1234, core.WeatherClear)
+	parts := BuildWeatherParts(nil, mgl32.Vec3{0, 70, 0}, 0, 1234, core.WeatherClear, 0, 6000)
 	if len(parts) != 0 {
 		t.Fatalf("晴天粒子数 = %d，想要 0", len(parts))
 	}
@@ -195,56 +206,74 @@ func TestBuildWeatherPartsClearEmitsNothing(t *testing.T) {
 // 会在晴天误绘降水）。
 func TestBuildWeatherPartsClearTruncatesReusedBuffer(t *testing.T) {
 	cam := mgl32.Vec3{0, 40, 0}
-	dst := BuildWeatherParts(nil, cam, 0, 500, core.WeatherRain)
+	dst := BuildWeatherParts(nil, cam, 0, 500, core.WeatherRain, 0, 6000)
 	if len(dst) != WeatherMaxParticles {
 		t.Fatalf("雨天粒子数 = %d，想要 %d", len(dst), WeatherMaxParticles)
 	}
-	if cleared := BuildWeatherParts(dst, cam, 0, 501, core.WeatherClear); len(cleared) != 0 {
+	if cleared := BuildWeatherParts(dst, cam, 0, 501, core.WeatherClear, 0, 6000); len(cleared) != 0 {
 		t.Fatalf("复用缓冲的晴天粒子数 = %d，想要 0", len(cleared))
 	}
 }
 
-// TestBuildWeatherPartsSelectsFormByHeightRelativeToSnowline 降水形态只由
-// 本地高度相对雪线确定：整列在线上的相机全为雪、整列在线下的全为雨，跨线
-// 相机按粒子世界高度逐粒分形（spec 高度决定雨雪形态场景）。
-func TestBuildWeatherPartsSelectsFormByHeightRelativeToSnowline(t *testing.T) {
-	high := BuildWeatherParts(nil, mgl32.Vec3{0, 120, 0}, 0, 500, core.WeatherRain)
-	if len(high) != WeatherMaxParticles {
-		t.Fatalf("高处粒子数 = %d，想要 %d", len(high), WeatherMaxParticles)
+// TestBuildWeatherPartsSelectsFormByLocalTemperature 降水形态由共享温度公式的
+// 局部温度逐粒子确定（spec「局部温度决定雨雪形态」）：冬季低地与夏季高山
+// 全列为雪、分点低地全列为雨；跨温度边界机位按粒子世界高度逐粒分形。
+func TestBuildWeatherPartsSelectsFormByLocalTemperature(t *testing.T) {
+	// 冬季低地（相机 Y=70，柱 (60,80]）：冬至正午海平面 −8℃、雨再 −4℃、
+	// 海拔递减只更冷，全列温度远低于雪点。
+	winter := BuildWeatherParts(nil, mgl32.Vec3{0, 70, 0}, 0, 500, core.WeatherRain, 0.75, 6000)
+	if len(winter) != WeatherMaxParticles {
+		t.Fatalf("冬季低地粒子数 = %d，想要 %d", len(winter), WeatherMaxParticles)
 	}
-	for index, part := range high {
+	for index, part := range winter {
 		if !isSnowPart(part) {
-			t.Fatalf("雪线上方粒子 %d 不是雪形：%+v", index, part)
+			t.Fatalf("冬季低地粒子 %d 不是雪形：%+v", index, part)
 		}
 	}
-	low := BuildWeatherParts(nil, mgl32.Vec3{0, 40, 0}, 0, 500, core.WeatherThunder)
-	if len(low) != WeatherMaxParticles {
-		t.Fatalf("低处粒子数 = %d，想要 %d", len(low), WeatherMaxParticles)
+	// 夏季高山（相机 Y=95，柱 (85,105]）：夏至正午海平面 30℃ 被 21 格以上海
+	// 拔递减压过雪点（spec 钢锚：夏至正午 Y=88 恰 0℃，雨再 −4℃），全列为雪。
+	summer := BuildWeatherParts(nil, mgl32.Vec3{0, 95, 0}, 0, 500, core.WeatherRain, 0.25, 6000)
+	if len(summer) != WeatherMaxParticles {
+		t.Fatalf("夏季高山粒子数 = %d，想要 %d", len(summer), WeatherMaxParticles)
 	}
-	for index, part := range low {
+	for index, part := range summer {
+		if !isSnowPart(part) {
+			t.Fatalf("夏季高山粒子 %d 不是雪形：%+v", index, part)
+		}
+	}
+	// spec 场景逐点：夏至正午雨、粒子 Y=90 的局部温度 −6.5℃，必为雪。
+	if !core.PrecipitationIsSnow(0.25, 6000, core.WeatherRain, 90) {
+		t.Fatal("夏至正午雨 Y=90 未判为雪（spec 夏季高山按温度下雪场景）")
+	}
+	// 分点低地（相机 Y=59，柱 (49,69]）：分点正午雨的局部温度
+	// 11−4−1.25·(y−64) 在柱内恒为正（温度边界 y=69.6），全列为雨。
+	spring := BuildWeatherParts(nil, mgl32.Vec3{0, 59, 0}, 0, 500, core.WeatherRain, 0, 6000)
+	if len(spring) != WeatherMaxParticles {
+		t.Fatalf("分点低地粒子数 = %d，想要 %d", len(spring), WeatherMaxParticles)
+	}
+	for index, part := range spring {
 		if isSnowPart(part) {
-			t.Fatalf("雪线下方粒子 %d 不是雨形：%+v", index, part)
+			t.Fatalf("分点低地粒子 %d 不是雨形：%+v", index, part)
 		}
 	}
-	// 跨线相机（雪线 ± 列高内）：两种形态必须同时出现，且分界恰为雪线。
-	mixed := BuildWeatherParts(nil, mgl32.Vec3{0, WeatherSnowLineY + 2, 0}, 0, 500, core.WeatherRain)
+	// 跨温度边界机位（分点正午、相机 Y=72、柱 (62,82]）：两种形态并存，且每
+	// 粒形态恰等于 `PrecipitationIsSnow` 在该粒子世界高度的判定。
+	mixed := BuildWeatherParts(nil, mgl32.Vec3{0, 72, 0}, 0, 500, core.WeatherRain, 0, 6000)
 	var snow, rain int
 	for _, part := range mixed {
 		center := part.transform.Mul4x1(mgl32.Vec4{0, 0, 0, 1})
-		if center.Y() >= WeatherSnowLineY {
+		wantSnow := core.PrecipitationIsSnow(0, 6000, core.WeatherRain, center.Y())
+		if wantSnow != isSnowPart(part) {
+			t.Fatalf("粒子 y=%v 的形态与温度判定不一致（wantSnow=%v）", center.Y(), wantSnow)
+		}
+		if wantSnow {
 			snow++
-			if !isSnowPart(part) {
-				t.Fatalf("雪线上粒子不是雪形：y=%v", center.Y())
-			}
 		} else {
 			rain++
-			if isSnowPart(part) {
-				t.Fatalf("雪线下粒子不是雨形：y=%v", center.Y())
-			}
 		}
 	}
 	if snow == 0 || rain == 0 {
-		t.Fatalf("跨线相机 snow=%d rain=%d，想要两种形态同时出现", snow, rain)
+		t.Fatalf("跨温度边界机位 snow=%d rain=%d，想要两种形态同时出现", snow, rain)
 	}
 }
 
@@ -253,8 +282,8 @@ func TestBuildWeatherPartsSelectsFormByHeightRelativeToSnowline(t *testing.T) {
 // 不存逐帧状态），同输入重放逐字节一致。
 func TestBuildWeatherPartsFallsWithAuthoritativeTick(t *testing.T) {
 	cam := mgl32.Vec3{0, 40, 0}
-	before := BuildWeatherParts(nil, cam, 0, 100, core.WeatherRain)
-	after := BuildWeatherParts(nil, cam, 0, 101, core.WeatherRain)
+	before := BuildWeatherParts(nil, cam, 0, 100, core.WeatherRain, 0, 6000)
+	after := BuildWeatherParts(nil, cam, 0, 101, core.WeatherRain, 0, 6000)
 	if len(before) != len(after) {
 		t.Fatalf("tick 前后粒子数 %d → %d，想要不变", len(before), len(after))
 	}
@@ -269,7 +298,7 @@ func TestBuildWeatherPartsFallsWithAuthoritativeTick(t *testing.T) {
 	if fell == 0 {
 		t.Fatal("tick 前进后没有粒子下落")
 	}
-	replay := BuildWeatherParts(nil, cam, 0, 100, core.WeatherRain)
+	replay := BuildWeatherParts(nil, cam, 0, 100, core.WeatherRain, 0, 6000)
 	for index := range before {
 		if replay[index] != before[index] {
 			t.Fatalf("粒子 %d 同输入重放不一致", index)
@@ -281,7 +310,7 @@ func TestBuildWeatherPartsFallsWithAuthoritativeTick(t *testing.T) {
 // 固定上限数量、水平/纵向偏移有界（相机前方有界数量）。
 func TestBuildWeatherPartsStaysInCameraForwardBox(t *testing.T) {
 	cam := mgl32.Vec3{100, 60, -40}
-	parts := BuildWeatherParts(nil, cam, 0, 77, core.WeatherThunder)
+	parts := BuildWeatherParts(nil, cam, 0, 77, core.WeatherThunder, 0, 6000)
 	if len(parts) != WeatherMaxParticles {
 		t.Fatalf("粒子数 = %d，想要固定上限 %d", len(parts), WeatherMaxParticles)
 	}
@@ -301,11 +330,11 @@ func TestBuildWeatherPartsStaysInCameraForwardBox(t *testing.T) {
 // `weather_streams_test.go`。
 func TestBuildWeatherPartsSteadyFrameZeroAlloc(t *testing.T) {
 	cam := mgl32.Vec3{0, 40, 0}
-	parts := BuildWeatherParts(make([]avatarPart, 0, WeatherMaxParticles), cam, 0, 99, core.WeatherRain)
+	parts := BuildWeatherParts(make([]avatarPart, 0, WeatherMaxParticles), cam, 0, 99, core.WeatherRain, 0, 6000)
 	buf := make([]byte, WeatherMaxParticles*avatarInstanceBytes)
 	encodeAvatarPartsInto(buf, parts)
 	allocs := testing.AllocsPerRun(20, func() {
-		reused := BuildWeatherParts(parts[:0], cam, 0, 99, core.WeatherRain)
+		reused := BuildWeatherParts(parts[:0], cam, 0, 99, core.WeatherRain, 0, 6000)
 		encodeAvatarPartsInto(buf, reused)
 	})
 	if allocs != 0 {

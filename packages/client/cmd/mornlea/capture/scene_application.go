@@ -49,6 +49,12 @@ type SceneApplication interface {
 	// 的写口（值域口径与 Predictor 和解一致），生产帧循环不消费它。
 	Weather() core.WeatherKind
 	SetCaptureWeather(kind core.WeatherKind) error
+	// SetCaptureSeason 是 capture-only 的季节镜像写口（值域口径与 Predictor
+	// 和解一致，越界拒绝）：抓帧管线默认把镜像 Season/SeasonProgress 钉在
+	// 春始分点（SeasonSpring/0），呈现侧 yearPhase 因此为 0——昼弧 12000
+	// warp 恒等、冷色 tint 权重 0，golden 不随真实世界（seed 派生）的季节
+	// 相位漂移。生产帧循环不消费它。
+	SetCaptureSeason(season core.Season, progress uint8) error
 	SetCenter(center core.ChunkPos)
 	SetBlockTargetReset(reset bool)
 	// 菜单全景（menu-vista）：PinVolatile 在收敛后钉住自转时刻，收敛判据

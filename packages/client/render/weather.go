@@ -10,9 +10,12 @@ import (
 )
 
 const (
-	// WeatherSnowLineY 是降水形态判定的雪线高度：粒子世界高度在线上为雪、
-	// 在线下为雨。它复用既有地表雪线常量（Rust 世界生成的 `SNOW_LINE`），
-	// 纯本地只读计算，不进权威状态、不同步，由单测钉住两端同值。
+	// WeatherSnowLineY 是降水形态判定的校准锚而非判定输入：Y=88 是「夏至
+	// 正午、晴天（无降水降温项）」下共享温度公式恰好抵消到雪点 0℃ 的等效
+	// 雪线（海平面 30℃ 基线 − 24 格 × 1.25℃/格）。它复用既有地表雪线常量
+	//（Rust 世界生成的 `SNOW_LINE`），把温度公式的海拔递减与旧静态雪线行为
+	// 钉在同一校准点；形态判定本身经 `core.PrecipitationIsSnow` 逐粒子求值，
+	// 本常量不再参与判定，由单测钉住两端同值仅供校准对照。
 	WeatherSnowLineY = float32(88)
 	// WeatherMaxParticles 是单帧降水粒子的固定上限：相机周围有界体内的确定
 	// 性数量，与天气稳定与否无关，绘制侧超限整帧拒绝。
@@ -106,7 +109,8 @@ const (
 	// 回绕，无堆积（位置是序号与 tick 的纯函数，不存逐帧状态）。
 	weatherColumnHeight = float32(20)
 	// weatherFallPerTick 是降水下落速度（格/权威 tick），雨雪同速：形态只由
-	// 高度选形，速度不参与区分，保持位置为 tick 的闭式纯函数。
+	// 局部温度（共享公式按粒子高度求值）选形，速度不参与区分，保持位置为
+	// tick 的闭式纯函数。
 	weatherFallPerTick = float32(0.55)
 	// weatherSalt 是降水散列的固定盐：把序号混合到三轴偏移域。
 	weatherSalt = uint32(0x85EBCA6B)
@@ -132,9 +136,11 @@ func weatherHash(index int) uint32 {
 // BuildWeatherParts 把降水编码为 avatar 通道的实心小 cuboid：晴天返回空，
 // 雨/雷暴返回固定上限数量。位置是（序号，权威 tick）的纯函数——水平按散列
 // 铺展在相机前方有界体内（含前向偏置），纵向随 tick 下落并在列内回绕；形态
-// 只由粒子当前世界高度相对雪线确定（线上雪点、线下雨丝），雪点叠加小幅水平
-// 摆动。调用方复用 `dst` 缓冲时稳定天气帧零分配。
-func BuildWeatherParts(dst []avatarPart, cam mgl32.Vec3, yaw float32, serverTick uint64, kind core.WeatherKind) []avatarPart {
+// 由共享温度公式按粒子当前世界高度本地求值（`core.PrecipitationIsSnow`，
+// 输入 yearPhase/effPhase 由 app 从镜像季节与权威时间派生传入），温度不高于
+// 雪点 0℃ 为雪点（叠加小幅水平摆动）、以上为雨丝——冬季低地与夏季高山都
+// 自然落雪，同季反例位置保持雨形。调用方复用 `dst` 缓冲时稳定天气帧零分配。
+func BuildWeatherParts(dst []avatarPart, cam mgl32.Vec3, yaw float32, serverTick uint64, kind core.WeatherKind, yearPhase float64, effPhase uint16) []avatarPart {
 	if kind != core.WeatherRain && kind != core.WeatherThunder {
 		return dst[:0]
 	}
@@ -155,7 +161,7 @@ func BuildWeatherParts(dst []avatarPart, cam mgl32.Vec3, yaw float32, serverTick
 		center := cam.Add(right.Mul(lateral)).Add(forward.Mul(depth))
 		phase := y01*weatherColumnHeight + fall
 		center[1] = cam.Y() + weatherColumnHeight/2 - float32(math.Mod(float64(phase), float64(weatherColumnHeight)))
-		if center.Y() >= WeatherSnowLineY {
+		if core.PrecipitationIsSnow(yearPhase, effPhase, kind, center.Y()) {
 			// 雪点：小立方体 + 随 tick 的水平摆动（同 tick 重放一致）。
 			sway := 0.4 * float32(math.Sin(2*math.Pi*float64((serverTick+uint64(hash&31))%32)/32))
 			center[0] += sway

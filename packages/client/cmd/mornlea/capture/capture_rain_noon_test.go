@@ -90,6 +90,11 @@ func TestRainNoonApplyPinsNoonRainAndFixedTick(t *testing.T) {
 		t.Fatalf("预测器天气 = %d/ready=%v，想要雨天 %d/true（注入必须经预测器接受口径）",
 			weather, ready, core.WeatherRain)
 	}
+	// 场景钉分点正午：注入的 PlayerState 未携带季节字段（零值即春始），
+	// 呈现侧 yearPhase 必须为 0——昼弧 12000 warp 恒等、冷色 tint 权重 0。
+	if got := app.YearPhase(); got != 0 {
+		t.Fatalf("rain-noon 的 yearPhase = %v，想要 0（分点正午）", got)
+	}
 	if got := app.RemotePlayers().Presentations(); len(got) != 0 {
 		t.Fatalf("远端玩家未清空: %+v", got)
 	}
@@ -136,54 +141,59 @@ func TestRainNoonPrepareLoadsFixedSeedTerrain(t *testing.T) {
 	}
 }
 
-// TestRainNoonWeatherChainEmitsOnlyRain 钉住雨天三要素的 CPU 侧输入：降水
-// 实例非空且晴天为空、同 tick 重放逐字节一致；降水柱顶仍在雪线之下，
-// 逐粒选形不可能出现雪（选形逻辑本身由 render 包单测覆盖）；天空灰化为正、
-// 露天亮度被压暗。
-func TestRainNoonWeatherChainEmitsOnlyRain(t *testing.T) {
+// TestRainNoonWeatherChainFormsFollowLocalTemperature 钉住雨天三要素的 CPU 侧
+// 输入：降水实例非空且晴天为空、同 tick 重放逐字节一致；场景钉分点正午
+// （yearPhase=0、effPhase=6000），逐粒形态必须等于共享温度公式在该粒子世界
+// 高度的判定——分点正午雨的局部温度为 11−4−1.25·(y−64)，雪形边界在
+// y=64+7/1.25=69.6；机位 75.5、降水柱 (65.5,85.5] 跨越边界，低处雨丝与高处
+// 雪点并存（温度边界由共享公式唯一决定，客户端逐粒子本地求值）。天空灰化
+// 为正、露天亮度被压暗。
+func TestRainNoonWeatherChainFormsFollowLocalTemperature(t *testing.T) {
 	var encoder render.InstanceEncoder
-	rainy := encoder.EncodeWeatherInstances(nil, rainNoonCameraPos, 0, captureRainNoonServerTick, core.WeatherRain)
+	rainy := encoder.EncodeWeatherInstances(nil, rainNoonCameraPos, 0, captureRainNoonServerTick, core.WeatherRain, 0, 6000)
 	if len(rainy) == 0 {
-		t.Fatal("雨天降水实例为空：雨线粒子没有进入呈现链路")
+		t.Fatal("雨天降水实例为空：降水粒子没有进入呈现链路")
 	}
 	var clearEncoder render.InstanceEncoder
-	if clear := clearEncoder.EncodeWeatherInstances(nil, rainNoonCameraPos, 0, captureRainNoonServerTick, core.WeatherClear); len(clear) != 0 {
+	if clear := clearEncoder.EncodeWeatherInstances(nil, rainNoonCameraPos, 0, captureRainNoonServerTick, core.WeatherClear, 0, 6000); len(clear) != 0 {
 		t.Fatalf("晴天降水实例 = %d 字节，想要 0", len(clear))
 	}
 	var replayEncoder render.InstanceEncoder
-	if again := replayEncoder.EncodeWeatherInstances(nil, rainNoonCameraPos, 0, captureRainNoonServerTick, core.WeatherRain); !bytes.Equal(rainy, again) {
-		t.Fatal("同 tick 降水重放不一致：雨粒子相位没有绑定固定 tick")
+	if again := replayEncoder.EncodeWeatherInstances(nil, rainNoonCameraPos, 0, captureRainNoonServerTick, core.WeatherRain, 0, 6000); !bytes.Equal(rainy, again) {
+		t.Fatal("同 tick 降水重放不一致：粒子相位没有绑定固定 tick")
 	}
-	// 降水柱顶仍在线下：柱半高直接引用 render 侧降水列高的一半，整列粒子
-	// 只能选雨形。
-	if columnTop := rainNoonCameraPos.Y() + render.WeatherColumnHeight/2; columnTop >= render.WeatherSnowLineY {
-		t.Fatalf("降水柱顶 = %v，已触及雪线 %v：高处粒子会选成雪形",
-			columnTop, render.WeatherSnowLineY)
-	}
-	// 编码输出逐粒断言雨选形：实例布局与 render 侧 avatar 编码同源（96 字节
-	// 定长：0..64 列主序 mat4、64..80 四通道色），步长直接引用天气侧常量
-	// （与 avatar 通道同源同值，不在别处复制该字面量）；纵向尺度取 Y 基向量
+	// 逐粒断言形态恰等于温度判定：实例布局与 render 侧 avatar 编码同源（96
+	// 字节定长：0..64 列主序 mat4、64..80 四通道色），步长直接引用天气侧常量
+	//（与 avatar 通道同源同值，不在别处复制该字面量）；纵向尺度取 Y 基向量
 	// 长度（雨丝纵向 0.6 的细丝、雪点 0.09 立方体，判形口径与 render 侧单测
-	// 同式）；本场景柱顶在线下，每粒的世界高度都必须在线下且呈雨形，雪形零容忍。
+	// 同式）。
 	const rainFilamentHeight = float32(0.6)
 	stride := render.WeatherInstanceBytes
 	if len(rainy)%stride != 0 {
 		t.Fatalf("雨天降水流 = %d 字节，不是 %d 字节实例的整数倍", len(rainy), stride)
 	}
+	var snow, rain int
 	for index := 0; index < len(rainy)/stride; index++ {
 		base := index * stride
 		f32 := func(offset int) float32 {
 			return math.Float32frombits(binary.LittleEndian.Uint32(rainy[base+offset:]))
 		}
-		if centerY := f32(52); centerY >= render.WeatherSnowLineY {
-			t.Fatalf("粒子 %d 高度 = %v，已触及雪线 %v：该粒会选成雪形",
-				index, centerY, render.WeatherSnowLineY)
-		}
+		centerY := f32(52)
+		wantSnow := core.PrecipitationIsSnow(0, 6000, core.WeatherRain, centerY)
 		yScale := float32(math.Sqrt(float64(f32(16)*f32(16) + f32(20)*f32(20) + f32(24)*f32(24))))
-		if math.Abs(float64(yScale-rainFilamentHeight)) >= 1e-6 {
-			t.Fatalf("粒子 %d 纵向尺度 = %v，想要雨丝 %v（雪形混入）",
-				index, yScale, rainFilamentHeight)
+		isSnow := math.Abs(float64(yScale-rainFilamentHeight)) >= 1e-6
+		if isSnow != wantSnow {
+			t.Fatalf("粒子 %d 高度 %v 的形态与温度判定不一致（wantSnow=%v）", index, centerY, wantSnow)
 		}
+		if wantSnow {
+			snow++
+		} else {
+			rain++
+		}
+	}
+	// 降水柱跨越分点正午的温度边界（69.6）：两种形态必须并存。
+	if snow == 0 || rain == 0 {
+		t.Fatalf("分点正午降水形态 snow=%d rain=%d，想要跨温度边界两种形态并存", snow, rain)
 	}
 	if gray := render.WeatherSkyGray(core.WeatherRain); gray <= 0 {
 		t.Fatalf("雨天灰度 = %v，想要正值（灰化天空）", gray)

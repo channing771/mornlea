@@ -235,9 +235,19 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	// 由绝对时间驱动）;ViewProj 及其逆矩阵同样只计算一次。全景相位钉死在
 	// 正午，昼夜呈现不随任何权威时间漂移。
 	worldTime, dayPhaseOffset := a.worldTimeTicks, a.dayPhaseOffset
+	// yearPhase 由镜像 Season+SeasonProgress 量化重建（`seasonalYearPhase`），
+	// 驱动昼弧 warp、冬季冷色 tint 与降水形态；全景同样钉分点（与钉死正午
+	// 同一纪律：菜单底图不随权威季节相位漂移）。
+	yearPhase := a.YearPhase()
 	if vista != nil {
 		worldTime, dayPhaseOffset = menuVistaWorldTimeTicks, 0
+		yearPhase = 0
 	}
+	// 季节化显示相位经全仓唯一 warp 入口求出：昼夜曲线与降水形态的温度输入
+	// 消费同一份 effPhase，不再各自取线性相位。分点（昼弧 12000）下逐值恒等
+	// 于线性相位。
+	dayArc := core.DayArcTicks(yearPhase)
+	effPhase := core.EffectiveDayPhase(worldTime, dayPhaseOffset, dayArc)
 	// 天气呈现只消费最后确认的权威天气（与世界时间同一接受纪律）：雨/雷暴
 	// 压暗昼夜亮度上限并灰化天空，雷暴叠加固定上限的闪光；晴天恢复既有天空
 	// 与亮度。全景相位强制晴天：全景没有权威天气，前序会话的天气不得渗入
@@ -246,7 +256,7 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	if vista != nil {
 		weather = core.WeatherClear
 	}
-	dayNight := render.DayNightAt(worldTime, dayPhaseOffset)
+	dayNight := render.DayNightAt(worldTime, dayPhaseOffset, yearPhase)
 	daylight := render.ApplyWeatherDaylight(dayNight.Daylight, weather, a.serverTick)
 	skyColor := render.WeatherSkyColor(dayNight.ClearColor, weather)
 	cloud := render.CloudOffsetAt(worldTime)
@@ -323,8 +333,9 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		return false, fmt.Errorf("准备第一人称双手: %w", err)
 	}
 	// 降水：位置是（序号，权威 tick）的纯函数、无跨帧状态，晴天两段恒为空
-	// （帧字节与天气引入前逐位一致）；雨/雷暴形态只由粒子高度相对雪线选形。
-	a.weatherStream = a.entityEncoder.EncodeWeatherInstances(a.weatherStream, cam.Pos, cam.Yaw, a.serverTick, weather)
+	// （帧字节与天气引入前逐位一致）；雨/雷暴形态由共享温度公式按粒子高度
+	// 本地求值（yearPhase/effPhase 与昼夜曲线同源）。
+	a.weatherStream = a.entityEncoder.EncodeWeatherInstances(a.weatherStream, cam.Pos, cam.Yaw, a.serverTick, weather, yearPhase, effPhase)
 	a.weatherState = render.EncodeWeatherState(a.weatherState, weather)
 
 	right := mgl32.Vec3{

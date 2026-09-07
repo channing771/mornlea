@@ -864,6 +864,18 @@ func captureOne(app SceneApplication, dir string, scene captureScene, updateGold
 	return err
 }
 
+// pinCaptureSeasonEquinox 把抓帧呈现侧的季节镜像钉在春始分点
+// （SeasonSpring/0 → yearPhase=0）。真实服务端的季节相位由 seed 派生、随
+// 加载时长推进，预热帧期间 drain 进镜像的值逐进程漂移；昼弧 warp、冷色
+// tint 与降水形态若直接消费它会 golden 翻色。分点锚下昼弧 12000、warp 恒
+// 等、冷色权重 0——昼夜基线回到无季节形态，降水形态按「分点 + 场景钉死
+// 的世界时间」由共享温度公式求值。与 `SetCaptureWeather` 同纪律：
+// capture-only 直写、不受冻结开关影响；必须在场景 Apply（最后一次 drain）
+// 之后调用，否则会被后续权威消息覆盖。
+func pinCaptureSeasonEquinox(app SceneApplication) error {
+	return app.SetCaptureSeason(core.SeasonSpring, 0)
+}
+
 // `captureSceneImage` 只完成既有场景的预热、状态装入、收敛和回读，不写文件。
 // update control 与正式 `captureOne` 共用它，保证两条路径没有第二套场景渲染逻辑。
 func captureSceneImage(app SceneApplication, scene captureScene) (*image.NRGBA, error) {
@@ -898,6 +910,11 @@ func captureSceneImage(app SceneApplication, scene captureScene) (*image.NRGBA, 
 		app.SetMenuPhase(application.MenuPhaseMenu)
 	default:
 		app.SetMenuPhase(application.MenuPhaseGame)
+	}
+	// 季节相位锚在菜单相位之后、收敛循环之前钉住：Apply 之后不再 drain，
+	// 钉值不会被权威消息覆盖；所有场景（含菜单全景）统一回到分点基线。
+	if err := pinCaptureSeasonEquinox(app); err != nil {
+		return nil, fmt.Errorf("钉住抓帧季节相位: %w", err)
 	}
 	settleDeadline := time.Now().Add(captureSettleTimeout)
 	for i := 0; ; i++ {
