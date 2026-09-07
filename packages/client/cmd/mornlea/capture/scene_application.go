@@ -45,6 +45,10 @@ type SceneApplication interface {
 	// 在收敛帧期间保持不被服务端时间改写(服务端时间随真实时间前进,最终
 	// 帧的昼夜参数会随进程启动漂移)。
 	SetWorldTimeFrozen(frozen bool)
+	// Weather 读取抓帧呈现侧的天气输入；SetCaptureWeather 是 capture-only
+	// 的写口（值域口径与 Predictor 和解一致），生产帧循环不消费它。
+	Weather() core.WeatherKind
+	SetCaptureWeather(kind core.WeatherKind) error
 	SetCenter(center core.ChunkPos)
 	SetBlockTargetReset(reset bool)
 	// 菜单全景（menu-vista）：PinVolatile 在收敛后钉住自转时刻，收敛判据

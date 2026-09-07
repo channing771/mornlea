@@ -271,6 +271,22 @@ func (a *Application) SetWorldTimeTicks(ticks uint64) { a.worldTimeTicks = ticks
 // 画面上整片翻色。`SetWorldTimeTicks` 直写不受冻结影响,场景仍可换钉值。
 func (a *Application) SetWorldTimeFrozen(frozen bool) { a.worldTimeFrozen = frozen }
 
+// Weather 读取抓帧呈现侧的天气输入：生产帧循环只经 `DrainServerMessages`
+// 按更新 tick 纪律推进它，抓帧场景经 `SetCaptureWeather` 直写。
+func (a *Application) Weather() core.WeatherKind { return a.weather }
+
+// SetCaptureWeather 写入抓帧呈现侧的天气输入（capture-only）：值域口径与
+// `Predictor` 和解一致（只接受晴/雨/雷暴三态），越界值拒绝且不污染已钉住
+// 的值。直写不受 `worldTimeFrozen` 影响——冻结只拦权威消息对呈现量的覆盖，
+// 场景在 `Apply` 里换钉自己的值；生产代码不得消费本方法。
+func (a *Application) SetCaptureWeather(kind core.WeatherKind) error {
+	if kind > core.WeatherThunder {
+		return fmt.Errorf("capture 天气 %d 越界，想要 0..%d", kind, core.WeatherThunder)
+	}
+	a.weather = kind
+	return nil
+}
+
 // InventoryOpen 读取容器/背包 UI 开合状态。
 func (a *Application) InventoryOpen() bool { return a.inventoryOpen }
 
