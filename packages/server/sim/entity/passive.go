@@ -67,7 +67,10 @@ type passiveState struct {
 	// 发时记录的草方块坐标：结算只写这一格，瞬态内存字段，不进快照或存档。
 	grazeTicks uint8
 	grazePos   core.BlockPos
-	fresh      bool
+	// snowFootprint 是踩雪脚印的瞬态累计器（见 snow_footprint.go）：与逃跑、
+	// 吃草一样是运行时派生物，不进快照或存档，重启后从零开始。
+	snowFootprint snowFootprintTracker
+	fresh         bool
 }
 
 // passiveSet 是按 `id` 严格升序维护的被动牛集合。切片容量在构造时按上限
@@ -276,6 +279,13 @@ func (engine *engineContext) advancePassiveMovement() {
 		if outsideHomeNeighborhood(entry.home, entry.state.Position) {
 			entry.state = previous
 		}
+		// 落足水平位移累计进脚印判定（snow_footprint.go）：牛与玩家共用同一
+		// helper；邻域回滚后位移为零，天然不累计。写入与玩家侧同在
+		// `SettleSnowFootprints` 的写入区统一结算。
+		engine.noteSnowFootprint(
+			&entry.snowFootprint, entry.dimension,
+			previous.Position, entry.state.Position, entry.state.OnGround,
+		)
 		index++
 	}
 }

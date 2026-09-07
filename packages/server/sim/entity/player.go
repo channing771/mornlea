@@ -50,6 +50,9 @@ type playerState struct {
 	// 身体浸没时它被逐 tick 重置到当前高度，因此水中不会累积出摔落伤害。
 	// 落地、传送、重生、维度 reset 都会把它重置为当前高度。
 	peakY float32
+	// snowFootprint 是踩雪脚印的瞬态累计器（见 snow_footprint.go）：不进快
+	// 照、哈希或存档，位置跳变（重生/传送）随 `beginReset` 清零。
+	snowFootprint snowFootprintTracker
 	// ticksSinceDamage 是自最后一次受伤以来连续未受伤的 tick 数，瞬态字段，
 	// 不持久化、不进入快照/哈希；满血时不推进。见 health_regen.go。
 	ticksSinceDamage uint32
@@ -592,6 +595,13 @@ func (engine *engineContext) advanceActivePlayers() {
 		} else if y := player.state.Position.Y(); y > player.peakY {
 			player.peakY = y
 		}
+		// 落足水平位移累计进脚印判定（snow_footprint.go）：与踩踏收集同处物
+		// 理阶段，只累计与登记候选，削雪写入由 `SettleSnowFootprints` 在写入
+		// 区统一完成。
+		engine.noteSnowFootprint(
+			&player.snowFootprint, session.dimension,
+			positionBeforeStep, player.state.Position, player.state.OnGround,
+		)
 		engine.updateSafeLocation(session)
 	}
 }
@@ -748,6 +758,8 @@ func (player *playerState) beginReset() {
 	// 重生一律清醒：入睡位不跨「待重生」窗口保留，否则重生即睡会让下一次
 	// 全员跳夜判定混入一个不在世界里的玩家。
 	player.sleeping = false
+	// 位置跳变作废脚印累计：残留里程会让重生后的第一步过早采样落足格。
+	player.snowFootprint = snowFootprintTracker{}
 	player.reset = false
 	player.inventoryDirty = true
 	player.nextCandidate = 0

@@ -144,6 +144,9 @@ func (engine *Engine) StepWithTunables(tickTunables TickTunables) TickResult {
 	engine.realm.AdvanceFarmlandMoisture(active, environment)
 	engine.notifyStepPhase(phaseCropAdvance)
 	tick.SettleTramples()
+	// 雪层脚印与耕地踩踏同域结算：两类收集都发生在更早的阶段（玩家物理、被
+	// 动牛推进），统一在随机 tick 之前落块，本 tick 被削低的雪层不再参与抽样。
+	tick.SettleSnowFootprints()
 	engine.realm.AdvanceCrops(active, pending)
 
 	tick.FinishWorld(&result)
