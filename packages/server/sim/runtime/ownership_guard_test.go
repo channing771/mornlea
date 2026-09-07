@@ -67,6 +67,7 @@ func TestOwnershipAnalyzerRejectsSyntheticViolations(t *testing.T) {
 					tick.AdvanceHostiles(nil, nil)
 					tick.SettleGameplay(nil)
 					tick.SettleTramples()
+					tick.SettleSnowFootprints()
 					tick.FinishWorld(nil)
 				}
 				func applyRealmStages(*Engine) {
@@ -107,6 +108,7 @@ func TestOwnershipAnalyzerRejectsSyntheticViolations(t *testing.T) {
 					tick.AdvanceHostiles(nil, nil)
 					tick.SettleGameplay(nil)
 					tick.SettleTramples()
+					tick.SettleSnowFootprints()
 					tick.FinishWorld(nil)
 				}
 				func applyRealmStages() {
@@ -146,6 +148,7 @@ func TestOwnershipAnalyzerRejectsSyntheticViolations(t *testing.T) {
 					tick.AdvanceHostiles(nil, nil)
 					tick.SettleGameplay(nil)
 					tick.SettleTramples()
+					tick.SettleSnowFootprints()
 					tick.FinishWorld(nil)
 				}
 				func applyRealmStages() {
@@ -181,6 +184,7 @@ func TestOwnershipAnalyzerRejectsSyntheticViolations(t *testing.T) {
 						tick.AdvanceHostiles(nil, nil)
 						tick.SettleGameplay(nil)
 						tick.SettleTramples()
+						tick.SettleSnowFootprints()
 						tick.FinishWorld(nil)
 					}
 					realmPart := func() {
@@ -219,6 +223,7 @@ func TestOwnershipAnalyzerRejectsSyntheticViolations(t *testing.T) {
 							tick.AdvanceHostiles(nil, nil)
 							tick.SettleGameplay(nil)
 							tick.SettleTramples()
+							tick.SettleSnowFootprints()
 							tick.FinishWorld(nil)
 						},
 						func() {
@@ -258,6 +263,7 @@ func TestOwnershipAnalyzerRejectsSyntheticViolations(t *testing.T) {
 							tick.AdvanceHostiles(nil, nil)
 							tick.SettleGameplay(nil)
 							tick.SettleTramples()
+							tick.SettleSnowFootprints()
 							tick.FinishWorld(nil)
 						},
 						func() {
@@ -294,6 +300,91 @@ func TestOwnershipAnalyzerRejectsSyntheticViolations(t *testing.T) {
 			`,
 		}})
 		requireOwnershipViolation(t, violations, "Command inbox")
+	})
+}
+
+// TestOwnershipAnalyzerRequiresSnowFootprintStageInCompleteTick 钉住雪层脚印
+// 结算属于「完整 runtime tick 编排」的定义：`Step` 路径在耕地踩踏之后调用
+// `SettleSnowFootprints`，复制编排的夹具必须连同这一阶段一起复制才算完整。
+// 缺了雪层脚印阶段的拆分编排不再覆盖完整掩码，不得误报；完整含雪的编排
+// （与既有拒绝用例同形）继续被拒绝——两条合起来证明该阶段真实参与闭包判定。
+func TestOwnershipAnalyzerRequiresSnowFootprintStageInCompleteTick(t *testing.T) {
+	t.Run("缺雪层脚印阶段的完整编排不再视为完整", func(t *testing.T) {
+		violations := analyzeOwnershipSources([]ownershipSource{{
+			name: "fixture_test.go",
+			contents: `package entity
+				type Engine struct{}
+				func TestCopiedTickWithoutSnow() { driveCopiedTick(&Engine{}) }
+				func driveCopiedTick(engine *Engine) {
+					applyEntityStages(engine)
+					applyRealmStages(engine)
+					finishCopiedTick(engine)
+				}
+				func applyEntityStages(*Engine) {
+					tick.ApplyPlayerCommands(nil, nil)
+					tick.ApplyCompanionActions(nil)
+					tick.AdvanceActors()
+					tick.AdvanceHostiles(nil, nil)
+					tick.SettleGameplay(nil)
+					tick.SettleTramples()
+					tick.FinishWorld(nil)
+				}
+				func applyRealmStages(*Engine) {
+					state.AdvanceFluids(nil, nil)
+					state.AdvanceFarmlandMoisture(nil, nil)
+					state.AdvanceCrops(nil, nil)
+					state.SweepUnsupportedWildPlants(nil)
+					state.SweepUnsupportedTorches(nil)
+					state.SweepUnsupportedBeds(nil)
+				}
+				func finishCopiedTick(*Engine) {
+					mutation.Commit()
+					tick.Publish(nil)
+				}
+			`,
+		}})
+		if len(violations) != 0 {
+			t.Fatalf("缺雪层脚印阶段的窄夹具被误拒绝：%s", strings.Join(violations, "; "))
+		}
+	})
+
+	t.Run("含雪层脚印阶段的完整编排仍拒绝", func(t *testing.T) {
+		violations := analyzeOwnershipSources([]ownershipSource{{
+			name: "fixture_test.go",
+			contents: `package entity
+				type Engine struct{}
+				func TestCopiedTickWithSnow() { driveCopiedTick(&Engine{}) }
+				func driveCopiedTick(engine *Engine) {
+					applyEntityStages(engine)
+					applyRealmStages(engine)
+					finishCopiedTick(engine)
+				}
+				func applyEntityStages(*Engine) {
+					tick.ApplyPlayerCommands(nil, nil)
+					tick.ApplyCompanionActions(nil)
+					tick.AdvanceActors()
+					tick.AdvanceHostiles(nil, nil)
+					tick.SettleGameplay(nil)
+					tick.SettleTramples()
+					tick.SettleSnowFootprints()
+					tick.FinishWorld(nil)
+				}
+				func applyRealmStages(*Engine) {
+					state.AdvanceFluids(nil, nil)
+					state.AdvanceFarmlandMoisture(nil, nil)
+					state.AdvanceCrops(nil, nil)
+					state.SweepUnsupportedWildPlants(nil)
+					state.SweepUnsupportedTorches(nil)
+					state.SweepUnsupportedBeds(nil)
+				}
+				func finishCopiedTick(*Engine) {
+					mutation.Commit()
+					tick.Publish(nil)
+				}
+			`,
+		}})
+		requireOwnershipViolation(t, violations, "driveCopiedTick")
+		requireOwnershipViolation(t, violations, "TestCopiedTickWithSnow")
 	})
 }
 
