@@ -143,7 +143,9 @@ func TestPassiveWanderStaysWithinHomeNeighborhood(t *testing.T) {
 	}
 	start := engine.passives.entries[0].state.Position
 	moved := false
-	for range 300 {
+	// 逐 tick 递进权威时钟：漫游朝向按段换向，守护的是换向下的有界漫游。
+	for tick := uint64(0); tick < 300; tick++ {
+		engine.tick.Store(tick)
 		engine.advancePassiveMovement()
 		if len(engine.passives.entries) != 1 {
 			t.Fatal("漫游中被动牛意外消失")
@@ -184,7 +186,9 @@ func TestPassiveMovementNeverPassesThroughWalls(t *testing.T) {
 	if err := engine.RestorePassive(mob); err != nil {
 		t.Fatalf("恢复被动牛：%v", err)
 	}
-	for range 100 {
+	// 逐 tick 递进权威时钟：换向的漫游仍不得穿出石墙环。
+	for tick := uint64(0); tick < 100; tick++ {
+		engine.tick.Store(tick)
 		engine.advancePassiveMovement()
 		position := engine.passives.entries[0].state.Position
 		x := int32(math.Floor(float64(position.X())))
@@ -260,7 +264,9 @@ func TestPassiveFleeEndsAndResumesWander(t *testing.T) {
 	if engine.passives.entries[0].fleeTicks == 0 {
 		t.Fatal("受击后未进入逃跑")
 	}
-	for range 120 {
+	// 逃跑 60 tick 后恢复的漫游也在推进时钟：换向段中牛仍须存活。
+	for tick := uint64(0); tick < 120; tick++ {
+		engine.tick.Store(tick)
 		engine.advancePassiveMovement()
 	}
 	if got := engine.passives.entries[0].fleeTicks; got != 0 {

@@ -58,11 +58,15 @@ func TestPassiveIdleLookReleasesBeyondSix(t *testing.T) {
 	restoreGrazeCow(t, engine, 33, mgl32.Vec3{2.5, 1, 2.5})
 	// 7 格外空手玩家：闲时规则够不着，回到确定性漫游派生。
 	placeSessionPlayer(engine, session, mgl32.Vec3{9.5, 1, 2.5})
-	engine.tick.Store(77)
 	entry := &engine.passives.entries[0]
+	// 逐 tick 推进一个完整漫游段：段首有界转向收敛后，输入必须落在段派生
+	// 目标上（冻结单 tick 只能看到未收敛的中间态）。
+	for tick := uint64(2) * wanderSegmentTicks; tick < uint64(3)*wanderSegmentTicks; tick++ {
+		engine.tick.Store(tick)
+		engine.passiveStepInput(entry)
+	}
 	input := engine.passiveStepInput(entry)
-	base := splitmix64(uint64(engine.seed) ^ uint64(77) ^ entry.id)
-	wantYaw := normalizeYaw(float32(base&0xFFFFFF) * (2 * math.Pi / 0x1000000))
+	wantYaw := wanderSegmentWantYaw(engine.seed, 2, entry.id)
 	if input.MoveZ != 1 || input.Yaw != wantYaw {
 		t.Fatalf("超距后输入=%+v，想要漫游派生 (MoveZ=1,Yaw=%v)", input, wantYaw)
 	}
