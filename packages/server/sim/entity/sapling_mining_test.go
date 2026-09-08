@@ -513,3 +513,46 @@ func TestCompanionMiningSaplingKeepsToolDurability(t *testing.T) {
 		})
 	}
 }
+
+// TestCompanionMiningLeavesNeverRollsSapling 覆盖 Scenario「伙伴采掘树叶不触发
+// 树苗判定」：目标坐标刻意选在玩家树叶→树苗判定的固定命中点上，伙伴完成采掘
+// 后必须只获得既有树叶掉落。额外树苗的概率判定只属于玩家采掘路径
+// （`completeMining` 的树叶分支），伙伴走 `completeCompanionMining` 的通用单件
+// 结算，不得镜像该判定——本用例与 `TestMiningLeavesHitDropsLeavesAndOneSapling`
+// 共用同一个命中坐标，两侧对照说明判定确实只按 actor 类型分叉。
+func TestCompanionMiningLeavesNeverRollsSapling(t *testing.T) {
+	// 公共场景把目标方块放在 (4, 1, 5)，而玩家判定的固定命中坐标不在那里，
+	// 因此这里把目标整体换成命中坐标上的树叶：伙伴站位与视线不变（命中点仍在
+	// 默认 InteractionReach 内、射线无遮挡），采掘意图按直写路径补齐。
+	fixture := newCompanionMiningScene(t, core.AirID, core.ItemNone)
+	target := leavesSaplingHitPositions[1]
+	if !leavesSaplingDropRoll(fixture.engine.seed, core.Overworld, target) {
+		t.Fatalf("夹具前提失效：%v 不再命中玩家树叶→树苗判定", target)
+	}
+	fixture.engine.SetBlockForTest(target, core.LeavesID)
+	fixture.target = target
+	fixture.entry.miningHeld = true
+	fixture.entry.miningTarget = target
+
+	var result TickResult
+	for range 5 {
+		result = advanceMiningOnce(fixture.engine)
+	}
+
+	if len(result.Rejected) != 0 {
+		t.Fatalf("伙伴采掘树叶被拒绝=%+v", result.Rejected)
+	}
+	if got := companionMiningBlockAt(t, fixture); got != core.AirID {
+		t.Fatalf("采掘后方块=%d，想要空气", got)
+	}
+	if got := companionItemCount(fixture.entry, core.ItemLeaves); got != 1 {
+		t.Fatalf("伙伴树叶产物=%d，想要恰好 1", got)
+	}
+	if got := companionItemCount(fixture.entry, core.ItemSapling); got != 0 {
+		t.Fatalf("伙伴背包出现树苗=%d，树叶→树苗判定必须只作用于玩家采掘", got)
+	}
+	// 伙伴产物直入背包：世界里既不得出现树叶掉落，也不得出现树苗掉落。
+	if drops := miningDropTotals(miningTargetRecord(t, fixture.engine, target).Chunk); len(drops) != 0 {
+		t.Fatalf("世界掉落物=%+v，伙伴采掘不得写入世界掉落物", drops)
+	}
+}
