@@ -4,5 +4,5 @@
 - [x] 1.3 同步 Go/Rust viewmodel 257 实例容量与超量错误测试，保留 ABI 布局；验证 `cargo test -p mornlea_client --locked viewmodel`，执行 `make rust` 并复验涉及 Go 包。
 ## 2. 视觉与收尾
 - [x] 2.1 在 capture 增加无头持物演示，覆盖空手、代表分面方块、全部工具及损坏状态、非方块物品；完整挖掘与攻击动作包含中立、峰值及恢复，输出审查物而不自动更新基线；验证 capture 定点测试与实际 motion demo。
-- [ ] 2.2 完成逐图目检、16:9/4:3 投影、零分配与预算回归；记录 ledger 并完成任务审查、整分支终审。
+- [x] 2.2 完成逐图目检、16:9/4:3 投影、零分配与预算回归；记录 ledger 并完成任务审查、整分支终审。
 - [x] 2.3 收尾执行 gofmt、`make test-race`、`make dev-check`（含六模块 vet 及 `make rust-check` 等价的 Rust fmt/clippy/test） 和 `openspec validate --all --strict --no-interactive`；记录证据，不推送或合并。

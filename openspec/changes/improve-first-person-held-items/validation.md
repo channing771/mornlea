@@ -24,6 +24,6 @@
 额外运行 `make build`，客户端与服务端 Go 编译均成功，但打包步骤复制 `packages/client/assets/packs/pixel_perfection/ATTRIBUTION.md` 失败。基线 `e61e8516` 的 Makefile 已使用该旧路径，而实际入库目录为 `packs/pastelcraft`；与本次手部改动无关，未扩大修改范围或伪造署名文件。因此不能将 `make build` 记录为成功。
 
 ## 审查
-Task 1：提交 `82c4fb53`，独立规格审查 PASS、代码质量 PASS，无待处理发现。Task 2：提交 `8939b627`，独立规格审查 PASS、代码质量 PASS，无待处理发现。整分支终审将在完成后回填。
+Task 1：提交 `82c4fb53`，独立规格审查 PASS、代码质量 PASS，无待处理发现。Task 2：提交 `8939b627`，独立规格审查 PASS、代码质量 PASS，无待处理发现。整分支终审 PASS，无生产缺陷或待处理发现；审查提示的 delta spec 文件尾额外空行已在回填时修正，并通过最终 diff 检查。完整审查记录保留在本 worktree 的 `build/held-items-preview/review-records/`。
 
 原工作区仍在 `e61e8516`，用户原有进度与 bucket 计划改动保留。此 change 工作在 `codex/first-person-held-items`，未推送或合并。

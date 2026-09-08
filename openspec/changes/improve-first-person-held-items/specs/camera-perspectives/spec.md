@@ -15,4 +15,3 @@
 - **GIVEN** 第三人称背面游戏相位
 - **WHEN** 渲染一帧
 - **THEN** 画面 MUST 含自身身体模型且 MUST NOT 含 viewmodel 像素
-
