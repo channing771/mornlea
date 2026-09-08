@@ -45,7 +45,7 @@ func TestHeldItemsSequenceProducesNeutralMiningAttackAndRecovery(t *testing.T) {
 			if app.ServerTick() != uint64(frame+1) {
 				t.Fatalf("tick drift at %d", frame)
 			}
-			input := render.ViewmodelInput{Selected: stack, Tick: app.ServerTick(), Mining: app.MiningOverlay().Active, AttackTick: app.attackTick}
+			input := render.ViewmodelInput{Selected: stack, Tick: app.ServerTick(), Mining: app.MiningOverlay().Active, AttackTick: app.attackTick, ViewportWidth: captureWidth, ViewportHeight: captureHeight, FovY: app.Camera().FovY}
 			_, period := render.ViewmodelSwingParams(render.ViewmodelTierOf(stack))
 			attackFrame := 8 + int(period)
 			if frame < attackFrame && app.attackTick != 0 {

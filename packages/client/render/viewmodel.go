@@ -73,6 +73,9 @@ type ViewmodelInput struct {
 	CamPitch   float32
 	// Registry 是本帧 atlas 同源的只读资产；nil 使用默认素材。
 	Registry *assets.Registry
+	// `ViewportWidth`/`ViewportHeight` 使用 HUD 同源逻辑像素；`FovY` 为世界相机垂直弧度。
+	// 零尺寸回落 1280×720，零 FOV 回落 70 度，供无窗口调用保持确定。
+	ViewportWidth, ViewportHeight, FovY float32
 }
 
 // ViewmodelHeldKindOf 把已确认选中槽映射为持物形态：空槽（零值、`ItemNone`
@@ -268,15 +271,11 @@ func buildViewmodelParts(dst []avatarPart, input *ViewmodelInput, angle float32)
 	if swingPhaseID(key)%2 != 0 {
 		material = uint32(assets.LayerHumanClayHead)
 	}
-	// 屏面滚转配合较小俯仰，避免正向峰值把整个臂根抬入画面。
-	root := viewmodelRootFromCameraPose(input.CamPos, input.CamYaw, input.CamPitch).
-		Mul4(mgl32.Translate3D(.38, -.30, -.95)).
-		Mul4(mgl32.HomogRotate3DZ(28*math.Pi/180 - angle*.30)).
-		Mul4(mgl32.HomogRotate3DX(angle * .35))
+	root := viewmodelRootFromCameraPose(input.CamPos, input.CamYaw, input.CamPitch).Mul4(viewmodelGripRoot(input, angle))
 	add := func(frame mgl32.Mat4, center, size mgl32.Vec3, color [4]float32, material uint32) {
 		dst = append(dst, avatarPart{transform: frame.Mul4(mgl32.Translate3D(center[0], center[1], center[2])).Mul4(mgl32.Scale3D(size[0], size[1], size[2])), color: color, material: material})
 	}
-	add(root, mgl32.Vec3{0, -.28, .05}, mgl32.Vec3{.16, .60, .18}, avatarShade(avatarColor(key), .82), material+12)
+	add(root, mgl32.Vec3{0, -.53, .05}, mgl32.Vec3{.16, 1.10, .18}, avatarShade(avatarColor(key), .82), material+12)
 	registry := input.Registry
 	if registry == nil {
 		registry = viewmodelDefaultRegistry
@@ -284,7 +283,7 @@ func buildViewmodelParts(dst []avatarPart, input *ViewmodelInput, angle float32)
 	switch ViewmodelHeldKindOf(input.Selected) {
 	case ViewmodelHeldBlock:
 		block, _ := core.ItemPlacement(input.Selected.Item)
-		frame := root.Mul4(mgl32.Translate3D(0, .12, 0)).Mul4(mgl32.HomogRotate3DX(.24)).Mul4(mgl32.HomogRotate3DY(-.55))
+		frame := root.Mul4(mgl32.HomogRotate3DZ(-65 * math.Pi / 180)).Mul4(mgl32.Translate3D(0, .12, 0)).Mul4(mgl32.HomogRotate3DX(.24)).Mul4(mgl32.HomogRotate3DY(-.55))
 		// 顶底面完整覆盖，侧面退让顶底厚度，前后面再退让左右厚度；
 		// 六面只接触不重叠，外表面封闭且边缘没有共面闪烁。
 		const side = float32(.25)
@@ -298,21 +297,19 @@ func buildViewmodelParts(dst []avatarPart, input *ViewmodelInput, angle float32)
 			add(frame, centers[i], sizes[i], [4]float32{1, 1, 1, 1}, uint32(registry.Material(block, face)))
 		}
 	case ViewmodelHeldItem:
-		// 图稿的柄从左下伸向右上；各类握点取实际柄内像素，损坏形态共享柄位。
+		frame := root.Mul4(mgl32.HomogRotate3DZ(-65 * math.Pi / 180)).Mul4(mgl32.HomogRotate3DY(-.45)).Mul4(mgl32.HomogRotate3DX(-.20))
+		if parts, ok := registry.ItemToolParts(input.Selected.Item); ok {
+			for _, part := range parts {
+				add(frame, mgl32.Vec3(part.Center), mgl32.Vec3(part.Size), part.Color, avatarMaterialSolid)
+			}
+			return dst
+		}
+		// 非工具图标沿原有像素承托点装配，完整立方仍走独立六面路径。
 		gripX, gripY, pixel := float32(8), float32(12), float32(.032)
 		// 铁锭图稿止于第十行，托点下移一像素以贴住拳面。
 		if input.Selected.Item == core.ItemIronIngot {
 			gripY = 11
 		}
-		switch ViewmodelTierOf(input.Selected) {
-		case ViewmodelTierSword:
-			gripX, gripY, pixel = 5.5, 12, .035
-		case ViewmodelTierPick:
-			gripX, gripY, pixel = 5, 12, .035
-		case ViewmodelTierHoe:
-			gripX, gripY, pixel = 5.5, 11.5, .035
-		}
-		frame := root.Mul4(mgl32.HomogRotate3DY(-.25)).Mul4(mgl32.HomogRotate3DX(-.25))
 		parts, _ := registry.ItemIconPrisms(input.Selected.Item)
 		for _, part := range parts {
 			center := mgl32.Vec3{(float32(part.X) + float32(part.Width)/2 - gripX) * pixel, (gripY - float32(part.Y) - .5) * pixel, 0}

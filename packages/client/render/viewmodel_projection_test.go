@@ -68,6 +68,7 @@ func assertHandsLandedOnScreen(t *testing.T, pos mgl32.Vec3, yaw, pitch float32)
 	t.Helper()
 	input := viewmodelTestInput(core.PlayerID{41}, core.ItemStack{}, 10)
 	input.CamPos, input.CamYaw, input.CamPitch = pos, yaw, pitch
+	input.ViewportWidth, input.ViewportHeight = 480, 480
 	out := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, input)
 	if len(out) != avatarInstanceBytes {
 		t.Fatalf("中立实例数 = %d，想要 1（主手）", len(out)/avatarInstanceBytes)
@@ -76,7 +77,8 @@ func assertHandsLandedOnScreen(t *testing.T, pos mgl32.Vec3, yaw, pitch float32)
 	const framePixels = 480
 	var ndc [1]mgl32.Vec3
 	for index := range 1 {
-		center := decodedPartCenter(out, index)
+		// 检查拳面而非已经出画的长前臂中心。
+		center := viewmodelInstanceCorner(out, index, 0, 1, 0)
 		if distance := center.Sub(pos).Len(); distance > 1.5 {
 			t.Fatalf("第 %d 只手距相机 %.2f 米，想要 1.5 米内（烘焙到本帧相机处）", index, distance)
 		}

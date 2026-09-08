@@ -62,7 +62,7 @@ func viewmodelInstanceCorner(out []byte, index int, sx, sy, sz float32) mgl32.Ve
 }
 
 // TestViewmodelSlantAngleInSpecRange 锁定斜持倾角落在契约区间：手臂长轴与
-// 竖直方向的夹角必须在 20°–35° 之间，主手需要满足。
+// 竖直方向的夹角必须在 70°–85° 之间，主手需要满足。
 func TestViewmodelSlantAngleInSpecRange(t *testing.T) {
 	input := viewmodelTestInput(core.PlayerID{51}, core.ItemStack{}, 10)
 	out := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, input)
@@ -70,8 +70,8 @@ func TestViewmodelSlantAngleInSpecRange(t *testing.T) {
 		t.Fatalf("中立实例数 = %d，想要 1（主手）", len(out)/avatarInstanceBytes)
 	}
 	for index := range 1 {
-		if degrees := viewmodelSlantDegreesOf(out, index); degrees < 20 || degrees > 35 {
-			t.Fatalf("第 %d 只手倾角 = %.1f°，想要 20°–35°", index, degrees)
+		if degrees := viewmodelSlantDegreesOf(out, index); degrees < 70 || degrees > 85 {
+			t.Fatalf("第 %d 只手倾角 = %.1f°，想要 70°–85°", index, degrees)
 		}
 	}
 }
@@ -223,7 +223,7 @@ func viewmodelInstanceScreenHull(t *testing.T, out []byte, index int, viewProj m
 }
 
 // TestViewmodelArmRootsOutsideScreenCorners 锁定臂根落在屏角之外：手臂底端
-// 经投影必须在屏幕之外（下边缘之下），只留前臂入画。
+// 经投影必须在屏幕之外（右边缘之外），只留前臂入画。
 func TestViewmodelArmRootsOutsideScreenCorners(t *testing.T) {
 	input := viewmodelTestInput(core.PlayerID{51}, core.ItemStack{}, 10)
 	out := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, input)
@@ -234,8 +234,8 @@ func TestViewmodelArmRootsOutsideScreenCorners(t *testing.T) {
 		if w <= 0 {
 			t.Fatalf("第 %d 只手臂根在相机后方（w=%.2f）", index, w)
 		}
-		if ndc[1] >= -1 {
-			t.Fatalf("第 %d 只手臂根 NDC=(%.2f,%.2f)，想要落在屏底之外（y<-1）",
+		if ndc[0] <= 1 && ndc[1] >= -1 {
+			t.Fatalf("第 %d 只手臂根 NDC=(%.2f,%.2f)，想要落在屏右或屏底之外",
 				index, ndc[0], ndc[1])
 		}
 	}

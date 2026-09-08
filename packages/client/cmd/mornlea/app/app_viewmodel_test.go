@@ -523,3 +523,24 @@ func TestViewmodelUsesCurrentAtlasIconAndMaximumPixelBudget(t *testing.T) {
 		t.Fatal("替换注册表后仍读取旧图标缓存")
 	}
 }
+
+func TestViewmodelUsesHUDLogicalViewportAndWorldFOV(t *testing.T) {
+	app := NewPresentationApplicationForTest()
+	app.frameWidth, app.frameHeight = 1280, 720
+	applyViewmodelHotbar(t, app, viewmodelStoneStack, 0)
+	app.camera.FovY = .9
+	// 使用已有窗口夹具的逻辑尺寸；物理帧缓冲刻意不一致。
+	app.window = nil
+	input := app.deriveViewmodelInput(false, render.BlockCrack{})
+	if input.ViewportWidth != 1280 || input.ViewportHeight != 720 || input.FovY != .9 {
+		t.Fatalf("capture viewport/FOV missing: %+v", input)
+	}
+	app.window = &settingsTestWindow{contentWidth: 640, contentHeight: 360, framebufferWidth: 1280, framebufferHeight: 720}
+	w, h := app.window.ContentSize()
+	input = app.deriveViewmodelInput(false, render.BlockCrack{})
+	app.clientSessionClosed = true
+	hud := app.assembleHUDState()
+	if input.ViewportWidth != float32(w) || input.ViewportHeight != float32(h) || input.ViewportWidth != float32(hud.Viewport.Width) || input.ViewportHeight != float32(hud.Viewport.Height) {
+		t.Fatal("viewmodel and HUD use different logical viewport")
+	}
+}

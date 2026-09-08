@@ -61,16 +61,20 @@ func (a *Application) deriveViewmodelInput(panorama bool, crack render.BlockCrac
 	if identity := a.startupOptions.Identity; identity != nil {
 		player = identity.PlayerID
 	}
+	width, height := a.hudLogicalSize()
 	return &render.ViewmodelInput{
-		Player:     player,
-		Registry:   a.registry,
-		Selected:   hotbar.Slots[hotbar.Selected],
-		Tick:       a.serverTick,
-		Mining:     crack.Visible,
-		AttackTick: a.combatFeedback.lastServerTick,
-		CamPos:     a.camera.Pos,
-		CamYaw:     a.camera.Yaw,
-		CamPitch:   a.camera.Pitch,
+		ViewportWidth:  float32(width),
+		ViewportHeight: float32(height),
+		FovY:           a.camera.FovY,
+		Player:         player,
+		Registry:       a.registry,
+		Selected:       hotbar.Slots[hotbar.Selected],
+		Tick:           a.serverTick,
+		Mining:         crack.Visible,
+		AttackTick:     a.combatFeedback.lastServerTick,
+		CamPos:         a.camera.Pos,
+		CamYaw:         a.camera.Yaw,
+		CamPitch:       a.camera.Pitch,
 	}
 }
 

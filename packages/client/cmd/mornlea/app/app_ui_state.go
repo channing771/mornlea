@@ -445,12 +445,7 @@ func (a *Application) pushUIStateIfChanged() {
 // 「镜像值 → 语义字段」的换算全部委托 `packages/client/client` 的构造器,本函数不解释
 // 字段语义、不预测任何权威状态。
 func (a *Application) assembleHUDState() client.UIHudState {
-	// `ContentSize` 与 WebView CSS 像素同为逻辑点；世界帧缓冲仍使用物理像素。
-	// 无窗口的离屏夹具沿用其设计尺寸，不会挂载 WebView。
-	width, height := a.frameWidth, a.frameHeight
-	if a.window != nil {
-		width, height = a.window.ContentSize()
-	}
+	width, height := a.hudLogicalSize()
 	viewport := client.NewUIHudViewport(uint32(max(0, width)), uint32(max(0, height)))
 	// 会话已关闭：旧会话的镜像不再下行（与断线隐藏常显 HUD 的既有语义一致），
 	// 只保留 viewport 让前端安全降级为不呈现。Predictor 不随断线复位（新会话
@@ -503,4 +498,15 @@ func (a *Application) popupPresentationText() string {
 		return ""
 	}
 	return a.framePopup.Text
+}
+
+// hudLogicalSize 统一 HUD 与主手的 CSS 逻辑尺寸；离屏 capture 使用帧尺寸。
+func (a *Application) hudLogicalSize() (int, int) {
+	// `ContentSize` 与 WebView CSS 像素同为逻辑点；世界帧缓冲仍使用物理像素。
+	// 无窗口的离屏夹具沿用其设计尺寸，不会挂载 WebView。
+	width, height := a.frameWidth, a.frameHeight
+	if a.window != nil {
+		width, height = a.window.ContentSize()
+	}
+	return width, height
 }

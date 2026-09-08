@@ -147,6 +147,9 @@ packages/client/cmd/mornlea/app/
 
 - `deriveViewmodelInput` 只消费已确认快捷栏，直通本帧相机与 `registry`；
   `ViewmodelInput.Registry` 让持物像素与上传 atlas 使用同一注册表缓存。
+  `hudLogicalSize` 同时供 HUD 与主手使用；`ViewportWidth`/`ViewportHeight`
+  直通窗口 `ContentSize`（无头 capture 用帧尺寸），`FovY` 直通本帧世界相机，
+  render 负责按完整状态栈安全区布局，不能误用 Retina 物理像素。
 - 空闲左手隐藏，主手与图标棱柱或六面方块共用握持根；相位、HUD 门控、
   静态 capture 抑制和第三人称显隐沿用原路径。
 - `TestViewmodelUsesCurrentAtlasIconAndMaximumPixelBudget` 通过真实材质覆盖

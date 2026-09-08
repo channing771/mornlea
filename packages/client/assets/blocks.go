@@ -306,6 +306,7 @@ type Registry struct {
 	layers       [layerCount][]byte
 	itemIcons    [core.ItemIDMax][]byte
 	itemPrisms   [core.ItemIDMax][]ItemIconPrism
+	itemTools    [core.ItemIDMax][]ItemToolPart
 	meshSnapshot mesh.RegistrySnapshot
 }
 

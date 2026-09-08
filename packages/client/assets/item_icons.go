@@ -99,6 +99,7 @@ func (r *Registry) refreshItemIcons() {
 		if layer, ok := ItemIconLayer(item); ok {
 			r.itemIcons[item] = r.layers[int(layer)]
 			r.itemPrisms[item] = buildItemIconPrisms(r.itemIcons[item])
+			r.itemTools[item] = buildItemToolParts(item, r.itemIcons[item])
 			continue
 		}
 		block, ok := core.ItemPlacement(item)
