@@ -20,7 +20,7 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		wantID  uint32
 		wantHex string
 	}{
-		{"hello", protocol.StateHandshake, protocol.ClientHello{ProtocolVersion: 37}, 0, "25"},
+		{"hello", protocol.StateHandshake, protocol.ClientHello{ProtocolVersion: 38}, 0, "26"},
 		{"login start", protocol.StateLogin, protocol.LoginStart{PlayerID: id, DisplayName: "Chen"}, 0, "00112233445546778899aabbccddeeff044368656e"},
 		{"input", protocol.StatePlay, protocol.PlayerInput{Sequence: 1, MoveX: -1, MoveZ: 1, Jump: true, Yaw: 1.5, Pitch: -0.5, Mining: true}, 0, "0100000000000000ff01010000c03f000000bf" + "01" + "00" + "00"},
 		// v24 新增：进食位是载荷最末一字节。夹具刻意取 Mining=false、
@@ -39,6 +39,11 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		// v22 新增：与 place 同样的 u64 序号 + 两个 f32 朝向，但没有栏位字节。
 		{"till soil", protocol.StatePlay, protocol.TillSoil{Sequence: 12, Yaw: 2, Pitch: -1}, 13,
 			"0c0000000000000000000040000080bf"},
+		// v38 新增：水桶双命令与 till soil 同形，只包 ID 不同。
+		{"collect water", protocol.StatePlay, protocol.CollectWater{Sequence: 16, Yaw: 2, Pitch: -1}, 16,
+			"100000000000000000000040000080bf"},
+		{"place water", protocol.StatePlay, protocol.PlaceWater{Sequence: 17, Yaw: 2, Pitch: -1}, 17,
+			"110000000000000000000040000080bf"},
 	}
 	for _, tc := range clients {
 		t.Run(tc.name, func(t *testing.T) {
@@ -65,8 +70,8 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		wantID  uint32
 		wantHex string
 	}{
-		{"server hello", protocol.StateHandshake, protocol.ServerHello{ProtocolVersion: 37}, 0, "25"},
-		{"handshake reject", protocol.StateHandshake, protocol.HandshakeReject{ServerProtocolVersion: 37, Code: protocol.HandshakeVersionMismatch, Message: "no"}, 1, "2501026e6f"},
+		{"server hello", protocol.StateHandshake, protocol.ServerHello{ProtocolVersion: 38}, 0, "26"},
+		{"handshake reject", protocol.StateHandshake, protocol.HandshakeReject{ServerProtocolVersion: 38, Code: protocol.HandshakeVersionMismatch, Message: "no"}, 1, "2601026e6f"},
 		{"login success", protocol.StateLogin, protocol.LoginSuccess{PlayerID: id, WorldSeed: 0x1122334455667788}, 0, "00112233445546778899aabbccddeeff8877665544332211"},
 		{"login reject", protocol.StateLogin, protocol.LoginReject{Code: protocol.LoginInvalidIdentity, Message: "no"}, 1, "02026e6f"},
 		{"block changes", protocol.StatePlay, protocol.BlockChanges{Dimension: core.Overworld, Chunk: core.ChunkPos{X: 1, Z: -1}, BaseRevision: 1, NewRevision: 2, Changes: []protocol.BlockChange{{Position: core.BlockPos{X: 16, Y: -64, Z: -1}, Block: core.StoneID}}}, 1, "0000000001000000ffffffff010000000000000002000000000000000110000000c0ffffffffffffff0200"},

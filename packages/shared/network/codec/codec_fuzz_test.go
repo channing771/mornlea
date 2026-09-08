@@ -45,6 +45,17 @@ func FuzzSmallPacketCodec(f *testing.F) {
 	}); err == nil {
 		f.Add(uint8(protocol.StatePlay), id, payload)
 	}
+	// v38 水桶双命令与 TillSoil 同形：种子同样由编码器现算。
+	if id, payload, err := encodeClientPacketPayload(protocol.StatePlay, protocol.CollectWater{
+		Sequence: 0x0102030405060708, Yaw: 1.5, Pitch: -0.5,
+	}); err == nil {
+		f.Add(uint8(protocol.StatePlay), id, payload)
+	}
+	if id, payload, err := encodeClientPacketPayload(protocol.StatePlay, protocol.PlaceWater{
+		Sequence: 0x0102030405060708, Yaw: 1.5, Pitch: -0.5,
+	}); err == nil {
+		f.Add(uint8(protocol.StatePlay), id, payload)
+	}
 	// v26 放置成功确认只携带原命令序号。
 	if id, payload, err := encodeServerControlPayload(protocol.StatePlay, protocol.PlaceBlockSucceeded{
 		Sequence: 0x0102030405060708,
