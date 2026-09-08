@@ -168,7 +168,8 @@ func TestBucketPlaceRejectsSourceAndSolid(t *testing.T) {
 }
 
 // TestBucketPlaceAcceptsFlowingWater 锁定覆盖流动水合法：流动格变源，原格水桶
-// 变空桶。
+// 变空桶；流动变源只是等级变化、不是流体成员变化，不入队湿度重判，附近已湿
+// 耕地保持湿。
 func TestBucketPlaceAcceptsFlowingWater(t *testing.T) {
 	engine, session, yaw, pitch := readyBucketPlayer(t, bucketWaterHeld, core.WaterLevel1ID, true)
 	result := placeBucket(engine, session, yaw, pitch)
@@ -180,6 +181,32 @@ func TestBucketPlaceAcceptsFlowingWater(t *testing.T) {
 	}
 	if got := engine.sessions[session].player.inventory.Hotbar.Slots[0]; got != bucketEmptyHeld {
 		t.Fatalf("覆盖流动水后栏位 = %+v，想要 %+v", got, bucketEmptyHeld)
+	}
+
+	// 流动变源不入队：同一 tick 推进湿度重判后，已湿耕地不得被翻干。耕地
+	// 放在射线平面之外（x=2），避免挡住放水射线。
+	moistureEngine, moistureSession := readyMovementPlayer(t)
+	wetFarmland := core.BlockPos{X: 2, Y: 1, Z: 4}
+	moistureEngine.SetBlockForTest(wetFarmland, core.FarmlandWetID)
+	moistureEngine.SetBlockForTest(tillTarget, core.WaterLevel1ID)
+	moisturePlayer := moistureEngine.sessions[moistureSession].player
+	moisturePlayer.inventory.Hotbar.Slots[0] = bucketWaterHeld
+	moisturePlayer.inventory.Hotbar.Selected = 0
+	moistureEye := moisturePlayer.state.Position.Add(mgl32.Vec3{0, moistureEngine.physicsTunables.EyeHeight, 0})
+	moistureBelow := tillTarget
+	moistureBelow.Y--
+	moistureYaw, moisturePitch := lookAtBlockTop(moistureEye, moistureBelow)
+	moistureResult := bucketMoistureTick(moistureEngine, []Command{{
+		Session: moistureSession, Sequence: 2, Kind: CommandPlaceWater, Yaw: moistureYaw, Pitch: moisturePitch,
+	}})
+	if len(moistureResult.Rejected) != 0 {
+		t.Fatalf("覆盖流动水被拒绝: %+v", moistureResult.Rejected)
+	}
+	if got := tillBlockAt(t, moistureEngine, tillTarget); got != core.WaterSourceID {
+		t.Fatalf("覆盖流动水后方块 = %d，想要源", got)
+	}
+	if got := tillBlockAt(t, moistureEngine, wetFarmland); got != core.FarmlandWetID {
+		t.Fatalf("流动水升源后耕地 = %d，想要保持湿耕地", got)
 	}
 }
 

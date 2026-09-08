@@ -157,6 +157,7 @@ func (server *Server) publishLocalResult(
 			return
 		}
 	}
+	// 成功序号按模拟侧入队顺序下发（同 tick 已按会话与序号稳定排序），客户端音频的严格递增假设以此为据。
 	for _, success := range result.PlacementSuccesses {
 		if success.Session != current.id {
 			continue

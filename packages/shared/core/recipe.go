@@ -295,6 +295,7 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 			Cells: [CraftingGridSlots]ItemID{
 				ItemIronIngot, ItemNone, ItemIronIngot,
 				ItemNone, ItemIronIngot, ItemNone,
+				ItemNone, ItemNone, ItemNone,
 			},
 			Output: ItemStack{Item: ItemEmptyBucket, Count: 1},
 		}, true

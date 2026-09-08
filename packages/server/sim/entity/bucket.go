@@ -139,7 +139,7 @@ func (engine *engineContext) ApplyBucketPlace(
 	}
 	target := adjacentBlock(hit.Block, hit.Face)
 	if target.Y < core.MinY || target.Y >= core.MaxY {
-		return RejectChunkNotReady, true
+		return RejectInvalidBlock, true
 	}
 	block, ready := dimension.BlockAt(target)
 	if !ready {
