@@ -66,9 +66,10 @@ const DOOR_UPPER: u16 = 70;
 /// ShortGrass:原创短草的协议稳定编号,被流动水覆盖时零掉落且不受掉落容量
 /// 限制——该结算语义在 Go sim 写入侧,这里只参与可替换判定。
 pub(crate) const SHORT_GRASS: u16 = 84;
-/// Sapling:橡树树苗的协议稳定编号(Go `core.SaplingID`),被流动水覆盖时按
-/// 作物冲毁同表掉落 1 个自身——掉落与容量原子拒绝同样在 Go sim 写入侧,
-/// 这里只参与可替换判定。
+/// Sapling:橡树树苗的协议稳定编号(Go `core.SaplingID`)。树苗是第三个非作物
+/// 植物方块,与作物、短草一样对流动水可替换;被覆盖后的掉落结算(1 个树苗及其
+/// 容量原子拒绝)在 Go sim 写入侧,不在作物掉落表上——kernel 只回答
+/// 「能不能写」,这里只参与可替换判定。
 pub(crate) const SAPLING: u16 = 89;
 
 /// 镜像 Go `core.IsFluid`:流体 = 源 + 7 档流动水,共 8 个连续编号。
