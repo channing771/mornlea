@@ -26,7 +26,7 @@ import (
 // 跳过、等级 7 到界、非源消亡写自格空气、上方流体存活 + 垂直替换弱水、
 // 陈旧项空写、作物可替换（实心对照）、门四态（开启流入/关闭与上半不可）、
 // `core.BarrierID` 邻格（sim 侧 scope 外读语义）、源不可替换、弱水被强水
-// 水平替换。向量断言的是 kernel 原始输出，槽位序 0=自格、1=上、2=下、
+// 水平替换、无限水双源升源（空气/流水自格）与垂直优先保留。向量断言的是 kernel 原始输出，槽位序 0=自格、1=上、2=下、
 // 3=+x、4=−x、5=+z、6=−z，无写条目为 FF 00 00。
 
 func TestFluidEvalBatchGoldenVectors(t *testing.T) {
@@ -124,6 +124,27 @@ func TestFluidEvalBatchGoldenVectors(t *testing.T) {
 			name:  "短草水平可替换草方块挡水",
 			cells: [7]core.BlockID{core.WaterSourceID, core.AirID, core.StoneID, core.ShortGrassID, core.GrassID, core.AirID, core.ShortGrassID},
 			want:  [fluidEvalItemOutputBytes]byte{0x03, 0x1c, 0x00, 0x05, 0x1c, 0x00, 0x06, 0x1c, 0x00, 0xff, 0x00, 0x00},
+		},
+		{
+			// 无限水空气升级：自格空气、上下石头、+x/−x 双源 → 自格（槽位 0）
+			// 写源（27 = 0x1b），优先级高于等级水。
+			name:  "无限水空气双源升源",
+			cells: [7]core.BlockID{core.AirID, core.StoneID, core.StoneID, core.WaterSourceID, core.WaterSourceID, core.StoneID, core.StoneID},
+			want:  [fluidEvalItemOutputBytes]byte{0x00, 0x1b, 0x00, 0xff, 0x00, 0x00, 0xff, 0x00, 0x00, 0xff, 0x00, 0x00},
+		},
+		{
+			// 无限水流水升级：等级 3 自格、下方实心、+x/−x 双源 → 自格升源，
+			// 不再向 +z/−z 空气做等级 4 水平传播。
+			name:  "无限水流水双源升源",
+			cells: [7]core.BlockID{core.WaterLevel3ID, core.StoneID, core.StoneID, core.WaterSourceID, core.WaterSourceID, core.AirID, core.AirID},
+			want:  [fluidEvalItemOutputBytes]byte{0x00, 0x1b, 0x00, 0xff, 0x00, 0x00, 0xff, 0x00, 0x00, 0xff, 0x00, 0x00},
+		},
+		{
+			// 无限水垂直保留：下方空气可替换时仍垂直优先，只写下方（槽位 2）
+			// 一条等级 1，不升源。
+			name:  "无限水垂直优先保留",
+			cells: [7]core.BlockID{core.WaterLevel2ID, core.StoneID, core.AirID, core.WaterSourceID, core.WaterSourceID, core.StoneID, core.StoneID},
+			want:  [fluidEvalItemOutputBytes]byte{0x02, 0x1c, 0x00, 0xff, 0x00, 0x00, 0xff, 0x00, 0x00, 0xff, 0x00, 0x00},
 		},
 	}
 	for _, test := range tests {

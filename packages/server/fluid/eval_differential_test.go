@@ -19,8 +19,8 @@ import (
 // 用例覆盖面与 kernel 的 Rust 单测分支表一致：垂直优先、水平扩散等级 +1、
 // 等级 7 到界、存活判定（上方流体 / 更强水平邻居）、非源消亡写空气、陈旧项
 // 空写、作物与短草等植物可替换、门四态（开启可流入 / 关闭与上半不可）、源
-// 不可替换、弱水被强水替换，另加 `core.BarrierID` 邻格（sim 侧 scope 外的读
-// 语义）。
+// 不可替换、弱水被强水替换、无限水双源升源（空气/流水自格）与垂直优先保留，
+// 另加 `core.BarrierID` 邻格（sim 侧 scope 外的读语义）。
 
 // evalDifferentialCase 是一条差分用例：在世界 w 里对 pos 做一次单格求值。
 type evalDifferentialCase struct {
@@ -113,6 +113,30 @@ func evalDifferentialCases() []evalDifferentialCase {
 			w.SetBlock(at(1, 10, 0), core.ShortGrassID)
 			w.SetBlock(at(-1, 10, 0), core.GrassID)
 			w.SetBlock(at(0, 10, -1), core.ShortGrassID)
+		}),
+		newCase("无限水-空气双源自格升源", at(0, 10, 0), func(w *memWorld) {
+			// 自格空气（不写入即空气），+x/−x 双源，其余石头：自格升源。
+			w.SetBlock(at(1, 10, 0), core.WaterSourceID)
+			w.SetBlock(at(-1, 10, 0), core.WaterSourceID)
+			w.SetBlock(at(0, 11, 0), core.StoneID)
+			w.SetBlock(at(0, 9, 0), core.StoneID)
+			w.SetBlock(at(0, 10, 1), core.StoneID)
+			w.SetBlock(at(0, 10, -1), core.StoneID)
+		}),
+		newCase("无限水-流水双源自格升源", at(0, 10, 0), func(w *memWorld) {
+			// 等级 3 自格、下方实心、+x/−x 双源：自格升源，不做等级水平传播。
+			w.SetBlock(at(0, 10, 0), core.WaterLevel3ID)
+			w.SetBlock(at(0, 11, 0), core.StoneID)
+			w.SetBlock(at(0, 9, 0), core.StoneID)
+			w.SetBlock(at(1, 10, 0), core.WaterSourceID)
+			w.SetBlock(at(-1, 10, 0), core.WaterSourceID)
+		}),
+		newCase("无限水-垂直优先保留不升源", at(0, 10, 0), func(w *memWorld) {
+			// 等级 2 自格、下方空气可替换、+x/−x 双源：仍垂直优先写下方等级 1。
+			w.SetBlock(at(0, 10, 0), core.WaterLevel2ID)
+			w.SetBlock(at(0, 11, 0), core.StoneID)
+			w.SetBlock(at(1, 10, 0), core.WaterSourceID)
+			w.SetBlock(at(-1, 10, 0), core.WaterSourceID)
 		}),
 	}
 }
