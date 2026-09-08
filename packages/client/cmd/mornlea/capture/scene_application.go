@@ -113,7 +113,8 @@ type SceneApplication interface {
 	ResetCombatFeedback()
 	CombatMarkerVisible() bool
 	// ObserveCombatHitForCapture 合成打击确认沿（严格递增才接受）：抓帧管线
-	// 用它打开编码器的攻击挥动窗；生产确认只走服务端消息，本方法无生产调用方。
+	// 用它独立驱动命中 marker；持物挥动由本地 elapsed 与主键输入推进。
+	// 生产确认只走服务端消息，本方法无生产调用方。
 	ObserveCombatHitForCapture(tick uint64)
 	// 场景清掉动作时钟，录制显式推进时间与有效主键，不依赖服务端反馈。
 	ResetViewmodel()
