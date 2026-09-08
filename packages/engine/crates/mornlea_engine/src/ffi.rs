@@ -3384,12 +3384,14 @@ mod tests {
         let truncated = tree_blocks_input(42, 7, 64, -9)[..TREE_BLOCKS_INPUT_BYTES - 1].to_vec();
         let below_world = tree_blocks_input(42, 7, -65, -9);
         let above_world = tree_blocks_input(42, 7, 312, -9);
+        let x_neighborhood_wraps = tree_blocks_input(42, i32::MAX, 64, -9);
         for input in [
             &bad_magic,
             &bad_layout,
             &truncated,
             &below_world,
             &above_world,
+            &x_neighborhood_wraps,
         ] {
             // SAFETY: 指针来自有效 Vec,长度与缓冲容量一致。
             let status = unsafe {

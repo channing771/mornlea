@@ -134,6 +134,7 @@ uint32_t mornlea_worldgen_probe(
  *
  * 根坐标 y 必须落在 [WORLD_MIN_Y, WORLD_MAX_Y - 9]:最坏普通橡树(高 7)
  * 的顶格在 root_y + 8,越界即按输入违约拒绝,而不是返回被截断的几何。
+ * 根坐标 x/z 的 ±2 邻域不得越出 i32 值域,否则几何坐标加法会回绕。
  *
  * abi_version 不匹配返回 MORNLEA_STATUS_ABI_VERSION;指针、范围或重叠
  * 违约返回 MORNLEA_STATUS_INVALID_ARGUMENT;输入内容违约(长度、magic、

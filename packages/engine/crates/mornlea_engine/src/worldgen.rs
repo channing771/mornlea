@@ -767,8 +767,9 @@ pub(crate) struct TreeBlock {
 /// 解析运行时树形几何输入;任何违约返回 None(FFI 层转为 StatusInput)。
 ///
 /// 校验项:长度精确等于 28、magic `MTB1`、layout 等于 1、根坐标 Y 落在
-/// `[WORLD_MIN_Y, TREE_BLOCKS_MAX_ROOT_Y]`。根坐标 X/Z 无额外约束——它们
-/// 只参与哈希,几何偏移与绝对坐标无关。
+/// `[WORLD_MIN_Y, TREE_BLOCKS_MAX_ROOT_Y]`,以及 X/Z 的 ±2 邻域不越出 i32
+/// 值域(否则几何坐标加法会回绕)。X/Z 本身无世界边界约束——它们只参与
+/// 哈希,几何偏移与绝对坐标无关。
 pub(crate) fn parse_tree_blocks_input(bytes: &[u8]) -> Option<TreeBlocksRequest> {
     if bytes.len() != TREE_BLOCKS_INPUT_BYTES
         || &bytes[0..4] != b"MTB1"
@@ -782,9 +783,14 @@ pub(crate) fn parse_tree_blocks_input(bytes: &[u8]) -> Option<TreeBlocksRequest>
         y: read_i32(bytes, 20),
         z: read_i32(bytes, 24),
     };
-    (WORLD_MIN_Y..=TREE_BLOCKS_MAX_ROOT_Y)
-        .contains(&request.y)
-        .then_some(request)
+    // 几何要取根 ±2 的水平邻域;坐标贴近 i32 边界时加法会回绕,回绕后的
+    // 坐标虽然仍是合法 i32,却已经不是调用方给的那棵树,按越界坐标拒绝。
+    let neighborhood_fits = request.x.checked_add(2).is_some()
+        && request.x.checked_sub(2).is_some()
+        && request.z.checked_add(2).is_some()
+        && request.z.checked_sub(2).is_some();
+    let fits_world_height = (WORLD_MIN_Y..=TREE_BLOCKS_MAX_ROOT_Y).contains(&request.y);
+    (neighborhood_fits && fits_world_height).then_some(request)
 }
 
 /// 由 `TREE_BLOCKS_SALT` 从 (世界种子, 根坐标) 派生普通橡树参数。
@@ -2492,6 +2498,17 @@ mod tree_blocks_tests {
             bytes[20..24].copy_from_slice(&(WORLD_MAX_Y - 8).to_le_bytes());
             bytes
         };
+        // 水平邻域越出 i32 值域:坐标本身合法,但根 ±2 会回绕,必须拒绝。
+        let x_at_max = {
+            let mut bytes = valid.clone();
+            bytes[16..20].copy_from_slice(&i32::MAX.to_le_bytes());
+            bytes
+        };
+        let z_at_min = {
+            let mut bytes = valid.clone();
+            bytes[24..28].copy_from_slice(&i32::MIN.to_le_bytes());
+            bytes
+        };
         for (name, bytes) in [
             ("magic", &bad_magic),
             ("layout", &bad_layout),
@@ -2499,12 +2516,19 @@ mod tree_blocks_tests {
             ("too_long", &too_long),
             ("below_world", &below_world),
             ("above_world", &above_world),
+            ("x_at_max", &x_at_max),
+            ("z_at_min", &z_at_min),
         ] {
             assert!(
                 parse_tree_blocks_input(bytes).is_none(),
                 "{name} 必须被拒绝"
             );
         }
+        // i32 值域内最靠边的合法根坐标仍必须接受:邻域恰好不越界。
+        let mut edge = valid.clone();
+        edge[16..20].copy_from_slice(&(i32::MAX - 2).to_le_bytes());
+        edge[24..28].copy_from_slice(&(i32::MIN + 2).to_le_bytes());
+        parse_tree_blocks_input(&edge).expect("i32 边界内 2 格的根坐标必须被接受");
         // 最高合法根坐标:最坏普通橡树(高 7)恰好落在世界上界内。
         let mut highest = valid.clone();
         highest[20..24].copy_from_slice(&(WORLD_MAX_Y - 9).to_le_bytes());
