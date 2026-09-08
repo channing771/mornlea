@@ -109,7 +109,9 @@ func captureSettled(stats client.MesherStats, pending, lodBusy, vistaPending int
 // delta 的顺序 MUST 条款固定；`rain-noon` 与双机位 `camera-third-back/front`
 // 同为表中部插入（紧随 mining-crack-heavy、先于 main-menu），`snow-cover`
 // 紧随 camera-third-front、先于 main-menu，顺序由 visual-verification 的
-// 顺序 MUST 条款固定。
+// 顺序 MUST 条款固定；`sapling-growth` 同为表中部插入（紧随 `oak-grove`、
+// 先于 `ai-companion`），顺序由 visual-verification delta「树苗与橡树再生
+// 基线场景」的 MUST 条款固定。
 var captureScenes = []captureScene{
 	{
 		Name:         "terrain-noon",
@@ -371,6 +373,18 @@ var captureScenes = []captureScene{
 		WarmupFrames: 8,
 		Prepare:      prepareOakGrove,
 		Apply:        applyOakGroveCaptureState,
+	},
+	{
+		// sapling-growth 是树苗与运行时橡树的无窗口近景 capture 场景：空气
+		// 邻域基线上的一片草地支撑面，面上立一株树苗，另一侧立一棵由运行时
+		// 树形几何（`worldgen.TreeBlocks`）长成的橡树。固定正午、固定机位，
+		// 树苗经既有四 quad 交叉斜面 cutout 路径呈现，不走任何特例渲染。
+		// 排序约束：紧随 oak-grove、先于 ai-companion（spec delta
+		// visual-verification「树苗与橡树再生基线场景」）。
+		Name:         "sapling-growth",
+		WarmupFrames: 8,
+		Prepare:      prepareSaplingGrowth,
+		Apply:        applySaplingGrowthCaptureState,
 	},
 	{
 		Name:         "ai-companion",
