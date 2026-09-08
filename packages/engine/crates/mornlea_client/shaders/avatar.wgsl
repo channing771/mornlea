@@ -60,7 +60,7 @@ fn avatar_uv(local: vec3f, face: u32) -> vec2f {
 // 人物内部材质每六层对应六面；本地 -Z 是前向，后脑独占 +Z 层。
 // 旧牛、敌怪、物品与纯色哨兵保持原采样规则。
 fn avatar_face_material(material: u32, face: u32) -> u32 {
-    if (material >= 112u && material < 160u) {
+    if (material >= 114u && material < 162u) {
         return material + face;
     }
     return material;
@@ -70,7 +70,7 @@ fn avatar_face_material(material: u32, face: u32) -> u32 {
 // cuboid 做保守布局，但片元只保留本地 ±Z 两张大面，避免四个窄侧面把整幅
 // 图标压成矩形边框。方块、牛、人物与纯色粒子均落在此区间之外。
 fn item_icon_material(material: u32) -> bool {
-    return material >= 81u && material < 112u;
+    return material >= 81u && material < 114u;
 }
 
 @vertex

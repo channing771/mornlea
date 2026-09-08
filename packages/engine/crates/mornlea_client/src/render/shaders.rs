@@ -83,7 +83,7 @@ mod tests {
 
     #[test]
     fn human_material_faces_are_isolated_from_existing_entities() {
-        assert!(AVATAR.contains("material >= 112u && material < 160u"));
+        assert!(AVATAR.contains("material >= 114u && material < 162u"));
         assert!(AVATAR.contains("return material + face;"));
         assert!(AVATAR.contains("out.material = avatar_face_material(instance.material, face);"));
         assert!(AVATAR.contains("default: { return vec2f(local.x + 0.5, 0.5 - local.y); }"));
@@ -94,7 +94,7 @@ mod tests {
     #[test]
     fn item_icon_materials_discard_only_narrow_faces() {
         assert!(AVATAR.contains("fn item_icon_material(material: u32) -> bool"));
-        assert!(AVATAR.contains("material >= 81u && material < 112u"));
+        assert!(AVATAR.contains("material >= 81u && material < 114u"));
         assert!(AVATAR.contains("@location(5)       face:     u32"));
         assert!(AVATAR.contains("if (item_icon_material(in.material) && in.face < 4u)"));
     }
