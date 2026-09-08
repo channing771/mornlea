@@ -201,6 +201,10 @@ func itemDropMaterial(item core.ItemID) (uint32, bool) {
 		return uint32(assets.LayerMossyCobblestone), true
 	case core.ItemWorkbench:
 		return uint32(assets.LayerWorkbenchTop), true
+	case core.ItemSapling:
+		// 树苗与其它可放置方块同源：世界薄片取它的方块材质层，UI 图标由
+		// `blockItemTexture` 回退路径从同一层合成，不新增物品图标层。
+		return uint32(assets.LayerSapling), true
 	default:
 		return 0, false
 	}

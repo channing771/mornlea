@@ -306,6 +306,42 @@ func shortGrassTexture() []byte {
 	return px
 }
 
+// saplingTexture 是橡树树苗的原创程序化 cutout 层：居中偏下的两列小树干 +
+// 上部叶团，背景全透明、alpha 只含 0 或 255。叶团逐行收放、行内按固定散列
+// 从四档叶绿里选色，树干左深右浅——与树叶层同族但独立成层，16×16 里必须
+// 一眼可辨是「小树」而不是「一撮草」（短草层是贴地的草叶剪影）。
+func saplingTexture() []byte {
+	px := make([]byte, texSize*texSize*4)
+	leaf := [...]rgb{
+		{R: 48, G: 108, B: 44}, {R: 62, G: 126, B: 54},
+		{R: 74, G: 140, B: 60}, {R: 88, G: 152, B: 66},
+	}
+	for y, row := range [...]string{
+		"................",
+		"......####......",
+		"....########....",
+		"...##########...",
+		"..############..",
+		"..############..",
+		"...##########...",
+		"....########....",
+		"......####......",
+	} {
+		for x, cell := range row {
+			if cell != '#' {
+				continue
+			}
+			paint(px, x, y, leaf[hash2(uint32(x), uint32(y), 0x5A91)%uint32(len(leaf))])
+		}
+	}
+	// 树干从叶团下沿一直画到底边并覆盖该处叶像素：左列深、右列浅。
+	for y := 8; y < texSize; y++ {
+		paint(px, 7, y, rgb{R: 72, G: 46, B: 28})
+		paint(px, 8, y, rgb{R: 112, G: 76, B: 42})
+	}
+	return px
+}
+
 func cobblestoneTexture() []byte {
 	px := noisyTexture(rgb{R: 116, G: 118, B: 120}, 10, 0xC0B1)
 	seam := rgb{R: 70, G: 72, B: 74}
