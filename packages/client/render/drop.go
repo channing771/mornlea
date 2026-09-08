@@ -211,9 +211,11 @@ func itemDropMaterial(item core.ItemID) (uint32, bool) {
 }
 
 // itemDropFlake 报告掉落物是否按非方块薄片呈现：不可放置的物品（食物/工
-// 具/火把等）一律薄片；可放置但放置体不是完整立方体的（作物/门/床）同样薄
-// 片，其余方块类保持迷你立方体。火把不在 `ItemPlacement` 表里（形态经
-// `PlaceableBlockAtFace` 按命中面选择），天然落入薄片分支。
+// 具/火把等）一律薄片；可放置物品默认保持迷你立方体，只有例外表内的作物/
+// 门/床五类走薄片。判据是例外表而非放置体形状——树苗的放置体是交叉斜面植
+// 物（非立方体），但不在例外表内，仍按迷你立方体呈现；新增可放置物品默认
+// 落入立方体分支，审视后才可入例外表。火把不在 `ItemPlacement` 表里（形态
+// 经 `PlaceableBlockAtFace` 按命中面选择），天然落入薄片分支。
 func itemDropFlake(item core.ItemID) bool {
 	switch item {
 	case core.ItemWheatSeeds, core.ItemPotato, core.ItemCarrot, core.ItemDoor, core.ItemBed:

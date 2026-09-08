@@ -515,7 +515,7 @@ func (engine *engineContext) completeCompanionMining(
 // 在伙伴背包副本上按固定序逐堆预演，任一堆放不下即该 tick 整体不结算（方块、
 // 容器内容物、耐久、背包全部不变，进度保持满格）；预演通过后同一权威 tick 内
 // `SetBlock` 空气 + 停用容器槽（`DeactivateChest`/`DeactivateFurnace`，对齐玩家
-// 路径 `completeMining` 的顺序）+ 背包提交副本 + `consumeToolDurability`，随后经
+// 路径 `completeMining` 的顺序）+ 背包提交副本 + `consumeMiningToolDurability`，随后经
 // `recordChange` 汇入既有 `pendingChunkChanges` 广播，不新增协议消息。
 //
 // 容器记录经 chunk record 读取（`ChestAt`/`Chest`/`FurnaceAt`/`Furnace`），与玩家

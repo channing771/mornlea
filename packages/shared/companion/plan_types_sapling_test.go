@@ -13,8 +13,9 @@ import (
 // plan_types_sapling_test.go：树苗的伙伴边界（spec 需求「伙伴交互边界显式」）。
 // 本能力不给伙伴增加任何新的放置权限，也不为树苗新增显式采掘拒绝；伙伴采掘
 // 树叶沿用既有的单一 `BlockDrop` 结算，玩家专属的树叶→树苗概率判定不得被
-// 镜像到伙伴侧。与 internal/sim 采掘完成分叉处的 `companionMineableBlock` 是
-// 同一规则的两处实现（companion 不得依赖 sim，依赖方向相反），两处必须一致。
+// 镜像到伙伴侧。与 `packages/server/sim/entity` 采掘完成分叉处的
+// `companionMineableBlock` 是同一规则的两处实现（companion 不得依赖 sim，
+// 依赖方向相反），两处必须一致。
 
 // TestPlanPlaceRegistryExcludesSapling 锁定 place 半边的计划生成侧防守：树苗是
 // 玩家可放置物品（`core.ItemPlacement` 有映射），但伙伴 place 注册表刻意不收
