@@ -685,6 +685,7 @@ func TestRecipeBucketVShape(t *testing.T) {
 		t.Fatalf("V 形 3 铁锭 = (%d,%+v,%v)，想要 (20,空桶x1,true)", id, out, ok)
 	}
 }
+
 // TestNonToolRecipesOutputZeroDurability 锁定非工具产物的耐久必须为零：
 // 耐久字段对没有耐久概念的物品必须是零值，否则同物品的两个栈会因无意义
 // 字段拒绝合并。
