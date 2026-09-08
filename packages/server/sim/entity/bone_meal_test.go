@@ -269,3 +269,26 @@ func TestBoneMealRejectsMaturePotatoAndCarrot(t *testing.T) {
 		}
 	}
 }
+
+// TestBoneMealDoesNotRipenSapling 覆盖 spec 场景「骨粉不催熟树苗」：树苗刻意
+// 不属于作物（`IsCrop` 只覆盖作物三族），骨粉命令因此在作物判定处整条拒绝，
+// 不进入消耗与写入路径。断言三件事——方块保持 `SaplingID`、骨粉数量不变、
+// 不广播任何区块变更；树苗的生长只能来自随机 tick 的确定性判定，骨粉不得成为
+// 绕过该判定的第二条加速路径。
+func TestBoneMealDoesNotRipenSapling(t *testing.T) {
+	held := core.ItemStack{Item: core.ItemBoneMeal, Count: 3}
+	engine, session, yaw, pitch := readyBoneMealPlayer(t, held, core.SaplingID)
+	result := boneMeal(engine, session, yaw, pitch)
+	if len(result.Rejected) != 1 || result.Rejected[0].Reason != RejectInvalidBlock {
+		t.Fatalf("树苗骨粉 Rejected=%+v，想要 RejectInvalidBlock", result.Rejected)
+	}
+	if got := tillBlockAt(t, engine, boneMealTarget); got != core.SaplingID {
+		t.Fatalf("骨粉改写了树苗格: %d", got)
+	}
+	if got := engine.sessions[session].player.inventory.Hotbar.Slots[0]; got != held {
+		t.Fatalf("树苗骨粉扣了骨粉: %+v", got)
+	}
+	if len(result.Changes) != 0 {
+		t.Fatalf("被拒绝的树苗骨粉广播了区块变更: %+v", result.Changes)
+	}
+}
