@@ -34,6 +34,18 @@ func flowingSurvives(pos core.BlockPos, self core.BlockID, w FluidWorld) bool {
 	return false
 }
 
+// countHorizontalSources 返回 pos 水平四邻中源的数量：无限水升级的唯一判据
+// （≥2 即升源）。只读 `w` 的 tick 起始状态，与 `flowingSurvives` 的快照约束一致。
+func countHorizontalSources(pos core.BlockPos, w FluidWorld) int {
+	n := 0
+	for _, npos := range horizontalNeighbors(pos) {
+		if w.BlockAt(npos) == core.WaterSourceID {
+			n++
+		}
+	}
+	return n
+}
+
 // evalCell 对 pos 求值一次完整的单格流动规则（spec.md「流动规则」全部
 // Scenario），返回本次求值想要做出的写入集合：key 是目标格，value 是新
 // 方块编号。返回空 map 表示本次求值不产生任何变化。
@@ -48,6 +60,11 @@ func evalCell(pos core.BlockPos, w FluidWorld) map[core.BlockPos]core.BlockID {
 	if !core.IsFluid(self) {
 		// 队列里的格在真正被处理前可能已经因为别的原因变成非流体（比如被
 		// 玩家挖掉后又放了实心方块）；这种陈旧待更新项直接跳过，不产生变化。
+		// 其中空气是无限水的唯一例外：水平四邻≥2源时自格升源；石头等实心与
+		// 植物仍空写。空气自格无垂直传播，命中即升级返回。
+		if self == core.AirID && countHorizontalSources(pos, w) >= 2 {
+			writes[pos] = core.WaterSourceID
+		}
 		return writes
 	}
 
@@ -65,6 +82,14 @@ func evalCell(pos core.BlockPos, w FluidWorld) map[core.BlockPos]core.BlockID {
 	below := core.BlockPos{X: pos.X, Y: pos.Y - 1, Z: pos.Z}
 	if Replaceable(w.BlockAt(below), 1) {
 		writes[below] = core.WaterLevel1ID
+		return writes
+	}
+
+	// 规则「无限水（流动水自格）」：水平四邻≥2源时自格升源并返回，优先级高于
+	// 等级水，不改变垂直优先（垂直已在上方返回）。源自格永不重写自身；升级只
+	// 发生在流动格，`Replaceable` 判定表不动。
+	if self != core.WaterSourceID && countHorizontalSources(pos, w) >= 2 {
+		writes[pos] = core.WaterSourceID
 		return writes
 	}
 

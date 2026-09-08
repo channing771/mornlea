@@ -195,3 +195,67 @@ func TestEvalCell_StaleQueueEntryNoop(t *testing.T) {
 		t.Fatalf("陈旧待更新项不应产生写入，got writes=%v", writes)
 	}
 }
+
+// TestInfiniteWaterTwoSourcesUpgrade 覆盖无限水规则：自格为空气，+x/-x
+// 为源，其余为石头时按无限水应升源而非等级水。
+func TestInfiniteWaterTwoSourcesUpgrade(t *testing.T) {
+	w := newMemWorld()
+	pos := core.BlockPos{X: 0, Y: 10, Z: 0}
+	w.SetBlock(core.BlockPos{X: 1, Y: 10, Z: 0}, core.WaterSourceID)
+	w.SetBlock(core.BlockPos{X: -1, Y: 10, Z: 0}, core.WaterSourceID)
+	w.SetBlock(core.BlockPos{X: 0, Y: 11, Z: 0}, core.StoneID)
+	w.SetBlock(core.BlockPos{X: 0, Y: 9, Z: 0}, core.StoneID)
+	w.SetBlock(core.BlockPos{X: 0, Y: 10, Z: 1}, core.StoneID)
+	w.SetBlock(core.BlockPos{X: 0, Y: 10, Z: -1}, core.StoneID)
+
+	writes := evalCell(pos, w)
+	got, ok := writes[pos]
+	if !ok || got != core.WaterSourceID {
+		t.Fatalf("双源夹空气 = %v ok=%v，想要源 %d", got, ok, core.WaterSourceID)
+	}
+	if len(writes) != 1 {
+		t.Fatalf("无限水升级只写自格，got writes=%v", writes)
+	}
+}
+
+// TestInfiniteWaterFlowingUpgrade 覆盖无限水规则的流动水自格：下方实心时
+// 双源夹流动水应升源，优先级高于等级水。
+func TestInfiniteWaterFlowingUpgrade(t *testing.T) {
+	w := newMemWorld()
+	pos := core.BlockPos{X: 0, Y: 10, Z: 0}
+	w.SetBlock(pos, core.WaterLevel3ID)
+	w.SetBlock(core.BlockPos{X: 1, Y: 10, Z: 0}, core.WaterSourceID)
+	w.SetBlock(core.BlockPos{X: -1, Y: 10, Z: 0}, core.WaterSourceID)
+	w.SetBlock(core.BlockPos{X: 0, Y: 11, Z: 0}, core.StoneID)
+	w.SetBlock(core.BlockPos{X: 0, Y: 9, Z: 0}, core.StoneID)
+
+	writes := evalCell(pos, w)
+	got, ok := writes[pos]
+	if !ok || got != core.WaterSourceID {
+		t.Fatalf("双源夹流水 = %v ok=%v，想要源 %d", got, ok, core.WaterSourceID)
+	}
+	if len(writes) != 1 {
+		t.Fatalf("无限水升级只写自格，got writes=%v", writes)
+	}
+}
+
+// TestInfiniteWaterVerticalPriorityPreserved 验证垂直优先不被无限水覆盖：
+// 下方可替换时流动水仍只向下写等级 1，不升源。
+func TestInfiniteWaterVerticalPriorityPreserved(t *testing.T) {
+	w := newMemWorld()
+	pos := core.BlockPos{X: 0, Y: 10, Z: 0}
+	w.SetBlock(pos, core.WaterLevel2ID)
+	w.SetBlock(core.BlockPos{X: 1, Y: 10, Z: 0}, core.WaterSourceID)
+	w.SetBlock(core.BlockPos{X: -1, Y: 10, Z: 0}, core.WaterSourceID)
+	w.SetBlock(core.BlockPos{X: 0, Y: 11, Z: 0}, core.StoneID)
+	// 下方空气可替换，触发垂直优先。
+
+	writes := evalCell(pos, w)
+	below := core.BlockPos{X: 0, Y: 9, Z: 0}
+	if got, ok := writes[below]; !ok || got != core.WaterLevel1ID {
+		t.Fatalf("垂直优先应写下方等级1，got=%v ok=%v", got, ok)
+	}
+	if len(writes) != 1 {
+		t.Fatalf("垂直优先时不应升源或水平写入，got writes=%v", writes)
+	}
+}
