@@ -57,4 +57,12 @@
 
 ## 延期与放弃
 
-以下事项在实现期由 ledger 裁决后逐条誊入，届时不得静默丢弃。
+以下事项经任务评审、整分支终审与 scoped 复审确认，均为 Minor、不可达路径或独立后续行，不阻塞本 change：
+
+- **文档刷新独立成行**：`docs/architecture.md`、`README.md`/`README.en.md`、`docs/notes/go-rust-division.md`、`docs/notes/lan-server.md`、`docs/notes/visual-verification.md`、`packages/tools/perfcheck/compare.go` 等处的版本描述同时滞后于协议 v38、client ABI v18 等多个版本，属独立文档刷新任务；权威矩阵（根 `AGENTS.md`、`openspec/config.yaml`）已随本 change 更新。
+- **主规格场景计数存量滞后**：`visual-verification` 主规格部分 Requirement 仍写「27/28 个场景」，早于本 change 前代码的 29 景即已失真；本 change 的 delta 只新增 `sapling-growth`（29→30），存量计数修正留待主规格维护。
+- **呈现细化候选**：树苗掉落物沿用可放置方块的 1/4 mini-cube 薄片分支，物品图标经 `blockItemTexture` 回退（透明源像素为黑，与玻璃图标同路径）；如需扁平 cutout 图标或薄片掉落，属独立呈现裁决。
+- **不可达路径**：`mornlea_tree_blocks` 对 X/Z 距 i32 边界 ±2 的根坐标硬拒并触发 Go 桥 panic，需 `|X|≈2^31` 的存档才可达；生长写入的回滚分支被 Y 范围与 ChunkReady 双重前置校验挡在公共缝之外，无直接测试（Rust 侧 `0xAA` canary 覆盖坏输入原子性）。
+- **测试强度**：Rust `quad.rs` 的植物集合测试断言常量而非字面量 `164`，字面量由跨语言真实 mesher pin 兜底；`nativeabi` 成功路径「尾字节不变」断言因缓冲零初始化而空转（同性质由 Rust canary 承担）。
+- **伙伴语义显式边界**：伙伴采掘树叶只产出既有 `ItemLeaves`（不触发树苗判定），伙伴植树在放置注册表中显式豁免——两者均已写入主规格契约，非缺陷。
+- **注册表注释存量**：`packages/engine/crates/mornlea_engine/src/input.rs` 的「今天是 85 条」注释早于本 change 即已陈旧，未在本 change 清扫。
