@@ -66,10 +66,7 @@ func TestViewmodelAllIconsVisibleAcrossCompleteSwings(t *testing.T) {
 		_, period := ViewmodelSwingParams(ViewmodelTierOf(stack))
 		var angles []float32
 		for tick := uint64(0); tick <= period; tick++ {
-			angles = append(angles, ViewmodelMiningAngle(tick, 0, ViewmodelTierOf(stack)))
-		}
-		for age := uint8(0); age <= ViewmodelAttackFrames; age++ {
-			angles = append(angles, ViewmodelAttackAngle(age, ViewmodelTierOf(stack)))
+			angles = append(angles, ViewmodelClickAngle(true, float32(tick)/float32(period), ViewmodelTierOf(stack)))
 		}
 		for _, aspect := range []float32{16.0 / 9, 4.0 / 3} {
 			projection := core.Perspective(viewmodelProjectionFovY, aspect, .1, 100)
@@ -164,11 +161,8 @@ func TestViewmodelBlockFacesStayOnScreenAcrossCompleteSwings(t *testing.T) {
 		for _, aspect := range []float32{16.0 / 9, 4.0 / 3} {
 			projection := core.Perspective(viewmodelProjectionFovY, aspect, .1, 100)
 			var angles []float32
-			for tick := uint64(0); tick <= 14; tick++ {
-				angles = append(angles, ViewmodelMiningAngle(tick, 0, ViewmodelTierBlock))
-			}
-			for age := uint8(0); age <= ViewmodelAttackFrames; age++ {
-				angles = append(angles, ViewmodelAttackAngle(age, ViewmodelTierBlock))
+			for step := 0; step <= 28; step++ {
+				angles = append(angles, ViewmodelClickAngle(true, float32(step)/28, ViewmodelTierBlock))
 			}
 			for _, angle := range angles {
 				parts := buildViewmodelParts(nil, &ViewmodelInput{Selected: core.ItemStack{Item: item, Count: 1}, ViewportWidth: aspect * 720, ViewportHeight: 720}, angle)

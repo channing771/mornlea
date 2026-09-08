@@ -3,6 +3,7 @@ package capture
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	application "github.com/channing771/mornlea/packages/client/cmd/mornlea/app"
 	"github.com/channing771/mornlea/packages/client/render"
@@ -45,7 +46,8 @@ func TestHeldItemsSequenceProducesNeutralMiningAttackAndRecovery(t *testing.T) {
 			if app.ServerTick() != uint64(frame+1) {
 				t.Fatalf("tick drift at %d", frame)
 			}
-			input := render.ViewmodelInput{Selected: stack, Tick: app.ServerTick(), Mining: app.MiningOverlay().Active, AttackTick: app.attackTick, ViewportWidth: captureWidth, ViewportHeight: captureHeight, FovY: app.Camera().FovY}
+			active, phase := app.motion.Phase()
+			input := render.ViewmodelInput{SwingActive: active, SwingPhase: phase, Selected: stack, ViewportWidth: captureWidth, ViewportHeight: captureHeight, FovY: app.Camera().FovY}
 			_, period := render.ViewmodelSwingParams(render.ViewmodelTierOf(stack))
 			attackFrame := 8 + int(period)
 			if frame < attackFrame && app.attackTick != 0 {
@@ -84,6 +86,7 @@ func TestHeldItemsDispatchRejectsMissingOutput(t *testing.T) {
 // heldItemsAttackObserver 记录真实应用消费的确认沿，让漏接或重复触发直接暴露在编码时序中。
 type heldItemsAttackObserver struct {
 	SceneApplication
+	motion     render.ViewmodelMotion
 	attackTick uint64
 	attacks    int
 }
@@ -107,4 +110,10 @@ func TestHeldItemsSequenceRejectsOutOfRangeBeforeMutatingApplication(t *testing.
 			t.Fatalf("item %d exceeds recorder budget", stack.Item)
 		}
 	}
+}
+
+func (a *heldItemsAttackObserver) AdvanceViewmodel(elapsed time.Duration, primary bool) {
+	hotbar, _ := a.Inventory().Hotbar()
+	a.motion.Advance(elapsed, primary, render.ViewmodelTierOf(hotbar.Slots[hotbar.Selected]))
+	a.SceneApplication.AdvanceViewmodel(elapsed, primary)
 }

@@ -115,8 +115,8 @@ func TestViewmodelEncodeUnregisteredSelection(t *testing.T) {
 	player := core.PlayerID{6}
 	encoder := &ViewmodelEncoder{}
 	input := viewmodelTestInput(player, core.ItemStack{Item: core.ItemIDMax, Count: 1}, 75)
-	input.Mining = true
-	input.AttackTick = 75
+	input.SwingActive = true
+	input.SwingPhase = .35
 	var out []byte
 	func() {
 		defer func() {

@@ -27,6 +27,11 @@ func TestViewmodelCompleteSweepClearsFullHUD(t *testing.T) {
 							t.Fatalf("item %d part %d covers crosshair at %v", item, i, viewport)
 						}
 						if models, ok := viewmodelDefaultRegistry.ItemToolParts(item); ok && i > 0 && models[i-1].Center[1] > .27 {
+							for _, corner := range hull {
+								if abs32(corner[0]) >= 1 || abs32(corner[1]) >= 1 {
+									t.Fatalf("tool %d head corner clipped at %v angle %v: %v", item, viewport, float32(step)*.05, corner)
+								}
+							}
 							center, _ := projectToNDC(projection, decodedPartCenter(out, i))
 							if abs32(center[0]) >= 1 || abs32(center[1]) >= 1 || viewmodelHullCoversPoint(hand, mgl32.Vec2{center[0], center[1]}) {
 								t.Fatalf("tool %d head part %d unreadable at %v angle %v", item, i, viewport, float32(step)*.05)

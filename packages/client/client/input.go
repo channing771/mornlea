@@ -29,10 +29,12 @@ func MovementFromKeys(w, a, s, d, jump bool) Movement {
 // Actions 是一帧内需要上行的意图。选择只发送请求，
 // 客户端不据此改写任何已确认的权威快捷栏状态。
 type Actions struct {
-	Mining     bool
-	Place      bool
-	Select     bool
-	SelectSlot uint8
+	// PrimaryDown 保留物理主键状态，仅供呈现侧跨 UI 抑制沿；不进入上行控制。
+	PrimaryDown bool
+	Mining      bool
+	Place       bool
+	Select      bool
+	SelectSlot  uint8
 	// ToggleInventory 是 E 键的上升沿；界面开关只影响本地输入路由。
 	ToggleInventory bool
 	// Click 是背包界面打开时的左键上升沿。
@@ -64,6 +66,7 @@ func (state *InputState) Update(
 ) Actions {
 	rising := primary && !state.primaryDown
 	actions := Actions{
+		PrimaryDown:     primary,
 		ToggleInventory: inventoryKey && !state.inventoryDown,
 		// 界面打开时抑制丢弃，但下方仍记录 Q 的物理状态，
 		// 使抑制期间按住的 Q 在恢复后不会被当成新的上升沿。

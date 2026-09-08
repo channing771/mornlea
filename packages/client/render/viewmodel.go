@@ -11,7 +11,7 @@ import (
 )
 
 // 本文件是第一人称主手 viewmodel 的 CPU 编码：主手及其持物，
-// 手臂颜色与材质同第三人称同源，全部相位由权威 tick 与触发沿派生，
+// 手臂颜色与材质同第三人称同源，全部相位由显式本地呈现时间派生，
 // 不读墙钟。输出复用 avatar 实例布局（96 字节/实例），绘制由 Rust 渲染器
 // 承担；帧 TLV 装配不在本文件，属于跨语言帧编码的职责。
 
@@ -19,9 +19,6 @@ const (
 	// ViewmodelMaxInstances 是单帧 viewmodel 实例恒定上限：主手一实例与
 	// 至多 16×16 个图标棱柱。
 	ViewmodelMaxInstances = 257
-	// ViewmodelAttackFrames 是命中确认后的攻击挥动窗（帧）：第 1 帧起挥，
-	// 第 6 帧后回中立持握，与既有命中 marker 的 6 帧语义同源。
-	ViewmodelAttackFrames = 6
 )
 
 // ViewmodelHeldKind 是右手持物三形态：只由已确认选中槽决定。
@@ -55,22 +52,18 @@ const (
 	ViewmodelTierAxe
 )
 
-// ViewmodelInput 是单帧 viewmodel 编码输入：`Selected` 必须是已确认镜像的
-// 选中槽（本地选择请求未确认时调用方不得提前填入）；`Mining` 由调用方按既
-// 有呈现信号门控（采掘 active、目标有效、裂纹阶段合法、游戏相位）；
-// `AttackTick` 是最后确认的 `CombatHit` 权威 tick，无命中时填零。
-// `CamPos`/`CamYaw`/`CamPitch` 是本帧呈现相机的位姿：根变换由它派生，相机
-// 空间偏移经根变换烘焙为世界变换后由既有世界投影绘制；零值即旧链的单位根，
-// 重放比较必须连同位姿一起固定。
+// ViewmodelInput 是单帧呈现快照：`Selected` 只取已确认选中，
+// `SwingActive` / `SwingPhase` 只取本地有效点击时钟。权威 tick、裂纹和命中
+// 不进入动作编码；相机位姿和逻辑尺寸共同固定重放的构图。
 type ViewmodelInput struct {
-	Player     core.PlayerID
-	Selected   core.ItemStack
-	Tick       uint64
-	Mining     bool
-	AttackTick uint64
-	CamPos     mgl32.Vec3
-	CamYaw     float32
-	CamPitch   float32
+	// SwingActive / SwingPhase 是有效点击驱动的单调呈现时间，重复编码不推进动作。
+	SwingActive bool
+	SwingPhase  float32
+	Player      core.PlayerID
+	Selected    core.ItemStack
+	CamPos      mgl32.Vec3
+	CamYaw      float32
+	CamPitch    float32
 	// Registry 是本帧 atlas 同源的只读资产；nil 使用默认素材。
 	Registry *assets.Registry
 	// `ViewportWidth`/`ViewportHeight` 使用 HUD 同源逻辑像素；`FovY` 为世界相机垂直弧度。
@@ -120,18 +113,15 @@ func ViewmodelTierOf(stack core.ItemStack) ViewmodelTier {
 	}
 }
 
-// viewmodelSwingParam 是单档的挥动参数：摆幅（弧度）与完整挥动周期（权威
-// tick 数）。呈现侧常量，不进任何线上契约，改表不动编码布局与 ABI。
+// viewmodelSwingParam 是摆幅与节奏档；`periodTicks` 仅表示 50ms 呈现采样数，
+// 不消费服务端 tick。参数不进线上契约，布局与 ABI 不变。
 type viewmodelSwingParam struct {
 	amplitude   float32
 	periodTicks uint64
 }
 
-// viewmodelSwingTable 是六档摆幅与节奏参数表：斧与铲在配方与采掘规则落地
-// 前取镐档默认值，落地后只改这两行的表值。摆幅按抓帧目检调定：工具三档统
-// 一 0.7（峰值挥动保持手持物在框内且屏面位移可辨，更大摆幅会使峰值帧冲出
-// 画面，见视觉基线报告；档位区分改由周期承担——剑 8 tick 最快、镐 10、空
-// 手 12、方块 14；周期一律不动）。
+// viewmodelSwingTable 保留类别摆幅与周期差异；剑 400ms、镐/锄 500ms、
+// 空手 600ms、方块 700ms。尚无斧物品，预留档沿用镐参数。
 var viewmodelSwingTable = [...]viewmodelSwingParam{
 	ViewmodelTierEmptyHand: {amplitude: 0.5, periodTicks: 12},
 	ViewmodelTierBlock:     {amplitude: 0.4, periodTicks: 14},
@@ -151,102 +141,24 @@ func ViewmodelSwingParams(tier ViewmodelTier) (amplitude float32, periodTicks ui
 	return param.amplitude, param.periodTicks
 }
 
-// ViewmodelMiningAngle 是挖掘挥动的纯相位函数：自锚点起随权威
-// tick 循环摆动，不读墙钟、帧间隔与本地随机数；同 `(tick, 档, 触发沿)` 重
-// 放逐帧相同。`tick` 回退时调用方重锚（以当前 tick 为新锚），旧相位不延续。
-func ViewmodelMiningAngle(tick, anchorTick uint64, tier ViewmodelTier) float32 {
-	amplitude, period := ViewmodelSwingParams(tier)
-	var elapsed uint64
-	if tick > anchorTick {
-		elapsed = tick - anchorTick
-	}
-	phase := 2 * math.Pi * float64(elapsed%period) / float64(period)
-	return amplitude * float32(math.Sin(phase))
-}
-
-// ViewmodelAttackAngle 是攻击挥动的纯相位函数：`attackAge` 为触发后的帧龄，
-// 窗内完成一次正弦挥动（首帧即起挥），窗满回零；同 `(帧龄, 档)` 重放逐帧相同。
-func ViewmodelAttackAngle(attackAge uint8, tier ViewmodelTier) float32 {
-	if attackAge >= ViewmodelAttackFrames {
-		return 0
-	}
-	amplitude, _ := ViewmodelSwingParams(tier)
-	phase := math.Pi * float64(attackAge+1) / float64(ViewmodelAttackFrames+1)
-	return amplitude * float32(math.Sin(phase))
-}
-
 // 默认输入与生产输入复用同一图标缓存算法；构造仅发生在包初始化阶段。
 var viewmodelDefaultRegistry = assets.NewDefaultRegistry()
 
-// ViewmodelEncoder 持有 viewmodel 编码的复用缓冲与挥动边沿状态：热路径零
-// 分配；状态只服务呈现（挖掘锚、攻击窗），不进协议与存档。
-type ViewmodelEncoder struct {
-	parts []avatarPart
-	// mining 是上一帧的挖掘门控，miningAnchor 是本轮挖掘的起始权威 tick。
-	mining       bool
-	miningAnchor uint64
-	// lastTick 是上一帧权威 tick，用于回退检测；lastAttackTick 是已见的
-	// 最新命中触发沿，陈旧与重复确认不得重启窗口。
-	lastTick       uint64
-	lastAttackTick uint64
-	// attackOpen 为真表示攻击窗进行中，attackAge 为窗内帧龄。
-	attackOpen bool
-	attackAge  uint8
-}
+// ViewmodelEncoder 只保留几何复用缓冲；动作由输入的显式呈现相位决定。
+type ViewmodelEncoder struct{ parts []avatarPart }
 
-// ResetViewmodel 清零挥动的边沿状态并保留复用缓冲：断线重连、会话重置与场
-// 景切换后由装配层调用，下一帧起按新输入重新锚定。
-func (e *ViewmodelEncoder) ResetViewmodel() {
-	e.parts = e.parts[:0]
-	e.mining = false
-	e.miningAnchor = 0
-	e.lastTick = 0
-	e.lastAttackTick = 0
-	e.attackOpen = false
-	e.attackAge = 0
-}
+// ResetViewmodel 清除复用部件；动作时钟由应用层在会话边界一并重置。
+func (e *ViewmodelEncoder) ResetViewmodel() { e.parts = e.parts[:0] }
 
 // EncodeViewmodelInstances 把单帧 viewmodel 编码为 96 字节/实例的字节流，
 // 与 avatar 实例布局同形。`input` 为 nil 表示无 viewmodel 输入（非游戏相
 // 位或会话未存活）：输出为空且不扰动编码器状态。`dst` 会被重置复用，调用
 // 方保证容量即零分配。单帧实例恒不超过 `ViewmodelMaxInstances`。
-//
-// 边沿语义：挖掘上升沿以本 tick 为锚，持续期间相位随 tick 循环，下降沿回
-// 中立；命中触发沿（严格递增的 `AttackTick`）开启 6 帧窗口，窗内攻击挥动
-// 优先于挖掘，窗满自闭；tick 回退时挖掘重锚、攻击窗与触发沿一起清空。
 func (e *ViewmodelEncoder) EncodeViewmodelInstances(dst []byte, input *ViewmodelInput) []byte {
 	if input == nil {
 		return dst[:0]
 	}
-	if input.Tick < e.lastTick {
-		// 回退即新会话：挖掘重锚、攻击窗与触发沿一起清空，否则旧大值会
-		// 把新会话的小 tick 命中误判为陈旧而丢掉首挥。
-		e.miningAnchor = input.Tick
-		e.attackOpen = false
-		e.attackAge = 0
-		e.lastAttackTick = 0
-	}
-	if input.Mining && !e.mining {
-		e.miningAnchor = input.Tick
-	}
-	e.mining = input.Mining
-	if input.AttackTick != 0 && input.AttackTick > e.lastAttackTick {
-		e.lastAttackTick = input.AttackTick
-		e.attackOpen = true
-		e.attackAge = 0
-	}
-	e.lastTick = input.Tick
-	tier := ViewmodelTierOf(input.Selected)
-	var angle float32
-	if e.attackOpen {
-		angle = ViewmodelAttackAngle(e.attackAge, tier)
-		e.attackAge++
-		if e.attackAge >= ViewmodelAttackFrames {
-			e.attackOpen = false
-		}
-	} else if e.mining {
-		angle = ViewmodelMiningAngle(input.Tick, e.miningAnchor, tier)
-	}
+	angle := ViewmodelClickAngle(input.SwingActive, input.SwingPhase, ViewmodelTierOf(input.Selected))
 	e.parts = buildViewmodelParts(e.parts[:0], input, angle)
 	dst = growEncodeBuffer(dst, len(e.parts)*avatarInstanceBytes)
 	encodeAvatarPartsInto(dst, e.parts)
@@ -275,7 +187,7 @@ func buildViewmodelParts(dst []avatarPart, input *ViewmodelInput, angle float32)
 	add := func(frame mgl32.Mat4, center, size mgl32.Vec3, color [4]float32, material uint32) {
 		dst = append(dst, avatarPart{transform: frame.Mul4(mgl32.Translate3D(center[0], center[1], center[2])).Mul4(mgl32.Scale3D(size[0], size[1], size[2])), color: color, material: material})
 	}
-	add(root, mgl32.Vec3{0, -.53, .05}, mgl32.Vec3{.16, 1.10, .18}, avatarShade(avatarColor(key), .82), material+12)
+	add(root, mgl32.Vec3{0, -.73, .05}, mgl32.Vec3{.16, 1.50, .18}, avatarShade(avatarColor(key), .82), material+12)
 	registry := input.Registry
 	if registry == nil {
 		registry = viewmodelDefaultRegistry

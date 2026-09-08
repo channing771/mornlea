@@ -29,9 +29,10 @@ func viewmodelGripRoot(input *ViewmodelInput, angle float32) mgl32.Mat4 {
 	tangent := float32(math.Tan(float64(fov) / 2))
 	scale := max(0, min((w-2*viewmodelHUDEdge)/viewmodelHUDWidth, (h-2*viewmodelHUDEdge)/viewmodelHUDHeight, float32(1)))
 	y := min(float32(.35), 1-2*(viewmodelHUDStatusHeight*scale+80)/h)
+	y -= (max(0, 1.5-w/h) * .4) * max(angle, 0) / .7
 	compensation := tangent / float32(math.Tan(35*math.Pi/180))
-	return mgl32.Translate3D(.60*w/h*tangent*.95, -y*tangent*.95, -.95).
+	return mgl32.Translate3D(.60*w/h*tangent*.95-max(angle, 0)*.12*compensation, -y*tangent*.95-(min(angle, 0)*.07+max(angle, 0)*.15)*compensation, -.95-max(angle, 0)*.22).
 		Mul4(mgl32.Scale3D(compensation, compensation, 1)).
-		Mul4(mgl32.HomogRotate3DZ(80*math.Pi/180 - angle*.30)).
+		Mul4(mgl32.HomogRotate3DZ(80*math.Pi/180 - angle*.12)).
 		Mul4(mgl32.HomogRotate3DX(angle * .35))
 }

@@ -5,22 +5,15 @@ package capture
 //（世界 PNG 纪律独立），`RunCapture`/`visual-check`/`visual-update` 都不
 // 感知它。
 //
-// 时间线（帧号 = 合成 tick 偏移，延迟 5cs 即 20Hz，与权威 tick 同频）：
-// hand-mining：铁镐在手、浅裂纹恒定（6/30），右手以镐档周期 10 tick 正弦
-// 挥动，120 帧恰好 12 次完整挥动；hand-attack：铁剑在手、每 12 帧合成一次
-// 确认沿（编码器窗语义为 6 帧挥动 + 6 帧中立，120 帧对应 10 个窗口沿），确
-// 认沿经抓帧专用缝写入，与线上 `CombatHit` 同语义。
-//
-// tick 来源是合成推进而非真实无头 tick：真实权威 tick 取决于加载收敛花了
-// 多久，随机器速度漂移（见 `captureScene` 的注释），演示必须逐帧确定才钉
-// 得住 120 帧约定。首帧合成 tick 远小于收敛期的真实 tick，编码器走回退分
-// 支重锚，旧相位不延续。
+// 时间线每帧显式推进 50ms；挖掘持键连续挥动，攻击每 12 帧点击一次。
+// 合成 tick 只供世界镜像与命中 marker，动作不依赖加载时长或确认到达时间。
 
 import (
 	"fmt"
 	"image"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/go-gl/mathgl/mgl32"
 
@@ -36,13 +29,12 @@ const (
 	// 打击重武装周期 12 整除，不断尾。
 	handSwingMotionFrameCount = 120
 	// handSwingMotionTickBase 是合成 tick 序列的起点：取值任意、固定即可；
-	// 远小于收敛期的真实 tick，首帧必走编码器回退重锚。
+	// 与加载收敛时长无关，世界镜像可确定重放。
 	handSwingMotionTickBase = uint64(1)
 	// handSwingMotionFrameDelay 是 GIF 单帧延迟（百分之一秒）：20Hz，与权
 	// 威 tick 同频，120 帧循环 6 秒。
 	handSwingMotionFrameDelay = 5
-	// handSwingMotionAttackPeriod 是打击重武装周期（帧）：6 帧挥动窗 + 6 帧
-	// 中立，循环往复。
+	// handSwingMotionAttackPeriod 是打击点击周期：8 帧动作、4 帧中立。
 	handSwingMotionAttackPeriod = 12
 )
 
@@ -52,7 +44,7 @@ func handSwingMotionTick(frame int) uint64 {
 }
 
 // handSwingMotionOverlay 给出挖掘剧本的采掘镜像：全程恒定浅阶段（6/30），
-// 裂纹只作背景，挥动由合成 tick 驱动。
+// 裂纹只作背景，挥动由显式呈现 elapsed 与持键驱动。
 func handSwingMotionOverlay(_ int) hud.MiningOverlay {
 	return hud.MiningOverlay{
 		Active: true, HasTarget: true, Target: captureMiningCrackTarget,
@@ -61,20 +53,21 @@ func handSwingMotionOverlay(_ int) hud.MiningOverlay {
 }
 
 // handSwingMotionRearmAttack 报告打击剧本在该帧是否重武装标记：周期首帧武
-// 装，窗内 6 帧挥动、窗外 6 帧中立。
+// 装；marker 的帧窗与本地动作时间线互不驱动。
 func handSwingMotionRearmAttack(frame int) bool {
 	return frame%handSwingMotionAttackPeriod == 0
 }
 
-// applyHandSwingMotionFrame 推进一帧时间线状态：合成 tick 直写；挖掘剧本
-// 重装恒定采掘镜像，打击剧本按周期合成确认沿（`Observe` 既置确认点开编码
-// 器窗口、又重武装标记帧数，一举两得）。调用方随后走真实 `RenderFrame` 抓帧。
+// applyHandSwingMotionFrame 把时间和主键送入生产呈现入口；
+// 世界裂纹和命中 marker 独立重装，随后由真实 `RenderFrame` 抓帧。
 func applyHandSwingMotionFrame(app SceneApplication, scene string, frame int) error {
 	app.SetServerTick(handSwingMotionTick(frame))
 	switch scene {
 	case "hand-mining":
+		app.AdvanceViewmodel(50*time.Millisecond, true)
 		app.SetMiningOverlay(handSwingMotionOverlay(frame))
 	case "hand-attack":
+		app.AdvanceViewmodel(50*time.Millisecond, handSwingMotionRearmAttack(frame))
 		if handSwingMotionRearmAttack(frame) {
 			app.ObserveCombatHitForCapture(handSwingMotionTick(frame))
 		}
@@ -219,9 +212,7 @@ func RunHandSwingMotion(app SceneApplication, outPath, scene string) error {
 	if _, err := captureSceneImage(app, stage); err != nil {
 		return fmt.Errorf("收敛 motion 场景: %w", err)
 	}
-	// 收敛后丢弃编码器边沿：循环首帧合成 tick 远小于收敛期真实 tick，本来
-	// 也会走回退重锚；显式重置让时间线的起点不依赖收敛细节（挖掘上升沿、
-	// 攻击窗关闭，首个重武装沿重开）。
+	// 收敛后清掉呈现动作时钟，首帧不继承预热状态。
 	app.ResetViewmodel()
 	frames, err := captureBoundedMotionFrames(handSwingMotionFrameCount,
 		func(frame int) (*image.NRGBA, error) {

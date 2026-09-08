@@ -154,3 +154,11 @@ packages/client/cmd/mornlea/app/
   静态 capture 抑制和第三人称显隐沿用原路径。
 - `TestViewmodelUsesCurrentAtlasIconAndMaximumPixelBudget` 通过真实材质覆盖
   检查完整图标的颜色、257 实例预算、注册表切换与预热后零分配。
+- `Actions.PrimaryDown` 保留物理主键，`applyInteractiveInput` 经相位、聊天、
+  面板与光标门控后推进 `viewmodelMotion`；被 UI 或首次捕获抑制的按键须松开
+  才能重新起挥。呈现消费完整单调 elapsed，预测保持原 100ms 上限。
+- `ViewmodelInput.SwingActive` / `SwingPhase` 只取本地动作时钟；不再传入
+  权威 tick、裂纹或 `CombatHit`。重复渲染不推进动作，松键后完成当前挥动，
+  持键以档位周期有界循环，迟到命中只驱动既有 marker 与音频。
+- capture 经 `AdvanceViewmodel(elapsed, primary)` 使用同一时钟；`ResetViewmodel`
+  同时清除动作与输入抑制沿，会话和 `PlayerState.Reset` 复用这一落点。

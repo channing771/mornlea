@@ -225,7 +225,8 @@ func runGamePhase(app *Application) error {
 		app.pumpDevCapture()
 
 		now := time.Now()
-		dt := min(now.Sub(lastFrame), 100*time.Millisecond)
+		presentationElapsed := now.Sub(lastFrame)
+		dt := min(presentationElapsed, 100*time.Millisecond)
 		lastFrame = now
 		app.DrainServerMessages(64)
 		if err := app.receiver.Err(); err != nil {
@@ -427,7 +428,7 @@ func runGamePhase(app *Application) error {
 			movement = client.Movement{}
 		}
 		app.applyInteractiveCursorInput(
-			dt, movement, actions, captured && !chatBlockedThisFrame, justCaptured,
+			presentationElapsed, movement, actions, captured && !chatBlockedThisFrame, justCaptured,
 		)
 		app.remotePlayers.Advance(dt)
 		if app.companions != nil {
@@ -469,6 +470,18 @@ func (a *Application) applyInteractiveInput(
 	actions client.Actions,
 	allowActions bool,
 ) {
+	// 输入抑制必须持续至松键，首次捕获点击不能在下一帧变成空挥。
+	allowedSwing := allowActions && !a.hudLinkedHidden(false) && !a.chatInput.open && !a.gameCursorFree && !a.panelVisible()
+	primary := actions.PrimaryDown
+	if !primary {
+		a.viewmodelPrimaryBlocked = false
+	}
+	if primary && !allowedSwing {
+		a.viewmodelPrimaryBlocked = true
+	}
+	a.AdvanceViewmodel(elapsed, allowedSwing && primary && !a.viewmodelPrimaryBlocked)
+	// 预测仍使用交互循环原有的 100ms 上限；呈现保留完整单调间隔。
+	elapsed = min(elapsed, 100*time.Millisecond)
 	if allowActions {
 		if actions.Select {
 			a.selectHotbarSlot(actions.SelectSlot)

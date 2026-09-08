@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
@@ -31,13 +32,13 @@ func heldItemsCatalogue() []core.ItemStack {
 	return stacks
 }
 
-// heldItemsFrameCount 保留前后中立段，并为当前档位录制恰好一个采掘周期和完整攻击窗口。
+// heldItemsFrameCount 保留前后中立段，并为当前档位录制两个完整本地动作。
 func heldItemsFrameCount(stack core.ItemStack) int {
 	_, period := render.ViewmodelSwingParams(render.ViewmodelTierOf(stack))
-	return int(period) + 20
+	return 2*int(period) + 14
 }
 
-// applyHeldItemsFrame 只驱动抓帧专用的确认镜像与合成 tick，不改变线上触发语义。
+// applyHeldItemsFrame 驱动确认镜像、独立 marker 与显式本地动作，不提交世界动作。
 func applyHeldItemsFrame(app SceneApplication, stack core.ItemStack, frame int) error {
 	if frame < 0 || frame >= heldItemsFrameCount(stack) {
 		return fmt.Errorf("手持目录帧越界: %d", frame)
@@ -49,6 +50,7 @@ func applyHeldItemsFrame(app SceneApplication, stack core.ItemStack, frame int) 
 		overlay = handSwingMotionOverlay(frame)
 	}
 	app.SetMiningOverlay(overlay)
+	app.AdvanceViewmodel(50*time.Millisecond, (frame >= 4 && frame < 4+int(period)) || frame == 8+int(period))
 	if frame == 8+int(period) {
 		app.ObserveCombatHitForCapture(uint64(frame + 1))
 	}
@@ -85,11 +87,11 @@ func RunHeldItemsMotion(app SceneApplication, outPath string) error {
 	catalogue := make([]*image.NRGBA, 0, len(stacks))
 	const columns = 4
 	sheets := map[string]*image.NRGBA{}
-	for _, name := range []string{"neutral", "mining-positive", "mining-negative", "attack-peak", "recovered"} {
+	for _, name := range []string{"neutral", "windup", "downstroke", "attack-peak", "recovered"} {
 		sheets[name] = image.NewNRGBA(image.Rect(0, 0, columns*320, ((len(stacks)+columns-1)/columns)*200))
 	}
 	var index strings.Builder
-	index.WriteString("# Held items preview\n\nEach item GIF: 20 Hz; four neutral frames, one mining cycle, four neutral frames, confirmed attack and recovery.\nContact sheets use full-frame 50% thumbnails with stable item IDs; PNGs retain original 640x360 pixels.\n\n")
+	index.WriteString("# Held items preview\n\nEach item GIF: 20 Hz; four neutral frames, one held-primary stroke, four neutral frames, one local air click and full recovery; each step explicitly advances 50 ms. Combat markers do not drive motion.\nContact sheets use full-frame 50% thumbnails with stable item IDs; PNGs retain original 640x360 pixels.\n\n")
 	for n, stack := range stacks {
 		app.ResetViewmodel()
 		app.ResetCombatFeedback()
@@ -119,7 +121,7 @@ func RunHeldItemsMotion(app SceneApplication, outPath string) error {
 		}
 		catalogue = append(catalogue, frames[0])
 		_, period := render.ViewmodelSwingParams(render.ViewmodelTierOf(stack))
-		points := map[string]int{"neutral": 0, "mining-positive": 4 + int(period+2)/4, "mining-negative": 4 + int(3*period+2)/4, "attack-peak": 8 + int(period) + 3, "recovered": len(frames) - 1}
+		points := map[string]int{"neutral": 0, "windup": 4 + max(1, int(period)/5), "downstroke": 4 + int(period)/2, "attack-peak": 8 + int(period) + int(period)/2, "recovered": len(frames) - 1}
 		for name, frameIndex := range points {
 			frame := frames[frameIndex]
 			if err := writePNG(filepath.Join(dir, prefix+"-"+name+".png"), frame); err != nil {

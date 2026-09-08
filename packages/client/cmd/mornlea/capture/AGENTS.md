@@ -72,6 +72,10 @@
 
 - `avatar-detail` 在settings-menu之后、far-horizon之前，用正侧背三个人物钉住静态材质；后继far-horizon完整重置相机，不污染依赖既有投影参数的场景。
 - `--motion-demo` 保留默认break-burst；`--motion-scene`显式选择avatar-walk、drop-scatter、drop-density。复用180帧上限的录制循环与标准库编码，不写world表或比较阈值。新剧本20Hz，原break-burst仍保持50帧和13cs延迟。
-- `--motion-scene held-items` 经 `RunHeldItemsMotion` 输出空手及全部注册物品的中立目录 GIF，并在输出路径追加 `-items` 的目录中生成逐物品完整挖掘/攻击 GIF、中立/双向挖掘峰值/攻击峰值/恢复 PNG、带物品 ID 的联系图与名称索引。继续使用既有有界录制器及 180 帧上限，逐项编码并释放中间动作帧；不进入正式场景表、不比较或自动更新视觉基线。`TestHeldItemsCatalogueCoversRegisteredItemsAndValidStacks`、`TestHeldItemsSequenceProducesNeutralMiningAttackAndRecovery` 与越界测试覆盖目录、确认沿、恢复和预算；main 路由测试覆盖无头入口。
+- `--motion-scene held-items` 经 `RunHeldItemsMotion` 输出空手及全部注册物品的中立目录 GIF，并在输出路径追加 `-items` 的目录中生成逐物品完整挖掘/攻击 GIF、中立/预备/下挥/点击峰值/恢复 PNG、带物品 ID 的联系图与名称索引。继续使用既有有界录制器及 180 帧上限，逐项编码并释放中间动作帧；不进入正式场景表、不比较或自动更新视觉基线。`TestHeldItemsCatalogueCoversRegisteredItemsAndValidStacks`、`TestHeldItemsSequenceProducesNeutralMiningAttackAndRecovery` 与越界测试覆盖目录、确认沿、恢复和预算；main 路由测试覆盖无头入口。
 - 专用场景先清理镜像和`ResetEntityPresentation`跨帧历史；掉落在正式帧注入。静态glyph在预热完成，运动帧抑制目标标签和描边以便审查；不修改生产游戏的目标反馈样式。
 - 橡树林在Apply复用完整呈现清场，不能携带权威加载期间生成的牛或敌对生物。
+- 持物动作剧本统一经 `AdvanceViewmodel(50*time.Millisecond, primary)` 显式
+  推进；`hand-mining` 持键，`hand-attack` 定期点击，命中 marker 独立。
+  held-items 每件录制两次完整动作与中立间隔，输出 `windup`、`downstroke`、
+  `attack-peak`、`neutral`、`recovered` 审查帧。GUI 的真实 HUD 合成验收独立于离屏目录。

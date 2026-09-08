@@ -3,6 +3,7 @@ package capture
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/channing771/mornlea/packages/client/render/hud"
 )
@@ -75,6 +76,8 @@ type handSwingMotionRecorder struct {
 	ticks    []uint64
 	observed []uint64
 	overlays int
+	primary  []bool
+	elapsed  []time.Duration
 }
 
 func (r *handSwingMotionRecorder) SetServerTick(tick uint64) { r.ticks = append(r.ticks, tick) }
@@ -109,10 +112,23 @@ func TestHandSwingMotionFrameDrivesCaptureSeam(t *testing.T) {
 			t.Fatalf("帧 %d: %v", frame, err)
 		}
 	}
+	if len(attack.primary) != 2*handSwingMotionAttackPeriod || len(mining.primary) != 2*handSwingMotionAttackPeriod {
+		t.Fatal("missing explicit animation steps")
+	}
+	for frame := range attack.primary {
+		if attack.primary[frame] != (frame%handSwingMotionAttackPeriod == 0) || !mining.primary[frame] || attack.elapsed[frame] != 50*time.Millisecond || mining.elapsed[frame] != 50*time.Millisecond {
+			t.Fatalf("explicit motion input drift at %d", frame)
+		}
+	}
 	if mining.overlays != 2*handSwingMotionAttackPeriod {
 		t.Fatalf("采掘镜像重装=%d，想要逐帧一次", mining.overlays)
 	}
 	if len(mining.observed) != 0 {
 		t.Fatalf("挖掘剧本合成确认沿=%v，想要永不合成", mining.observed)
 	}
+}
+
+func (r *handSwingMotionRecorder) AdvanceViewmodel(elapsed time.Duration, primary bool) {
+	r.primary = append(r.primary, primary)
+	r.elapsed = append(r.elapsed, elapsed)
 }

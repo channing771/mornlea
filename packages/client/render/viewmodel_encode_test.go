@@ -70,8 +70,8 @@ func TestViewmodelHandsMatchAvatarArmStyle(t *testing.T) {
 		if material := decodedPartMaterial(out, index); material != headMaterial+12 {
 			t.Fatalf("第 %d 只手材质 = %d，想要头部层 +12", index, material)
 		}
-		if size := decodedPartSize(out, index); !approxEqual(size[0], 0.16) || !approxEqual(size[1], 1.10) || !approxEqual(size[2], 0.18) {
-			t.Fatalf("第 %d 只手尺寸 = %v，想要 0.16×1.10×0.18", index, size)
+		if size := decodedPartSize(out, index); !approxEqual(size[0], 0.16) || !approxEqual(size[1], 1.50) || !approxEqual(size[2], 0.18) {
+			t.Fatalf("第 %d 只手尺寸 = %v，想要 0.16×1.50×0.18", index, size)
 		}
 	}
 }
@@ -90,8 +90,8 @@ func TestViewmodelFrameInstanceBound(t *testing.T) {
 	for _, stack := range stacks {
 		encoder := &ViewmodelEncoder{}
 		input := viewmodelTestInput(player, stack, 30)
-		input.Mining = true
-		input.AttackTick = 30
+		input.SwingActive = true
+		input.SwingPhase = .35
 		out := encoder.EncodeViewmodelInstances(nil, input)
 		if count := len(out) / avatarInstanceBytes; count > ViewmodelMaxInstances {
 			t.Fatalf("持物(%d)实例数 = %d，超出单帧上限", stack.Item, count)
@@ -102,7 +102,8 @@ func TestViewmodelFrameInstanceBound(t *testing.T) {
 func TestViewmodelNilInputEncodesEmpty(t *testing.T) {
 	encoder := &ViewmodelEncoder{}
 	live := viewmodelTestInput(core.PlayerID{27}, core.ItemStack{Item: core.ItemStone, Count: 1}, 40)
-	live.Mining = true
+	live.SwingActive = true
+	live.SwingPhase = .35
 	before := append([]byte(nil), encoder.EncodeViewmodelInstances(nil, live)...)
 	if len(before) == 0 {
 		t.Fatalf("前置条件崩了：有输入时编码为空")
@@ -110,14 +111,16 @@ func TestViewmodelNilInputEncodesEmpty(t *testing.T) {
 	if got := encoder.EncodeViewmodelInstances(nil, nil); len(got) != 0 {
 		t.Fatalf("无输入编码长度 = %d，想要空", len(got))
 	}
-	// 空输入不扰动编码器状态：攻击窗口按原帧序继续，不重启不跳帧。
+	// 空输入不改变显式动作相位；恢复后与同输入直接编码一致。
 	next := viewmodelTestInput(core.PlayerID{27}, core.ItemStack{Item: core.ItemStone, Count: 1}, 41)
-	next.Mining = true
+	next.SwingActive = true
+	next.SwingPhase = .35
 	encoder.EncodeViewmodelInstances(nil, nil)
 	got := append([]byte(nil), encoder.EncodeViewmodelInstances(nil, next)...)
 	replay := &ViewmodelEncoder{}
 	replayLive := viewmodelTestInput(core.PlayerID{27}, core.ItemStack{Item: core.ItemStone, Count: 1}, 40)
-	replayLive.Mining = true
+	replayLive.SwingActive = true
+	replayLive.SwingPhase = .35
 	replay.EncodeViewmodelInstances(nil, replayLive)
 	want := append([]byte(nil), replay.EncodeViewmodelInstances(nil, next)...)
 	if !bytes.Equal(got, want) {
@@ -128,7 +131,8 @@ func TestViewmodelNilInputEncodesEmpty(t *testing.T) {
 func TestViewmodelEncodeZeroAlloc(t *testing.T) {
 	encoder := &ViewmodelEncoder{}
 	input := viewmodelTestInput(core.PlayerID{29}, core.ItemStack{Item: core.ItemStone, Count: 1}, 60)
-	input.Mining = true
+	input.SwingActive = true
+	input.SwingPhase = .35
 	dst := make([]byte, 0, ViewmodelMaxInstances*avatarInstanceBytes)
 	encoder.EncodeViewmodelInstances(dst, input)
 	allocs := testing.AllocsPerRun(20, func() {
