@@ -1,5 +1,7 @@
 # First-person held items Implementation Plan
 
+> 第一轮历史实施记录。用户反馈后的当前实施要求以 `refinement-plan.md` 与更新后的 design/spec 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task.
 
 **Goal:** 优化主手构图、隐藏空闲左手、让各方块和工具在手中可辨且协调。

@@ -27,3 +27,6 @@
 Task 1：提交 `82c4fb53`，独立规格审查 PASS、代码质量 PASS，无待处理发现。Task 2：提交 `8939b627`，独立规格审查 PASS、代码质量 PASS，无待处理发现。整分支终审 PASS，无生产缺陷或待处理发现；审查提示的 delta spec 文件尾额外空行已在回填时修正，并通过最终 diff 检查。完整审查记录保留在本 worktree 的 `build/held-items-preview/review-records/`。
 
 原工作区仍在 `e61e8516`，用户原有进度与 bucket 计划改动保留。此 change 工作在 `codex/first-person-held-items`，未推送或合并。
+
+## 用户反馈后的第二轮验收（进行中）
+第一轮离屏图未合成 HUD，不能证明无 HUD 遮挡；用户要求工具结构进一步立体、实际 HUD 共存及即时空挥。真实1280×720窗口已复现前臂压住右侧饥饿图标，证据为 `build/held-items-refinement/before-hud.png`。第二轮门禁和图像待实现及审查后补充，以上第一轮结果不作为第二轮通过声明。
