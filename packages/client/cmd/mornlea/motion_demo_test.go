@@ -58,9 +58,9 @@ func TestParseMainOptionsMotionDemoRejectsConflicts(t *testing.T) {
 
 func TestRunMotionDemoUsesOneApplicationWithoutCapture(t *testing.T) {
 	constructed, closed, demonstrated := 0, 0, 0
-	var gotPath string
+	var gotPath, gotScene string
 	err := runWithDependencies(
-		append([]string{"--motion-demo", "testdata/visual-golden/motion/break-burst.gif"}, absentConfigArgs(t)...),
+		append([]string{"--motion-demo", "testdata/visual-golden/motion/break-burst.gif", "--motion-scene", "held-items"}, absentConfigArgs(t)...),
 		runDependencies{
 			loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
 			newApplication: func(options application.Options) (*application.Application, error) {
@@ -73,9 +73,10 @@ func TestRunMotionDemoUsesOneApplicationWithoutCapture(t *testing.T) {
 				}
 				return application.NewCloseTrackedApplicationForTest(func() { closed++ }), nil
 			},
-			runMotionDemo: func(_ *application.Application, path, _ string) error {
+			runMotionDemo: func(_ *application.Application, path, scene string) error {
 				demonstrated++
 				gotPath = path
+				gotScene = scene
 				return nil
 			},
 		},
@@ -85,6 +86,9 @@ func TestRunMotionDemoUsesOneApplicationWithoutCapture(t *testing.T) {
 	}
 	if constructed != 1 || demonstrated != 1 || closed != 1 {
 		t.Fatalf("constructed=%d demonstrated=%d closed=%d，want 1/1/1", constructed, demonstrated, closed)
+	}
+	if gotScene != "held-items" {
+		t.Fatalf("motion scene=%q", gotScene)
 	}
 	if gotPath != "testdata/visual-golden/motion/break-burst.gif" {
 		t.Fatalf("motion 输出路径=%q", gotPath)
@@ -127,7 +131,7 @@ func TestRunMotionDemoPropagatesError(t *testing.T) {
 }
 
 func TestMotionSceneSelector(t *testing.T) {
-	for _, scene := range []string{"break-burst", "avatar-walk", "drop-scatter", "drop-density", "hand-mining", "hand-attack", "weather-cycle"} {
+	for _, scene := range []string{"break-burst", "avatar-walk", "drop-scatter", "drop-density", "hand-mining", "hand-attack", "weather-cycle", "held-items"} {
 		opts, err := parseMainOptions([]string{"--motion-demo", "x.gif", "--motion-scene", scene})
 		if err != nil || opts.MotionScene != scene {
 			t.Fatalf("scene=%s opts=%+v err=%v", scene, opts, err)

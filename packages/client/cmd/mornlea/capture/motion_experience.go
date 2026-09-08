@@ -163,6 +163,9 @@ func captureBoundedMotionFrames(count int, capture func(int) (*image.NRGBA, erro
 
 // `RunMotion` 只接受显式有界剧本，复用应用渲染与 GIF 编码；出生在正式帧注入。
 func RunMotion(app SceneApplication, outPath, scene string) error {
+	if scene == "held-items" {
+		return RunHeldItemsMotion(app, outPath)
+	}
 	if scene == "break-burst" {
 		return RunBreakBurstMotion(app, outPath)
 	}
