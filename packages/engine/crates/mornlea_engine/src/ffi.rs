@@ -15,10 +15,20 @@ use crate::raycast::{
 };
 use crate::step::{STEP_HEADER_BYTES, STEP_OUTPUT_BYTES, physics_step};
 use crate::worldgen::{
-    CHUNK_VOLUME, WORLDGEN_CHUNK_OUTPUT_BYTES, WORLDGEN_PROBE_OUTPUT_RECORD_BYTES,
-    parse_chunk_input, parse_probe_input, run_probe,
+    CHUNK_VOLUME, TREE_BLOCKS_COUNT_BYTES, TREE_BLOCKS_MAX_OUTPUT_BYTES, TREE_BLOCKS_RECORD_BYTES,
+    WORLDGEN_CHUNK_OUTPUT_BYTES, WORLDGEN_PROBE_OUTPUT_RECORD_BYTES, encode_tree_blocks,
+    parse_chunk_input, parse_probe_input, parse_tree_blocks_input, run_probe, tree_blocks,
 };
 
+/// engine ABI v11:v10(自然短草)之上新增运行时树形几何出口
+/// `mornlea_tree_blocks`——输入 28 字节(`MTB1` magic + layout u32 + 世界
+/// 种子 i64 + 根坐标 x/y/z i32),输出 `count u32` 加每条 8 字节记录
+/// (dx/dy/dz i8、保留 u8、block u16 LE、保留 u16),记录上限 128;几何由
+/// 独立冻结 salt 从 (世界种子, 根坐标) 派生,限定为普通橡树家族,不依赖
+/// 世界生成的 8×8 候选格网格,因此 `GenerateChunk`/`BaseBlockAt` 逐格不变
+/// ——oak-sapling-regrowth 变更。既有入口签名与语义不变;旧 dylib 与新
+/// 二进制混装被版本握手拒绝(二者本就是同一不可跨版本混装的 release
+/// unit)。
 /// engine ABI v10:v9(流体双内核)之上把 worldgen `MGW1` 请求材料表由
 /// 14 项扩为 15 项(末项 `short_grass`,位于偏移 52,perm 后移到偏移 54):
 /// 带内 layout 2 → 3、公共 header 564 → 566 字节、chunk 输入 572 → 574
@@ -41,7 +51,7 @@ use crate::worldgen::{
 /// 由 greedy 的 model dispatcher 消费。条目上限 64→80 已在 v7 期内提前完成,
 /// 不随本次升版重复记账。既有入口签名与语义不变;旧 dylib 与新二进制混装被
 /// 版本握手拒绝(二者本就是同一不可跨版本混装的 release unit)。
-pub(crate) const ABI_VERSION: u32 = 10;
+pub(crate) const ABI_VERSION: u32 = 11;
 
 // 输入长度校验委托给 step::step_input_is_valid（内部使用 STEP_HEADER_BYTES），此常量保留供 ABI 文档对齐。
 #[allow(dead_code)]
@@ -607,6 +617,85 @@ unsafe fn worldgen_probe_with(
         }
         let mut encoded = vec![0u8; needed];
         run_probe(&params, &records, &mut encoded);
+        Ok::<Vec<u8>, u32>(encoded)
+    }));
+    match result {
+        Ok(Ok(encoded)) => {
+            // SAFETY: output 非空、范围有效且与 input 不重叠；只在完整成功后一次发布。
+            unsafe { std::ptr::copy_nonoverlapping(encoded.as_ptr(), output, encoded.len()) };
+            MORNLEA_STATUS_OK
+        }
+        Ok(Err(status)) => status,
+        Err(_) => MORNLEA_STATUS_PANIC,
+    }
+}
+
+/// 运行时树形几何生产入口(无状态纯函数)。
+///
+/// 输入 28 字节:`MTB1` magic(4)+ layout u32 LE(4,必须为 1)+ 世界种子
+/// i64 LE(8)+ 根坐标 x/y/z i32 LE(12);输出为 `count u32` LE 加每条
+/// 8 字节记录(dx i8、dy i8、dz i8、保留 u8 必须为 0、block u16 LE、
+/// 保留 u16 必须为 0)。记录是相对根坐标的偏移,根格自身(偏移全零)是
+/// 树干底;记录数上限 128。几何由独立冻结 salt 从 (世界种子, 根坐标)
+/// 派生,限定为普通橡树家族,与世界生成的 8×8 候选格网格无关。
+///
+/// 容量语义:`output_len` 必须不小于 `4 + count×8`(调用方按静态上界
+/// `worldgen::TREE_BLOCKS_MAX_OUTPUT_BYTES` 预分配);不足时返回
+/// `MORNLEA_STATUS_OUTPUT_OVERFLOW` 且不写任何字节。任何输入违约返回
+/// 错误状态且不修改输出缓冲;结果只在完整成功后一次发布。
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn mornlea_tree_blocks(
+    abi_version: u32,
+    input: *const u8,
+    input_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> u32 {
+    // SAFETY: C 调用方提供原始缓冲区；helper 会在解引用前验证指针、范围、长度与重叠。
+    unsafe { tree_blocks_with(abi_version, input, input_len, output, output_len) }
+}
+
+/// `mornlea_tree_blocks` 的校验与发布核心,校验顺序镜像
+/// `mornlea_worldgen_chunk`:ABI 版本 → 空指针 → 输出容量下限 → 指针范围
+/// → 两两重叠;生成与编码全部在本地缓冲完成后才一次性拷贝发布,失败路径
+/// 不触碰调用方输出。
+unsafe fn tree_blocks_with(
+    abi_version: u32,
+    input: *const u8,
+    input_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> u32 {
+    if abi_version != ABI_VERSION {
+        return MORNLEA_STATUS_ABI_VERSION;
+    }
+    if input.is_null() || output.is_null() {
+        return MORNLEA_STATUS_INVALID_ARGUMENT;
+    }
+    if output_len < TREE_BLOCKS_COUNT_BYTES {
+        return MORNLEA_STATUS_OUTPUT_OVERFLOW;
+    }
+    if !byte_range_is_valid(input, input_len) || !byte_range_is_valid(output, output_len) {
+        return MORNLEA_STATUS_INVALID_ARGUMENT;
+    }
+    if ranges_overlap(input.addr(), input_len, output.addr(), output_len) {
+        return MORNLEA_STATUS_INVALID_ARGUMENT;
+    }
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // SAFETY: input 非空，范围不超过 isize::MAX，地址加法不回绕且不与 output 重叠。
+        let bytes = unsafe { std::slice::from_raw_parts(input, input_len) };
+        let request = parse_tree_blocks_input(bytes).ok_or(MORNLEA_STATUS_INPUT)?;
+        let records = tree_blocks(&request).ok_or(MORNLEA_STATUS_OUTPUT_OVERFLOW)?;
+        let needed = TREE_BLOCKS_COUNT_BYTES + records.len() * TREE_BLOCKS_RECORD_BYTES;
+        // 调用方按静态上界预分配;几何越过上界即契约违约,与容量不足同一条
+        // 显式溢出路径,绝不写出部分结果。
+        if needed > TREE_BLOCKS_MAX_OUTPUT_BYTES || output_len < needed {
+            return Err(MORNLEA_STATUS_OUTPUT_OVERFLOW);
+        }
+        // 先在本地缓冲编码，成功后一次拷贝，保证失败路径不触碰调用方输出。
+        let mut encoded = vec![0u8; needed];
+        encode_tree_blocks(&records, &mut encoded);
         Ok::<Vec<u8>, u32>(encoded)
     }));
     match result {
@@ -1223,15 +1312,17 @@ mod mesh_tests {
     use super::*;
 
     #[test]
-    fn exported_version_is_ten() {
-        // engine ABI v10:v9(流体双内核)之上把 worldgen `MGW1` 材料表由
-        // 14 项扩为 15 项(末项 short_grass,位于偏移 52,perm 后移到 54),
-        // 带内 layout 2 → 3、公共 header 564 → 566 字节、chunk 输入 572 →
-        // 574、LOD 壳输入 580 → 582,详见 ABI_VERSION 的 doc comment 与
-        // packages/engine/include/mornlea_engine.h 的版本史注释。既有入口签名与语义
-        // 不变;旧 dylib 与新二进制混装被版本握手拒绝(二者本就是同一不可
-        // 跨版本混装的 release unit)。
-        assert_eq!(mornlea_engine_abi_version(), 10);
+    fn exported_version_is_eleven() {
+        // engine ABI v11:v10(自然短草)之上新增运行时树形几何出口
+        // `mornlea_tree_blocks`——输入 28 字节(`MTB1` + layout u32 + 世界
+        // 种子 i64 + 根坐标 x/y/z i32),输出 `count u32` + 每条 8 字节记录,
+        // 记录上限 128;几何由独立冻结 salt 从 (世界种子, 根坐标) 派生,
+        // 限定为普通橡树家族,不依赖世界生成的 8×8 候选格网格,因此
+        // `GenerateChunk`/`BaseBlockAt` 逐格不变。详见 ABI_VERSION 的 doc
+        // comment 与 packages/engine/include/mornlea_engine.h 的版本史注释。
+        // 既有入口签名与语义不变;旧 dylib 与新二进制混装被版本握手拒绝
+        // (二者本就是同一不可跨版本混装的 release unit)。
+        assert_eq!(mornlea_engine_abi_version(), 11);
     }
 }
 #[cfg(test)]
@@ -3178,6 +3269,161 @@ mod tests {
         };
         assert_eq!(status_short, MORNLEA_STATUS_OUTPUT_OVERFLOW);
         assert_eq!(out_one, canary_one);
+    }
+
+    use super::mornlea_tree_blocks;
+    use crate::worldgen::{TREE_BLOCKS_INPUT_BYTES, TREE_BLOCKS_MAX_OUTPUT_BYTES};
+
+    /// 构造一条合法的运行时树形几何请求:`MTB1` + layout 1 + seed + 根坐标。
+    fn tree_blocks_input(seed: i64, x: i32, y: i32, z: i32) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(TREE_BLOCKS_INPUT_BYTES);
+        bytes.extend_from_slice(b"MTB1");
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend_from_slice(&seed.to_le_bytes());
+        bytes.extend_from_slice(&x.to_le_bytes());
+        bytes.extend_from_slice(&y.to_le_bytes());
+        bytes.extend_from_slice(&z.to_le_bytes());
+        bytes
+    }
+
+    #[test]
+    fn tree_blocks_is_deterministic_and_rejects_bad_input() {
+        let input = tree_blocks_input(42, 7, 64, -9);
+        let mut first = vec![0xAAu8; TREE_BLOCKS_MAX_OUTPUT_BYTES];
+        let mut second = vec![0xAAu8; TREE_BLOCKS_MAX_OUTPUT_BYTES];
+        // SAFETY: 指针来自有效 Vec,长度与缓冲容量一致。
+        let status_first = unsafe {
+            mornlea_tree_blocks(
+                ABI_VERSION,
+                input.as_ptr(),
+                input.len(),
+                first.as_mut_ptr(),
+                first.len(),
+            )
+        };
+        // SAFETY: 同上。
+        let status_second = unsafe {
+            mornlea_tree_blocks(
+                ABI_VERSION,
+                input.as_ptr(),
+                input.len(),
+                second.as_mut_ptr(),
+                second.len(),
+            )
+        };
+        assert_eq!(status_first, MORNLEA_STATUS_OK);
+        assert_eq!(status_second, MORNLEA_STATUS_OK);
+        assert_eq!(first, second, "同输入必须逐字节一致");
+        let count = u32::from_le_bytes(first[0..4].try_into().unwrap()) as usize;
+        assert!(count > 0 && count <= 128, "count={count}");
+        // 根格自身是第一条记录,恒为树干底原木(编号 17)。
+        assert_eq!(&first[4..12], &[0, 0, 0, 0, 17, 0, 0, 0]);
+        // 保留字节恒为 0;写入范围之外的尾部保持调用前内容。
+        for record in first[4..4 + count * 8].chunks_exact(8) {
+            assert_eq!(
+                [record[3], record[6], record[7]],
+                [0, 0, 0],
+                "保留字节必须为 0"
+            );
+        }
+        if 4 + count * 8 < first.len() {
+            assert_eq!(
+                first[4 + count * 8],
+                0xAA,
+                "成功路径不得写入记录区之外的字节"
+            );
+        }
+
+        let canary = vec![0xAAu8; TREE_BLOCKS_MAX_OUTPUT_BYTES];
+        let mut untouched = canary.clone();
+
+        // ABI 版本不匹配:输出缓冲原样。
+        // SAFETY: 指针来自有效 Vec;仅 abi_version 不匹配。
+        let status_abi = unsafe {
+            mornlea_tree_blocks(
+                ABI_VERSION + 1,
+                input.as_ptr(),
+                input.len(),
+                untouched.as_mut_ptr(),
+                untouched.len(),
+            )
+        };
+        assert_eq!(status_abi, MORNLEA_STATUS_ABI_VERSION);
+        assert_eq!(untouched, canary);
+
+        // 空输入指针与空输出指针都必须拒绝。
+        // SAFETY: 被测的就是空指针路径,入口在解引用前拒绝。
+        let status_null_input = unsafe {
+            mornlea_tree_blocks(
+                ABI_VERSION,
+                std::ptr::null(),
+                0,
+                untouched.as_mut_ptr(),
+                untouched.len(),
+            )
+        };
+        assert_eq!(status_null_input, MORNLEA_STATUS_INVALID_ARGUMENT);
+        // SAFETY: 同上。
+        let status_null_output = unsafe {
+            mornlea_tree_blocks(
+                ABI_VERSION,
+                input.as_ptr(),
+                input.len(),
+                std::ptr::null_mut(),
+                untouched.len(),
+            )
+        };
+        assert_eq!(status_null_output, MORNLEA_STATUS_INVALID_ARGUMENT);
+        assert_eq!(untouched, canary);
+
+        // 未知 magic、未知 layout、长度不符、根坐标越界都必须原样拒绝。
+        let mut bad_magic = tree_blocks_input(42, 7, 64, -9);
+        bad_magic[0] = b'X';
+        let mut bad_layout = tree_blocks_input(42, 7, 64, -9);
+        bad_layout[4..8].copy_from_slice(&2u32.to_le_bytes());
+        let truncated = tree_blocks_input(42, 7, 64, -9)[..TREE_BLOCKS_INPUT_BYTES - 1].to_vec();
+        let below_world = tree_blocks_input(42, 7, -65, -9);
+        let above_world = tree_blocks_input(42, 7, 312, -9);
+        for input in [
+            &bad_magic,
+            &bad_layout,
+            &truncated,
+            &below_world,
+            &above_world,
+        ] {
+            // SAFETY: 指针来自有效 Vec,长度与缓冲容量一致。
+            let status = unsafe {
+                mornlea_tree_blocks(
+                    ABI_VERSION,
+                    input.as_ptr(),
+                    input.len(),
+                    untouched.as_mut_ptr(),
+                    untouched.len(),
+                )
+            };
+            assert_eq!(status, MORNLEA_STATUS_INPUT);
+            assert_eq!(untouched, canary);
+        }
+
+        // 输出缓冲不足(小于头部、小于几何所需)必须返回显式溢出且不写部分结果。
+        let valid = tree_blocks_input(42, 7, 64, -9);
+        for capacity in [0usize, 3, 4 + count * 8 - 1] {
+            // SAFETY: 输出指针有效,容量由参数控制。
+            let status_short = unsafe {
+                mornlea_tree_blocks(
+                    ABI_VERSION,
+                    valid.as_ptr(),
+                    valid.len(),
+                    untouched.as_mut_ptr(),
+                    capacity,
+                )
+            };
+            assert_eq!(
+                status_short, MORNLEA_STATUS_OUTPUT_OVERFLOW,
+                "capacity={capacity}"
+            );
+            assert_eq!(untouched, canary);
+        }
     }
 
     use super::{lod_shell_with, mornlea_lod_shell};
