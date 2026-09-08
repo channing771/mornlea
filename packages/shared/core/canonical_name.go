@@ -128,6 +128,8 @@ var explicitCanonicalItemNames = map[ItemID]string{
 	ItemBrokenWoodenSword:  "broken_wooden_sword",
 	ItemBrokenStoneSword:   "broken_stone_sword",
 	ItemBrokenIronSword:    "broken_iron_sword",
+	ItemEmptyBucket:        "empty_bucket",
+	ItemWaterBucket:        "water_bucket",
 }
 
 var canonicalItemNames = buildCanonicalItemNames()
