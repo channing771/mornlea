@@ -54,8 +54,8 @@ func TestViewmodelHandsMatchAvatarArmStyle(t *testing.T) {
 	player := core.PlayerID{21, 22, 23}
 	encoder := &ViewmodelEncoder{}
 	out := append([]byte(nil), encoder.EncodeViewmodelInstances(nil, viewmodelTestInput(player, core.ItemStack{}, 10))...)
-	if len(out) != 2*avatarInstanceBytes {
-		t.Fatalf("空手实例数 = %d，想要 2", len(out)/avatarInstanceBytes)
+	if len(out) != avatarInstanceBytes {
+		t.Fatalf("空手实例数 = %d，想要 1", len(out)/avatarInstanceBytes)
 	}
 	key := EntityKey{Kind: EntityPlayer, ID: [16]byte(player)}
 	wantColor := avatarShade(avatarColor(key), 0.82)
@@ -63,22 +63,22 @@ func TestViewmodelHandsMatchAvatarArmStyle(t *testing.T) {
 	if swingPhaseID(key)%2 != 0 {
 		headMaterial = uint32(assets.LayerHumanClayHead)
 	}
-	for index := range 2 {
+	for index := range 1 {
 		if color := decodedPartColor(out, index); color != wantColor {
 			t.Fatalf("第 %d 只手颜色 = %v，想要 %v（与同身体基色同源）", index, color, wantColor)
 		}
 		if material := decodedPartMaterial(out, index); material != headMaterial+12 {
 			t.Fatalf("第 %d 只手材质 = %d，想要头部层 +12", index, material)
 		}
-		if size := decodedPartSize(out, index); !approxEqual(size[0], 0.1) || !approxEqual(size[1], 0.7) || !approxEqual(size[2], 0.25) {
-			t.Fatalf("第 %d 只手尺寸 = %v，想要 0.1×0.7×0.25", index, size)
+		if size := decodedPartSize(out, index); !approxEqual(size[0], 0.16) || !approxEqual(size[1], 0.60) || !approxEqual(size[2], 0.18) {
+			t.Fatalf("第 %d 只手尺寸 = %v，想要 0.16×0.60×0.18", index, size)
 		}
 	}
 }
 
 func TestViewmodelFrameInstanceBound(t *testing.T) {
-	if ViewmodelMaxInstances != 4 {
-		t.Fatalf("单帧实例上限 = %d，想要 4（左右手 + 持物 + 保留一位）", ViewmodelMaxInstances)
+	if ViewmodelMaxInstances != 257 {
+		t.Fatalf("单帧实例上限 = %d，想要 257（主手与图标棱柱）", ViewmodelMaxInstances)
 	}
 	player := core.PlayerID{25}
 	stacks := []core.ItemStack{

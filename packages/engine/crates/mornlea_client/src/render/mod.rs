@@ -571,7 +571,7 @@ pub struct OffscreenRenderer {
     /// 采掘裂纹 overlay pass(恰 1 实例容量,透明只读深度,bind 随 atlas
     /// 上传重建)。
     crack_pass: CrackPass,
-    /// 第一人称双手 viewmodel 叠加 pass(恒 ≤4 实例,复用 avatar 实例布局
+    /// 第一人称双手 viewmodel 叠加 pass(恒 ≤257 实例,复用 avatar 实例布局
     /// 与材质分支的不透明变体,bind 随 atlas 上传重建)。
     viewmodel_pass: EntityPass,
     /// 降水粒子叠加 pass(恒 ≤256 实例,复用 avatar 实例布局与材质分支的
@@ -1029,7 +1029,7 @@ impl OffscreenRenderer {
         // `shaders::CRACK`;bind 随 atlas 上传重建,未上传前不绘制。
         let crack_pass = CrackPass::new(&device, &queue, COLOR_FORMAT, DEPTH_FORMAT);
 
-        // 第一人称双手 viewmodel 叠加 pass:恒 ≤4 实例的常驻资源,复用
+        // 第一人称双手 viewmodel 叠加 pass:恒 ≤257 实例的常驻资源,复用
         // avatar 的 shader 模块与不透明管线状态(实例布局与材质分支纪律
         // 与 avatar 同源);bind 随 atlas 上传重建,未上传前不绘制。
         let viewmodel_pass = EntityPass::new(

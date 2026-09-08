@@ -98,6 +98,7 @@ func (r *Registry) refreshItemIcons() {
 	for item := core.ItemID(1); item < core.ItemIDMax; item++ {
 		if layer, ok := ItemIconLayer(item); ok {
 			r.itemIcons[item] = r.layers[int(layer)]
+			r.itemPrisms[item] = buildItemIconPrisms(r.itemIcons[item])
 			continue
 		}
 		block, ok := core.ItemPlacement(item)
@@ -506,4 +507,46 @@ func abs(value int) int {
 		return -value
 	}
 	return value
+}
+
+// ItemIconPrism 是图标一行中的同色像素棱柱；坐标以左上角为原点，单位为
+// 图标像素。渲染方给予统一非零厚度，颜色按不透明 cutout 阈值保留。
+type ItemIconPrism struct {
+	X, Y, Width uint8
+	Color       [4]float32
+}
+
+// ItemIconPrisms 返回注册表拥有的只读轮廓缓存；调用方不得修改。完整方块
+// 不走图标棱柱，空物品与未知编号返回 false，帧内查询不生成几何。
+func (r *Registry) ItemIconPrisms(item core.ItemID) ([]ItemIconPrism, bool) {
+	if item == core.ItemNone || item >= core.ItemIDMax {
+		return nil, false
+	}
+	parts := r.itemPrisms[item]
+	_, ok := ItemIconLayer(item)
+	return parts, ok
+}
+
+func buildItemIconPrisms(px []byte) []ItemIconPrism {
+	parts := make([]ItemIconPrism, 0, 256)
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; {
+			i := (y*16 + x) * 4
+			if px[i+3] < 128 {
+				x++
+				continue
+			}
+			end := x + 1
+			for end < 16 {
+				j := (y*16 + end) * 4
+				if px[j+3] < 128 || px[j] != px[i] || px[j+1] != px[i+1] || px[j+2] != px[i+2] {
+					break
+				}
+				end++
+			}
+			parts = append(parts, ItemIconPrism{X: uint8(x), Y: uint8(y), Width: uint8(end - x), Color: [4]float32{float32(px[i]) / 255, float32(px[i+1]) / 255, float32(px[i+2]) / 255, 1}})
+			x = end
+		}
+	}
+	return parts
 }

@@ -6,18 +6,19 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/packages/client/assets"
+	"github.com/channing771/mornlea/packages/client/mesh"
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-// 本文件是第一人称双手 viewmodel 的 CPU 编码：屏幕左右两侧的双手与右手
-// 持物，几何与颜色同第三人称手臂同源，全部相位由权威 tick 与触发沿派生，
+// 本文件是第一人称主手 viewmodel 的 CPU 编码：主手及其持物，
+// 手臂颜色与材质同第三人称同源，全部相位由权威 tick 与触发沿派生，
 // 不读墙钟。输出复用 avatar 实例布局（96 字节/实例），绘制由 Rust 渲染器
 // 承担；帧 TLV 装配不在本文件，属于跨语言帧编码的职责。
 
 const (
-	// ViewmodelMaxInstances 是单帧 viewmodel 实例恒定上限：左手、右手、
-	// 持物各一，另保留一位给副手扩展占位。
-	ViewmodelMaxInstances = 4
+	// ViewmodelMaxInstances 是单帧 viewmodel 实例恒定上限：主手一实例与
+	// 至多 16×16 个图标棱柱。
+	ViewmodelMaxInstances = 257
 	// ViewmodelAttackFrames 是命中确认后的攻击挥动窗（帧）：第 1 帧起挥，
 	// 第 6 帧后回中立持握，与既有命中 marker 的 6 帧语义同源。
 	ViewmodelAttackFrames = 6
@@ -31,7 +32,7 @@ const (
 	ViewmodelHeldNone ViewmodelHeldKind = iota
 	// ViewmodelHeldBlock 表示手持方块：微缩立方。
 	ViewmodelHeldBlock
-	// ViewmodelHeldItem 表示手持物品：扁长条程序化几何。
+	// ViewmodelHeldItem 表示手持物品：有厚度的原创图标轮廓。
 	ViewmodelHeldItem
 )
 
@@ -70,14 +71,19 @@ type ViewmodelInput struct {
 	CamPos     mgl32.Vec3
 	CamYaw     float32
 	CamPitch   float32
+	// Registry 是本帧 atlas 同源的只读资产；nil 使用默认素材。
+	Registry *assets.Registry
 }
 
 // ViewmodelHeldKindOf 把已确认选中槽映射为持物形态：空槽（零值、`ItemNone`
-// 或数量为零）与未注册物品一律无持物且不 panic；`core.ItemPlacement` 命
-// 中的为手持方块，其余已注册物品为手持物品。
+// 或数量为零）与未注册物品一律无持物且不 panic；原创轮廓图标优先，
+// 其余 `core.ItemPlacement` 命中的物品为微缩方块。
 func ViewmodelHeldKindOf(stack core.ItemStack) ViewmodelHeldKind {
 	if stack.Count == 0 || stack.Item == core.ItemNone || !core.RegisteredItem(stack.Item) {
 		return ViewmodelHeldNone
+	}
+	if _, ok := assets.ItemIconLayer(stack.Item); ok {
+		return ViewmodelHeldItem
 	}
 	if _, ok := core.ItemPlacement(stack.Item); ok {
 		return ViewmodelHeldBlock
@@ -86,14 +92,14 @@ func ViewmodelHeldKindOf(stack core.ItemStack) ViewmodelHeldKind {
 }
 
 // ViewmodelTierOf 把已确认选中槽映射为挥动档：空槽与未注册物品走空手档；
-// 可放置物品走方块档；剑（含损坏形态）走剑档；镐（含损坏形态）走镐档；锄
+// 完整方块走方块档；剑（含损坏形态）走剑档；镐（含损坏形态）走镐档；锄
 // （含损坏形态）走锄档；其余已注册非工具物品沿用空手档。斧档不可经物品到
 // 达：核心尚无斧物品，`ViewmodelTierAxe` 只供参数表占位与未来扩展。
 func ViewmodelTierOf(stack core.ItemStack) ViewmodelTier {
 	if stack.Count == 0 || stack.Item == core.ItemNone || !core.RegisteredItem(stack.Item) {
 		return ViewmodelTierEmptyHand
 	}
-	if _, ok := core.ItemPlacement(stack.Item); ok {
+	if ViewmodelHeldKindOf(stack) == ViewmodelHeldBlock {
 		return ViewmodelTierBlock
 	}
 	switch stack.Item {
@@ -166,62 +172,8 @@ func ViewmodelAttackAngle(attackAge uint8, tier ViewmodelTier) float32 {
 	return amplitude * float32(math.Sin(phase))
 }
 
-var (
-	// `viewmodelArmSize` 与第三人称手臂同源：0.1×0.7×0.25。
-	viewmodelArmSize = mgl32.Vec3{0.1, 0.7, 0.25}
-	// viewmodelSlantAngle 是双手斜持的倾角：手臂长轴向画面中心倾斜，落在
-	// 20°–35° 契约区间内；左右手取镜像符号，顶端都偏向画面中心。
-	viewmodelSlantAngle = float32(28 * math.Pi / 180)
-	// viewmodelLeftCenter/viewmodelRightCenter 是相机空间的双手中心：右手
-	// 为主手，更靠画面中心、位置更高、离相机更近；双臂只以前臂入画（约屏
-	// 高下三分之一），臂根落在屏底之外。
-	viewmodelLeftCenter  = mgl32.Vec3{-0.48, -0.55, -0.88}
-	viewmodelRightCenter = mgl32.Vec3{0.37, -0.48, -0.84}
-	// viewmodelLeftPivot/viewmodelRightPivot 是双手挥动转轴（臂根）：落在
-	// 各自手臂正下方，斜持滚转与挥动旋转都绕它发生。
-	viewmodelLeftPivot  = mgl32.Vec3{-0.48, -0.90, -0.88}
-	viewmodelRightPivot = mgl32.Vec3{0.37, -0.83, -0.84}
-	// viewmodelHeldBlockCenter/viewmodelHeldBlockSize 是手持方块的微缩立方：
-	// 被右手握持在相机一侧，与世界同源材质。
-	viewmodelHeldBlockCenter = mgl32.Vec3{0.37, -0.19, -0.72}
-	viewmodelHeldBlockSize   = mgl32.Vec3{0.22, 0.22, 0.22}
-	// viewmodelHeldItemCenter/viewmodelHeldItemSize 是手持物品的扁长条：纵
-	// 轴显著长于另两轴，与立方剪影可辨；装在右手拳面朝相机一侧，不被手臂
-	// 遮挡。
-	viewmodelHeldItemCenter = mgl32.Vec3{0.35, -0.17, -0.72}
-	viewmodelHeldItemSize   = mgl32.Vec3{0.09, 0.5, 0.12}
-	// viewmodelHeldPickCenter 是镐类（镐/锄/斧档）的专用落点：相对长条通用
-	// 落点整体前移出拳面（`z` +0.08），刃体中段不再落在手臂深度之后；剑类
-	// 与食物火把等沿用通用落点，两者剪影与落点各自独立。
-	viewmodelHeldPickCenter = mgl32.Vec3{0.35, -0.16, -0.64}
-	// viewmodelHeldItemTilt 是长条持物相对手臂的固定前倾：顶端向视线前方微
-	// 倾，刃面透视缩短、不再直立遮屏；与挥动角叠加后相对握持位姿恒定。
-	viewmodelHeldItemTilt = float32(-0.5)
-)
-
-// viewmodelHeldNeutralColor 是未登记基色物品的中性呈现色：`ItemColor` 只覆
-// 盖部分物品，未覆盖的已注册物品走本色而非透明黑，保证持物可见。
-var viewmodelHeldNeutralColor = [4]float32{0.75, 0.7, 0.65, 1}
-
-// viewmodelHeldColor 返回扁长条持物的呈现色：复用与 HUD、掉落物共享的稳
-// 定基色再经与手臂同源的呈现明暗（`avatarShade` 系数），浅色工具在亮背景
-// 下与白墙可辨；共享注册色本身不动。未覆盖的物品回落中性呈现色。
-func viewmodelHeldColor(item core.ItemID) [4]float32 {
-	if color, ok := itemDropColor(item); ok && color[3] != 0 {
-		return avatarShade(color, 0.82)
-	}
-	return avatarShade(viewmodelHeldNeutralColor, 0.82)
-}
-
-// viewmodelHeldBlockAppearance 返回手持方块的材质与颜色：单实例只带一层号，
-// 取与掉落物同源的世界顶面代表层（顶面/侧面与世界一致在此离散度下成立）；
-// 无世界层可取时回落纯色分支。
-func viewmodelHeldBlockAppearance(item core.ItemID) (material uint32, color [4]float32) {
-	if layer, ok := itemDropMaterial(item); ok {
-		return layer, [4]float32{1, 1, 1, 1}
-	}
-	return avatarMaterialSolid, viewmodelHeldColor(item)
-}
+// 默认输入与生产输入复用同一图标缓存算法；构造仅发生在包初始化阶段。
+var viewmodelDefaultRegistry = assets.NewDefaultRegistry()
 
 // ViewmodelEncoder 持有 viewmodel 编码的复用缓冲与挥动边沿状态：热路径零
 // 分配；状态只服务呈现（挖掘锚、攻击窗），不进协议与存档。
@@ -308,60 +260,64 @@ func viewmodelRootFromCameraPose(pos mgl32.Vec3, yaw, pitch float32) mgl32.Mat4 
 		Mul4(mgl32.HomogRotate3DX(pitch))
 }
 
-// viewmodelSlantedLimb 装配带斜持倾角的四肢 cuboid：挥动旋转先绕臂根转轴
-// 发生，再整体绕肢体中心叠加斜持滚转——落点（中心）由调用方显式摆放在屏
-// 角，倾角只转朝向不搬落点。斜持参数取镜像符号（左负右正，顶端都偏向画面
-// 中心）；挥动参数只驱动右手（左手恒零）；前倾参数只作用于长条持物，且是
-// 局部预旋转（绕持物自身中心，不搬落点，挥动中与手臂的相对位姿恒定）。
-// 三者全零时退化为旧链的平移加缩放。
-func viewmodelSlantedLimb(root mgl32.Mat4, pivot, center, size mgl32.Vec3, slant, swing, tilt float32, color [4]float32, material uint32) avatarPart {
-	back := mgl32.Translate3D(center[0]-pivot[0], center[1]-pivot[1], center[2]-pivot[2])
-	forth := mgl32.Translate3D(pivot[0]-center[0], pivot[1]-center[1], pivot[2]-center[2])
-	return avatarPart{
-		transform: root.Mul4(mgl32.Translate3D(center[0], center[1], center[2])).
-			Mul4(mgl32.HomogRotate3DZ(slant)).
-			Mul4(forth).
-			Mul4(mgl32.HomogRotate3DX(swing)).
-			Mul4(back).
-			Mul4(mgl32.HomogRotate3DX(tilt)).
-			Mul4(mgl32.Scale3D(size[0], size[1], size[2])),
-		color:    color,
-		material: material,
-	}
-}
-
-// buildViewmodelParts 装配单帧实例：左手静态占位，右手绕臂根按挥动角旋转，
-// 持物随右手同轴旋转。双手颜色与材质与同身份第三人称手臂同源。根变换由本帧
-// 相机位姿派生：全部相机空间中心与转轴先落根内，挥动旋转仍在相机空间发生，
-// 再随刚体根整体落到世界（旋转语义不受平移影响）。
+// buildViewmodelParts 把主手与持物装在同一握持根；挥动只作用于根，局部握点
+// 不随相位漂移。相机根在最外层，保持任意世界位姿下的第一人称构图。
 func buildViewmodelParts(dst []avatarPart, input *ViewmodelInput, angle float32) []avatarPart {
 	key := EntityKey{Kind: EntityPlayer, ID: [16]byte(input.Player)}
-	base := avatarColor(key)
-	handColor := avatarShade(base, 0.82)
 	material := uint32(assets.LayerHumanSageHead)
 	if swingPhaseID(key)%2 != 0 {
 		material = uint32(assets.LayerHumanClayHead)
 	}
-	armMaterial := material + 12
-	root := viewmodelRootFromCameraPose(input.CamPos, input.CamYaw, input.CamPitch)
-	dst = append(dst, viewmodelSlantedLimb(root, viewmodelLeftPivot, viewmodelLeftCenter, viewmodelArmSize,
-		-viewmodelSlantAngle, 0, 0, handColor, armMaterial))
-	dst = append(dst, viewmodelSlantedLimb(root, viewmodelRightPivot, viewmodelRightCenter, viewmodelArmSize,
-		viewmodelSlantAngle, angle, 0, handColor, armMaterial))
+	// 屏面滚转配合较小俯仰，避免正向峰值把整个臂根抬入画面。
+	root := viewmodelRootFromCameraPose(input.CamPos, input.CamYaw, input.CamPitch).
+		Mul4(mgl32.Translate3D(.38, -.30, -.95)).
+		Mul4(mgl32.HomogRotate3DZ(28*math.Pi/180 - angle*.30)).
+		Mul4(mgl32.HomogRotate3DX(angle * .35))
+	add := func(frame mgl32.Mat4, center, size mgl32.Vec3, color [4]float32, material uint32) {
+		dst = append(dst, avatarPart{transform: frame.Mul4(mgl32.Translate3D(center[0], center[1], center[2])).Mul4(mgl32.Scale3D(size[0], size[1], size[2])), color: color, material: material})
+	}
+	add(root, mgl32.Vec3{0, -.28, .05}, mgl32.Vec3{.16, .60, .18}, avatarShade(avatarColor(key), .82), material+12)
+	registry := input.Registry
+	if registry == nil {
+		registry = viewmodelDefaultRegistry
+	}
 	switch ViewmodelHeldKindOf(input.Selected) {
 	case ViewmodelHeldBlock:
-		heldMaterial, heldColor := viewmodelHeldBlockAppearance(input.Selected.Item)
-		dst = append(dst, viewmodelSlantedLimb(root, viewmodelRightPivot, viewmodelHeldBlockCenter, viewmodelHeldBlockSize,
-			viewmodelSlantAngle, angle, 0, heldColor, heldMaterial))
-	case ViewmodelHeldItem:
-		heldCenter := viewmodelHeldItemCenter
-		if tier := ViewmodelTierOf(input.Selected); tier == ViewmodelTierPick ||
-			tier == ViewmodelTierHoe || tier == ViewmodelTierAxe {
-			heldCenter = viewmodelHeldPickCenter
+		block, _ := core.ItemPlacement(input.Selected.Item)
+		frame := root.Mul4(mgl32.Translate3D(0, .12, 0)).Mul4(mgl32.HomogRotate3DX(.24)).Mul4(mgl32.HomogRotate3DY(-.55))
+		// 顶底面完整覆盖，侧面退让顶底厚度，前后面再退让左右厚度；
+		// 六面只接触不重叠，外表面封闭且边缘没有共面闪烁。
+		const side = float32(.25)
+		const thickness = float32(.002)
+		const offset = (side - thickness) / 2
+		const inner = side - 2*thickness
+		faces := [...]mesh.Face{mesh.FacePosX, mesh.FaceNegX, mesh.FacePosY, mesh.FaceNegY, mesh.FacePosZ, mesh.FaceNegZ}
+		centers := [...]mgl32.Vec3{{offset, 0, 0}, {-offset, 0, 0}, {0, offset, 0}, {0, -offset, 0}, {0, 0, offset}, {0, 0, -offset}}
+		sizes := [...]mgl32.Vec3{{thickness, inner, side}, {thickness, inner, side}, {side, thickness, side}, {side, thickness, side}, {inner, inner, thickness}, {inner, inner, thickness}}
+		for i, face := range faces {
+			add(frame, centers[i], sizes[i], [4]float32{1, 1, 1, 1}, uint32(registry.Material(block, face)))
 		}
-		dst = append(dst, viewmodelSlantedLimb(root, viewmodelRightPivot, heldCenter, viewmodelHeldItemSize,
-			viewmodelSlantAngle, angle, viewmodelHeldItemTilt, viewmodelHeldColor(input.Selected.Item), avatarMaterialSolid))
-	default:
+	case ViewmodelHeldItem:
+		// 图稿的柄从左下伸向右上；各类握点取实际柄内像素，损坏形态共享柄位。
+		gripX, gripY, pixel := float32(8), float32(12), float32(.032)
+		// 铁锭图稿止于第十行，托点下移一像素以贴住拳面。
+		if input.Selected.Item == core.ItemIronIngot {
+			gripY = 11
+		}
+		switch ViewmodelTierOf(input.Selected) {
+		case ViewmodelTierSword:
+			gripX, gripY, pixel = 5.5, 12, .035
+		case ViewmodelTierPick:
+			gripX, gripY, pixel = 5, 12, .035
+		case ViewmodelTierHoe:
+			gripX, gripY, pixel = 5.5, 11.5, .035
+		}
+		frame := root.Mul4(mgl32.HomogRotate3DY(-.25)).Mul4(mgl32.HomogRotate3DX(-.25))
+		parts, _ := registry.ItemIconPrisms(input.Selected.Item)
+		for _, part := range parts {
+			center := mgl32.Vec3{(float32(part.X) + float32(part.Width)/2 - gripX) * pixel, (gripY - float32(part.Y) - .5) * pixel, 0}
+			add(frame, center, mgl32.Vec3{float32(part.Width) * pixel, pixel, .045}, part.Color, avatarMaterialSolid)
+		}
 	}
 	return dst
 }

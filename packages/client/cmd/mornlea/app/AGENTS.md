@@ -142,3 +142,12 @@ packages/client/cmd/mornlea/app/
 - Tab 进入自由光标，WebView 返回的关闭/捕获事件刷新鼠标基线并抑制当帧世界动作。交互远程连接也装配前端，capture/benchmark 保持无 WebView。
 
 - capture 公共清场经 `ResetEntityPresentation` 同时清掉步态、破碎粒子与下落历史，防止加载阶段掉落或前一个场景污染后续独立画面。
+
+## 第一人称持物 (`app_viewmodel.go`)
+
+- `deriveViewmodelInput` 只消费已确认快捷栏，直通本帧相机与 `registry`；
+  `ViewmodelInput.Registry` 让持物像素与上传 atlas 使用同一注册表缓存。
+- 空闲左手隐藏，主手与图标棱柱或六面方块共用握持根；相位、HUD 门控、
+  静态 capture 抑制和第三人称显隐沿用原路径。
+- `TestViewmodelUsesCurrentAtlasIconAndMaximumPixelBudget` 通过真实材质覆盖
+  检查完整图标的颜色、257 实例预算、注册表切换与预热后零分配。

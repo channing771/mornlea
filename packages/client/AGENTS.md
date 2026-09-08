@@ -16,7 +16,9 @@ go.work 成员）。更具体的边界见各子目录 `AGENTS.md`：
 - `cmd/mornlea` 是图形客户端应用入口（薄 main 加 app/capture/benchmark/devcapture 四个功能域子包）。
 - `assets.Registry` 持有全注册物品的 16×16 RGBA 只读图标缓存；完整方块从当前
   顶面/侧面材质生成等距小方块，透明轮廓物品同时占 atlas 追加层供世界薄片采样。
-  原创建图与 contact sheet 入口见 `assets/ITEM_ICONS.md`。
+  原创建图与 contact sheet 入口见 `assets/ITEM_ICONS.md`。轮廓物品还在材质刷新时
+  生成 `ItemIconPrisms` 只读同行同色棱柱缓存，供第一人称持物复用；帧内不得
+  重建像素几何。
 
 ## 依赖边界
 

@@ -7,7 +7,15 @@ package app
 // 例计数门把超限帧稳定拒绝。
 
 import (
+	"bytes"
+	"encoding/binary"
+	"github.com/channing771/mornlea/packages/client/assets"
+	"image"
+	"image/color"
+	"image/png"
+	"math"
 	"testing"
+	"testing/fstest"
 
 	"github.com/go-gl/mathgl/mgl32"
 
@@ -189,15 +197,15 @@ func TestRenderFrameSuppressedViewmodelStreamEmpty(t *testing.T) {
 	}
 }
 
-// TestValidateViewmodelInstanceCount 锁定计数门：空与 1..4 实例放行，超限
+// TestValidateViewmodelInstanceCount 锁定计数门：空与 1..257 实例放行，超限
 // 与非对齐字节流稳定拒绝。
 func TestValidateViewmodelInstanceCount(t *testing.T) {
-	for _, size := range []int{0, 96, 192, 384} {
+	for _, size := range []int{0, 96, 192, 257 * 96} {
 		if err := validateViewmodelInstanceCount(make([]byte, size)); err != nil {
 			t.Fatalf("%d 字节被拒绝: %v", size, err)
 		}
 	}
-	for _, size := range []int{95, 97, 480} {
+	for _, size := range []int{95, 97, 258 * 96} {
 		if err := validateViewmodelInstanceCount(make([]byte, size)); err == nil {
 			t.Fatalf("%d 字节被放行，想要拒绝", size)
 		}
@@ -292,16 +300,16 @@ func TestSceneFirstFrameNeutralAfterViewmodelReset(t *testing.T) {
 }
 
 // TestViewmodelInstanceBytesMatchesEncoderOutput 把计数门常量钉在编码器真
-// 实输出上：中立双手恰两实例、手持方块恰三实例；`render` 侧布局若变，本测
+// 实输出上：中立主手恰一实例、手持方块恰七实例；`render` 侧布局若变，本测
 // 先红，计数门不静默漂移。
 func TestViewmodelInstanceBytesMatchesEncoderOutput(t *testing.T) {
 	neutral := &render.ViewmodelInput{Selected: core.ItemStack{}, Tick: 10}
-	if out := (&render.ViewmodelEncoder{}).EncodeViewmodelInstances(nil, neutral); len(out) != 2*viewmodelInstanceBytes {
-		t.Fatalf("中立输出 %d 字节，想要 %d", len(out), 2*viewmodelInstanceBytes)
+	if out := (&render.ViewmodelEncoder{}).EncodeViewmodelInstances(nil, neutral); len(out) != viewmodelInstanceBytes {
+		t.Fatalf("中立输出 %d 字节，想要 %d", len(out), viewmodelInstanceBytes)
 	}
 	held := &render.ViewmodelInput{Selected: viewmodelStoneStack, Tick: 10}
-	if out := (&render.ViewmodelEncoder{}).EncodeViewmodelInstances(nil, held); len(out) != 3*viewmodelInstanceBytes {
-		t.Fatalf("持物输出 %d 字节，想要 %d", len(out), 3*viewmodelInstanceBytes)
+	if out := (&render.ViewmodelEncoder{}).EncodeViewmodelInstances(nil, held); len(out) != 7*viewmodelInstanceBytes {
+		t.Fatalf("持物输出 %d 字节，想要 %d", len(out), 7*viewmodelInstanceBytes)
 	}
 }
 
@@ -369,8 +377,8 @@ func TestPlayerStateResetClearsViewmodel(t *testing.T) {
 	}
 }
 
-// TestRenderFrameEncodesViewmodelStream 锁定帧接线：已确认手持方块进帧得三
-// 实例流，空槽回落双手；接线不破坏帧提交。
+// TestRenderFrameEncodesViewmodelStream 锁定帧接线：已确认手持方块进帧得七
+// 实例流，空槽回落主手；接线不破坏帧提交。
 func TestRenderFrameEncodesViewmodelStream(t *testing.T) {
 	app := newRemoteRenderApplication(t, &IntegrationGlyphSource{})
 	if err := app.predictor.Begin(network.PlayerState{
@@ -385,16 +393,16 @@ func TestRenderFrameEncodesViewmodelStream(t *testing.T) {
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("持物帧 RenderFrame=(%v,%v)", rendered, err)
 	}
-	if len(app.viewmodelStream) != 3*96 {
-		t.Fatalf("持物帧 viewmodel 流 %d 字节，想要 288（双手+持物）", len(app.viewmodelStream))
+	if len(app.viewmodelStream) != 7*96 {
+		t.Fatalf("持物帧 viewmodel 流 %d 字节，想要 672（主手+六面）", len(app.viewmodelStream))
 	}
 
 	applyViewmodelHotbar(t, app, core.ItemStack{}, 0)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("空手帧 RenderFrame=(%v,%v)", rendered, err)
 	}
-	if len(app.viewmodelStream) != 2*96 {
-		t.Fatalf("空手帧 viewmodel 流 %d 字节，想要 192（双手无持物）", len(app.viewmodelStream))
+	if len(app.viewmodelStream) != 96 {
+		t.Fatalf("空手帧 viewmodel 流 %d 字节，想要 96（主手无持物）", len(app.viewmodelStream))
 	}
 }
 
@@ -465,5 +473,53 @@ func TestRenderFrameViewmodelAttackWindowCloses(t *testing.T) {
 	}
 	if string(app.viewmodelStream) != string(neutral) {
 		t.Fatal("6 帧窗满后未回中立持握")
+	}
+}
+
+func TestViewmodelUsesCurrentAtlasIconAndMaximumPixelBudget(t *testing.T) {
+	artwork := image.NewNRGBA(image.Rect(0, 0, 16, 16))
+	for y := range 16 {
+		for x := range 16 {
+			artwork.SetNRGBA(x, y, color.NRGBA{R: uint8(x * 16), G: uint8(y * 16), B: 71, A: 255})
+		}
+	}
+	var pngBytes bytes.Buffer
+	if err := png.Encode(&pngBytes, artwork); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := assets.NewRegistryWithOverride(fstest.MapFS{
+		"pack.json":             {Data: []byte(`{"format":1,"name":"viewmodel test"}`)},
+		"textures/raw_beef.png": {Data: pngBytes.Bytes()},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &Application{registry: registry}
+	applyViewmodelHotbar(t, app, core.ItemStack{Item: core.ItemRawBeef, Count: 1}, 0)
+	input := app.deriveViewmodelInput(false, render.BlockCrack{})
+	out := app.viewmodelEncoder.EncodeViewmodelInstances(nil, input)
+	if len(out) != 257*96 {
+		t.Fatalf("完整 16×16 图标得到 %d 实例", len(out)/96)
+	}
+	if err := validateViewmodelInstanceCount(out); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 256 {
+		base := (i+1)*96 + 64
+		want := [4]float32{float32((i%16)*16) / 255, float32((i/16)*16) / 255, 71.0 / 255, 1}
+		for c := range 4 {
+			if got := math.Float32frombits(binary.LittleEndian.Uint32(out[base+c*4:])); got != want[c] {
+				t.Fatalf("像素 %d 颜色 %d=%f, want %f", i, c, got, want[c])
+			}
+		}
+	}
+	dst := make([]byte, 0, 257*96)
+	if allocs := testing.AllocsPerRun(10, func() { app.viewmodelEncoder.EncodeViewmodelInstances(dst, input) }); allocs != 0 {
+		t.Fatalf("最大预算热编码分配 %f", allocs)
+	}
+	app.registry = assets.NewDefaultRegistry()
+	next := app.viewmodelEncoder.EncodeViewmodelInstances(nil, app.deriveViewmodelInput(false, render.BlockCrack{}))
+	if bytes.Equal(next, out) {
+		t.Fatal("替换注册表后仍读取旧图标缓存")
 	}
 }

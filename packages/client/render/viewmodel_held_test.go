@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/channing771/mornlea/packages/client/assets"
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
@@ -47,9 +46,6 @@ func TestViewmodelHeldKindBlockItems(t *testing.T) {
 	blocks := []core.ItemID{
 		core.ItemStone, core.ItemDirt, core.ItemGrass, core.ItemOakLog,
 		core.ItemWorkbench, core.ItemChest, core.ItemFurnace,
-		// 放置映射命中即方块微缩立方：作物种子与门床同样走立方分支。
-		core.ItemWheatSeeds, core.ItemPotato, core.ItemCarrot,
-		core.ItemDoor, core.ItemBed,
 	}
 	for _, item := range blocks {
 		if _, ok := core.ItemPlacement(item); !ok {
@@ -80,39 +76,8 @@ func TestViewmodelHeldKindNonBlockItems(t *testing.T) {
 		}
 		stack := core.ItemStack{Item: item, Count: 1}
 		if got := ViewmodelHeldKindOf(stack); got != ViewmodelHeldItem {
-			t.Fatalf("持物形态(物品 %d) = %d，想要扁长条物品", item, got)
+			t.Fatalf("持物形态(物品 %d) = %d，想要图标轮廓物品", item, got)
 		}
-	}
-}
-
-func TestViewmodelEncodeHeldSilhouette(t *testing.T) {
-	player := core.PlayerID{1, 2, 3}
-	encode := func(stack core.ItemStack) []byte {
-		encoder := &ViewmodelEncoder{}
-		return append([]byte(nil), encoder.EncodeViewmodelInstances(nil, viewmodelTestInput(player, stack, 10))...)
-	}
-
-	empty := encode(core.ItemStack{})
-	if len(empty) != 2*avatarInstanceBytes {
-		t.Fatalf("空手编码长度 = %d，想要 2 个实例（左右手、无持物）", len(empty)/avatarInstanceBytes)
-	}
-
-	block := encode(core.ItemStack{Item: core.ItemStone, Count: 1})
-	if len(block) != 3*avatarInstanceBytes {
-		t.Fatalf("持方块编码长度 = %d，想要 3 个实例（左右手 + 持物）", len(block)/avatarInstanceBytes)
-	}
-	blockSize := decodedPartSize(block, 2)
-	if !approxEqual(blockSize[0], blockSize[1]) || !approxEqual(blockSize[1], blockSize[2]) {
-		t.Fatalf("持方块几何 = %v，想要微缩立方（三轴近似相等）", blockSize)
-	}
-
-	tool := encode(core.ItemStack{Item: core.ItemIronSword, Count: 1})
-	if len(tool) != 3*avatarInstanceBytes {
-		t.Fatalf("持剑编码长度 = %d，想要 3 个实例（左右手 + 持物）", len(tool)/avatarInstanceBytes)
-	}
-	toolSize := decodedPartSize(tool, 2)
-	if !(toolSize[1] > 2*toolSize[0] && toolSize[1] > 2*toolSize[2]) {
-		t.Fatalf("持剑几何 = %v，想要扁长条（纵轴显著长于另两轴）", toolSize)
 	}
 }
 
@@ -133,7 +98,7 @@ func TestViewmodelHeldSwitchesOnlyOnConfirmedSelection(t *testing.T) {
 	if !bytes.Equal(first, withheld) {
 		t.Fatalf("确认未到达时形态变化，想要保持旧确认值")
 	}
-	// 确认到达后下一帧传入新确认栈：形态恰在该帧切换为扁长条。
+	// 确认到达后下一帧传入新确认栈：形态恰在该帧切换为图标轮廓。
 	switched := encode(sword, 72)
 	if got := ViewmodelHeldKindOf(sword); got != ViewmodelHeldItem {
 		t.Fatalf("前置条件崩了：剑形态 = %d", got)
@@ -141,11 +106,8 @@ func TestViewmodelHeldSwitchesOnlyOnConfirmedSelection(t *testing.T) {
 	if bytes.Equal(withheld, switched) {
 		t.Fatalf("确认到达后形态未切换，想要下一帧切换")
 	}
-	if count := len(switched) / avatarInstanceBytes; count != 3 {
-		t.Fatalf("切换后实例数 = %d，想要 3", count)
-	}
-	if size := decodedPartSize(switched, 2); !(size[1] > 2*size[0] && size[1] > 2*size[2]) {
-		t.Fatalf("切换后持物几何 = %v，想要扁长条", size)
+	if len(switched) <= 7*avatarInstanceBytes {
+		t.Fatal("工具没有像素轮廓")
 	}
 }
 
@@ -164,45 +126,7 @@ func TestViewmodelEncodeUnregisteredSelection(t *testing.T) {
 		}()
 		out = encoder.EncodeViewmodelInstances(nil, input)
 	}()
-	if count := len(out) / avatarInstanceBytes; count != 2 {
-		t.Fatalf("未注册选中实例数 = %d，想要 2（双手、无持物）", count)
-	}
-}
-
-func TestViewmodelHeldBlockAppearance(t *testing.T) {
-	// 完整立方体取世界顶面代表层，颜色走贴图采样中性白。
-	material, color := viewmodelHeldBlockAppearance(core.ItemStone)
-	if material != uint32(assets.LayerStone) {
-		t.Fatalf("持方块材质 = %d，想要世界顶面代表层 %d", material, uint32(assets.LayerStone))
-	}
-	if color != [4]float32{1, 1, 1, 1} {
-		t.Fatalf("持方块颜色 = %v，想要贴图采样中性白", color)
-	}
-	// 非完整立方放置物（种子）取图标同源层，同样六面采样。
-	seedsMaterial, seedsColor := viewmodelHeldBlockAppearance(core.ItemWheatSeeds)
-	if seedsMaterial != uint32(assets.LayerItemWheatSeeds) {
-		t.Fatalf("持种子材质 = %d，想要图标同源层 %d", seedsMaterial, uint32(assets.LayerItemWheatSeeds))
-	}
-	if seedsColor != [4]float32{1, 1, 1, 1} {
-		t.Fatalf("持种子颜色 = %v，想要贴图采样中性白", seedsColor)
-	}
-}
-
-func TestViewmodelHeldColorFallback(t *testing.T) {
-	// 已登记基色的物品复用共享色经呈现明暗（与手臂同源的 `avatarShade`
-	// 系数，保证浅色工具在亮背景下可辨；共享注册色本身不动）。
-	if color := viewmodelHeldColor(core.ItemStonePickaxe); color != avatarShade(ItemColor(core.ItemStonePickaxe), 0.82) {
-		t.Fatalf("持镐颜色 = %v，想要呈现明暗 %v", color, avatarShade(ItemColor(core.ItemStonePickaxe), 0.82))
-	}
-	// 未覆盖的已注册物品回落中性不透明色（同样经呈现明暗），而非透明黑。
-	wantNeutral := avatarShade(viewmodelHeldNeutralColor, 0.82)
-	for _, item := range []core.ItemID{core.ItemBread, core.ItemStick, core.ItemTorch} {
-		color := viewmodelHeldColor(item)
-		if color != wantNeutral {
-			t.Fatalf("持物(物品 %d)颜色 = %v，想要中性呈现色 %v", item, color, wantNeutral)
-		}
-		if color[3] != 1 {
-			t.Fatalf("持物(物品 %d)不透明度 = %v，想要 1", item, color[3])
-		}
+	if count := len(out) / avatarInstanceBytes; count != 1 {
+		t.Fatalf("未注册选中实例数 = %d，想要 1（主手、无持物）", count)
 	}
 }

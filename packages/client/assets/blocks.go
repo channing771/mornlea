@@ -305,6 +305,7 @@ var textureBindings = [...]textureBinding{
 type Registry struct {
 	layers       [layerCount][]byte
 	itemIcons    [core.ItemIDMax][]byte
+	itemPrisms   [core.ItemIDMax][]ItemIconPrism
 	meshSnapshot mesh.RegistrySnapshot
 }
 
