@@ -446,11 +446,11 @@ func TestRecipeShapeTableOneToThirteenIsFrozen(t *testing.T) {
 
 // TestRecipeRejectsUnknownIDs 覆盖 spec Scenario「未登记配方被拒绝」：
 // recipe 0 与任意大于当前末项的编号都必须稳定拒绝且不产生产物。
-// 写成 `RecipeIronSword+1` 起步而不是裸字面量，
+// 写成 `RecipeBucket+1` 起步而不是裸字面量，
 // 下次追加配方时这段循环自动跟着末项走。
 func TestRecipeRejectsUnknownIDs(t *testing.T) {
 	unknown := []core.RecipeID{0}
-	for id := core.RecipeIronSword + 1; id <= core.RecipeIronSword+5; id++ {
+	for id := core.RecipeBucket + 1; id <= core.RecipeBucket+5; id++ {
 		unknown = append(unknown, id)
 	}
 	unknown = append(unknown, 200, 255)
@@ -507,9 +507,9 @@ func TestRegisteredRecipeCellsStayInsideShapeBounds(t *testing.T) {
 	}
 	// 注册表从 1 起无空洞连续注册到末项常量：循环按「首个未注册即停」推进，
 	// 中间留洞会让后面的配方全部漏检，这里用计数把洞钉出来。
-	if checked != int(core.RecipeIronSword) {
+	if checked != int(core.RecipeBucket) {
 		t.Fatalf("注册表枚举到 %d 条，想要与末项常量一致的 %d 条（注册表出现空洞？）",
-			checked, core.RecipeIronSword)
+			checked, core.RecipeBucket)
 	}
 }
 
@@ -670,6 +670,21 @@ func TestMatchCraftingGridTorchPersonalGrid(t *testing.T) {
 	}
 }
 
+// TestRecipeBucketVShape 锁定空桶配方的编号与形状：左中/右中/底中 3 铁锭
+// 合成 1 个空桶。
+func TestRecipeBucketVShape(t *testing.T) {
+	if core.RecipeBucket != 20 {
+		t.Fatalf("RecipeBucket = %d，想要 20", core.RecipeBucket)
+	}
+	var slots [core.CraftingGridSlots]core.ItemStack
+	slots[3] = core.ItemStack{Item: core.ItemIronIngot, Count: 1}
+	slots[5] = core.ItemStack{Item: core.ItemIronIngot, Count: 1}
+	slots[7] = core.ItemStack{Item: core.ItemIronIngot, Count: 1}
+	id, out, ok := core.MatchCraftingGrid(3, slots)
+	if !ok || id != core.RecipeBucket || out.Item != core.ItemEmptyBucket || out.Count != 1 {
+		t.Fatalf("V 形 3 铁锭 = (%d,%+v,%v)，想要 (20,空桶x1,true)", id, out, ok)
+	}
+}
 // TestNonToolRecipesOutputZeroDurability 锁定非工具产物的耐久必须为零：
 // 耐久字段对没有耐久概念的物品必须是零值，否则同物品的两个栈会因无意义
 // 字段拒绝合并。
