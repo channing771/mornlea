@@ -120,6 +120,18 @@ func TestHotbarMessagesValidateFixedBounds(t *testing.T) {
 	}
 }
 
+func TestBucketCommandIDsAppendOnly(t *testing.T) {
+	if id, ok := protocol.ClientPacketID(protocol.StatePlay, protocol.CollectWater{}); !ok || id != 16 {
+		t.Fatalf("CollectWater ID = (%d,%v)，想要 (16,true)", id, ok)
+	}
+	if id, ok := protocol.ClientPacketID(protocol.StatePlay, protocol.PlaceWater{}); !ok || id != 17 {
+		t.Fatalf("PlaceWater ID = (%d,%v)，想要 (17,true)", id, ok)
+	}
+	if protocol.ProtocolVersion != 38 {
+		t.Fatalf("ProtocolVersion = %d，想要 38", protocol.ProtocolVersion)
+	}
+}
+
 func TestRejectReasonsAreStableProtocolValues(t *testing.T) {
 	tests := []struct {
 		got  protocol.RejectReason
@@ -136,6 +148,9 @@ func TestRejectReasonsAreStableProtocolValues(t *testing.T) {
 		{protocol.RejectInvalidSlot, "invalid_slot"},
 		{protocol.RejectHotbarFull, "hotbar_full"},
 		{protocol.RejectDropCapacity, "drop_capacity"},
+		{protocol.RejectContainerCapacity, "container_capacity"},
+		{protocol.RejectNotFluidSource, "not_fluid_source"},
+		{protocol.RejectBucketMismatch, "bucket_mismatch"},
 	}
 	for _, tc := range tests {
 		if string(tc.got) != tc.want {

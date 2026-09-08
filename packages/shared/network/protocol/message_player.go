@@ -211,6 +211,8 @@ const (
 	RejectHotbarFull        RejectReason = "hotbar_full"
 	RejectDropCapacity      RejectReason = "drop_capacity"
 	RejectContainerCapacity RejectReason = "container_capacity"
+	RejectNotFluidSource    RejectReason = "not_fluid_source"
+	RejectBucketMismatch    RejectReason = "bucket_mismatch"
 )
 
 type CommandRejected struct {

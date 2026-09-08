@@ -63,14 +63,14 @@ func TestGridCraftingPacketIDsAreFrozen(t *testing.T) {
 	}{
 		{StatePlay, CraftingState{}, 21},
 	})
-	if _, ok := ClientPacketForID(StatePlay, 15+1); ok {
-		t.Fatal("Play client packet ID 16 必须保持未分配")
+	if _, ok := ClientPacketForID(StatePlay, 17+1); ok {
+		t.Fatal("Play client packet ID 18 必须保持未分配")
 	}
 	if _, ok := ServerPacketForID(StatePlay, 28+1); ok {
 		t.Fatal("Play server packet ID 29 必须保持未分配")
 	}
-	if ProtocolVersion != 37 {
-		t.Fatalf("协议版本 = %d，想要 37——夜行者三类消息由 v30 承载、显示相位偏移由 v31 承载、私有战斗命中由 v32 承载、被动牛三类消息由 v33 承载、放牧位由 v34 承载、死亡原因位由 v35 承载、天气字节由 v36 承载、季节三字段由 v37 承载", ProtocolVersion)
+	if ProtocolVersion != 38 {
+		t.Fatalf("协议版本 = %d，想要 38——夜行者三类消息由 v30 承载、显示相位偏移由 v31 承载、私有战斗命中由 v32 承载、被动牛三类消息由 v33 承载、放牧位由 v34 承载、死亡原因位由 v35 承载、天气字节由 v36 承载、季节三字段由 v37 承载、水桶双命令由 v38 承载", ProtocolVersion)
 	}
 }
 
@@ -102,8 +102,8 @@ func TestProtocolV22TillSoilPacketIDIsFrozen(t *testing.T) {
 	} else if _, isTake := packet.(TakeCraftingOutput); !isTake {
 		t.Fatalf("Play client packet ID 15 = %T，想要 TakeCraftingOutput", packet)
 	}
-	if ProtocolVersion != 37 {
-		t.Fatalf("协议版本 = %d，想要 37", ProtocolVersion)
+	if ProtocolVersion != 38 {
+		t.Fatalf("协议版本 = %d，想要 38", ProtocolVersion)
 	}
 }
 
@@ -119,8 +119,8 @@ func TestProtocolV27BoneMealPacketIDIsFrozen(t *testing.T) {
 	if _, isBone := packet.(BoneMeal); !isBone {
 		t.Fatalf("Play client packet ID 14 = %T，想要 BoneMeal", packet)
 	}
-	if _, ok := ClientPacketForID(StatePlay, 14+2); ok {
-		t.Fatal("Play client packet ID 16 必须保持未分配")
+	if _, ok := ClientPacketForID(StatePlay, 17+1); ok {
+		t.Fatal("Play client packet ID 18 必须保持未分配")
 	}
 }
 
@@ -185,6 +185,8 @@ func TestCommandRejectReasonIDsAreFrozen(t *testing.T) {
 		{RejectInvalidInput, 7}, {RejectPlayerNotReady, 8},
 		{RejectInvalidSlot, 9}, {RejectHotbarFull, 10}, {RejectDropCapacity, 11},
 		{RejectContainerCapacity, 12},
+		{RejectNotFluidSource, 13},
+		{RejectBucketMismatch, 14},
 	}
 	for _, tc := range reasons {
 		got, ok := CommandRejectReasonID(tc.reason)
@@ -202,7 +204,7 @@ func TestCommandRejectReasonIDsAreFrozen(t *testing.T) {
 	if _, ok := CommandRejectReasonForID(0); ok {
 		t.Fatal("zero rejection reason ID decoded")
 	}
-	if _, ok := CommandRejectReasonForID(13); ok {
+	if _, ok := CommandRejectReasonForID(15); ok {
 		t.Fatal("unknown rejection reason ID decoded")
 	}
 }
@@ -295,6 +297,12 @@ func sameClientPacketType(left, right ClientPacket) bool {
 		return ok
 	case BoneMeal:
 		_, ok := right.(BoneMeal)
+		return ok
+	case CollectWater:
+		_, ok := right.(CollectWater)
+		return ok
+	case PlaceWater:
+		_, ok := right.(PlaceWater)
 		return ok
 	}
 	return false
