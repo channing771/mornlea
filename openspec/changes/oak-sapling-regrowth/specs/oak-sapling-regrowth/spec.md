@@ -132,7 +132,7 @@
 
 ### Requirement: 生长写入跨区块原子且失败零副作用
 
-生长写入前系统 MUST 校验树形几何的每个目标格：必须在世界高度范围内，且当前方块 MUST 是 `AirID` 或 `ShortGrassID`；任一格不满足时 MUST 放弃本次生长并保持树苗与全部方块不变。写入前系统 MUST 校验全部目标区块处于 Ready 状态；任一区块未就绪时 MUST 放弃本次生长且零副作用，后续 tick MAY 重试。全部写入 MUST 全有或全无：任一写入失败时系统 MUST 恢复本次已写入的全部旧方块值。成功时每个被改写的格 MUST 经既有变更记录通道登记，受影响区块的 revision MUST 各推进一次，且 MUST NOT 出现部分生长的树。生长 MAY 覆盖 `ShortGrassID`，被覆盖的短草 MUST NOT 产生任何掉落。
+生长写入前系统 MUST 校验树形几何的每个目标格：必须在世界高度范围内，且当前方块 MUST 是 `AirID` 或 `ShortGrassID`（树苗自身格是树干底格，MUST 视为合法目标而不参与该占用校验）；任一格不满足时 MUST 放弃本次生长并保持树苗与全部方块不变。写入前系统 MUST 校验全部目标区块处于 Ready 状态；任一区块未就绪时 MUST 放弃本次生长且零副作用，后续 tick MAY 重试。全部写入 MUST 全有或全无：任一写入失败时系统 MUST 恢复本次已写入的全部旧方块值。成功时每个被改写的格 MUST 经既有变更记录通道登记，受影响区块的 revision MUST 各推进一次，且 MUST NOT 出现部分生长的树。生长 MAY 覆盖 `ShortGrassID`，被覆盖的短草 MUST NOT 产生任何掉落。
 
 #### Scenario: 空间不足零副作用
 
