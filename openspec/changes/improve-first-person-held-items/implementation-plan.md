@@ -28,9 +28,9 @@
 - [ ] 验证 `go test ./packages/client/assets ./packages/client/render ./packages/client/cmd/mornlea/app -count=1`；`cd packages/engine && CARGO_TARGET_DIR=target/cargo cargo test -p mornlea_client --locked viewmodel`；`make rust` 如 Rust有改动；`git diff --check`。将红绿证据与生产接线说明写报告。完成本任务后仅提交相关代码和测试，不提交 planning 或别人的文件。
 
 ### Task 2: 无头视觉演示与修整
-**Files:** packages/client/cmd/mornlea/capture/motion* 及需要的相关主手调校文件，演示说明；不修改既有PNG/GIF基线。
+**Files:** packages/client/cmd/mornlea/capture/motion*、packages/client/cmd/mornlea/capture/AGENTS.md、packages/client/cmd/mornlea/options.go 与入口路由测试及需要的相关主手调校文件，演示说明；不修改既有PNG/GIF基线。
 **Interfaces:** Consumes Task1生产主手编码与资产缓存；Produces 可重复运行的无头完整物品演示及实际输出路径。
 - [ ] 读取Task1报告确认新增API与限制，给capture演示路由与确定性输入先写失败测试，再复用 motion-demo 入口添加手持目录演示（短名由实现者决定）。
 - [ ] 覆盖空手、草/原木/工作台/石方块、全部已注册工具及损坏状态，以及火把、门、床、桶、食物的代表外观。完整动作中含中立、峰值、恢复，无前台窗口。
-- [ ] 输出到本 change worktree 的临时审查物目录，提供用于逐图检查的中立与峰值联系图或帧文件，同时提供完整GIF。允许修整Task1姿态但必须记录测试和原因。
+- [ ] 复用 motionMaxFrames 现有180帧上限，不提高全局演示预算。可用一个中立物品目录GIF加同目录逐物品完整动作GIF，逐项捕获/编码并释放中间帧，不把所有物品长动画驻留内存。输出到本 change worktree 的临时审查物目录，提供用于逐图检查的中立与峰值联系图或帧文件，同时提供完整GIF。允许修整Task1姿态但必须记录测试和原因。
 - [ ] 运行 capture 定点测试与实际演示，目检识别度、握点、裁切、遮挡、材质面；问题修到协调。将命令与可读路径写入报告。提交相关代码，不提交临时媒体和 planning。
