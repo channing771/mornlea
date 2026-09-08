@@ -211,6 +211,27 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 				continue
 			}
 			tick.interactions = append(tick.interactions, command)
+		case CommandCollectWater, CommandPlaceWater:
+			// 与翻地/骨粉同形的两段式：命令阶段只做玩家与朝向的廉价校验，真正的
+			// 射线、目标判定与写方块推迟到 interactions 循环——阶段顺序契约
+			// 要求一切区块写者位于 reconcileSubscriptions 之后。
+			if session.player == nil || session.player.lifecycle != PlayerActive {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectPlayerNotReady,
+				})
+				continue
+			}
+			if !validPlayerLook(command.Yaw, command.Pitch) {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectInvalidInput,
+				})
+				continue
+			}
+			tick.interactions = append(tick.interactions, command)
 		case CommandInteractDoor:
 			if session.player == nil || session.player.lifecycle != PlayerActive {
 				result.Rejected = append(result.Rejected, Rejection{
@@ -435,6 +456,22 @@ func (tick *TickContext) SettleGameplay(result *TickResult) {
 			}
 		case CommandBoneMeal:
 			if reason, rejected := engine.executeBoneMeal(command, pending); rejected {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   reason,
+				})
+			}
+		case CommandCollectWater:
+			if reason, rejected := engine.ApplyBucketCollect(command, pending); rejected {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   reason,
+				})
+			}
+		case CommandPlaceWater:
+			if reason, rejected := engine.ApplyBucketPlace(command, pending); rejected {
 				result.Rejected = append(result.Rejected, Rejection{
 					Session:  command.Session,
 					Sequence: command.Sequence,

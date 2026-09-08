@@ -244,7 +244,11 @@ func (engine *engineContext) advanceMining(
 	for _, id := range sessions[:count] {
 		session := engine.sessions[id]
 		player := session.player
-		if !player.miningHeld || player.meleeSuppressedMining || player.reset || !engine.sessionView(session).Ready || session.viewContainer {
+		if !player.miningHeld || player.meleeSuppressedMining || player.bucketSuppressedMining ||
+			player.reset || !engine.sessionView(session).Ready || session.viewContainer {
+			// 水桶抑制只活一个 tick：在这里消费自清，不泄漏到后续 tick；按住
+			// 意图保留，下一 tick 由持续输入重新累积。
+			player.bucketSuppressedMining = false
 			player.mining = miningState{}
 			continue
 		}
