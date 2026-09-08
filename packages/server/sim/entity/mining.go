@@ -198,8 +198,11 @@ func companionMineableBlock(block core.BlockID) bool {
 	// 雪层四档同理必须显式拒绝：雪层只由积雪/消融机制产生，没有掉落语义，
 	// 今天的通用判据同样只是碰巧拒绝（缺 BlockDrop 登记），按短草同一契约
 	// 写成显式谓词。
+	// 流体八编号同理必须显式拒绝：水今天同样没有 BlockDrop 登记，通用判据碰
+	// 巧也会拒绝，但取水能力扩给伙伴之前一律拒绝——若未来水登记了掉落，只有
+	// 这里的显式谓词还站着。
 	if core.IsCrop(block) || core.IsFarmland(block) || core.IsTorch(block) ||
-		core.IsWildGrass(block) || core.IsSnowLayer(block) {
+		core.IsWildGrass(block) || core.IsSnowLayer(block) || core.IsFluid(block) {
 		return false
 	}
 	_, ok := core.BlockDrop(block)

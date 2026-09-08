@@ -469,6 +469,13 @@ func (tick *TickContext) SettleGameplay(result *TickResult) {
 					Sequence: command.Sequence,
 					Reason:   reason,
 				})
+			} else {
+				// 取水成功复用放置成功序号通道：客户端音频只消费严格递增的
+				// 成功序号，不另开桶专用的确认消息与协议版本。
+				result.PlacementSuccesses = append(result.PlacementSuccesses, PlacementSuccess{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+				})
 			}
 		case CommandPlaceWater:
 			if reason, rejected := engine.ApplyBucketPlace(command, pending); rejected {
@@ -476,6 +483,12 @@ func (tick *TickContext) SettleGameplay(result *TickResult) {
 					Session:  command.Session,
 					Sequence: command.Sequence,
 					Reason:   reason,
+				})
+			} else {
+				// 放水成功与取水同理复用同一成功序号通道。
+				result.PlacementSuccesses = append(result.PlacementSuccesses, PlacementSuccess{
+					Session:  command.Session,
+					Sequence: command.Sequence,
 				})
 			}
 		case CommandSelectHotbar:

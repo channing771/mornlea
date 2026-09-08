@@ -385,3 +385,70 @@ func TestCompanionCannotPlaceOrMineWater(t *testing.T) {
 		}
 	}
 }
+
+// TestCompanionMineableBlockExplicitlyMentionsFluid 锁定采掘防御清单对流体的
+// 显式拒绝：水今天没有 `core.BlockDrop` 登记，通用判据碰巧也会拒绝它，但若
+// 未来水登记了掉落，只有这里点名 `core.IsFluid` 的显式谓词还站着。
+func TestCompanionMineableBlockExplicitlyMentionsFluid(t *testing.T) {
+	if !companionFunctionMentionsIdentifier(t, "mining.go", "companionMineableBlock", "IsFluid") {
+		t.Fatal("companionMineableBlock 没有显式点名 core.IsFluid；" +
+			"伙伴拒绝流体不得依赖缺失 BlockDrop 的巧合")
+	}
+	for _, block := range []core.BlockID{
+		core.WaterSourceID,
+		core.WaterLevel1ID, core.WaterLevel2ID, core.WaterLevel3ID, core.WaterLevel4ID,
+		core.WaterLevel5ID, core.WaterLevel6ID, core.WaterLevel7ID,
+	} {
+		if companionMineableBlock(block) {
+			t.Fatalf("companionMineableBlock(%d) = true，流体必须是显式拒绝的伙伴采掘目标", block)
+		}
+	}
+}
+
+// TestCompanionPlaceableBlockExplicitlyRejectsFluid 锁定放置防御清单对流体的
+// 显式拒绝：水今天走不到往返校验（无 `core.BlockDrop` 登记），但巧合性阻挡
+// 不是契约——点名 `core.IsFluid` 的显式谓词才是在未来登记变更下仍然成立的拒绝。
+func TestCompanionPlaceableBlockExplicitlyRejectsFluid(t *testing.T) {
+	if !companionFunctionMentionsIdentifier(t, "companion_placement.go", "companionPlaceableBlock", "IsFluid") {
+		t.Fatal("companionPlaceableBlock 没有显式点名 core.IsFluid；" +
+			"伙伴拒绝流体不得依赖缺失 BlockDrop 的巧合")
+	}
+	for _, block := range []core.BlockID{
+		core.WaterSourceID,
+		core.WaterLevel1ID, core.WaterLevel2ID, core.WaterLevel3ID, core.WaterLevel4ID,
+		core.WaterLevel5ID, core.WaterLevel6ID, core.WaterLevel7ID,
+	} {
+		if _, ok := companionPlaceableBlock(block); ok {
+			t.Fatalf("companionPlaceableBlock(%d) 放行，流体必须是显式拒绝的伙伴放置目标", block)
+		}
+	}
+}
+
+// TestBucketSuccessPublishesPlacementSequence 锁定取/放成功复用放置成功序号
+// 通道：客户端音频只消费严格递增的成功序号，桶成功必须同样产出
+// `PlacementSuccesses`，否则取/放成功在客户端永远无声。
+func TestBucketSuccessPublishesPlacementSequence(t *testing.T) {
+	engine, session, yaw, pitch := readyBucketPlayer(t, bucketEmptyHeld, core.WaterSourceID, false)
+	result := collectBucket(engine, session, yaw, pitch)
+	if len(result.Rejected) != 0 {
+		t.Fatalf("合法取水被拒绝: %+v", result.Rejected)
+	}
+	if len(result.PlacementSuccesses) != 1 || result.PlacementSuccesses[0].Session != session ||
+		result.PlacementSuccesses[0].Sequence != 2 {
+		t.Fatalf("取水成功发布 = %+v，想要 [{session 序号 2}]", result.PlacementSuccesses)
+	}
+
+	player := engine.sessions[session].player
+	eye := player.state.Position.Add(mgl32.Vec3{0, engine.physicsTunables.EyeHeight, 0})
+	below := tillTarget
+	below.Y--
+	placeYaw, placePitch := lookAtBlockTop(eye, below)
+	result = placeBucket(engine, session, placeYaw, placePitch)
+	if len(result.Rejected) != 0 {
+		t.Fatalf("合法放水被拒绝: %+v", result.Rejected)
+	}
+	if len(result.PlacementSuccesses) != 1 || result.PlacementSuccesses[0].Session != session ||
+		result.PlacementSuccesses[0].Sequence != 2 {
+		t.Fatalf("放水成功发布 = %+v，想要 [{session 序号 2}]", result.PlacementSuccesses)
+	}
+}

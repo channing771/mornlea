@@ -68,6 +68,10 @@ func ItemIconLayer(item core.ItemID) (uint32, bool) {
 		return uint32(LayerItemBrokenStoneSword), true
 	case core.ItemBrokenIronSword:
 		return uint32(LayerItemBrokenIronSword), true
+	case core.ItemEmptyBucket:
+		return uint32(LayerItemEmptyBucket), true
+	case core.ItemWaterBucket:
+		return uint32(LayerItemWaterBucket), true
 	case core.ItemRawBeef:
 		return uint32(LayerRawBeef), true
 	case core.ItemCookedBeef:
@@ -387,6 +391,26 @@ func originalItemTexture(item core.ItemID) []byte {
 				m.setAccent(x, y)
 			}
 		}
+	case core.ItemEmptyBucket, core.ItemWaterBucket:
+		// 铁桶正视图：提梁是顶部的矩形拱，桶口是横沿，桶身是下收的梯形。
+		// 水桶只在桶身上沿内侧多两行水蓝色（`accent`），空桶无点缀——两桶
+		// 除水色外同形，栏位里一眼可辨而不断开同类关系。
+		m.line(4, 5, 4, 2, 0, false)
+		m.line(4, 2, 12, 2, 0, false)
+		m.line(12, 2, 12, 5, 0, false)
+		for x := 3; x <= 12; x++ {
+			m.set(x, 5)
+		}
+		for y := 6; y <= 13; y++ {
+			inset := (y - 6 + 1) / 3
+			for x := 4 + inset; x <= 11-inset; x++ {
+				if item == core.ItemWaterBucket && y <= 7 {
+					m.setAccent(x, y)
+				} else {
+					m.set(x, y)
+				}
+			}
+		}
 	default:
 		panic(fmt.Sprintf("物品 %d 缺少原创图稿定义", item))
 	}
@@ -470,6 +494,8 @@ func paletteForItem(item core.ItemID) itemPalette {
 		return itemPalette{rgb{76, 51, 34}, rgb{126, 91, 52}, rgb{164, 126, 70}, rgb{100, 128, 59}}
 	case core.ItemBed:
 		return itemPalette{rgb{72, 49, 34}, rgb{177, 99, 82}, rgb{221, 144, 119}, rgb{244, 225, 193}}
+	case core.ItemEmptyBucket, core.ItemWaterBucket:
+		return itemPalette{rgb{71, 67, 66}, rgb{171, 177, 180}, rgb{230, 226, 213}, rgb{88, 150, 235}}
 	default:
 		return wood
 	}

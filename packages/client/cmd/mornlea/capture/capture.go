@@ -463,6 +463,23 @@ var captureScenes = []captureScene{
 		},
 	},
 	{
+		// 水桶池塘是水桶的无窗口近景 capture 场景：空气邻域基线上的一条草地
+		// 支撑条，条上源水、空地、耕地各一格——源是取水目标、空地是放水落点、
+		// 耕地是湿度联动对照，三格同框即取放前后的视觉证据。固定正午、固定
+		// 近景机位（与短草近景同一机位），源/耕地的顶面差与水色在画面里是数
+		// 十像素而不是亚像素噪声，golden 双阈值兜底。
+		//
+		// 排序约束：紧随 water-surface-slope、先于 mining-crack-early（水景
+		// 之后、裂纹之前，水相关场景相邻），由
+		// TestCaptureSceneOrderAndAICompanionDeterminism 与
+		// TestBucketPondCaptureSceneIsRegistered 兜底。far-horizon 仍为倒数
+		// 第二、water-underwater 仍为唯一末场景。
+		Name:         "bucket-pond",
+		WarmupFrames: 8,
+		Prepare:      prepareBucketPond,
+		Apply:        applyBucketPondCaptureState,
+	},
+	{
 		// mining-crack-early 是采掘裂纹浅阶段的无窗口 capture 场景：复用
 		// target-block-feedback 的固定世界（空气邻域中相机正前方 4.5..5.5 格、
 		// 命中面 4.5 格的单块砖），权威采掘镜像钉在 6/30——按 BlockCrackStage
@@ -471,7 +488,7 @@ var captureScenes = []captureScene{
 		// 随机器速度变化的读数，位姿在 Apply 钉死，收敛帧内不再
 		// drain，输出无需 PinVolatile 即确定。
 		//
-		// 排序约束：紧随 water-surface-slope、先于 rain-noon（后者 `Apply` 经
+		// 排序约束：紧随 bucket-pond、先于 rain-noon（后者 `Apply` 经
 		// 橡树林装配自带 resetCapturePresentation，不继承本场景的呈现状态），由
 		// TestCaptureSceneOrderAndAICompanionDeterminism 与裂纹夹具测试兜底。
 		Name:         "mining-crack-early",

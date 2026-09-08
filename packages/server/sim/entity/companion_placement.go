@@ -57,6 +57,12 @@ func companionPlaceableBlock(blockID core.BlockID) (core.ItemID, bool) {
 	if core.IsCrop(blockID) || core.IsFarmland(blockID) {
 		return core.ItemNone, false
 	}
+	// 流体八编号必须在往返校验之外显式拒绝：水今天没有 `core.BlockDrop`
+	// 登记、往返碰巧也走不通，但巧合性阻挡不是契约——取水能力扩给伙伴之前，
+	// 即使未来水登记了掉落，这里的显式谓词仍然拒绝。
+	if core.IsFluid(blockID) {
+		return core.ItemNone, false
+	}
 	item, ok := core.BlockDrop(blockID)
 	if !ok {
 		return core.ItemNone, false

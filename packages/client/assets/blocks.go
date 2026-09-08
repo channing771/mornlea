@@ -142,9 +142,10 @@ const (
 	LayerCowHead
 	LayerRawBeef
 	LayerCookedBeef
-	// LayerItemCoal..LayerItemBrokenIronSword 是非立方体物品共用的原创图标层。
+	// LayerItemCoal..LayerItemWaterBucket 是非立方体物品共用的原创图标层。
 	// 只能追加在既有世界材质之后，保持所有冻结层号不变；UI 与世界薄片直接
-	// 采样同一层，避免各自维护一套轮廓。
+	// 采样同一层，避免各自维护一套轮廓。双桶两层紧随末工具层之后追加，
+	// 人物分面层随之后移（人物层号由相对常量表达，不冻结绝对值）。
 	LayerItemCoal
 	LayerItemRawIron
 	LayerItemIronIngot
@@ -174,6 +175,8 @@ const (
 	LayerItemBrokenWoodenSword
 	LayerItemBrokenStoneSword
 	LayerItemBrokenIronSword
+	LayerItemEmptyBucket
+	LayerItemWaterBucket
 	// `LayerHumanSageHead` 起每六层按 +X、-X、+Y、-Y、+Z、-Z 排列；
 	// 人物专属内部层不开放材质包覆盖，面部仅位于本地前向 -Z。
 	LayerHumanSageHead
@@ -730,7 +733,7 @@ func isCutoutLayer(layer int) bool {
 		layer == int(LayerShortGrass) ||
 		(layer >= int(LayerCrack0) && layer <= int(LayerCrack9)) ||
 		layer == int(LayerRawBeef) || layer == int(LayerCookedBeef) ||
-		(layer >= int(LayerItemCoal) && layer <= int(LayerItemBrokenIronSword))
+		(layer >= int(LayerItemCoal) && layer <= int(LayerItemWaterBucket))
 }
 
 func (r *Registry) LayerCount() int { return int(layerCount) }

@@ -24,6 +24,7 @@ func TestItemDropFlakeClassification(t *testing.T) {
 		core.ItemBrokenStoneHoe, core.ItemBrokenIronHoe,
 		core.ItemWoodenSword, core.ItemStoneSword, core.ItemIronSword,
 		core.ItemBrokenWoodenSword, core.ItemBrokenStoneSword, core.ItemBrokenIronSword,
+		core.ItemEmptyBucket, core.ItemWaterBucket,
 	}
 	for _, item := range flakes {
 		if !itemDropFlake(item) {
