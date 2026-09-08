@@ -158,6 +158,18 @@ fn flowing_survives(cells: &[u16; EVAL_SLOTS_PER_ITEM], self_id: u16) -> bool {
         .any(|&slot| is_fluid(cells[slot]) && fluid_level(cells[slot]) < level)
 }
 
+/// 水平四邻中源的数量：无限水升级的唯一判据（≥2 即升源）。
+///
+/// 只读槽位切片，与 `flowing_survives` 同为 tick 起始状态快照；计数本身不做
+/// 写入判定，调用方按自格类型分两处使用（空气自格走陈旧例外，流动自格走
+/// 垂直之后、水平之前）。
+fn horizontal_source_count(cells: &[u16; EVAL_SLOTS_PER_ITEM]) -> usize {
+    HORIZONTAL_SLOTS
+        .iter()
+        .filter(|&&slot| cells[slot] == WATER_SOURCE)
+        .count()
+}
+
 /// 把一条候选写入编码进输出项的第 index 条槽位条目(3 字节)。
 fn write_entry(out: &mut [u8; EVAL_ITEM_OUTPUT_BYTES], index: usize, slot: u8, id: u16) {
     let entry = &mut out[index * 3..index * 3 + 3];
@@ -168,7 +180,7 @@ fn write_entry(out: &mut [u8; EVAL_ITEM_OUTPUT_BYTES], index: usize, slot: u8, i
 /// 对一项 7 格邻域执行单次规则求值,把至多 4 条候选写入编码进定长输出槽。
 ///
 /// 写入形状与 Go `evalCell` 的返回 map 一一对应:陈旧项/等级 7 到界为空;
-/// 非源消亡只有自格 1 条(写 `Air`);垂直优先只有下方 1 条(写等级 1);
+/// 非源消亡只有自格 1 条(写 `Air`);无限水只有自格 1 条(写源);垂直优先只有下方 1 条(写等级 1);
 /// 水平传播至多 4 条(四个水平方向,槽位序 +x、−x、+z、−z)。已用槽位
 /// 从 entry 0 起连续排布,其余为「无写入」哨兵(0xFF, 0x00, 0x00)。
 pub(crate) fn eval_one(cells: &[u16; EVAL_SLOTS_PER_ITEM], out: &mut [u8; EVAL_ITEM_OUTPUT_BYTES]) {
@@ -182,7 +194,12 @@ pub(crate) fn eval_one(cells: &[u16; EVAL_SLOTS_PER_ITEM], out: &mut [u8; EVAL_I
     let self_id = cells[SLOT_SELF];
     if !is_fluid(self_id) {
         // 队列里的格在真正被处理前可能已因外部原因变非流体;陈旧待更新项
-        // 直接跳过,不产生变化(与「非源消亡写 Air」是两回事)。
+        // 直接跳过,不产生变化(与「非源消亡写 Air」是两回事)。其中空气是
+        // 无限水的唯一例外：水平四邻≥2源时自格升源；石头等实心与植物仍空写。
+        // 空气自格无垂直传播，命中即升级返回。
+        if self_id == AIR && horizontal_source_count(cells) >= 2 {
+            write_entry(out, 0, SLOT_SELF as u8, WATER_SOURCE);
+        }
         return;
     }
 
@@ -200,6 +217,14 @@ pub(crate) fn eval_one(cells: &[u16; EVAL_SLOTS_PER_ITEM], out: &mut [u8; EVAL_I
     // 排布、WaterLevelN == WaterSource+N 的稳定约定(Go 侧同一条算式)。
     if replaceable(cells[SLOT_BELOW], 1) {
         write_entry(out, 0, SLOT_BELOW as u8, WATER_SOURCE + 1);
+        return;
+    }
+
+    // 「无限水（流动水自格）」：水平四邻≥2源时自格升源并返回，优先级高于
+    // 等级水，不改变垂直优先（垂直已在上方返回）。源自格永不重写自身；
+    // 升级只发生在流动格，`replaceable` 判定表不动。
+    if self_id != WATER_SOURCE && horizontal_source_count(cells) >= 2 {
+        write_entry(out, 0, SLOT_SELF as u8, WATER_SOURCE);
         return;
     }
 
@@ -648,6 +673,51 @@ mod tests {
                 0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00,
             ]
         );
+    }
+
+    #[test]
+    fn infinite_water_two_sources_upgrade() {
+        // 自格为空气，+x/−x 为源，其余为石头：按无限水应升源而非等级水。
+        let out = eval(&cells(
+            AIR,
+            STONE,
+            STONE,
+            WATER_SOURCE,
+            WATER_SOURCE,
+            STONE,
+            STONE,
+        ));
+        assert_writes(&out, &[(0, WATER_SOURCE)]);
+    }
+
+    #[test]
+    fn infinite_water_flowing_upgrade() {
+        // 流动水自格、下方实心时双源夹流水应升源，优先级高于等级水。
+        let out = eval(&cells(
+            WATER_SOURCE + 3,
+            STONE,
+            STONE,
+            WATER_SOURCE,
+            WATER_SOURCE,
+            AIR,
+            AIR,
+        ));
+        assert_writes(&out, &[(0, WATER_SOURCE)]);
+    }
+
+    #[test]
+    fn infinite_water_vertical_priority_preserved() {
+        // 下方可替换时流动水仍只向下写等级 1，不升源（垂直优先不被覆盖）。
+        let out = eval(&cells(
+            WATER_SOURCE + 2,
+            STONE,
+            AIR,
+            WATER_SOURCE,
+            WATER_SOURCE,
+            STONE,
+            STONE,
+        ));
+        assert_writes(&out, &[(2, WATER_SOURCE + 1)]);
     }
 
     #[test]

@@ -7,10 +7,10 @@ import (
 
 func TestOriginalHumanFaceLayers(t *testing.T) {
 	r := NewRegistry()
-	if r.LayerCount() != 162 {
+	if r.LayerCount() != int(LayerHumanClayLeg)+8 {
 		t.Fatalf("人物分面层缺失: %d", r.LayerCount())
 	}
-	for _, base := range []int{112, 136} {
+	for _, base := range []int{int(LayerHumanSageHead), int(LayerHumanClayHead)} {
 		front, back := r.LayerRGBA(base+5), r.LayerRGBA(base+4)
 		if bytes.Equal(front, back) {
 			t.Fatal("面部复制到后脑")

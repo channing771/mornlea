@@ -128,6 +128,10 @@ func ItemColor(item core.ItemID) [4]float32 {
 		return [4]float32{152.0 / 255, 76.0 / 255, 55.0 / 255, 1}
 	case core.ItemCookedBeef:
 		return [4]float32{78.0 / 255, 55.0 / 255, 33.0 / 255, 1}
+	case core.ItemEmptyBucket:
+		return [4]float32{168.0 / 255, 174.0 / 255, 180.0 / 255, 1}
+	case core.ItemWaterBucket:
+		return [4]float32{74.0 / 255, 144.0 / 255, 226.0 / 255, 1}
 	default:
 		return [4]float32{}
 	}

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
+
+	"github.com/channing771/mornlea/packages/client/assets"
 )
 
 func TestHumanDetailMaterialsAndCapacity(t *testing.T) {
@@ -21,8 +23,9 @@ func TestHumanDetailMaterialsAndCapacity(t *testing.T) {
 			t.Fatal("身体固定容量改变")
 		}
 		if kind == EntityPlayer || kind == EntityCompanion {
+			head := uint32(assets.LayerHumanSageHead)
 			for _, part := range parts {
-				if part.material < 112 || part.material >= 160 || (part.material-112)%6 != 0 {
+				if part.material < head || part.material >= head+48 || (part.material-head)%6 != 0 {
 					t.Fatalf("人类缺少专属分面材质: %d", part.material)
 				}
 			}

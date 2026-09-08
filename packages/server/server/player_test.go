@@ -340,6 +340,37 @@ func TestTranslatePlayerMessage(t *testing.T) {
 				Kind:     contract.CommandTakeCraftingOutput,
 			},
 		},
+		{
+			// 水桶双命令与翻地同形：只搬运序号与朝向，Yaw 同样必须非零。
+			name: "collect water carries yaw and pitch",
+			message: network.CollectWater{
+				Sequence: 26,
+				Yaw:      1.25,
+				Pitch:    -0.35,
+			},
+			want: contract.Command{
+				Session:  testSessionID,
+				Sequence: 26,
+				Kind:     contract.CommandCollectWater,
+				Yaw:      1.25,
+				Pitch:    -0.35,
+			},
+		},
+		{
+			name: "place water carries yaw and pitch",
+			message: network.PlaceWater{
+				Sequence: 27,
+				Yaw:      -0.5,
+				Pitch:    0.15,
+			},
+			want: contract.Command{
+				Session:  testSessionID,
+				Sequence: 27,
+				Kind:     contract.CommandPlaceWater,
+				Yaw:      -0.5,
+				Pitch:    0.15,
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -356,6 +387,8 @@ func TestTranslatePlayerMessage(t *testing.T) {
 	}{
 		{sim: contract.RejectInvalidInput, network: network.RejectInvalidInput},
 		{sim: contract.RejectPlayerNotReady, network: network.RejectPlayerNotReady},
+		{sim: contract.RejectNotFluidSource, network: network.RejectNotFluidSource},
+		{sim: contract.RejectBucketMismatch, network: network.RejectBucketMismatch},
 	}
 	for _, reason := range reasons {
 		got, ok := networkRejectReason(reason.sim)

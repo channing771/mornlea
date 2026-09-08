@@ -521,6 +521,57 @@ func applyGrassCloseupCaptureState(app SceneApplication) error {
 	return app.Inventory().Apply(network.InventoryState{Inventory: core.Inventory{}})
 }
 
+// prepareBucketPond 装入水桶池塘夹具：空气邻域基线上的一条草地支撑条，
+// 条上源水、空地、耕地各一格。源是取水目标（地面层的一格源水），空地是放水
+// 落点（草地上方的一格空气，断言为空以锁住可放置），耕地是湿度联动对照
+// （地面层的一格湿耕地）。三格同框即取放前后的视觉证据：取水前后源格的
+// 有无、放水前后空地的有无、湿度链路的耕地干湿都落在这三格里。
+// 坐标全部冻结：支撑条 x=-2..2、z=-4..-2（y=0），源在 (-1,0,-3)，空地是
+// (0,1,-3) 的空气（正下方 (0,0,-3) 仍是草地支撑），耕地在 (1,0,-2)。
+// 相机沿用短草近景的近景机位，三格距相机约 4 格，顶面差在画面里是数十像素
+// 而不是亚像素噪声。
+func prepareBucketPond(app SceneApplication) error {
+	if err := prepareCaptureAirNeighborhood(app); err != nil {
+		return err
+	}
+	blocks := make(map[core.ChunkPos]map[core.BlockPos]core.BlockID)
+	setBlock := func(position core.BlockPos, block core.BlockID) {
+		chunk := position.Chunk()
+		if blocks[chunk] == nil {
+			blocks[chunk] = make(map[core.BlockPos]core.BlockID)
+		}
+		blocks[chunk][position] = block
+	}
+	for z := int32(-4); z <= -2; z++ {
+		for x := int32(-2); x <= 2; x++ {
+			setBlock(core.BlockPos{X: x, Y: 0, Z: z}, core.GrassID)
+		}
+	}
+	setBlock(core.BlockPos{X: -1, Y: 0, Z: -3}, core.WaterSourceID)
+	setBlock(core.BlockPos{X: 1, Y: 0, Z: -2}, core.FarmlandWetID)
+	return applyCaptureBlocks(app, blocks, 1, "水桶池塘")
+}
+
+// applyBucketPondCaptureState 钉死水桶池塘的全部呈现状态：固定正午、固定近景
+// 机位（与短草近景同一机位，三格同框），前序场景留下的共享呈现状态经公共
+// 清场统一清空（本场景排在水面斜坡之后，ai-companion 的伙伴/聊天、夜行者、
+// 牛群与雨天都可能残留），不依赖场景表顺序。
+func applyBucketPondCaptureState(app SceneApplication) error {
+	if err := resetCapturePresentation(app); err != nil {
+		return err
+	}
+	app.SetWorldTimeTicks(6000)
+	app.Camera().Pos = mgl32.Vec3{0.5, 2.2, 1.5}
+	app.Camera().Yaw = 0
+	app.Camera().Pitch = -0.15
+	app.SetCenter(application.CameraChunk(app.Camera().Pos))
+	app.SetInventoryOpen(false)
+	if app.Panel() != nil {
+		app.Panel().SetVisible(false)
+	}
+	return app.Inventory().Apply(network.InventoryState{Inventory: core.Inventory{}})
+}
+
 func applyCaptureMirror(app SceneApplication, message network.ServerMessage) error {
 	update, err := app.Mirror().Apply(message)
 	if err != nil {

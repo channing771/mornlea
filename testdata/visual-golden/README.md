@@ -2,13 +2,13 @@
 
 本目录统一存放视觉回归基线，均为测试夹具二进制。
 
-- `world/`：无窗口世界场景基线 28 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
+- `world/`：无窗口世界场景基线 29 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
 - `motion/`：过程 GIF 基线 11 个（被动牛 4 剧本 + motion 演示 7 个），只验呈现、不进比对，对应 `cmd/mornlea/capture/passive_death_scripts.go` 的 `passiveDeathGIFScripts` 与各 motion 演示入口（按 tick 步进抓帧，标准库 `image/gif` 编码）。
 - `ui/`：前端 UI 部件基线 30 张，对应 `packages/engine/crates/mornlea_client/frontend/visual/fixture-names.ts` 的 `fixtureNames`。
 
 旧目录 `cmd/mornlea/capture/testdata/golden/` 与 `engine/crates/mornlea_client/frontend/visual/golden/` 已清空，仅剩空目录，不再写入。
 
-## world（28 张）
+## world（29 张）
 
 文件名即场景名加 `.png` 后缀，场景定义与顺序以 `captureScenes` 为准。
 
@@ -31,6 +31,7 @@
 | `passive-herd.png` | `passive-herd` | 正午草地上 3 头贴图牛与 1 个纹理生牛肉掉落的站位与掉落相位。 |
 | `passive-graze.png` | `passive-graze` | 正午草地上低头牛与常态牛的位姿对照，及牛吻部身前由草变泥土的一格。 |
 | `water-surface-slope.png` | `water-surface-slope` | 俯视水池的水面高度斜坡与透水可见的池底材质。 |
+| `bucket-pond.png` | `bucket-pond` | 近景草地条上源水、空地、湿耕地各一格，取放前后的视觉证据。 |
 | `mining-crack-early.png` | `mining-crack-early` | 同一目标砖块上的浅阶段世界空间采掘裂纹。 |
 | `mining-crack-heavy.png` | `mining-crack-heavy` | 同一目标砖块上的最重阶段裂纹，与浅阶段对照判读加深。 |
 | `rain-noon.png` | `rain-noon` | 夏至正午雨天固定夹具（相位补偿后显示相位恰 6000，天空与日照和分点基线逐字节一致）：雨粒子、灰天空与压暗后的露天亮度同框；降水形态由温度公式逐粒派生，入画全为雨形。 |

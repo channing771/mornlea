@@ -94,12 +94,12 @@ func TestItemDropMaterialsMatchRegistryTopFace(t *testing.T) {
 }
 
 // TestItemDropIconLayerRangeMatchesClientShader 钉住共享 shader 的薄片材质边界：
-// 牛头层 80 不进入，生牛肉到最后一个原创物品层 81..111 全部进入，人物从
-// 112 起另走六面材质。三段相邻但互不重叠。
+// 牛头层 80 不进入，生牛肉到最后一个原创物品层 81..113 全部进入，人物从
+// 114 起另走六面材质。三段相邻但互不重叠。
 func TestItemDropIconLayerRangeMatchesClientShader(t *testing.T) {
-	if assets.LayerCowHead != 80 || assets.LayerRawBeef != 81 || assets.LayerItemBrokenIronSword != 111 ||
-		assets.LayerHumanSageHead != 112 {
+	if assets.LayerCowHead != 80 || assets.LayerRawBeef != 81 || assets.LayerItemWaterBucket != 113 ||
+		assets.LayerHumanSageHead != 114 {
 		t.Fatalf("薄片 shader 边界漂移: cow=%d raw=%d last=%d human=%d",
-			assets.LayerCowHead, assets.LayerRawBeef, assets.LayerItemBrokenIronSword, assets.LayerHumanSageHead)
+			assets.LayerCowHead, assets.LayerRawBeef, assets.LayerItemWaterBucket, assets.LayerHumanSageHead)
 	}
 }

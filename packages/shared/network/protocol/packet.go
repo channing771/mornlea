@@ -7,7 +7,10 @@ import (
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-// ProtocolVersion 是当前唯一支持的协议版本；v37 在 `PlayerState` 载荷尾部
+// ProtocolVersion 是当前唯一支持的协议版本；v38 在 Play C→S 尾部追加
+// ID 16/17 的水桶双命令 `CollectWater`/`PlaceWater`（u64 序号 + 两个 f32
+// 朝向，与 `TillSoil` 同形：目标与栏位由服务端权威决定），并新增
+// `RejectReason` 13/14（非流体源/桶态错配）；v37 在 `PlayerState` 载荷尾部
 // （`WeatherKind` 之后）追加季节三字节：1 字节季节（u8，仅 0..3 合法，
 // 0=春、1=夏、2=秋、3=冬，紧跟天气之后；越界拒绝）、1 字节季内进度
 // （u8，0..255 量化，全域合法）与 1 字节玩家位置温度（i8，摄氏度，由共享
@@ -34,6 +37,9 @@ import (
 // despawn 只携带 ID），并维护旧客户端握手拒绝语义；v29 在 `PlayerState` 尾部追加
 // `SaturationZero` 饱和度归零提示位（紧跟 `Hunger` 之后、`WorldTimeTicks` 之前）；v28 在 `PlayerInput` 尾部追加 `Sprinting` 疾跑位（紧跟 `Eating` 之后）；v27 新增 Play C→S ID 14 `BoneMeal`，v26 新增 Play S→C ID 20 `PlaceBlockSucceeded`，v25 只扩展既有 `Mining` 位语义不新增字段，v24 上线权威饥饿 Eating/Hunger 并拒绝 v23 及更早登录。
 //
+// v38 是纯追加：只在 Play C→S 尾部新增 ID 16/17 的水桶双命令，不改动
+// 既有 packet 的 wire 形状与全部长度上限；新增的 `RejectReason` 13/14 只扩
+// 拒绝原因枚举，不改动既有编号；旧版握手拒绝是既有语义。
 // v37 是纯追加：只在 `PlayerState` 载荷尾部（`WeatherKind` 之后）新增
 // 季节/季内进度/温度三字节，不新增 packet、不改动既有包 ID、不新增
 // `RejectReason`；旧版握手拒绝是既有语义。
@@ -64,7 +70,7 @@ import (
 // v21 在 `PlayerState` 末尾追加 2 字节权威氧气（只发给玩家本人的权威
 // 值）；v20 追加 8 个流体方块编号（只扩方块 ID 集合，wire 形状不变），流体
 // 变更走既有区块变更通道（design.md D8）。
-const ProtocolVersion uint32 = 37
+const ProtocolVersion uint32 = 38
 
 // State 标识连接当前允许交换的 packet 集合。
 type State uint8
@@ -227,6 +233,10 @@ func ValidateClientPacket(state State, packet ClientPacket) error {
 		case TillSoil:
 			return clientPacket.Validate()
 		case BoneMeal:
+			return clientPacket.Validate()
+		case CollectWater:
+			return clientPacket.Validate()
+		case PlaceWater:
 			return clientPacket.Validate()
 		case MoveCraftingStack:
 			return clientPacket.Validate()

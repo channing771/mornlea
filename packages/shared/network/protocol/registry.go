@@ -43,6 +43,10 @@ func ClientPacketID(state State, packet ClientPacket) (uint32, bool) {
 			return 14, true
 		case TakeCraftingOutput:
 			return 15, true
+		case CollectWater:
+			return 16, true
+		case PlaceWater:
+			return 17, true
 		}
 	}
 	return 0, false
@@ -92,6 +96,10 @@ func ClientPacketForID(state State, id uint32) (ClientPacket, bool) {
 			return BoneMeal{}, true
 		case 15:
 			return TakeCraftingOutput{}, true
+		case 16:
+			return CollectWater{}, true
+		case 17:
+			return PlaceWater{}, true
 		}
 	}
 	return nil, false
@@ -299,6 +307,10 @@ func CommandRejectReasonID(reason RejectReason) (uint8, bool) {
 		return 11, true
 	case RejectContainerCapacity:
 		return 12, true
+	case RejectNotFluidSource:
+		return 13, true
+	case RejectBucketMismatch:
+		return 14, true
 	default:
 		return 0, false
 	}
@@ -332,6 +344,10 @@ func CommandRejectReasonForID(id uint8) (RejectReason, bool) {
 		return RejectDropCapacity, true
 	case 12:
 		return RejectContainerCapacity, true
+	case 13:
+		return RejectNotFluidSource, true
+	case 14:
+		return RejectBucketMismatch, true
 	default:
 		return "", false
 	}

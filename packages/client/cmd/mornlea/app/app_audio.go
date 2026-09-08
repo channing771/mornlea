@@ -118,12 +118,20 @@ func (feedback *localAudioFeedback) ObserveBlockChanges(changes network.BlockCha
 
 // ObservePlacementSuccess 只消费本会话严格递增的权威放置成功序号。
 // 重复和旧序号无声；`Reset` 清空基线后，新会话可从低序号重新开始。
+// 取/放水成功复用同一确认序号通道（服务端把桶成功同样记入
+// `PlacementSuccesses`，不另开消息与协议版本），以确认基线里的选中堆区分：
+// 成功消息先于背包增量到达，选中堆仍是发出桶命令时的那一桶，落水声；否则
+// 沿用方块放置的单击。基线缺席时同样单击，不为未知状态编造水声。
 func (feedback *localAudioFeedback) ObservePlacementSuccess(success network.PlaceBlockSucceeded) (audio.Cue, bool) {
 	if feedback.hasPlacementSequence && success.Sequence <= feedback.placementSequence {
 		return 0, false
 	}
 	feedback.hasPlacementSequence = true
 	feedback.placementSequence = success.Sequence
+	if feedback.hasStack && (feedback.stack.Item == core.ItemEmptyBucket ||
+		feedback.stack.Item == core.ItemWaterBucket) {
+		return audio.CueWaterSplash, true
+	}
 	return audio.CueUIClick, true
 }
 

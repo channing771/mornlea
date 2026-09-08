@@ -52,10 +52,10 @@ func TestCompanionMessageIDsAreAppendOnly(t *testing.T) {
 		t.Fatal("Play client packet ID 1 必须保持未分配")
 	}
 	// v22 把 13 分配给了 TillSoil，v27 把 14 分配给了 BoneMeal，格子工作台把
-	// 15 分配给 `TakeCraftingOutput`（`MoveCraftingStack` 复用 7）；本表的
-	// 「下一个仍未分配」上界随之推进到 16。
-	if _, ok := ClientPacketForID(StatePlay, 16); ok {
-		t.Fatal("未知 client packet ID 16 被接受")
+	// 15 分配给 `TakeCraftingOutput`（`MoveCraftingStack` 复用 7），v38 把
+	// 16/17 分配给水桶双命令；本表的「下一个仍未分配」上界随之推进到 18。
+	if _, ok := ClientPacketForID(StatePlay, 18); ok {
+		t.Fatal("未知 client packet ID 18 被接受")
 	}
 	// 格子工作台把 21 分配给了 `CraftingState`，夜行者把 22/23/24 分配给
 	// `HostileSpawn`/`HostileState`/`HostileDespawn`，私有战斗命中把 25 分配给

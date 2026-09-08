@@ -110,6 +110,7 @@ func TestItemIconMaterialsAndBrokenFormsStayDistinct(t *testing.T) {
 		{core.ItemIronSword, core.ItemBrokenIronSword},
 		{core.ItemPotato, core.ItemPoisonousPotato},
 		{core.ItemRawBeef, core.ItemCookedBeef},
+		{core.ItemEmptyBucket, core.ItemWaterBucket},
 	}
 	for _, pair := range pairs {
 		left, _ := registry.ItemIconRGBA(pair[0])

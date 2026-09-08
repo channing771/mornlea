@@ -66,6 +66,8 @@ const (
 	CommandTakeCraftingOutput    = contract.CommandTakeCraftingOutput
 	CommandInteractDoor          = contract.CommandInteractDoor
 	CommandInteractBed           = contract.CommandInteractBed
+	CommandCollectWater          = contract.CommandCollectWater
+	CommandPlaceWater            = contract.CommandPlaceWater
 	RejectInvalidRay             = contract.RejectInvalidRay
 	RejectNoTarget               = contract.RejectNoTarget
 	RejectChunkNotReady          = contract.RejectChunkNotReady
@@ -78,6 +80,8 @@ const (
 	RejectHotbarFull             = contract.RejectHotbarFull
 	RejectDropCapacity           = contract.RejectDropCapacity
 	RejectContainerCapacity      = contract.RejectContainerCapacity
+	RejectNotFluidSource         = contract.RejectNotFluidSource
+	RejectBucketMismatch         = contract.RejectBucketMismatch
 	CompanionActionMove          = contract.CompanionActionMove
 	CompanionActionMineHold      = contract.CompanionActionMineHold
 	CompanionActionMineRelease   = contract.CompanionActionMineRelease

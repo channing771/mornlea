@@ -161,6 +161,12 @@ func sameClientPacket(got, want protocol.ClientPacket) bool {
 	case protocol.BoneMeal:
 		other, ok := want.(protocol.BoneMeal)
 		return ok && got == other
+	case protocol.CollectWater:
+		other, ok := want.(protocol.CollectWater)
+		return ok && got == other
+	case protocol.PlaceWater:
+		other, ok := want.(protocol.PlaceWater)
+		return ok && got == other
 	default:
 		return false
 	}

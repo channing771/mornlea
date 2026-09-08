@@ -251,6 +251,44 @@ func TestLocalAudioMiningRequiresActuallyAppliedDelta(t *testing.T) {
 	}
 }
 
+func TestLocalAudioBucketSuccessPlaysSplash(t *testing.T) {
+	app, endpoint := newInteractiveTestApplication(t)
+	var recorder audioCueRecorder
+	app.playCue = recorder.play
+
+	// 权威背包确认选中空桶：经 drain 进入音频基线，成功到达时增量尚未应用，
+	// 选中堆仍是发出取水命令时的那一桶。
+	sendInteractiveServerMessage(t, endpoint, network.InventoryState{Inventory: audioInventory(core.ItemEmptyBucket, 1)})
+	app.DrainServerMessages(1)
+	for _, sequence := range []uint64{1, 1, 0, 2} {
+		sendInteractiveServerMessage(t, endpoint, network.PlaceBlockSucceeded{Sequence: sequence})
+		app.DrainServerMessages(1)
+	}
+	recorder.want(t, audio.CueWaterSplash, audio.CueWaterSplash)
+
+	// 放水成功同理：选中水桶时的成功序号同样落水声。
+	sendInteractiveServerMessage(t, endpoint, network.InventoryState{Inventory: audioInventory(core.ItemWaterBucket, 1)})
+	app.DrainServerMessages(1)
+	sendInteractiveServerMessage(t, endpoint, network.PlaceBlockSucceeded{Sequence: 3})
+	app.DrainServerMessages(1)
+	recorder.want(t, audio.CueWaterSplash, audio.CueWaterSplash, audio.CueWaterSplash)
+}
+
+func TestLocalAudioBlockSuccessStillClicksWhenBucketNotSelected(t *testing.T) {
+	app, endpoint := newInteractiveTestApplication(t)
+	var recorder audioCueRecorder
+	app.playCue = recorder.play
+
+	// 选中泥土、桶在非选中格：成功序号仍是方块放置的单击，不因背包里有桶变调。
+	inventory := audioInventory(core.ItemDirt, 2)
+	inventory.Hotbar.Slots[1] = core.ItemStack{Item: core.ItemWaterBucket, Count: 1}
+	sendInteractiveServerMessage(t, endpoint, network.InventoryState{Inventory: inventory})
+	app.DrainServerMessages(1)
+	sendInteractiveServerMessage(t, endpoint, network.PlaceBlockSucceeded{Sequence: 1})
+	app.DrainServerMessages(1)
+	recorder.want(t, audio.CueUIClick)
+}
+
 func TestLocalAudioPlacementOnlyFromFreshSuccessAcknowledgement(t *testing.T) {
 	app, endpoint, recorder, target := newAudioPlacementApplication(t)
 

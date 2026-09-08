@@ -144,6 +144,10 @@ type (
 	TillSoil = protocol.TillSoil
 	// BoneMeal 是客户端骨粉催熟命令。
 	BoneMeal = protocol.BoneMeal
+	// CollectWater 是客户端收取流体源命令。
+	CollectWater = protocol.CollectWater
+	// PlaceWater 是客户端放置流体源命令。
+	PlaceWater = protocol.PlaceWater
 	// PlayerState 是服务端发给玩家本人的完整权威状态。
 	PlayerState = protocol.PlayerState
 	// RemotePlayerSpawn 是其他玩家进入同步范围的出生通知。
@@ -186,6 +190,10 @@ const (
 	RejectDropCapacity = protocol.RejectDropCapacity
 	// RejectContainerCapacity 表示容器容量不足。
 	RejectContainerCapacity = protocol.RejectContainerCapacity
+	// RejectNotFluidSource 表示取水目标不是流体源。
+	RejectNotFluidSource = protocol.RejectNotFluidSource
+	// RejectBucketMismatch 表示手持桶态与命令不匹配。
+	RejectBucketMismatch = protocol.RejectBucketMismatch
 )
 
 // 物品栏与容器消息 DTO 定义在 protocol 包；再导出保持既有 network.X 引用。

@@ -180,6 +180,24 @@ func translateClientMessage(
 			Yaw:      message.Yaw,
 			Pitch:    message.Pitch,
 		}, true
+	case network.CollectWater:
+		// 与 TillSoil 同形：只搬运序号与朝向，目标与栏位都由 sim 从权威
+		// 状态取得，server 不做第二次校验。Memory 与 TCP 共用这一入口。
+		return contract.Command{
+			Session:  id,
+			Sequence: message.Sequence,
+			Kind:     contract.CommandCollectWater,
+			Yaw:      message.Yaw,
+			Pitch:    message.Pitch,
+		}, true
+	case network.PlaceWater:
+		return contract.Command{
+			Session:  id,
+			Sequence: message.Sequence,
+			Kind:     contract.CommandPlaceWater,
+			Yaw:      message.Yaw,
+			Pitch:    message.Pitch,
+		}, true
 	case network.CloseContainer:
 		return contract.Command{
 			Session:  id,

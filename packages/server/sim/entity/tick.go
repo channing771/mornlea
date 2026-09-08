@@ -211,6 +211,27 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 				continue
 			}
 			tick.interactions = append(tick.interactions, command)
+		case CommandCollectWater, CommandPlaceWater:
+			// 与翻地/骨粉同形的两段式：命令阶段只做玩家与朝向的廉价校验，真正的
+			// 射线、目标判定与写方块推迟到 interactions 循环——阶段顺序契约
+			// 要求一切区块写者位于 reconcileSubscriptions 之后。
+			if session.player == nil || session.player.lifecycle != PlayerActive {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectPlayerNotReady,
+				})
+				continue
+			}
+			if !validPlayerLook(command.Yaw, command.Pitch) {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectInvalidInput,
+				})
+				continue
+			}
+			tick.interactions = append(tick.interactions, command)
 		case CommandInteractDoor:
 			if session.player == nil || session.player.lifecycle != PlayerActive {
 				result.Rejected = append(result.Rejected, Rejection{
@@ -439,6 +460,35 @@ func (tick *TickContext) SettleGameplay(result *TickResult) {
 					Session:  command.Session,
 					Sequence: command.Sequence,
 					Reason:   reason,
+				})
+			}
+		case CommandCollectWater:
+			if reason, rejected := engine.ApplyBucketCollect(command, pending); rejected {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   reason,
+				})
+			} else {
+				// 取水成功复用放置成功序号通道：客户端音频只消费严格递增的
+				// 成功序号，不另开桶专用的确认消息与协议版本。
+				result.PlacementSuccesses = append(result.PlacementSuccesses, PlacementSuccess{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+				})
+			}
+		case CommandPlaceWater:
+			if reason, rejected := engine.ApplyBucketPlace(command, pending); rejected {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   reason,
+				})
+			} else {
+				// 放水成功与取水同理复用同一成功序号通道。
+				result.PlacementSuccesses = append(result.PlacementSuccesses, PlacementSuccess{
+					Session:  command.Session,
+					Sequence: command.Sequence,
 				})
 			}
 		case CommandSelectHotbar:

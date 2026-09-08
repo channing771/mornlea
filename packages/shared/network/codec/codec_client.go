@@ -79,6 +79,14 @@ func encodeClientPacketPayload(state protocol.State, packet protocol.ClientPacke
 			e.u64(message.Sequence)
 			e.f32(message.Yaw)
 			e.f32(message.Pitch)
+		case protocol.CollectWater:
+			e.u64(message.Sequence)
+			e.f32(message.Yaw)
+			e.f32(message.Pitch)
+		case protocol.PlaceWater:
+			e.u64(message.Sequence)
+			e.f32(message.Yaw)
+			e.f32(message.Pitch)
 		case protocol.MoveCraftingStack:
 			e.u64(message.Sequence)
 			e.u8(message.From)
@@ -286,6 +294,26 @@ func decodeClientPacketPayload(state protocol.State, packetID uint32, payload []
 			var take protocol.TakeCraftingOutput
 			take.Sequence, err = d.u64()
 			packet = take
+		case 16:
+			var collect protocol.CollectWater
+			collect.Sequence, err = d.u64()
+			if err == nil {
+				collect.Yaw, err = d.f32()
+			}
+			if err == nil {
+				collect.Pitch, err = d.f32()
+			}
+			packet = collect
+		case 17:
+			var place protocol.PlaceWater
+			place.Sequence, err = d.u64()
+			if err == nil {
+				place.Yaw, err = d.f32()
+			}
+			if err == nil {
+				place.Pitch, err = d.f32()
+			}
+			packet = place
 		default:
 			return nil, codecError("decode client", state, packetID, errUnknownPacketID)
 		}

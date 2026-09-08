@@ -16,16 +16,19 @@ import (
 // 7 格输入——包括未注册的方块编号——kernel 输出永远满足规则集的结构不变量：
 //
 //   - 确定性：同一输入两次调用逐字节一致；
-//   - 自格（槽位 0）只可能写空气（非源消亡），且自格是源时槽位 0 恒无写入
-//     （「源永不自然消失」）——源格自身永不被写为任何值，包括空气；
-//   - 上邻（槽位 1）永不被写（规则只有向下与水平两个写入方向）；
-//   - 每条流体写入的等级 ∈ 1..7（永远不会写出源方块本身或越界等级）；
+//   - 自格（槽位 0）只可能写空气（非源消亡）或源（无限水升级：空气或流动水
+//     自格 + 水平双源），且自格是源时槽位 0 恒无写入（「源永不自然消失」）——
+//     源格自身永不被写为任何值，包括空气；
+//   - 上邻（槽位 1）永不被写（规则只有向下、水平与自格升级三个写入方向）；
+//   - 每条流体写入（槽位 2..6）的等级 ∈ 1..7（永远不会写出源方块本身或越界
+//     等级）；槽位 0 的源写入是无限水升级，不走等级水路径，跳过 `Replaceable`
+//     与等级检查；
 //   - 写入只落在「可替换」的目标上：空气、植物（作物与短草）、开启下半门
 //     或更弱的流动水（经 `Replaceable` 判定，含任意未注册编号一律按实心
 //     不可替换）；
 //   - 垂直写入（槽位 2）恒为等级 1；水平写入（槽位 3..6）恒为自格等级 +1
 //     （源的等级读作 0，故为 1）；
-//   - 自格非流体时（陈旧项）不产生任何写入。
+//   - 自格非流体时（陈旧项）不产生任何写入，唯一的例外是空气自格的无限水升级。
 
 func FuzzFluidEval(f *testing.F) {
 	f.Add(uint16(27), uint16(0), uint16(0), uint16(0), uint16(0), uint16(0), uint16(0))           // 源垂直
@@ -36,6 +39,8 @@ func FuzzFluidEval(f *testing.F) {
 	f.Add(uint16(28), uint16(27), uint16(2), uint16(63), uint16(62), uint16(70), uint16(0))       // 门与源邻格
 	f.Add(uint16(27), uint16(0), uint16(84), uint16(0), uint16(84), uint16(33), uint16(3))        // 短草目标
 	f.Add(uint16(9999), uint16(27), uint16(34), uint16(45), uint16(60), uint16(1), uint16(65535)) // 未注册编号
+	f.Add(uint16(0), uint16(2), uint16(2), uint16(27), uint16(27), uint16(2), uint16(2))          // 无限水空气双源
+	f.Add(uint16(30), uint16(2), uint16(2), uint16(27), uint16(27), uint16(0), uint16(0))         // 无限水流水双源
 	f.Fuzz(func(t *testing.T, self, above, below, plusX, minusX, plusZ, minusZ uint16) {
 		cells := [7]uint16{self, above, below, plusX, minusX, plusZ, minusZ}
 		input := make([]byte, fluidEvalHeaderBytes+fluidEvalItemBytes)
@@ -53,6 +58,14 @@ func FuzzFluidEval(f *testing.F) {
 		}
 
 		selfID := core.BlockID(self)
+		// 无限水判据（与 kernel/oracle 同字）：水平四邻（+x、−x、+z、−z，
+		// 即 cells[3:]）中源计数≥2 即升源。
+		horizontalSources := 0
+		for _, c := range cells[3:] {
+			if core.BlockID(c) == core.WaterSourceID {
+				horizontalSources++
+			}
+		}
 		for j := range fluidEvalWritesPerItem {
 			entry := output[j*3 : j*3+3]
 			slot := entry[0]
@@ -67,8 +80,19 @@ func FuzzFluidEval(f *testing.F) {
 				if selfID == core.WaterSourceID {
 					t.Fatalf("源格自格永不被写（源不死）: % x", output)
 				}
+				if id == core.WaterSourceID {
+					// 无限水升级：只允许空气或流动水自格 + 水平双源；源写入
+					// 不走等级水路径，直接跳过 `Replaceable` 与等级检查。
+					if selfID != core.AirID && !core.IsFluid(selfID) {
+						t.Fatalf("自格升源只允许空气或流动水自格，got 自格 %d: % x", selfID, output)
+					}
+					if horizontalSources < 2 {
+						t.Fatalf("自格升源需要水平双源，got %d: % x", horizontalSources, output)
+					}
+					continue
+				}
 				if id != core.AirID {
-					t.Fatalf("自格只能写空气，got %d: % x", id, output)
+					t.Fatalf("自格只能写空气或升源，got %d: % x", id, output)
 				}
 				continue
 			}
@@ -100,6 +124,12 @@ func FuzzFluidEval(f *testing.F) {
 		if !core.IsFluid(selfID) {
 			for j := range fluidEvalWritesPerItem {
 				if output[j*3] != fluidEvalNoWriteSlot {
+					// 空气例外：无限水升级允许自格升源这一条写入，其余仍须零写入。
+					if selfID == core.AirID && j == 0 && output[j*3] == 0 &&
+						core.BlockID(binary.LittleEndian.Uint16(output[j*3+1:j*3+3])) == core.WaterSourceID &&
+						horizontalSources >= 2 {
+						continue
+					}
 					t.Fatalf("自格非流体（陈旧项）不应产生写入: % x", output)
 				}
 			}

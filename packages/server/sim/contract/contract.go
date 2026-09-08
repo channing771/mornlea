@@ -31,6 +31,8 @@ const (
 	CommandTakeCraftingOutput
 	CommandInteractDoor
 	CommandInteractBed
+	CommandCollectWater
+	CommandPlaceWater
 )
 
 type RejectReason uint8
@@ -48,6 +50,8 @@ const (
 	RejectHotbarFull        RejectReason = 9
 	RejectDropCapacity      RejectReason = 10
 	RejectContainerCapacity RejectReason = 11
+	RejectNotFluidSource    RejectReason = 12
+	RejectBucketMismatch    RejectReason = 13
 )
 
 type Command struct {

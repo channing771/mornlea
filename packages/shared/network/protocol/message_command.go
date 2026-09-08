@@ -139,3 +139,41 @@ func (command BoneMeal) Validate() error {
 	}
 	return nil
 }
+
+// CollectWater 请求收取视线内的流体源。
+//
+// 与 TillSoil 同形：只带序号与朝向。客户端不声明目标格、也不声明栏位
+// ——目标由服务端的权威射线决定，作用的空桶一律取权威选中的快捷栏格。
+type CollectWater struct {
+	Sequence   uint64
+	Yaw, Pitch float32
+}
+
+func (CollectWater) clientMessage() {}
+func (CollectWater) clientPacket()  {}
+
+func (command CollectWater) Validate() error {
+	if !finite32(command.Yaw) || !finite32(command.Pitch) {
+		return errors.New("network: collect water has non-finite rotation")
+	}
+	return nil
+}
+
+// PlaceWater 请求把视线贴面落点处放下一格流体源。
+//
+// 与 CollectWater 同形：只带序号与朝向。落点由服务端的权威射线决定，
+// 作用的水桶一律取权威选中的快捷栏格。
+type PlaceWater struct {
+	Sequence   uint64
+	Yaw, Pitch float32
+}
+
+func (PlaceWater) clientMessage() {}
+func (PlaceWater) clientPacket()  {}
+
+func (command PlaceWater) Validate() error {
+	if !finite32(command.Yaw) || !finite32(command.Pitch) {
+		return errors.New("network: place water has non-finite rotation")
+	}
+	return nil
+}

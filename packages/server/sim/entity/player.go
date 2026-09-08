@@ -46,6 +46,10 @@ type playerState struct {
 	// meleeSuppressedMining 只标记本 tick 已成功命中实体的采掘分流；下一 tick 必须由
 	// 当时的持续输入重新判定，不能跨 tick 保留。
 	meleeSuppressedMining bool
+	// bucketSuppressedMining 只标记本 tick 已有水桶成功结算的采掘分流；与近战
+	// 标记同为单 tick 抑制，但由 `advanceMining` 在消费时自清，不依赖战斗阶段
+	// 的入口清零，下一 tick 同样由持续输入重新判定。
+	bucketSuppressedMining bool
 	// peakY 是离地后到达过的最高高度，瞬态字段，不持久化、不进入快照/哈希。
 	// 身体浸没时它被逐 tick 重置到当前高度，因此水中不会累积出摔落伤害。
 	// 落地、传送、重生、维度 reset 都会把它重置为当前高度。
@@ -750,6 +754,7 @@ func (player *playerState) beginReset() {
 	player.attackCooldownTicks = 0
 	player.hurtCooldownTicks = 0
 	player.meleeSuppressedMining = false
+	player.bucketSuppressedMining = false
 	player.eatingHeld = false
 	player.mining = miningState{}
 	// 死亡与位置跳变都经这里，进食进度随之作废：重生后站在出生点继续吃完
