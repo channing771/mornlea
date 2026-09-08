@@ -42,8 +42,8 @@ func TestTorchBlockIDsAppendAfterCrops(t *testing.T) {
 		t.Fatalf("ShortGrassID = %d，必须紧随 BedHeadEastID(%d)",
 			core.ShortGrassID, core.BedHeadEastID)
 	}
-	if core.BlockIDMax != 89 {
-		t.Fatalf("BlockIDMax = %d，必须后移到 89（短草与四档雪层之后）", core.BlockIDMax)
+	if core.BlockIDMax != 90 {
+		t.Fatalf("BlockIDMax = %d，必须后移到 90（短草、四档雪层与树苗之后）", core.BlockIDMax)
 	}
 	// 形态编号两两不同：五种命中面必须解析为五个不同的方块。
 	seen := map[core.BlockID]bool{}

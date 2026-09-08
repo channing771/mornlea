@@ -111,6 +111,11 @@ const (
 	// 不经 `ItemPlacement` 放置（取水/倒水走流体交互窗口），只能追加在哨兵前。
 	ItemEmptyBucket
 	ItemWaterBucket
+	// ItemSapling 是橡树树苗物品：放置成 SaplingID，堆叠 64、无耐久，不参与
+	// 任何合成配方。获取途径只有树苗方块的移除（采掘、支撑消失、被流体冲毁）
+	// 与完成采掘树叶时的独立概率判定，两者都走既有权威掉落物系统。同样只能
+	// 追加在 `ItemIDMax` 哨兵之前。
+	ItemSapling
 	// ItemIDMax 是合法物品编号的独占上界（最后一个合法 ItemID + 1），本身不是
 	// 物品枚举成员。它供测试以「item < ItemIDMax」穷举全部物品，替代依赖
 	//「某个具体物品恰为枚举末项」的脆弱写法；放在 core 是因为物品注册表归属
@@ -304,6 +309,11 @@ func BlockDrop(block BlockID) (ItemID, bool) {
 	case BedFootSouthID, BedFootWestID, BedFootNorthID, BedFootEastID,
 		BedHeadSouthID, BedHeadWestID, BedHeadNorthID, BedHeadEastID:
 		return ItemBed, true
+	// 树苗采掘与环境移除（支撑被移除、被流体冲毁）都掉回恰好 1 个树苗物品。
+	// 树叶的树苗掉落刻意不登记在这里：那是完成采掘时按世界种子、维度与坐标
+	// 冻结的独立概率判定，本表只表达确定性的单产物映射。
+	case SaplingID:
+		return ItemSapling, true
 	default:
 		return ItemNone, false
 	}
@@ -320,7 +330,7 @@ func ItemStackLimit(item ItemID) (uint8, bool) {
 		ItemWheatSeeds, ItemWheat, ItemBread,
 		ItemStick, ItemWorkbench, ItemBoneMeal,
 		ItemPotato, ItemCarrot, ItemPoisonousPotato, ItemDoor,
-		ItemTorch, ItemRottenFlesh, ItemBed, ItemRawBeef, ItemCookedBeef:
+		ItemTorch, ItemRottenFlesh, ItemBed, ItemRawBeef, ItemCookedBeef, ItemSapling:
 		return MaxStackCount, true
 	case ItemStonePickaxe, ItemIronPickaxe,
 		ItemBrokenStonePickaxe, ItemBrokenIronPickaxe,
@@ -478,6 +488,10 @@ func ItemPlacement(item ItemID) (BlockID, bool) {
 	// 由放置执行方经 BedHeadID/BedHeadNeighbor 原子完成。
 	case ItemBed:
 		return BedFootSouthID, true
+	// 树苗与床同形：单值映射给出方块编号，「只能种在泥土或草地上方」的支撑
+	// 约束由放置执行方校验——本窗口只回答写哪个编号，不回答能不能写。
+	case ItemSapling:
+		return SaplingID, true
 	default:
 		return AirID, false
 	}

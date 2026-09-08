@@ -92,6 +92,7 @@ var canonicalBlockNames = [...]string{
 	SnowLayer2BlockID:    "snow_layer_2",
 	SnowLayer3BlockID:    "snow_layer_3",
 	SnowLayer4BlockID:    "snow_layer_4",
+	SaplingID:            "oak_sapling",
 }
 
 // explicitCanonicalItemNames 只登记没有同名完整方块的物品。完整方块物品通过
