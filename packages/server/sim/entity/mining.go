@@ -313,16 +313,12 @@ func (engine *engineContext) advanceMining(
 		// 也不得有这一行。疲劳刻意不进下方的耐久豁免：疲劳的判定点是「玩家的
 		// 成功采掘」，与工具磨损语义无关。
 		player.applyExhaustion(exhaustionMiningMilli, engine.tunables.ExhaustionThresholdMilli)
-		// 完成时选中物与 `consumeToolDurability` 读的是同一个栏位（采掘中途换手
-		// 会重置进度，不存在「开始持锄、完成持镐」的窗口），豁免与扣耐久必然
-		// 判定同一件工具。短草与树苗各走第三、第四类豁免
-		// （`wildGrassDurabilityExempt`/`saplingDurabilityExempt`）：
+		// 完成时选中物与 `consumeMiningToolDurability` 读的是同一个栏位（采掘
+		// 中途换手会重置进度，不存在「开始持锄、完成持镐」的窗口），豁免与扣
+		// 耐久必然判定同一件工具。四类豁免按**被移除方块**判定，玩家与伙伴共用
+		// 同一个入口（见 `consumeMiningToolDurability`）：豁免命中时
 		// `consumeToolDurability` 整体不被调用，耐久 1 的工具也不会转损坏形态。
-		held := player.inventory.Hotbar.Slots[player.inventory.Hotbar.Selected].Item
-		if !hoeHarvestDurabilityExempt(minedBlock, held) &&
-			!wildGrassDurabilityExempt(minedBlock) &&
-			!saplingDurabilityExempt(minedBlock) &&
-			consumeToolDurability(&player.actorState) {
+		if consumeMiningToolDurability(&player.actorState, minedBlock) {
 			player.inventoryDirty = true
 		}
 	}
@@ -481,7 +477,7 @@ func (engine *engineContext) completeCompanionMining(
 			entry.inventory = staged
 			entry.inventoryDirty = true
 		}
-		if consumeToolDurability(&entry.actorState) {
+		if consumeMiningToolDurability(&entry.actorState, entry.mining.block) {
 			entry.inventoryDirty = true
 		}
 		entry.mining = miningState{}
@@ -508,7 +504,7 @@ func (engine *engineContext) completeCompanionMining(
 		entry.inventory = staged
 		entry.inventoryDirty = true
 	}
-	if consumeToolDurability(&entry.actorState) {
+	if consumeMiningToolDurability(&entry.actorState, entry.mining.block) {
 		entry.inventoryDirty = true
 	}
 	entry.mining = miningState{}
@@ -586,51 +582,71 @@ func (engine *engineContext) completeCompanionContainerMining(
 	}
 	entry.inventory = staged
 	entry.inventoryDirty = true
-	if consumeToolDurability(&entry.actorState) {
+	if consumeMiningToolDurability(&entry.actorState, entry.mining.block) {
 		entry.inventoryDirty = true
 	}
 	entry.mining = miningState{}
 }
 
-// hoeHarvestDurabilityExempt 报告一次玩家采掘完成是否豁免扣耐久：被移除的方块
+// hoeHarvestDurabilityExempt 报告一次权威采掘完成是否豁免扣耐久：被移除的方块
 // 是作物（`core.IsCrop`，小麦八个生长阶段）且完成时选中物是完好锄头
 // （`core.TillingTool`）。这是 authoritative-farming 遗留 16 所说的「作物 × 锄头」
-// 豁免，tool-durability 三类成功破坏豁免中的第一类（另两类：完好剑在任何破坏
+// 豁免，tool-durability 四类成功破坏豁免中的第一类（另三类：完好剑在任何破坏
 // 路径上的豁免在 `consumeToolDurability` 内，短草 × 任意工具的豁免在
-// `wildGrassDurabilityExempt`）。锄头破坏非作物仍沿用既有扣耐久规则；损坏形态
-// 被 `core.TillingTool` 显式排除（它只枚举两个完好锄头编号），因此持损坏锄头
-// 收获作物走不进豁免——本就没有耐久可扣。伙伴采掘路径
-// （`completeCompanionMining`）不设本守卫：`companionMineableBlock` 的防御清单
-// 已显式拒绝全部农业方块，豁免在伙伴侧不可达，加守卫是死代码。
+// `wildGrassDurabilityExempt`，树苗 × 任意工具的豁免在 `saplingDurabilityExempt`）。
+// 锄头破坏非作物仍沿用既有扣耐久规则；损坏形态被 `core.TillingTool` 显式排除
+// （它只枚举两个完好锄头编号），因此持损坏锄头收获作物走不进豁免——本就没有
+// 耐久可扣。本谓词对伙伴同样求值（`consumeMiningToolDurability` 是两类 actor 的
+// 共用入口），但伙伴侧恒为假：`companionMineableBlock` 的防御清单已显式拒绝
+// 全部农业方块，作物在伙伴侧不可达。
 func hoeHarvestDurabilityExempt(block core.BlockID, item core.ItemID) bool {
 	return core.IsCrop(block) && core.TillingTool(item)
 }
 
-// wildGrassDurabilityExempt 报告一次玩家成功采掘是否属于「短草 × 任意工具」
+// wildGrassDurabilityExempt 报告一次权威采掘完成是否属于「短草 × 任意工具」
 // 零磨损豁免（tool-durability 的第三类）：被移除方块是短草（`core.IsWildGrass`）
 // 时，无论完成时选中栏是空手、普通物品还是任一完好工具（镐、锄头、剑，含
 // 剩余耐久恰好为 1 的工具），都不扣减耐久，也不把耐久 1 的工具转为损坏形态
 // ——调用方因此整体跳过 `consumeToolDurability`，自然没有耐久侧的 inventory
 // dirty。判定只看被移除方块、与手持无关；短草不是作物（`IsCrop` 为假），本豁免
 // 与「作物 × 锄头」类互不重叠，持锄头破坏短草以外的方块仍按既有规则磨损。
-// 伙伴路径不可达：`companionMineableBlock` 已显式拒绝短草。
+// 本谓词对伙伴同样求值，但伙伴侧恒为假：`companionMineableBlock` 已显式拒绝
+// 短草，短草在伙伴侧不可达。
 func wildGrassDurabilityExempt(block core.BlockID) bool {
 	return core.IsWildGrass(block)
 }
 
-// saplingDurabilityExempt 报告一次玩家成功采掘是否属于「树苗 × 任意工具」
+// saplingDurabilityExempt 报告一次权威采掘完成是否属于「树苗 × 任意工具」
 // 零磨损豁免（tool-durability 的第四类）：被移除方块是树苗（`core.IsSapling`）
 // 时，无论完成时选中栏是空手、普通物品还是任一完好工具（含剩余耐久恰好为 1
 // 的工具），都不扣减耐久，也不把耐久 1 的工具转为损坏形态——调用方因此整体
 // 跳过 `consumeToolDurability`。判定只看被移除方块、与手持无关；树苗不是作物
 // （`IsCrop` 为假），本豁免与「作物 × 锄头」类互不重叠，持锄头破坏树苗以外的
-// 方块仍按既有规则磨损。
-//
-// 与短草豁免的差别是伙伴侧可达性：树苗按通用单一掉落规则可被伙伴采掘
-// （`companionMineableBlock` 不拒绝它），但伙伴结算走 `completeCompanionMining`
-// 自己的耐久扣减路径、不经过本谓词——伙伴的工具磨损语义由伙伴契约独立裁决。
+// 方块仍按既有规则磨损。伙伴侧同样可达：树苗按通用单一掉落规则可被伙伴采掘
+// （`companionMineableBlock` 不拒绝它），两类 actor 的采掘完成都经
+// `consumeMiningToolDurability` 这一入口判定。
 func saplingDurabilityExempt(block core.BlockID) bool {
 	return core.IsSapling(block)
+}
+
+// consumeMiningToolDurability 是玩家与伙伴**权威采掘完成**共用的耐久入口：
+// 先按「被移除方块」判定四类豁免（作物 × 完好锄头、短草 × 任意、树苗 × 任意；
+// 完好剑在 `consumeToolDurability` 内按选中物判定），豁免命中即整体跳过扣减并
+// 返回 false，否则按既有规则扣一点耐久并返回是否发生写入。
+//
+// 豁免必须对两类 actor 同样成立：短草在伙伴侧因 `companionMineableBlock` 显式
+// 拒绝而不可达，树苗则可采掘——若伙伴结算直接调 `consumeToolDurability`，同一
+// 株树苗会因 actor 不同产生两种磨损结果（tool-durability 的豁免条款按被移除
+// 方块判定，与 actor 无关）。翻地（`farming.go`）不移除任何方块，四类豁免都没
+// 有判定对象，仍直接调用 `consumeToolDurability`。
+func consumeMiningToolDurability(actor *actorState, block core.BlockID) bool {
+	held := actor.inventory.Hotbar.Slots[actor.inventory.Hotbar.Selected].Item
+	if hoeHarvestDurabilityExempt(block, held) ||
+		wildGrassDurabilityExempt(block) ||
+		saplingDurabilityExempt(block) {
+		return false
+	}
+	return consumeToolDurability(actor)
 }
 
 // consumeToolDurability 在成功方块动作后扣减选中工具的耐久，完好剑除外。

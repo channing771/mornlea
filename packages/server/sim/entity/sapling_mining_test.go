@@ -369,15 +369,23 @@ func TestMiningLeavesMissSucceedsWithOneFreeDropSlot(t *testing.T) {
 }
 
 // TestMiningLeavesHitCapacityFullRejectsAtomicallyAndRetryStaysHit 覆盖 Scenario
-// 「树叶命中树苗掉落但容量已满时原子拒绝」与「相同坐标重试结果不变」：命中 +
-// 容量满 → RejectDropCapacity 且树叶、掉落槽、revision、工具与疲劳全部不变；
-// 树叶 5 tick 完成，因此每轮 5 tick 是一次完整重试，释放两个掉落槽后同一坐标
-// 立即结算为「树叶 + 树苗」——重试不会把命中重掷成未命中，也不会只掉树叶。
+// 「树叶命中树苗掉落但容量已满时原子拒绝」与「相同坐标重试结果不变」：命中且只留
+// **恰好一个**空掉落槽时 → RejectDropCapacity 且树叶、掉落槽、revision、工具与
+// 疲劳全部不变。
+//
+// 「只留一个空槽」是这条用例的承重设计：一个空槽足够放下树叶自身掉落，因此若实现
+// 把树叶与树苗拆成两次预演（或先落树叶、再补树苗），第一次预演就会成功、树叶被
+// 移除并进槽——下面的「方块与 `DropsHash` 逐字节不变」立刻红。只有两堆进同一次
+// `PrepareDropBatch` 才会整体拒绝。
+//
+// 树叶 5 tick 完成，因此每轮 5 tick 是一次完整重试；再释放一个槽（合计两个空槽）
+// 后同一坐标必须结算为「树叶 + 树苗」，重试不会把命中重掷成未命中，也不会只掉
+// 树叶。
 func TestMiningLeavesHitCapacityFullRejectsAtomicallyAndRetryStaysHit(t *testing.T) {
 	held := core.ItemStack{Item: core.ItemIronPickaxe, Count: 1, Durability: fullToolDurability(core.ItemIronPickaxe)}
 	engine, session, target := plantMiningPlayer(t, leavesSaplingHitPositions[1], core.LeavesID, held)
 	player := engine.sessions[session].player
-	fillMiningDrops(engine, target)
+	fillMiningDropsLeavingOneSlot(engine, target)
 	record := miningTargetRecord(t, engine, target)
 	beforeHash := record.Chunk.Hash()
 	beforeDrops := record.Chunk.DropsHash()
@@ -412,13 +420,10 @@ func TestMiningLeavesHitCapacityFullRejectsAtomicallyAndRetryStaysHit(t *testing
 		}
 	}
 
-	// 释放两个掉落槽后重试：同一坐标必须仍然命中并同时掉出树叶与树苗。树叶与
-	// 树苗是不同的物品，两堆各占一个空槽——只释放一个槽仍会整体拒绝，这正是
-	// 「同一次原子结算」的容量语义。
+	// 再释放一个槽（合计两个空槽）后重试：树叶与树苗是不同的物品，两堆各占一个
+	// 空槽，因此这次必须整体成功。
 	key := core.ChunkKey{Dimension: core.Overworld, Pos: target.Chunk()}
-	for slot := range 2 {
-		engine.SetChunkDropForTest(key, slot, world.DropSlot{})
-	}
+	engine.SetChunkDropForTest(key, 0, world.DropSlot{})
 	var result TickResult
 	for range 5 {
 		result = advanceMiningOnce(engine)
@@ -451,5 +456,60 @@ func TestMiningLeavesHitCapacityFullRejectsAtomicallyAndRetryStaysHit(t *testing
 func TestCompanionMineableBlockAdmitsSaplingByGenericRule(t *testing.T) {
 	if !companionMineableBlock(core.SaplingID) {
 		t.Fatal("companionMineableBlock(SaplingID) = false，树苗必须按通用单一掉落规则被允许")
+	}
+}
+
+// TestCompanionMiningSaplingKeepsToolDurability 覆盖 Scenario「伙伴采掘树苗同样
+// 不扣耐久」：四项耐久豁免按「被移除方块」判定，对玩家与伙伴的权威采掘结算同样
+// 成立。伙伴选中任一完好工具（含耐久恰好为 1 的工具与损坏形态）采掘树苗后，工具
+// 的 item、数量与耐久必须逐字段不变。
+//
+// 探针刻意不是 `inventoryDirty`：伙伴采掘的产物直入背包，该标记由入包本身合法
+// 置位，无法区分「耐久写入」与「产物入包」两种来源。改用「结算后背包 = 结算前
+// 背包 + 恰好 1 个树苗」的等式——任何耐久写入（扣一点或转损坏形态）都会破坏
+// 它，而空手与损坏工具不会产生额外的树苗堆。
+func TestCompanionMiningSaplingKeepsToolDurability(t *testing.T) {
+	tests := []struct {
+		name string
+		held core.ItemStack
+	}{
+		{name: "空手"},
+		{name: "完好石镐", held: core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: fullToolDurability(core.ItemStonePickaxe)}},
+		{name: "完好铁镐", held: core.ItemStack{Item: core.ItemIronPickaxe, Count: 1, Durability: fullToolDurability(core.ItemIronPickaxe)}},
+		{name: "完好锄头", held: core.ItemStack{Item: core.ItemIronHoe, Count: 1, Durability: fullToolDurability(core.ItemIronHoe)}},
+		{name: "完好剑", held: core.ItemStack{Item: core.ItemStoneSword, Count: 1, Durability: fullToolDurability(core.ItemStoneSword)}},
+		{name: "耐久1的铁镐不损坏", held: core.ItemStack{Item: core.ItemIronPickaxe, Count: 1, Durability: 1}},
+		{name: "耐久1的锄头不损坏", held: core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: 1}},
+		{name: "损坏形态工具", held: core.ItemStack{Item: core.ItemBrokenStonePickaxe, Count: 1}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := readyCompanionMining(t, core.SaplingID, core.ItemNone)
+			entry := fixture.entry
+			if test.held != (core.ItemStack{}) {
+				entry.inventory.Hotbar.Slots[0] = test.held
+			}
+			before := entry.inventory
+			want, leftover := before.AddStack(core.ItemStack{Item: core.ItemSapling, Count: 1})
+			if leftover.Count != 0 {
+				t.Fatalf("夹具背包放不下树苗产物: %+v", leftover)
+			}
+
+			result := advanceMiningOnce(fixture.engine)
+
+			if len(result.Rejected) != 0 {
+				t.Fatalf("伙伴采掘树苗被拒绝=%+v", result.Rejected)
+			}
+			if got := companionMiningBlockAt(t, fixture); got != core.AirID {
+				t.Fatalf("采掘后方块=%d，想要空气", got)
+			}
+			if entry.inventory != want {
+				t.Fatalf("结算后背包=%+v，想要「结算前 + 1 个树苗」=%+v（工具必须逐字段不变）",
+					entry.inventory, want)
+			}
+			if got := companionItemCount(entry, core.ItemSapling); got != 1 {
+				t.Fatalf("伙伴树苗产物=%d，想要恰好 1", got)
+			}
+		})
 	}
 }
