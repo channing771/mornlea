@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"container/list"
 	"context"
 	"errors"
 	"fmt"
@@ -25,13 +26,46 @@ import (
 
 const maxPlayerFileLength = int64(player.EnvelopeLength) + int64(player.MaxPayload)
 
+// regionHandle 是 regions 缓存里一个 region 文件的受治理句柄：内嵌记录层容器
+// 本体（方法整体提升，编排调用面保持 `store.regions[key].Save` 形态不变），
+// 追加在途引用计数与 LRU 链表节点。refs 与 element 只在 regionMu 下读写；
+// refs 为零的句柄才允许被 LRU 淘汰或 Close 关闭，在途 I/O 期间的句柄既不会
+// 被淘汰，也不会被 Close 抢先关闭底层文件。
+type regionHandle struct {
+	*chunk.Region
+	key     RegionKey
+	refs    int
+	element *list.Element
+}
+
 // DiskStore persists chunks in lazily opened region files under one locked world.
+//
+// 并发形态：regionMu 只保护缓存治理（map、LRU、引用计数与排空状态），不覆盖
+// 文件 I/O——同一 region 文件内的串行化由 chunk.Region 内嵌互斥承担，不同
+// region 与不同存档类别因此互不阻塞。metadata/players/companions/hostiles/
+// passives 五类各自独立持锁；world.meta 的内存镜像由 metadataMu 保护。
+// closing/closed 为原子量：closing 在 Close 入口先置位以立即拒绝新操作，
+// closed 在排空在途引用后置位，此后任何入口都返回 os.ErrClosed。
 type DiskStore struct {
-	mu      sync.Mutex
-	files   *worldFiles
-	regions map[RegionKey]*chunk.Region
+	files *worldFiles
+
+	regionMu        sync.Mutex
+	regionCond      sync.Cond
+	regions         map[RegionKey]*regionHandle
+	regionLRU       list.List
+	regionCap       int
+	regionBusy      int
+	regionDraining  bool
+	regionEvictErrs []error
+
+	metadataMu  sync.Mutex
+	playerMu    sync.Mutex
+	companionMu sync.Mutex
+	hostileMu   sync.Mutex
+	passiveMu   sync.Mutex
+
 	closing atomic.Bool
-	closed  bool
+	closed  atomic.Bool
 
 	playerReplaceHooks    atomicReplaceHooks
 	companionReplaceHooks atomicReplaceHooks
@@ -45,15 +79,22 @@ func OpenDisk(ctx context.Context, root string, options OpenOptions) (*DiskStore
 	if err != nil {
 		return nil, err
 	}
-	return &DiskStore{
-		files:   files,
-		regions: make(map[RegionKey]*chunk.Region),
-	}, nil
+	regionCap := options.RegionHandleCacheCap
+	if regionCap <= 0 {
+		regionCap = DefaultRegionHandleCacheCap
+	}
+	store := &DiskStore{
+		files:     files,
+		regions:   make(map[RegionKey]*regionHandle),
+		regionCap: regionCap,
+	}
+	store.regionCond.L = &store.regionMu
+	return store, nil
 }
 
 func (store *DiskStore) Metadata() Metadata {
-	store.mu.Lock()
-	defer store.mu.Unlock()
+	store.metadataMu.Lock()
+	defer store.metadataMu.Unlock()
 	return store.files.metadata
 }
 
@@ -71,9 +112,9 @@ func (store *DiskStore) SaveMetadata(ctx context.Context, metadata Metadata) err
 		return fmt.Errorf("encode world metadata: %w", err)
 	}
 
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if store.closed {
+	store.metadataMu.Lock()
+	defer store.metadataMu.Unlock()
+	if store.closed.Load() {
 		return os.ErrClosed
 	}
 	if err := ctx.Err(); err != nil {
@@ -101,29 +142,16 @@ func (store *DiskStore) LoadChunk(
 	if err := ctx.Err(); err != nil {
 		return StoredChunk{}, err
 	}
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if store.closing.Load() || store.closed {
-		return StoredChunk{}, os.ErrClosed
+	regionKey, _ := RegionFor(key)
+	handle, err := store.acquireRegion(ctx, regionKey, false)
+	if errors.Is(err, os.ErrNotExist) {
+		return StoredChunk{}, fmt.Errorf("%w: %v", ErrChunkNotFound, key)
 	}
-	if err := ctx.Err(); err != nil {
+	if err != nil {
 		return StoredChunk{}, err
 	}
-
-	regionKey, _ := RegionFor(key)
-	opened, ok := store.regions[regionKey]
-	if !ok {
-		var err error
-		opened, err = chunk.OpenRegion(ctx, store.regionPath(regionKey), regionKey)
-		if errors.Is(err, os.ErrNotExist) {
-			return StoredChunk{}, fmt.Errorf("%w: %v", ErrChunkNotFound, key)
-		}
-		if err != nil {
-			return StoredChunk{}, err
-		}
-		store.regions[regionKey] = opened
-	}
-	return opened.Load(ctx, key)
+	defer store.releaseRegion(handle)
+	return handle.Load(ctx, key)
 }
 
 func (store *DiskStore) SaveBatch(
@@ -156,37 +184,139 @@ func (store *DiskStore) SaveBatch(
 		return result, os.ErrClosed
 	}
 
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if store.closing.Load() || store.closed {
-		return result, os.ErrClosed
-	}
-	if err := ctx.Err(); err != nil {
-		return result, err
-	}
-
 	for _, key := range keys {
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		opened, err := store.regionForSave(ctx, key)
-		if err != nil {
+		if err := store.saveRegionGroup(ctx, key, grouped[key], &result); err != nil {
 			return result, err
-		}
-		regionResult, err := opened.Save(ctx, grouped[key])
-		for chunkKey, revision := range regionResult.Committed {
-			result.Committed[chunkKey] = revision
-		}
-		if err != nil {
-			return result, fmt.Errorf("save region %+v: %w", key, err)
-		}
-		if opened.ShouldCompact(region.ProductionSpacePolicy) {
-			if err := opened.Compact(ctx); err != nil {
-				return result, fmt.Errorf("compact region %+v: %w", key, err)
-			}
 		}
 	}
 	return result, nil
+}
+
+// saveRegionGroup 获取单个 region 的缓存句柄，完成该组保存、必要的生产压缩
+// 与提交记账。句柄的获取与释放在函数内严格配对：任何失败路径都不泄漏在途
+// 引用，region 内的文件 I/O 由容器内嵌互斥串行，不同 region 的批次在此期间
+// 可以并行推进。
+func (store *DiskStore) saveRegionGroup(
+	ctx context.Context,
+	key RegionKey,
+	saves []ChunkSave,
+	result *SaveResult,
+) error {
+	handle, err := store.acquireRegion(ctx, key, true)
+	if err != nil {
+		return err
+	}
+	defer store.releaseRegion(handle)
+	regionResult, err := handle.Save(ctx, saves)
+	for chunkKey, revision := range regionResult.Committed {
+		result.Committed[chunkKey] = revision
+	}
+	if err != nil {
+		return fmt.Errorf("save region %+v: %w", key, err)
+	}
+	if handle.ShouldCompact(region.ProductionSpacePolicy) {
+		if err := handle.Compact(ctx); err != nil {
+			return fmt.Errorf("compact region %+v: %w", key, err)
+		}
+	}
+	return nil
+}
+
+// acquireRegion 取出（必要时打开）key 的缓存句柄并登记一个在途引用；调用方
+// 完成 I/O 后必须 releaseRegion 归还。create 控制保存路径的缺文件行为：先建
+// 目录再建文件；读取路径不创建。打开与登记都在 regionMu 内完成，同一 region
+// 的并发首次访问收敛到同一次打开，避免两个描述符写同一文件。
+func (store *DiskStore) acquireRegion(
+	ctx context.Context,
+	key RegionKey,
+	create bool,
+) (*regionHandle, error) {
+	store.regionMu.Lock()
+	defer store.regionMu.Unlock()
+	if store.regionDraining || store.closed.Load() {
+		return nil, os.ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if handle, ok := store.regions[key]; ok {
+		store.pinRegionLocked(handle)
+		return handle, nil
+	}
+	opened, err := store.openRegionLocked(ctx, key, create)
+	if err != nil {
+		return nil, err
+	}
+	handle := &regionHandle{Region: opened, key: key}
+	store.regions[key] = handle
+	handle.element = store.regionLRU.PushFront(handle)
+	store.pinRegionLocked(handle)
+	store.evictRegionsLocked()
+	return handle, nil
+}
+
+// releaseRegion 归还一个在途引用，随后尝试把缓存收缩回上限内，并唤醒等待
+// 排空的 Close。
+func (store *DiskStore) releaseRegion(handle *regionHandle) {
+	store.regionMu.Lock()
+	defer store.regionMu.Unlock()
+	handle.refs--
+	store.regionBusy--
+	store.evictRegionsLocked()
+	store.regionCond.Broadcast()
+}
+
+// pinRegionLocked 登记一个在途引用并触碰 LRU 位置；调用方必须持有 regionMu。
+func (store *DiskStore) pinRegionLocked(handle *regionHandle) {
+	handle.refs++
+	store.regionBusy++
+	store.regionLRU.MoveToFront(handle.element)
+}
+
+// evictRegionsLocked 从 LRU 尾部关闭空闲句柄，把缓存收缩到上限内。尾部候选
+// 仍有在途引用时本次收缩让步（句柄不被关闭），待引用归还或下次插入时重试；
+// 因此在途引用密集的窗口内句柄数可能暂时超过上限，这是淘汰安全的代价。
+func (store *DiskStore) evictRegionsLocked() {
+	for store.regionLRU.Len() > store.regionCap {
+		tail := store.regionLRU.Back()
+		if tail == nil {
+			return
+		}
+		victim := tail.Value.(*regionHandle)
+		if victim.refs > 0 {
+			return
+		}
+		store.regionLRU.Remove(tail)
+		delete(store.regions, victim.key)
+		if err := victim.Close(); err != nil {
+			store.regionEvictErrs = append(store.regionEvictErrs, fmt.Errorf(
+				"evict region %+v: %w", victim.key, err,
+			))
+		}
+	}
+}
+
+// openRegionLocked 打开（保存路径下必要时创建）key 的 region 文件；调用方
+// 必须持有 regionMu。
+func (store *DiskStore) openRegionLocked(
+	ctx context.Context,
+	key RegionKey,
+	create bool,
+) (*chunk.Region, error) {
+	path := store.regionPath(key)
+	if create {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return nil, fmt.Errorf("create region directory %q: %w", filepath.Dir(path), err)
+		}
+	}
+	opened, err := chunk.OpenRegion(ctx, path, key)
+	if errors.Is(err, os.ErrNotExist) && create {
+		opened, err = chunk.CreateRegion(ctx, path, key)
+	}
+	return opened, err
 }
 
 func (store *DiskStore) LoadPlayer(
@@ -203,9 +333,9 @@ func (store *DiskStore) LoadPlayer(
 		return StoredPlayer{}, fmt.Errorf("%w: invalid requested player ID", ErrCorrupt)
 	}
 
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if store.closing.Load() || store.closed {
+	store.playerMu.Lock()
+	defer store.playerMu.Unlock()
+	if store.closed.Load() {
 		return StoredPlayer{}, os.ErrClosed
 	}
 	if err := ctx.Err(); err != nil {
@@ -236,9 +366,9 @@ func (store *DiskStore) SavePlayer(
 		return 0, err
 	}
 
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if store.closing.Load() || store.closed {
+	store.playerMu.Lock()
+	defer store.playerMu.Unlock()
+	if store.closed.Load() {
 		return 0, os.ErrClosed
 	}
 	if err := ctx.Err(); err != nil {
@@ -293,9 +423,9 @@ func (store *DiskStore) LoadCompanions(ctx context.Context) (StoredCompanions, e
 	if err := ctx.Err(); err != nil {
 		return StoredCompanions{}, err
 	}
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if store.closing.Load() || store.closed {
+	store.companionMu.Lock()
+	defer store.companionMu.Unlock()
+	if store.closed.Load() {
 		return StoredCompanions{}, os.ErrClosed
 	}
 	if err := ctx.Err(); err != nil {
@@ -324,9 +454,9 @@ func (store *DiskStore) CompanionsExist(ctx context.Context) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if store.closing.Load() || store.closed {
+	store.companionMu.Lock()
+	defer store.companionMu.Unlock()
+	if store.closed.Load() {
 		return false, os.ErrClosed
 	}
 	if err := ctx.Err(); err != nil {
@@ -355,9 +485,9 @@ func (store *DiskStore) SaveCompanions(ctx context.Context, save CompanionSave) 
 		return err
 	}
 
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if store.closing.Load() || store.closed {
+	store.companionMu.Lock()
+	defer store.companionMu.Unlock()
+	if store.closed.Load() {
 		return os.ErrClosed
 	}
 	if err := ctx.Err(); err != nil {
@@ -407,9 +537,9 @@ func (store *DiskStore) LoadHostileMobs(ctx context.Context) (StoredHostileMobs,
 	if err := ctx.Err(); err != nil {
 		return StoredHostileMobs{}, err
 	}
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if store.closing.Load() || store.closed {
+	store.hostileMu.Lock()
+	defer store.hostileMu.Unlock()
+	if store.closed.Load() {
 		return StoredHostileMobs{}, os.ErrClosed
 	}
 	if err := ctx.Err(); err != nil {
@@ -441,9 +571,9 @@ func (store *DiskStore) SaveHostileMobs(ctx context.Context, save HostileMobsSav
 		return err
 	}
 
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if store.closing.Load() || store.closed {
+	store.hostileMu.Lock()
+	defer store.hostileMu.Unlock()
+	if store.closed.Load() {
 		return os.ErrClosed
 	}
 	if err := ctx.Err(); err != nil {
@@ -495,9 +625,9 @@ func (store *DiskStore) LoadPassiveMobs(ctx context.Context) (StoredPassiveMobs,
 	if err := ctx.Err(); err != nil {
 		return StoredPassiveMobs{}, err
 	}
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if store.closing.Load() || store.closed {
+	store.passiveMu.Lock()
+	defer store.passiveMu.Unlock()
+	if store.closed.Load() {
 		return StoredPassiveMobs{}, os.ErrClosed
 	}
 	if err := ctx.Err(); err != nil {
@@ -529,9 +659,9 @@ func (store *DiskStore) SavePassiveMobs(ctx context.Context, save PassiveMobsSav
 		return err
 	}
 
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if store.closing.Load() || store.closed {
+	store.passiveMu.Lock()
+	defer store.passiveMu.Unlock()
+	if store.closed.Load() {
 		return os.ErrClosed
 	}
 	if err := ctx.Err(); err != nil {
@@ -659,44 +789,74 @@ func sortChunkKeys(keys []core.ChunkKey) {
 	})
 }
 
+// Sync 依次同步全部缓存 region 句柄。句柄先以引用钉住再逐个 Sync，期间不持
+// regionMu，region I/O 与其他并行操作互不阻塞；Close 会等待这些在途引用
+// 归还后才关闭句柄。
 func (store *DiskStore) Sync(ctx context.Context) error {
 	if store.closing.Load() {
 		return os.ErrClosed
 	}
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if store.closing.Load() || store.closed {
+	store.regionMu.Lock()
+	if store.regionDraining || store.closed.Load() {
+		store.regionMu.Unlock()
 		return os.ErrClosed
 	}
-
 	keys := store.regionKeys()
-	errs := make([]error, 0, len(keys))
-	for _, key := range keys {
-		if err := store.regions[key].Sync(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("sync region %+v: %w", key, err))
+	handles := make([]*regionHandle, len(keys))
+	for index, key := range keys {
+		handles[index] = store.regions[key]
+		store.pinRegionLocked(handles[index])
+	}
+	store.regionMu.Unlock()
+
+	errs := make([]error, 0, len(handles))
+	for _, handle := range handles {
+		if err := handle.Sync(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("sync region %+v: %w", handle.key, err))
 		}
+		store.releaseRegion(handle)
 	}
 	return errors.Join(errs...)
 }
 
+// Close 幂等：先置位 closing 立即拒绝新操作，再等待全部在途 region 引用归还，
+// 之后关闭缓存句柄（失败句柄保留在缓存中供重试 Close），最后依次占住五类
+// 存档锁排空类别 I/O 并释放世界锁。淘汰路径产生的句柄关闭错误一并汇入返回值。
 func (store *DiskStore) Close() error {
 	if store == nil {
 		return nil
 	}
 	store.closing.Store(true)
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	store.closed = true
 
+	store.regionMu.Lock()
+	store.regionDraining = true
+	for store.regionBusy > 0 {
+		store.regionCond.Wait()
+	}
+	store.closed.Store(true)
 	keys := store.regionKeys()
-	errs := make([]error, 0, len(keys))
+	errs := store.regionEvictErrs
+	store.regionEvictErrs = nil
 	for _, key := range keys {
 		if err := store.regions[key].Close(); err != nil {
 			errs = append(errs, fmt.Errorf("close region %+v: %w", key, err))
 			continue
 		}
-		delete(store.regions, key)
+		store.removeRegionLocked(key)
 	}
+	store.regionMu.Unlock()
+
+	store.metadataMu.Lock()
+	defer store.metadataMu.Unlock()
+	store.playerMu.Lock()
+	defer store.playerMu.Unlock()
+	store.companionMu.Lock()
+	defer store.companionMu.Unlock()
+	store.hostileMu.Lock()
+	defer store.hostileMu.Unlock()
+	store.passiveMu.Lock()
+	defer store.passiveMu.Unlock()
+
 	if len(errs) != 0 {
 		return errors.Join(errs...)
 	}
@@ -804,25 +964,7 @@ func readPassiveFile(path string) ([]byte, error) {
 	return encoded, nil
 }
 
-func (store *DiskStore) regionForSave(ctx context.Context, key RegionKey) (*chunk.Region, error) {
-	if opened, ok := store.regions[key]; ok {
-		return opened, nil
-	}
-	path := store.regionPath(key)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, fmt.Errorf("create region directory %q: %w", filepath.Dir(path), err)
-	}
-	opened, err := chunk.OpenRegion(ctx, path, key)
-	if errors.Is(err, os.ErrNotExist) {
-		opened, err = chunk.CreateRegion(ctx, path, key)
-	}
-	if err != nil {
-		return nil, err
-	}
-	store.regions[key] = opened
-	return opened, nil
-}
-
+// regionKeys 返回缓存句柄键的排序快照；调用方必须持有 regionMu。
 func (store *DiskStore) regionKeys() []RegionKey {
 	keys := make([]RegionKey, 0, len(store.regions))
 	for key := range store.regions {
@@ -830,6 +972,16 @@ func (store *DiskStore) regionKeys() []RegionKey {
 	}
 	sortRegionKeys(keys)
 	return keys
+}
+
+// removeRegionLocked 把句柄从缓存与 LRU 链表移除；调用方必须持有 regionMu。
+func (store *DiskStore) removeRegionLocked(key RegionKey) {
+	handle, ok := store.regions[key]
+	if !ok {
+		return
+	}
+	store.regionLRU.Remove(handle.element)
+	delete(store.regions, key)
 }
 
 func sortRegionKeys(keys []RegionKey) {

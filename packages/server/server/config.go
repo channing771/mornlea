@@ -38,10 +38,13 @@ type Config struct {
 	RetryBaseTicks        uint64
 	RetryMaxTicks         uint64
 	UnsavedBytes          int64
-	ShutdownTimeout       time.Duration
-	SaveObserver          func(time.Duration)
-	HeartbeatInterval     time.Duration
-	HeartbeatTimeout      time.Duration
+	// RegionHandleCacheCap 是磁盘存档层同时保持打开的 region 文件句柄上限，
+	// 经 OpenOptions 传入 DiskStore；零值在装配层回落为默认上限。
+	RegionHandleCacheCap int
+	ShutdownTimeout      time.Duration
+	SaveObserver         func(time.Duration)
+	HeartbeatInterval    time.Duration
+	HeartbeatTimeout     time.Duration
 
 	heartbeatClock heartbeatClock
 	// companionIdentityGenerator 只用于启动期 v5 身份生成；测试注入失败与
@@ -59,26 +62,27 @@ type Config struct {
 
 func DefaultConfig(seed int64) Config {
 	return Config{
-		Seed:              seed,
-		MaxPlayers:        8,
-		ViewRadius:        33,
-		Workers:           max(1, runtime.GOMAXPROCS(0)-1),
-		SnapshotChunks:    64,
-		SnapshotBytes:     1 << 20,
-		OutboxCapacity:    512,
-		SpawnDimension:    core.Overworld,
-		SpawnAnchor:       core.ChunkPos{},
-		SaveWorkers:       2,
-		SaveChunks:        8,
-		SaveBytes:         4 << 20,
-		AutosaveTicks:     6000,
-		RetryBaseTicks:    20,
-		RetryMaxTicks:     1200,
-		UnsavedBytes:      512 << 20,
-		ShutdownTimeout:   30 * time.Second,
-		HeartbeatInterval: 5 * time.Second,
-		HeartbeatTimeout:  15 * time.Second,
-		heartbeatClock:    realHeartbeatClock{},
+		Seed:                 seed,
+		MaxPlayers:           8,
+		ViewRadius:           33,
+		Workers:              max(1, runtime.GOMAXPROCS(0)-1),
+		SnapshotChunks:       64,
+		SnapshotBytes:        1 << 20,
+		OutboxCapacity:       512,
+		SpawnDimension:       core.Overworld,
+		SpawnAnchor:          core.ChunkPos{},
+		SaveWorkers:          2,
+		SaveChunks:           8,
+		SaveBytes:            4 << 20,
+		AutosaveTicks:        6000,
+		RetryBaseTicks:       20,
+		RetryMaxTicks:        1200,
+		UnsavedBytes:         512 << 20,
+		RegionHandleCacheCap: storage.DefaultRegionHandleCacheCap,
+		ShutdownTimeout:      30 * time.Second,
+		HeartbeatInterval:    5 * time.Second,
+		HeartbeatTimeout:     15 * time.Second,
+		heartbeatClock:       realHeartbeatClock{},
 	}
 }
 
@@ -127,6 +131,12 @@ func (config *Config) validate() {
 	}
 	if config.UnsavedBytes < 1 {
 		panic("server: unsaved byte limit must be positive")
+	}
+	if config.RegionHandleCacheCap < 0 {
+		panic("server: negative region handle cache cap")
+	}
+	if config.RegionHandleCacheCap == 0 {
+		config.RegionHandleCacheCap = storage.DefaultRegionHandleCacheCap
 	}
 	if config.ShutdownTimeout <= 0 {
 		panic("server: shutdown timeout must be positive")

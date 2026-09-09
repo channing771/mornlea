@@ -142,13 +142,20 @@ func run(ctx context.Context, args []string, injected dependencies) error {
 	// mornlea-server 不消费渲染组：effective.Render 就地丢弃，只 Apply physics 与 sim。
 	effective.Apply()
 	dependencies := mergeDependencies(injected)
-	store, err := dependencies.openDisk(ctx, options.World, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion:     5,
-		Seed:              options.Seed,
-		SpawnDimension:    core.Overworld,
-		DepthsSpawnAnchor: core.ChunkPos{},
-		DepthsSeedSalt:    core.DepthsSeedSalt,
-	}})
+	// server.Config 先按命令行种子装配再打开存档：region 句柄上限沿
+	// server.Config → OpenOptions 链路传入 DiskStore，种子在读取 metadata
+	// 后校正为磁盘权威值。
+	config := server.DefaultConfig(options.Seed)
+	store, err := dependencies.openDisk(ctx, options.World, storage.OpenOptions{
+		Create: storage.Metadata{
+			FormatVersion:     5,
+			Seed:              options.Seed,
+			SpawnDimension:    core.Overworld,
+			DepthsSpawnAnchor: core.ChunkPos{},
+			DepthsSeedSalt:    core.DepthsSeedSalt,
+		},
+		RegionHandleCacheCap: config.RegionHandleCacheCap,
+	})
 	if err != nil {
 		return fmt.Errorf("打开世界: %w", err)
 	}
@@ -158,7 +165,7 @@ func run(ctx context.Context, args []string, injected dependencies) error {
 	}
 
 	metadata := store.Metadata()
-	config := server.DefaultConfig(metadata.Seed)
+	config.Seed = metadata.Seed
 	config.Companions = slices.Clone(effective.CompanionDefinitions())
 	// 配置文件只保存 Agent credential 环境变量名，密钥值仅进入内存中的
 	// server.Config，不写日志与存档。

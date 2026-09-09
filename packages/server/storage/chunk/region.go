@@ -196,8 +196,11 @@ func (r *Region) SetCompactionHooks(hooks region.CompactionHooks) {
 }
 
 // Bank 返回当前生效 bank 的副本，供根包 `ChunkKeys` 编排枚举已落盘槽位，
-// 不暴露容器内部状态的可变引用。
+// 不暴露容器内部状态的可变引用。读取经容器互斥串行，与并行的 Save/Compact
+// 不产生数据竞争。
 func (r *Region) Bank() region.Bank {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.bank
 }
 

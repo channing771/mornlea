@@ -29,7 +29,9 @@ type backupDirectory struct {
 	mode fs.FileMode
 }
 
-// Backup 在当前世界锁和存储锁内创建可验证的完整目录备份。
+// Backup 在当前世界锁内创建可验证的完整目录备份。复制不长时间持有任何全局
+// 锁：region 文件的双 bank 提交与各聚合文件的原子替换保证并发写入下复制的
+// 仍是某个完整合法的提交点，备份因此可与并行保存同时进行。
 func (store *DiskStore) Backup(ctx context.Context, destination string) error {
 	return store.backup(ctx, destination, os.Rename, syncDirectory)
 }
@@ -46,14 +48,12 @@ func (store *DiskStore) backup(
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if store.closing.Load() || store.closed {
+	store.metadataMu.Lock()
+	seed := store.files.metadata.Seed
+	closed := store.closed.Load()
+	store.metadataMu.Unlock()
+	if closed {
 		return os.ErrClosed
-	}
-	if err := ctx.Err(); err != nil {
-		return err
 	}
 
 	source, err := filepath.Abs(store.files.root)
@@ -83,7 +83,7 @@ func (store *DiskStore) backup(
 
 	identity := backupIdentity{
 		Source:           source,
-		Seed:             store.files.metadata.Seed,
+		Seed:             seed,
 		MigrationVersion: backupMigrationVersion,
 	}
 	if exists, err := matchingBackup(destination, identity); err != nil {
