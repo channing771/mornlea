@@ -69,7 +69,7 @@ type Generator struct {
 	depths []byte
 }
 
-// dimSeed 按维度派生世界种子:主世界保持基础种子(既有世界逐字节不变),
+// `dimSeed` 按维度派生世界种子:主世界保持基础种子(既有世界逐字节不变),
 // `Depths` 异或固定盐后独立演化;未知维度回落主世界(值域由协议层收紧,
 // 此处保持全函数、不在热路径抛错)。
 func dimSeed(base int64, dim core.DimensionID) int64 {

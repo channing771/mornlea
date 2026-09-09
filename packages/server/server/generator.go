@@ -16,7 +16,7 @@ type Generator interface {
 
 type TerrainProbe struct {
 	generator *worldgen.Generator
-	// dimension 是探针归属的维度,构造后不变;高度查询一律落到该维的高度图。
+	// `dimension` 是探针归属的维度,构造后不变;高度查询一律落到该维的高度图。
 	dimension core.DimensionID
 }
 
@@ -28,7 +28,7 @@ func NewTerrainProbe(seed int64) *TerrainProbe {
 	return NewTerrainProbeForDimension(seed, core.Overworld)
 }
 
-// NewTerrainProbeForDimension 创建归属指定维度的高度探针:传送落点的新维
+// `NewTerrainProbeForDimension` 创建归属指定维度的高度探针:传送落点的新维
 // 出生扫描用它读该维高度图,而不是主世界高度。
 func NewTerrainProbeForDimension(seed int64, dim core.DimensionID) *TerrainProbe {
 	return &TerrainProbe{generator: worldgen.NewForDimension(seed, false, dim), dimension: dim}
