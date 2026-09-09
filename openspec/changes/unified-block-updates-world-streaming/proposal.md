@@ -13,6 +13,18 @@
 - benchmark scenario v22→v23：多玩家探针按会话视距启用订阅，新增 `streaming` 指标族（已加载区块数、chunk 加载时延分位、峰值 RSS，只记录不阻断）；perfcheck 迁移白名单加 `22:23`。
 - 非目标：草蔓延/沙落/红石本体（只交挂载面）；运行中动态调视距与设置页视距滑块；非区块四类存档 region 化；重扫队列与 `SweepUnsupported*` 即时反应面统一；重写已落地的 region 格式/兴趣管理/背压/Observe-Drain 编排。
 
+## 延期与放弃
+
+实现期全部裁决与验证证据见 `ledger.md`；以下为终审时仍开放的记档项（不阻塞本 change）：
+
+1. **存档 job 单 FIFO 的加载优先级**：generate job 排在全部 load job 之后、探针 Workers=1 ~3 job/tick——大世界冷启动/传送暖起的首个改进候选（3.4 实测记档，也是 scenario v23 视距梯度收敛 2/4/6/8 的根因）。
+2. **拆锁的既定代价**（3.3 评审 M-2/M-3/M-4，代码注释已声明）：`Sync` 全量 pin 扰动 LRU 且是唯一超限窗口；Backup 与 Close 语义从「互斥快照」变「入口检查后尽力复制」；`ChunkKeys` 快照粒度从全局一致弱化为逐 region 合法提交点。
+3. **streaming 门禁的 race 覆盖**（3.4 评审 M-1）：端到端探针测试在 -race 下被既有 skip 跳过，streaming 完整性门禁只在非 race 构建生效（既有测试设计取舍）。
+4. **perf 记录项**（均已入 `docs/notes/perf-baseline.md` v23 段，record-only）：`BenchmarkAdvanceEval` 微基准 +~10%（统一调度器跨域扫描+间接回调）；本机首测 tick p99 11.2ms、flying p99 17.9ms 达到记录性阈值（跨硬件 M2 vs 历史 M5 只作定性对照）。
+5. **环境项**：`make build` 尾部可选资产包 `pixel_perfection` 的 ATTRIBUTION 拷贝在本机失败（该包未 provision，预存在条件，非本 change 缺陷）。
+6. **哈希收敛余量**：`sim/runtime/weather.go`（天气时长掷骰）与 `shared/core/season.go`（共享域）的 splitmix64 仍为本地实现——明确范围外，可在后续 change 收敛到 `updates.Sampler`。
+7. **设置页视距滑块**：视距现经配置文件 + 登录协商生效，UI 入口为顺延候选。
+
 ## Capabilities
 
 ### New Capabilities
