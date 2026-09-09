@@ -7,7 +7,7 @@
 
 ## 2. 调度迁移
 
-- [ ] 2.1 流体迁入：`packages/server/fluid/queue.go` 的 `Queue` 替换为 `updates.Queue(kind=FluidFlow)`，fluid 包保留批量 eval/`strongerWrite`/提交排序/重入队；既有 DamBreak/Waterfall/SyntheticRiskScale 差分逐位不变；验证 `go test ./packages/server/fluid ./packages/server/sim/runtime -race -count=1`
+- [x] 2.1 流体迁入：`packages/server/fluid/queue.go` 的 `Queue` 替换为 `updates.Queue(kind=FluidFlow)`，fluid 包保留批量 eval/`strongerWrite`/提交排序/重入队；既有 DamBreak/Waterfall/SyntheticRiskScale 差分逐位不变；验证 `go test ./packages/server/fluid ./packages/server/sim/runtime -race -count=1`
 - [ ] 2.2 湿度迁移：`realm.AdvanceFarmlandMoisture` 的 FIFO+游标改为 `updates.Queue(kind=FarmlandMoisture)`（新鲜入队当 tick 流体推进后结算、预算 65,536 不变、全块重扫保留）；新增平衡态 oracle（随机操作序列湿判定分布等价）并按 delta spec 重定 FIFO 顺序类测试；验证 `go test ./packages/server/sim/realm ./packages/server/sim/runtime -race -count=1`
 - [ ] 2.3 随机面迁移：`AdvanceCrops`/`advanceSaplingCell`/`advanceSnowCover`/产量与退化判定换用 `updates.Sampler`（逐位不变，固定世界重放测试钉住）；验证 `go test ./packages/server/sim/realm -race -count=1`
 - [ ] 2.4 阶段重排与入队点收敛：`engine_step.go` 三阶段收敛为 `phaseBlockUpdates`（子序：重扫→fluid→moisture→随机抽样），`stepPhase` 常量与观察测试同步；`EnvironmentMutation.SetBlock`/`entity/engine_changes.go`/bucket/farming/placement/snow_footprint 的入队统一走 updates API；验证 `go test ./packages/server/sim/... ./packages/server/server -race -count=1`
