@@ -539,7 +539,7 @@ func (w *fluidWorld) settleFloodedCrop(
 	count := 0
 	if harvestable {
 		if old == core.WheatStage7ID {
-			wheatCount, seedCount := cropYieldRolls(
+			wheatCount, seedCount := sampler.CropYieldRolls(
 				w.state.environment.seed, w.state.environment.tick, w.id, position,
 			)
 			stacks[count] = core.ItemStack{Item: item, Count: wheatCount}
@@ -934,111 +934,14 @@ func (state *State) sortedFluidDimensions() []core.DimensionID {
 
 // --- Crop ---
 
-func splitmix64(x uint64) uint64 {
-	x += 0x9e3779b97f4a7c15
-	x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9
-	x = (x ^ (x >> 27)) * 0x94d049bb133111eb
-	return x ^ (x >> 31)
-}
-
-func cropSectionHash(seed int64, tick uint64, key core.ChunkKey, sectionY int) uint64 {
-	hash := splitmix64(uint64(seed))
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(key.Dimension)))
-	hash = splitmix64(hash ^ uint64(uint32(key.Pos.X)))
-	hash = splitmix64(hash ^ uint64(uint32(key.Pos.Z)))
-	return splitmix64(hash ^ uint64(uint32(sectionY)))
-}
-
-func sampleCells(seed int64, tick uint64, key core.ChunkKey, sectionY, n int, out []int) []int {
-	cells := out[:0]
-	if n <= 0 {
-		return cells
-	}
-	base := cropSectionHash(seed, tick, key, sectionY)
-	for index := range n {
-		cells = append(cells, int(splitmix64(base^uint64(index))%core.BlocksPerSection))
-	}
-	return cells
-}
-
-const cropGrowthRollSalt = 0xc0ffee5eedca11ed
-
-func cropGrowthRoll(
-	seed int64,
-	tick uint64,
-	dimension core.DimensionID,
-	position core.BlockPos,
-	chancePercent uint8,
-) bool {
-	if chancePercent == 0 {
-		return false
-	}
-	if chancePercent >= 100 {
-		return true
-	}
-	hash := splitmix64(uint64(seed) ^ cropGrowthRollSalt)
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(dimension)))
-	hash = splitmix64(hash ^ uint64(uint32(position.X)))
-	hash = splitmix64(hash ^ uint64(uint32(position.Y)))
-	hash = splitmix64(hash ^ uint64(uint32(position.Z)))
-	return hash%100 < uint64(chancePercent)
-}
-
-const cropYieldRollSalt = 0x5eedfeedfaceface
-
-func cropYieldRolls(
-	seed int64,
-	tick uint64,
-	dimension core.DimensionID,
-	position core.BlockPos,
-) (wheat uint8, seeds uint8) {
-	hash := splitmix64(uint64(seed) ^ cropYieldRollSalt)
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(dimension)))
-	hash = splitmix64(hash ^ uint64(uint32(position.X)))
-	hash = splitmix64(hash ^ uint64(uint32(position.Y)))
-	hash = splitmix64(hash ^ uint64(uint32(position.Z)))
-	wheat = uint8(hash%3) + 1
-	hash = splitmix64(hash)
-	seeds = uint8(hash%3) + 1
-	return wheat, seeds
-}
-
-const cropYieldPotatoSalt = 0x70a70a515eedface
-const cropYieldCarrotSalt = 0xca7707701ace5eed
-const poisonPotatoSalt = 0xdeadbeefcafe1234
-
-func cropYieldRollsPotato(seed int64, tick uint64, dim core.DimensionID, pos core.BlockPos) uint8 {
-	hash := splitmix64(uint64(seed) ^ cropYieldPotatoSalt)
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(dim)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.X)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.Y)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
-	return uint8(hash%4) + 1
-}
-
-func cropYieldRollsCarrot(seed int64, tick uint64, dim core.DimensionID, pos core.BlockPos) uint8 {
-	hash := splitmix64(uint64(seed) ^ cropYieldCarrotSalt)
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(dim)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.X)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.Y)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
-	return uint8(hash%4) + 1
-}
-
-func poisonRoll(seed int64, tick uint64, dim core.DimensionID, pos core.BlockPos) bool {
-	hash := splitmix64(uint64(seed) ^ poisonPotatoSalt)
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(dim)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.X)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.Y)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
-	return hash%50 == 0
-}
+// sampler 是随机面判定器的统一调用点：零值 `updates.Sampler` 是无状态纯函数
+// 集合，包级变量只是固定「判定真相在 updates」的写法（与 sim/entity 先例一
+// 致）——随机 tick 的抽样派生（`SampleCells`）与生长、退化、产量、毒素各判定
+// 流都从这里取值。历史上哈希链与域盐值常量在本包与 sim/entity 各持一份本地
+// 副本，变更 unified-block-updates-world-streaming 已原样搬迁到 updates 导出；
+// 搬迁前实现在固定输入下的输出由 updates 的已知答案测试与本包的固定世界重放
+// 钉子逐位钉住，换接保持搅拌输入顺序、次数与常量逐字不变。
+var sampler = updates.Sampler{}
 
 func growCrop(block core.BlockID, wet, skyExposed bool) (next core.BlockID, changed bool) {
 	if !core.IsCrop(block) {
@@ -1056,38 +959,6 @@ func growCrop(block core.BlockID, wet, skyExposed bool) (next core.BlockID, chan
 func cropSkyExposed(chunk *world.Chunk, position core.BlockPos) bool {
 	localX, _, localZ := position.Local()
 	return position.Y >= chunk.HighestOpaque(localX, localZ)
-}
-
-const farmlandRevertRollSalt = 0xfa1abb1edeadc0de
-const farmlandRevertChancePercent = 30
-
-func farmlandRevertRoll(seed int64, tick uint64, dimension core.DimensionID, position core.BlockPos) bool {
-	hash := splitmix64(uint64(seed) ^ farmlandRevertRollSalt)
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(dimension)))
-	hash = splitmix64(hash ^ uint64(uint32(position.X)))
-	hash = splitmix64(hash ^ uint64(uint32(position.Y)))
-	hash = splitmix64(hash ^ uint64(uint32(position.Z)))
-	return hash%100 < uint64(farmlandRevertChancePercent)
-}
-
-// saplingGrowthRollSalt 让树苗生长判定的哈希流与作物生长、耕地退化及产量/掉落
-// 各流互相独立：取 ASCII "SAPLGROW" 的位模式，与 entity 侧树叶掉落判定用的
-// "SAPLINGS" 刻意不同——同一棵树苗的「生长」与「被采掘后掉落」是两条互不相关
-// 的判定，同源会让两者的命中在固定样本上系统性同步。
-const saplingGrowthRollSalt = 0x5341_504C_4752_4F57
-
-// saplingGrowthRoll 报告本 tick 是否推进 position 上的树苗：判定只依赖世界
-// 种子、权威 tick、维度与坐标（与 `cropGrowthRoll`/`farmlandRevertRoll` 同形，
-// 不用进程级随机源、不读 map 遍历序、不感知玩家与手持物），命中率 1/8。
-func saplingGrowthRoll(seed int64, tick uint64, dimension core.DimensionID, position core.BlockPos) bool {
-	hash := splitmix64(uint64(seed) ^ saplingGrowthRollSalt)
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(dimension)))
-	hash = splitmix64(hash ^ uint64(uint32(position.X)))
-	hash = splitmix64(hash ^ uint64(uint32(position.Y)))
-	hash = splitmix64(hash ^ uint64(uint32(position.Z)))
-	return hash&7 == 0
 }
 
 func (state *State) AdvanceCrops(active []core.ChunkKey, mutation *Mutation) {
@@ -1122,7 +993,7 @@ func (state *State) AdvanceCrops(active []core.ChunkKey, mutation *Mutation) {
 		baseZ := key.Pos.Z << core.SectionShift
 		for sectionY := range core.SectionsPerChunk {
 			baseY := int32(sectionY<<core.SectionShift) + core.MinY
-			state.environment.cropCellScratch = sampleCells(
+			state.environment.cropCellScratch = sampler.SampleCells(
 				seed, tick, key, sectionY, samples, state.environment.cropCellScratch,
 			)
 			for _, cell := range state.environment.cropCellScratch {
@@ -1165,7 +1036,7 @@ func (state *State) advanceCropCell(
 		if !changed {
 			return
 		}
-		if !cropGrowthRoll(
+		if !sampler.CropGrowthRoll(
 			state.environment.seed, tick, dimensionID, position,
 			state.environment.config.CropGrowthChancePercent,
 		) {
@@ -1186,7 +1057,7 @@ func (state *State) advanceCropCell(
 		if !ready || aboveBlock != core.AirID {
 			return
 		}
-		if !farmlandRevertRoll(state.environment.seed, tick, dimensionID, position) {
+		if !sampler.FarmlandRevertRoll(state.environment.seed, tick, dimensionID, position) {
 			return
 		}
 		// 先写入区块，成功后再登记变更，避免幽灵变更
@@ -1222,7 +1093,7 @@ type saplingGrowthWrite struct {
 //  3. 根坐标上界：`root.Y <= core.MaxY - 9`。engine 只接受该上界内的根坐标，
 //     越界请求以硬状态拒绝并让 Go 桥 panic；玩家可以在高处搭塔种苗，因此这条
 //     前置守卫是必须的；
-//  4. 独立冻结 salt 的 1/8 判定 `saplingGrowthRoll` 命中；
+//  4. 独立冻结 salt 的 1/8 判定 `sampler.SaplingGrowthRoll` 命中；
 //  5. 树形几何（engine ABI 单一真源）的每条记录都在世界高度内且当前是 `AirID`
 //     或 `ShortGrassID`。树苗自身那一格（树干底）例外：它就是被替换的格；
 //  6. 全部目标区块处于 Ready。
@@ -1253,7 +1124,7 @@ func (state *State) advanceSaplingCell(
 	if position.Y > core.MaxY-9 {
 		return
 	}
-	if !saplingGrowthRoll(state.environment.seed, tick, dimensionID, position) {
+	if !sampler.SaplingGrowthRoll(state.environment.seed, tick, dimensionID, position) {
 		return
 	}
 	records := worldgen.TreeBlocks(state.environment.seed, position)

@@ -136,7 +136,7 @@ type Tunables struct {
 	// 正确，但 64 已经是默认值的 20 倍，再大只会白烧 tick 预算。
 	RandomTicksPerSection uint8 `json:"randomTicksPerSection"`
 	// CropGrowthChancePercent 是被抽中的未成熟作物在环境满足时推进一个阶段的
-	// 百分比概率（internal/sim/realm/environment.go 的 `cropGrowthRoll`）。
+	// 百分比概率（sim/realm 环境阶段经 `sampler.CropGrowthRoll` 判定）。
 	//
 	// 判定用纯整数哈希 `hash(worldSeed, tick, 方块坐标) % 100 < 本字段`，不是
 	// 全局 RNG，因此重放同一段 tick 必然得到同一串结果。

@@ -151,7 +151,7 @@ func TestMemoryTCPFluidCropFloodBroadcastParity(t *testing.T) {
 	// 各一堆，数量由 (seed, 结算 tick, 维度, 坐标) 的确定性哈希给出、各落在
 	// [1,3]。两侧的绝对 tick 已在开录前对齐，跨传输逐件一致由上面的 DeepEqual
 	// 锁定；这组结构断言是独立于比对的形状守卫，精确重放另由 sim 侧按
-	// `cropYieldRolls` 现算的用例锁定。
+	// `sampler.CropYieldRolls` 现算的用例锁定。
 	if !memory.Flood {
 		t.Fatal("夹具失效：整个录制窗口内没有出现作物格被写成流动水的变更")
 	}

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 func enqueueNonFarmlandCandidates(state *State, count int, skip map[core.BlockPos]struct{}) {
@@ -216,5 +217,80 @@ func TestFarmlandMoistureDeterministicAcrossBudgetTicks(t *testing.T) {
 		return slices.Equal(left, right)
 	}) {
 		t.Fatalf("相同积压的逐 tick 变更不同：%+v 与 %+v", first, second)
+	}
+}
+
+// readyDualDimensionMoistureState 构造 Overworld 与 Depths 各含一个已就绪且在
+// active 范围内区块（chunk (0,0)）的世界：双维度湿度预算夹具的底座。scope 预置
+// 两个键，避免首 tick 触发全块重扫污染读取计量（与 readyFarmlandMoistureState
+// 同做法，扩展到第二维度）。
+func readyDualDimensionMoistureState(t *testing.T) (*State, []core.ChunkKey) {
+	t.Helper()
+	state := NewState(core.Overworld, core.Depths)
+	active := make([]core.ChunkKey, 0, 2)
+	for _, id := range []core.DimensionID{core.Overworld, core.Depths} {
+		dimension := state.Dimension(id)
+		chunk := world.NewChunk(core.ChunkPos{})
+		chunk.Compact()
+		if !dimension.BeginGeneration(core.ChunkPos{}) {
+			t.Fatalf("维度 %d 区块未开始生成", id)
+		}
+		if err := dimension.ApplyGenerated(core.ChunkPos{}, chunk); err != nil {
+			t.Fatalf("维度 %d 区块生成失败：%v", id, err)
+		}
+		active = append(active, core.ChunkKey{Dimension: id})
+	}
+	state.environment.scope = make(map[core.ChunkKey]struct{}, len(active))
+	state.environment.scopeNext = make(map[core.ChunkKey]struct{}, len(active))
+	for _, key := range active {
+		state.environment.scope[key] = struct{}{}
+	}
+	return state, active
+}
+
+// TestFarmlandMoistureBudgetIsGlobalAcrossDimensions 钉住「候选检查与方块读取
+// 双预算是跨维度全局合计，而非每维度各一份」：Overworld 以 65,536 个范围内非
+// 耕地候选恰好耗尽全局检查与读取额度（每候选 1 检查 + 1 读取），同 tick 内随
+// 后推进的 Depths（维度 ID 更大、固定排序在后）首候选在检查预算守卫处
+// HandleDeferred 顺延——零读取、待办不丢；次 tick 双预算重建，Depths 候选以
+// 完整 163 次读取（目标 1 + 干邻域 162）结算，无部分结果。维度推进顺序由
+// `sortedFluidDimensions` 的 ID 升序固定，断言不依赖 map 遍历顺序。
+func TestFarmlandMoistureBudgetIsGlobalAcrossDimensions(t *testing.T) {
+	state, active := readyDualDimensionMoistureState(t)
+	target := core.BlockPos{X: 8, Y: 1, Z: 8}
+	if _, changed, err := state.Dimension(core.Depths).SetBlock(target, core.FarmlandDryID); err != nil || !changed {
+		t.Fatalf("铺设 Depths 耕地失败 err=%v changed=%v", err, changed)
+	}
+	enqueueNonFarmlandCandidates(state, farmlandMoistureCandidatesPerTick, nil)
+	state.EnqueueFarmlandMoisture(core.Depths, target)
+
+	// 首 tick：Overworld 耗尽双预算，Depths 首候选当 tick 顺延。
+	advanceFarmlandMoistureTest(state, active, 0)
+	if got := state.FarmlandCandidateInspections(); got != farmlandMoistureCandidatesPerTick {
+		t.Fatalf("首 tick 全局候选检查=%d，想要 %d（跨维度合计）", got, farmlandMoistureCandidatesPerTick)
+	}
+	if got := state.FarmlandBlockReads(); got != farmlandMoistureReadsPerTick {
+		t.Fatalf("首 tick 全局方块读取=%d，想要 %d（跨维度合计）", got, farmlandMoistureReadsPerTick)
+	}
+	if got := state.FarmlandMoisturePendingLen(); got != 1 {
+		t.Fatalf("首 tick 后待办=%d，想要顺延的 Depths 候选恰好 1 项", got)
+	}
+	if !state.FarmlandQueued(core.Depths, target) {
+		t.Fatal("Depths 首候选在当 tick 被消费或丢失，想要 HandleDeferred 顺延")
+	}
+
+	// 次 tick：预算重建（计量清零），Depths 候选完整结算。
+	advanceFarmlandMoistureTest(state, active, 1)
+	if got := state.FarmlandCandidateInspections(); got != 1 {
+		t.Fatalf("次 tick 候选检查=%d，想要 1", got)
+	}
+	if got := state.FarmlandBlockReads(); got != 163 {
+		t.Fatalf("次 tick 方块读取=%d，想要 163（目标 1 + 干邻域 162）", got)
+	}
+	if got := state.FarmlandMoisturePendingLen(); got != 0 {
+		t.Fatalf("次 tick 后待办=%d，想要 0", got)
+	}
+	if block, ready := state.Dimension(core.Depths).BlockAt(target); !ready || block != core.FarmlandDryID {
+		t.Fatalf("结算后耕地=%d（ready=%v），无水邻域应保持干耕地", block, ready)
 	}
 }

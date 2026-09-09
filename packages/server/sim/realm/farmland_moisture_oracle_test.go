@@ -44,9 +44,9 @@ func runFarmlandMoistureOracleScenario(t *testing.T, seed uint64) [][]core.Block
 		}
 	}
 
-	random := splitmix64(seed)
+	random := sampler.SplitMix64(seed)
 	next := func(bounds uint64) uint64 {
-		random = splitmix64(random)
+		random = sampler.SplitMix64(random)
 		return random % bounds
 	}
 	position := func() core.BlockPos {

@@ -207,6 +207,39 @@ func TestSamplerSaltConstants(t *testing.T) {
 	}
 }
 
+// TestSamplerSaltsPairwiseDistinct 钉住「全量盐值两两互异」：随机面当前共 10 个
+// 域盐值（realm 家族 7 个 + entity 家族 3 个，另有非盐值的分母/概率常量）。
+// 各判定流只靠盐值区分身份，未来追加新盐值若与既有任何一个撞值，两条流会在
+// 相同 `(种子, tick, 维度, 位置)` 输入下系统性同源——这条两两互异断言让撞盐
+// 在新增当刻变红，无须等到分布级测试以统计方式偶然暴露。
+func TestSamplerSaltsPairwiseDistinct(t *testing.T) {
+	salts := []struct {
+		name  string
+		value uint64
+	}{
+		{"CropGrowthRollSalt", CropGrowthRollSalt},
+		{"CropYieldRollSalt", CropYieldRollSalt},
+		{"CropYieldPotatoSalt", CropYieldPotatoSalt},
+		{"CropYieldCarrotSalt", CropYieldCarrotSalt},
+		{"PoisonPotatoSalt", PoisonPotatoSalt},
+		{"FarmlandRevertRollSalt", FarmlandRevertRollSalt},
+		{"SaplingGrowthRollSalt", SaplingGrowthRollSalt},
+		{"ShortGrassSeedDropSalt", ShortGrassSeedDropSalt},
+		{"LeavesSaplingDropSalt", LeavesSaplingDropSalt},
+		{"PassiveGrazeRollSalt", PassiveGrazeRollSalt},
+	}
+	if len(salts) != 10 {
+		t.Fatalf("盐值清单长度 %d，想要 10——新增盐值后必须把本断言的清单同步扩容", len(salts))
+	}
+	for i := range salts {
+		for j := i + 1; j < len(salts); j++ {
+			if salts[i].value == salts[j].value {
+				t.Fatalf("%s 与 %s 撞盐 %#x：两条判定流会同源", salts[i].name, salts[j].name, salts[i].value)
+			}
+		}
+	}
+}
+
 // TestSamplerReplayBitIdentical 钉住「相同输入重放逐位一致」：随机面是纯整数
 // 哈希，不允许引入任何进程级随机源或隐藏状态——同一批输入执行两次，全部判定
 // 逐位一致。
