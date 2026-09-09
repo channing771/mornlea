@@ -38,7 +38,8 @@ type Entry struct {
 // Handler 是一个域的处理回调：`Advance` 按全序逐条弹出到期待办并同步调用
 // 所属域的回调。回调内可以调用 `Queue.Enqueue`（含对刚弹出的条目重新排队），
 // 这些入队会被推迟到本次推进结束后生效，因此同一条目在一次推进内至多被
-// 处理一次；回调内不得调用 `Register`/`Clear`。
+// 处理一次；回调内禁止重入 `Advance`/`Register`/`Clear`——重入会破坏预算
+// 快照、注册表与推进期暂存路径的一致性，属未定义行为。
 type Handler func(entry Entry)
 
 // item 是单域堆里的一条记录：位置与到期 tick（kind 隐含在所属堆里）。
@@ -288,6 +289,62 @@ func (q *Queue) Clear() {
 // 重入队）。主要供测试与可观测性使用。
 func (q *Queue) Len() int {
 	return q.pending
+}
+
+// LenOf 返回 kind 域当前排队的记录数（该域堆 order 的长度）。它与 `Len`
+// 的口径差——「堆里的记录数」对「待办计数」——正是消费方白盒测试断言
+// 双射不变量（每条待办恰好一条记录、无过时残留）所需的可观测量。只读
+// 查询，生产热路径不调用。
+func (q *Queue) LenOf(kind Kind) int {
+	heap := q.heaps[kind]
+	if heap == nil {
+		return 0
+	}
+	return len(heap.order)
+}
+
+// DueTick 返回 (pos, kind) 当前排队待办的到期 tick；未在队返回 false。只读
+// 查询，供消费方测试断言「只提前不推迟」的落位值；生产热路径不调用。
+func (q *Queue) DueTick(pos core.BlockPos, kind Kind) (uint64, bool) {
+	heap := q.heaps[kind]
+	if heap == nil {
+		return 0, false
+	}
+	i, ok := heap.index[pos]
+	if !ok {
+		return 0, false
+	}
+	return heap.order[i].dueTick, true
+}
+
+// DueCount 返回 kind 域中 dueTick <= now 的待办数。这是对该域堆的线性扫描，
+// 只供测试夹具守卫（如「本 tick 到期项是否超过预算」的判定）；生产热路径
+// 不调用。
+func (q *Queue) DueCount(kind Kind, now uint64) int {
+	heap := q.heaps[kind]
+	if heap == nil {
+		return 0
+	}
+	count := 0
+	for _, it := range heap.order {
+		if it.dueTick <= now {
+			count++
+		}
+	}
+	return count
+}
+
+// LastAdvanceExamined 返回最近一次 Advance 探视的堆顶数，是「单 tick 成本与
+// 队列规模解耦」的可观测量。导出读取口供消费方（如 fluid）把该结构性证据
+// 转发给自己的白盒测试；生产路径不读它。
+func (q *Queue) LastAdvanceExamined() int {
+	return q.lastAdvanceExamined
+}
+
+// ExamineLimitHits 返回探视守卫累计触发次数（分域堆下应当恒为 0）。导出
+// 读取口供消费方测试断言守卫未被触发；生产路径不读它。
+func (q *Queue) ExamineLimitHits() int {
+	return q.examineLimitHits
 }
 
 // candidateLess 实现跨域的全局全序 `(dueTick, chunkX, chunkZ, y, z, x, kind)`：
