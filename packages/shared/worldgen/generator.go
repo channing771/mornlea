@@ -47,7 +47,7 @@ const (
 	probeModeBase    = 2
 
 	// depthsSeedSalt 是 `Depths` 维度的种子盐:位模式即 `0x9E3779B97F4A7C15`
-	// (经典 64 位黄金比例常数)。字面量 `0x9E3779B97F4A7C15` 超出 `int64`
+	// (经典 64 位黄金比例常数)。字面量 `0x9E3779B97F4A7C15` 超出 int64
 	// 上界、不能直接写进 `^` 运算,故以其二进制补码相反数
 	// `-0x61C8864680B583EB` 表达,两者位模式相同。
 	depthsSeedSalt = int64(-0x61C8864680B583EB)

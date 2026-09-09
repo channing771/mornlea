@@ -184,6 +184,9 @@ func newWorld(
 		// 注入在线玩家权威源：规划快照的 OnlinePlayers 填充与 follow 目标
 		// 的在线性/位置解析共用同一会话注册表读取路径。
 		server.companionManager.onlinePlayers = server.onlinePlanPlayersSnapshot
+		// 注入玩家维度权威源：follow 的跨维保持据此判定目标是否已传送到
+		// 另一维度，调用方必须持有 stepMu（与在线玩家快照同一边界）。
+		server.companionManager.playerDimension = server.onlinePlayerDimension
 		// 恢复接线：任务域载荷在首个 tick 之前回填槽位（Planning/
 		// Validating 归一为 Queued，Running 保留进度且路径留空待重算）。
 		server.companionManager.restoreQueues(loadedQueues)

@@ -200,6 +200,10 @@ type companionManager struct {
 	// 的在线性/位置解析共用它；nil 是防御缺省（视同无人在线）。调用方必须
 	// 持有 stepMu（与 manager 其余状态同一单写者边界）。
 	onlinePlayers func() []companion.PlanPlayer
+	// playerDimension 返回指定玩家的当前权威维度，供 follow 的跨维保持查询：
+	// 目标在另一维度时跟随原地待命而不是跨维寻路（伙伴不跟随传送）。同样由
+	// Server 注入、同一调用边界；nil 是防御缺省（视同维度未知、不保持）。
+	playerDimension func(core.PlayerID) (core.DimensionID, bool)
 
 	slots      map[companion.ID]*companionTaskSlot
 	orderedIDs []companion.ID
@@ -735,6 +739,16 @@ func (m *companionManager) applyPathOutcome(outcome pathOutcome) {
 		slot.hasReplanAt = true
 		return
 	}
+	if step := current.Plan.Steps[current.StepIndex]; step.Kind == companion.PlanStepFollow {
+		if body, active := m.body(outcome.id); active &&
+			m.followTargetCrossDimension(body, step.PlayerID) {
+			// 跨维跟随不消费寻路结果：传送前派发的在途路径落地时目标已在
+			// 另一维度，直接丢弃（不计失败、不设冷却），与派发侧保持一致。
+			slot.path = nil
+			slot.hasReplanAt = false
+			return
+		}
+	}
 	result := outcome.result
 	slot.path = &result
 	slot.waypoint = 0
@@ -899,6 +913,15 @@ func (m *companionManager) advanceFollowRunner(
 		// 身体尚未激活（出生扫描在途）：不裁决距离也不提交输入，等下一 tick。
 		return true
 	}
+	if m.followTargetCrossDimension(body, step.PlayerID) {
+		// 目标在另一维度（传送）：原地待命，不提交移动输入、不发起寻路、
+		// 不判任务失败——返回旧维后跟随自然恢复。路径与重算意图清空，
+		// 避免 `submitPathRequest` 以旧维网格配新维终点做无谓派发。
+		slot.path = nil
+		slot.hasReplanAt = false
+		slot.hasFollowGoal = false
+		return true
+	}
 	if withinFollowDistance(body.Position, target.Position) {
 		// 距离边界内：停止提交移动输入。清空既有路径与重算意图，防止
 		// dispatchPathRequests 在距离内反复发起寻路；已派发的在途寻路结果
@@ -939,6 +962,20 @@ func (m *companionManager) followTarget(playerID core.PlayerID) (companion.PlanP
 		}
 	}
 	return companion.PlanPlayer{}, false
+}
+
+// followTargetCrossDimension 报告跟随目标是否位于与伙伴不同的维度：只有
+// 注入了 `playerDimension` 且能解析出目标维度时才做判定，否则一律视为同维
+// （保持既有行为，不因缺失注入而误保持）。
+func (m *companionManager) followTargetCrossDimension(
+	body companion.Body,
+	playerID core.PlayerID,
+) bool {
+	if m.playerDimension == nil {
+		return false
+	}
+	dimension, ok := m.playerDimension(playerID)
+	return ok && dimension != body.Dimension
 }
 
 // withinFollowDistance 报告伙伴与目标玩家的水平距离是否落在跟随距离内。
@@ -1173,6 +1210,11 @@ func (m *companionManager) submitPathRequest(
 		if !online {
 			// 目标离线：寻路无从发起。失败裁决由 advanceRunners 的在线性
 			// 先验统一产生（每 tick 必达），这里只静默跳过。
+			return
+		}
+		if m.followTargetCrossDimension(body, step.PlayerID) {
+			// 目标在另一维度：`advanceFollowRunner` 的跨维分支已先行保持，
+			// 这里只防御派发窗口，不计失败、不设冷却。
 			return
 		}
 		if withinFollowDistance(body.Position, target.Position) {

@@ -24,7 +24,7 @@ type SectionKey struct {
 // Overworld 是 M2A 使用的主世界维度。
 const Overworld DimensionID = 0
 
-// Depths 是与主世界同 tick 串行结算的第二权威维度：`Overworld` 为 0，
+// Depths 是随主世界一并启动的第二权威维度：`Overworld` 为 0，
 // `Depths` 固定为 1，后续世界生成、存档与协议值域都以该编号区分双维。
 const Depths DimensionID = 1
 

@@ -53,7 +53,7 @@ func (engine *engineContext) settleDeath(
 	// restoreCandidates，让待重生扫描优先复用既有恢复路径回到床尾；失效或无
 	// 法验证时保持候选为空，beginReset 的锚点语义原样生效（含 present 位清除，
 	// 见 bedRespawnCandidate）。
-	respawn := engine.bedRespawnCandidate(player)
+	respawn := engine.bedRespawnCandidate(session)
 	// beginReset 是既有的重生/传送路径：它把玩家置为待重生、位置移回出生锚点所在列、
 	// 速度与输入归零，并把摔落峰值重置到新高度，因此死亡不需要另写一套位置赋值。
 	player.beginReset()

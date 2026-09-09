@@ -138,7 +138,9 @@ func respawnBlockFromPosition(position [3]float32) core.BlockPos {
 var bedStandHeight = physics.BlockCollisionBoxes(core.BedFootSouthID, true).Boxes[0].Max.Y()
 
 // bedRespawnCandidate 在死亡结算时对个人重生点做延迟校验（「两格仍为同一张
-// 床的床尾与床头」才可用）。返回 nil 表示回落世界出生锚点：
+// 床的床尾与床头」才可用）。返回 nil 表示回落死亡所在维度的出生锚点：
+//   - 重生点维度与死亡维度不同——床不跨维生效，本次死亡回落本维锚点，记录
+//     保留到返回旧维后仍可用（多维传送不带走床）
 //   - 无重生点，或床尾/床头所在区块未就绪——后一种是「无法证明床已失效」：
 //     本次死亡先回落锚点（重生不得因等待远处区块而停摆），记录保留给下一次
 //     死亡再验；
@@ -149,8 +151,12 @@ var bedStandHeight = physics.BlockCollisionBoxes(core.BedFootSouthID, true).Boxe
 // 校验通过时返回一个指向床尾格的出生候选（站立在床顶面），经既有的
 // restoreCandidate 路径复用区块就绪等待、落点校验与 `activate`，不另写重生
 // 位置赋值。校验只读世界，不影响其他玩家的重生点。
-func (engine *engineContext) bedRespawnCandidate(player *playerState) *restoreCandidate {
+func (engine *engineContext) bedRespawnCandidate(session *sessionState) *restoreCandidate {
+	player := session.player
 	if !player.respawnPresent {
+		return nil
+	}
+	if player.respawnDim != session.dimension {
 		return nil
 	}
 	dimension := engine.dimension(player.respawnDim)
