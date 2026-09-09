@@ -12,8 +12,10 @@ import (
 // 引擎的显示相位偏移必须从世界 metadata 恢复，而不是恒从 0 起步。
 func TestNewWorldRestoresDayPhaseOffsetFromMetadata(t *testing.T) {
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 4, Seed: 42, SpawnDimension: core.Overworld,
-		DayPhaseOffset: 12399,
+		FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld,
+		DayPhaseOffset:    12399,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
 	config := DefaultConfig(42)
 	config.ViewRadius = 0

@@ -19,10 +19,12 @@ func TestExternalCallerAttachesDynamicSession(t *testing.T) {
 		config,
 		server.FlatTestGenerator{},
 		storage.NewMemory(storage.Metadata{
-			FormatVersion:  4,
-			Seed:           7,
-			SpawnDimension: core.Overworld,
-			SpawnAnchor:    core.ChunkPos{},
+			FormatVersion:     5,
+			Seed:              7,
+			SpawnDimension:    core.Overworld,
+			SpawnAnchor:       core.ChunkPos{},
+			DepthsSpawnAnchor: core.ChunkPos{},
+			DepthsSeedSalt:    0x9E3779B97F4A7C15,
 		}),
 	)
 	t.Cleanup(func() { shutdownExternalServerForTest(t, running) })

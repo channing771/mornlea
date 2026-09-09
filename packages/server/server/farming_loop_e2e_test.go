@@ -298,10 +298,12 @@ func runNaturalSeedFarmingScript(
 	// 一次性材料包，脚本第一步要看的正是这份材料包不再携带种子。生成器用
 	// 生产 worldgen.New（流体开启 = 生产默认配置），不经任何测试生成旁路。
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion:  4,
-		Seed:           naturalFarmingSeed,
-		SpawnDimension: core.Overworld,
-		SpawnAnchor:    naturalFarmingAnchor,
+		FormatVersion:     5,
+		Seed:              naturalFarmingSeed,
+		SpawnDimension:    core.Overworld,
+		SpawnAnchor:       naturalFarmingAnchor,
+		DepthsSpawnAnchor: naturalFarmingAnchor,
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
 	config := hostTestConfig()
 	config.ViewRadius = 1

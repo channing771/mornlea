@@ -609,7 +609,7 @@ func TestCompanionPersistenceFIFOOnlyQueueSurvivesRealStoreRoundTrip(t *testing.
 	// FIFO-only 是服务端产出的真实载荷形态（当前任务终态清槽后 FIFO 仍有
 	// 排队指令）：必须能通过真实存档（MemoryStore 走完整 v2 编码）落盘并
 	// 精确恢复，不经任何假存档。
-	store := storage.NewMemory(storage.Metadata{FormatVersion: 4, Seed: 42})
+	store := storage.NewMemory(storage.Metadata{FormatVersion: 5, Seed: 42, DepthsSpawnAnchor: core.ChunkPos{}, DepthsSeedSalt: 0x9E3779B97F4A7C15})
 	loadedV5 := persistenceV5Loaded(1)
 	loadedV5.Records = loadedV5.Records[:1]
 	loadedV5.Lifecycles = loadedV5.Lifecycles[:1]

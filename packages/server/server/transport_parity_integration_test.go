@@ -241,7 +241,9 @@ func runMiningParityScript(t *testing.T, transport string) miningParityResult {
 	t.Helper()
 	identity := integrationIdentity(0x72, "MiningParity")
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 4, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
 	stoneFull, _ := core.ItemMaxDurability(core.ItemStonePickaxe)
 	ironFull, _ := core.ItemMaxDurability(core.ItemIronPickaxe)
@@ -518,7 +520,9 @@ func runParityTranscript(t *testing.T, transport string) parityResult {
 	t.Helper()
 	identity := integrationIdentity(0x71, "Parity")
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 4, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
 	var initialInventory core.Inventory
 	initialInventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 4}
@@ -907,7 +911,9 @@ func runCraftingGridParityScript(t *testing.T, transport string) craftingGridPar
 	t.Helper()
 	identity := integrationIdentity(0x95, "GridCrafter")
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 4, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
 	// 石锄的四个原料各占一格：整堆移动语义不能拆堆，同一物品的多格形状必须
 	// 由多个独立栈摆放（这正是两次点击整堆语义下的真实玩家操作形态）。

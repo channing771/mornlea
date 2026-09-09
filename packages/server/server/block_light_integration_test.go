@@ -49,7 +49,9 @@ func runStaticBlockLightScript(t *testing.T, transport string) staticBlockLightR
 	t.Helper()
 	identity := integrationIdentity(0x73, "BlockLightParity")
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 4, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
 	stoneFull, _ := core.ItemMaxDurability(core.ItemStonePickaxe)
 	var inventory core.Inventory

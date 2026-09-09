@@ -12,6 +12,7 @@ import (
 
 	"github.com/channing771/mornlea/packages/server/server"
 	"github.com/channing771/mornlea/packages/server/storage"
+	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
 )
 
@@ -31,7 +32,7 @@ func TestMornleaServerProcess(t *testing.T) {
 	if os.Getenv("MORNLEA_SERVER_PROCESS_FAIL_SAVE") == "1" {
 		err := run(context.Background(), args, dependencies{
 			openDisk: func(context.Context, string, storage.OpenOptions) (storage.WorldStore, error) {
-				return storage.NewMemory(storage.Metadata{FormatVersion: 4}), nil
+				return storage.NewMemory(storage.Metadata{FormatVersion: 5, DepthsSpawnAnchor: core.ChunkPos{}, DepthsSeedSalt: 0x9E3779B97F4A7C15}), nil
 			},
 			listenTCP: func(string) (network.Listener, error) {
 				return mornleaServerTestListener{}, nil

@@ -235,8 +235,10 @@ type ConnectionTestStore struct {
 // NewConnectionTestStore 是测试装配入口：按给定种子构造连接测试用内存存档。
 func NewConnectionTestStore(seed int64) *ConnectionTestStore {
 	return &ConnectionTestStore{MemoryStore: storage.NewMemory(storage.Metadata{
-		FormatVersion: 4,
-		Seed:          seed,
+		FormatVersion:     5,
+		Seed:              seed,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})}
 }
 

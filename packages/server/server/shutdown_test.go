@@ -801,9 +801,11 @@ type shutdownTestStore struct {
 func newShutdownTestStore() *shutdownTestStore {
 	return &shutdownTestStore{
 		metadata: storage.Metadata{
-			FormatVersion:  4,
-			Seed:           42,
-			SpawnDimension: core.Overworld,
+			FormatVersion:     5,
+			Seed:              42,
+			SpawnDimension:    core.Overworld,
+			DepthsSpawnAnchor: core.ChunkPos{},
+			DepthsSeedSalt:    0x9E3779B97F4A7C15,
 		},
 		owned:        true,
 		saveStarted:  make(chan int, 32),

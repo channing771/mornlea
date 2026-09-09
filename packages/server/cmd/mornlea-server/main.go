@@ -143,9 +143,11 @@ func run(ctx context.Context, args []string, injected dependencies) error {
 	effective.Apply()
 	dependencies := mergeDependencies(injected)
 	store, err := dependencies.openDisk(ctx, options.World, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion:  4,
-		Seed:           options.Seed,
-		SpawnDimension: core.Overworld,
+		FormatVersion:     5,
+		Seed:              options.Seed,
+		SpawnDimension:    core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	}})
 	if err != nil {
 		return fmt.Errorf("打开世界: %w", err)

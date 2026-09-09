@@ -23,7 +23,7 @@ import (
 func TestPassivePersistenceRoundTripViaMemoryStore(t *testing.T) {
 	// 走真实 MemoryStore 的完整编码路径：观察 → Flush → 重新加载必须逐字段
 	// 一致，不经任何假存档。
-	store := storage.NewMemory(storage.Metadata{FormatVersion: 4, Seed: 42})
+	store := storage.NewMemory(storage.Metadata{FormatVersion: 5, Seed: 42, DepthsSpawnAnchor: core.ChunkPos{}, DepthsSeedSalt: 0x9E3779B97F4A7C15})
 	p := NewPassives(store, storage.StoredPassiveMobs{}, passivePersistenceTestOptions())
 	t.Cleanup(p.Close)
 	p.Observe([]contract.PassiveMob{
