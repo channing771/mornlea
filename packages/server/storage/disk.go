@@ -41,9 +41,10 @@ type regionHandle struct {
 // DiskStore persists chunks in lazily opened region files under one locked world.
 //
 // 并发形态：regionMu 只保护缓存治理（map、LRU、引用计数与排空状态），不覆盖
-// 文件 I/O——同一 region 文件内的串行化由 chunk.Region 内嵌互斥承担，不同
-// region 与不同存档类别因此互不阻塞。metadata/players/companions/hostiles/
-// passives 五类各自独立持锁；world.meta 的内存镜像由 metadataMu 保护。
+// region 数据面 I/O；句柄打开/关闭的元数据操作在锁内（防同文件双开）。同一
+// region 文件内的串行化由 chunk.Region 内嵌互斥承担，不同 region 与不同存档
+// 类别因此互不阻塞。metadata/players/companions/hostiles/passives 五类各自
+// 独立持锁；world.meta 的内存镜像由 metadataMu 保护。
 // closing/closed 为原子量：closing 在 Close 入口先置位以立即拒绝新操作，
 // closed 在排空在途引用后置位，此后任何入口都返回 os.ErrClosed。
 type DiskStore struct {
@@ -276,20 +277,17 @@ func (store *DiskStore) pinRegionLocked(handle *regionHandle) {
 	store.regionLRU.MoveToFront(handle.element)
 }
 
-// evictRegionsLocked 从 LRU 尾部关闭空闲句柄，把缓存收缩到上限内。尾部候选
-// 仍有在途引用时本次收缩让步（句柄不被关闭），待引用归还或下次插入时重试；
-// 因此在途引用密集的窗口内句柄数可能暂时超过上限，这是淘汰安全的代价。
+// evictRegionsLocked 关闭多余句柄，把缓存收缩到上限内。候选从 LRU 尾部向前
+// 选举，跳过仍有在途引用的句柄（不关闭、留在链表内）：收缩后超出上限的句柄
+// 因此必然全部在途，句柄数被钉在「上限加在途引用数」内；全部候选在途时本次
+// 收缩让步，待引用归还或下次插入时重试。
 func (store *DiskStore) evictRegionsLocked() {
 	for store.regionLRU.Len() > store.regionCap {
-		tail := store.regionLRU.Back()
-		if tail == nil {
+		victim := store.electEvictableRegionLocked()
+		if victim == nil {
 			return
 		}
-		victim := tail.Value.(*regionHandle)
-		if victim.refs > 0 {
-			return
-		}
-		store.regionLRU.Remove(tail)
+		store.regionLRU.Remove(victim.element)
 		delete(store.regions, victim.key)
 		if err := victim.Close(); err != nil {
 			store.regionEvictErrs = append(store.regionEvictErrs, fmt.Errorf(
@@ -297,6 +295,20 @@ func (store *DiskStore) evictRegionsLocked() {
 			))
 		}
 	}
+}
+
+// electEvictableRegionLocked 从 LRU 尾部向前返回首个无在途引用的句柄；调用方
+// 必须持有 regionMu。尾部候选在途时不中止整轮收缩，而是跳过它继续向前回收
+// 更空闲的候选，保证在途窗口内句柄数仍收敛于「上限加在途引用数」；全部候选
+// 在途时返回 nil，由调用方让步本轮收缩。
+func (store *DiskStore) electEvictableRegionLocked() *regionHandle {
+	for element := store.regionLRU.Back(); element != nil; element = element.Prev() {
+		candidate := element.Value.(*regionHandle)
+		if candidate.refs == 0 {
+			return candidate
+		}
+	}
+	return nil
 }
 
 // openRegionLocked 打开（保存路径下必要时创建）key 的 region 文件；调用方

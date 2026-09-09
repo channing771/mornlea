@@ -511,6 +511,11 @@ func TestDiskStoreInFlightRegionReferenceDefersEviction(t *testing.T) {
 		if _, err := store.SaveBatch(context.Background(), diskSavesFor([]core.ChunkKey{keyFor(index)}, 1)); err != nil {
 			t.Fatalf("停靠期间 save region %d: %v", index, err)
 		}
+		// 窗口硬上界：停靠的保存持有唯一在途引用，句柄数不得超过「上限加
+		// 在途引用数」，空闲候选必须照常被淘汰回收。
+		if bound := handleCap + 1; len(store.regions) > bound {
+			t.Fatalf("停靠期间句柄数 %d 超过上限 %d 加在途引用 1 的上界 %d", len(store.regions), handleCap, bound)
+		}
 	}
 
 	releaseOnce.Do(func() { close(release) })

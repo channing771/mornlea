@@ -223,7 +223,11 @@ func copyWorldBackup(ctx context.Context, source, destination string) ([]backupD
 		if err != nil {
 			return err
 		}
-		if relative != "." && matchedTemporary {
+		matchedCompact, err := filepath.Match(".*.compact-*", entry.Name())
+		if err != nil {
+			return err
+		}
+		if relative != "." && (matchedTemporary || matchedCompact) {
 			if entry.IsDir() {
 				return filepath.SkipDir
 			}

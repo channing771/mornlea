@@ -9,8 +9,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"testing"
 
+	"github.com/channing771/mornlea/packages/server/storage/region"
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
@@ -107,6 +109,53 @@ func TestWorldBackupIncludesCompanionFileButSkipsTemporaryFiles(t *testing.T) {
 	)
 	if _, err := os.Lstat(filepath.Join(destination, filepath.Base(temporary))); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("备份不应包含伙伴临时文件，Lstat 错误: %v", err)
+	}
+}
+
+// TestWorldBackupDuringParkedCompactRenameSkipsTemporaryFiles 钉住 Backup 与
+// 并发 Compact 的交错安全：Compact 的临时替换文件停靠在 rename 时，Backup
+// 必须成功完成（否则 WalkDir 列出临时文件后其被 rename 走会令复制整体失败），
+// 且备份目录不含任何 compact/temp 残留（半写临时文件不得混入备份）。
+func TestWorldBackupDuringParkedCompactRenameSkipsTemporaryFiles(t *testing.T) {
+	store, _, destination := newWorldBackupFixture(t)
+	key := core.ChunkKey{Dimension: 0, Pos: core.ChunkPos{X: -33, Z: 34}}
+	regionKey, _ := RegionFor(key)
+	handle := store.regions[regionKey]
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	// defer 逆序保证失败路径先放行门闩再执行夹具的 Close 清理，Close 在
+	// region 互斥上等待停靠的 Compact 释放，避免清理卡死。
+	defer releaseOnce.Do(func() { close(release) })
+	handle.SetCompactionHooks(region.CompactionHooks{
+		Rename: func(temporary, canonical string) error {
+			close(started)
+			<-release
+			return os.Rename(temporary, canonical)
+		},
+	})
+
+	compactDone := make(chan error, 1)
+	go func() {
+		compactDone <- handle.Compact(context.Background())
+	}()
+	waitForTestSignal(t, started, "Compact 未到达 rename 门闩")
+
+	if err := store.Backup(context.Background(), destination); err != nil {
+		t.Fatalf("停靠 Compact rename 期间 Backup 失败: %v", err)
+	}
+	assertBackupFreeOfTemporaryResidue(t, destination)
+	if _, err := os.Lstat(filepath.Join(destination, dimensionRegionPath(regionKey))); err != nil {
+		t.Fatalf("备份缺少正式 region 文件: %v", err)
+	}
+
+	releaseOnce.Do(func() { close(release) })
+	if err := waitForTestError(t, compactDone, "停靠的 Compact 未完成"); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := store.LoadChunk(context.Background(), key)
+	if err != nil || stored.Revision != 1 {
+		t.Fatalf("Compact 完成后读取 revision = %d（err %v），想要 1", stored.Revision, err)
 	}
 }
 
@@ -452,6 +501,32 @@ func snapshotWorldBackupSource(t *testing.T, root string) map[string]worldBackup
 		t.Fatalf("快照源世界失败: %v", err)
 	}
 	return snapshot
+}
+
+// assertBackupFreeOfTemporaryResidue 断言备份目录内没有任何原子替换或
+// Compact 的临时文件残留，正式文件（含身份文件）不受影响。
+func assertBackupFreeOfTemporaryResidue(t *testing.T, destination string) {
+	t.Helper()
+	err := filepath.WalkDir(destination, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		matchedTemporary, err := filepath.Match(".*.tmp-*", entry.Name())
+		if err != nil {
+			return err
+		}
+		matchedCompact, err := filepath.Match(".*.compact-*", entry.Name())
+		if err != nil {
+			return err
+		}
+		if matchedTemporary || matchedCompact {
+			t.Errorf("备份包含临时文件残留 %q", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("扫描备份临时残留失败: %v", err)
+	}
 }
 
 func assertWorldBackupAbsent(t *testing.T, destination string) {
