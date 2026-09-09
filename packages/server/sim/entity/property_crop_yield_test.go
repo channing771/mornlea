@@ -3,6 +3,7 @@ package entity
 import (
 	"testing"
 
+	"github.com/channing771/mornlea/packages/server/updates"
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
@@ -15,7 +16,8 @@ import (
 // 都是跨平台跨运行逐位稳定的。
 
 // TestCropYieldReplayIsDeterministic 覆盖 Scenario「同一输入重放得到相同数量」：
-// 同一 `(seed, tick, dimension, position)` 调用 `cropYieldRolls` 两次，小麦与
+// 同一 `(seed, tick, dimension, position)` 调用 `updates.Sampler` 的
+// `CropYieldRolls` 两次，小麦与
 // 种子两类数量必须逐件相同。输入清单覆盖正负种子、tick 0 与高位 tick、两个维度
 // 与负坐标——确定性必须在输入域的角落里都成立，而不只在中枢的"漂亮"输入上。
 func TestCropYieldReplayIsDeterministic(t *testing.T) {
@@ -33,8 +35,8 @@ func TestCropYieldReplayIsDeterministic(t *testing.T) {
 	}
 	for _, input := range inputs {
 		t.Run(input.name, func(t *testing.T) {
-			wheatA, seedsA := cropYieldRolls(input.seed, input.tick, input.dimension, input.position)
-			wheatB, seedsB := cropYieldRolls(input.seed, input.tick, input.dimension, input.position)
+			wheatA, seedsA := sampler.CropYieldRolls(input.seed, input.tick, input.dimension, input.position)
+			wheatB, seedsB := sampler.CropYieldRolls(input.seed, input.tick, input.dimension, input.position)
 			if wheatA != wheatB || seedsA != seedsB {
 				t.Fatalf("同输入两次调用结果不同：(小麦 %d, 种子 %d) vs (小麦 %d, 种子 %d)",
 					wheatA, seedsA, wheatB, seedsB)
@@ -73,7 +75,7 @@ func TestCropYieldStaysInRangeAndCoversValues(t *testing.T) {
 	for seed := int64(-3); seed <= 3; seed++ {
 		for tick := uint64(0); tick < 64; tick++ {
 			for _, sampled := range positions {
-				wheat, seeds := cropYieldRolls(seed, tick, sampled.dimension, sampled.position)
+				wheat, seeds := sampler.CropYieldRolls(seed, tick, sampled.dimension, sampled.position)
 				if wheat < 1 || wheat > 3 {
 					t.Fatalf("seed=%d tick=%d dim=%d pos=%v 的小麦数量 %d 越界 [1,3]",
 						seed, tick, sampled.dimension, sampled.position, wheat)
@@ -103,7 +105,7 @@ func TestCropYieldStaysInRangeAndCoversValues(t *testing.T) {
 }
 
 // TestCropYieldStreamIndependentOfGrowthStream 锁定双流独立性（design.md D1）：
-// yield 流必须由独立 salt 驱动，不得与 `cropGrowthRoll` 的生长判定流在相同
+// yield 流必须由独立 salt 驱动，不得与 `updates.Sampler.CropGrowthRoll` 的生长判定流在相同
 // `(seed, tick)` 前缀上同源——否则「这株长成了」与「这株掉多少」会结构性相关，
 // 例如某些格子永远长熟又永远高产。两层断言：
 //
@@ -115,8 +117,8 @@ func TestCropYieldStaysInRangeAndCoversValues(t *testing.T) {
 // 全部输入写死在清单里，哈希又是纯函数，所以分歧数是逐位确定的常量：本测试
 // 今天绿，重跑一万次也绿，不存在抽样抖动。
 func TestCropYieldStreamIndependentOfGrowthStream(t *testing.T) {
-	if cropYieldRollSalt == cropGrowthRollSalt {
-		t.Fatal("cropYieldRollSalt 与 cropGrowthRollSalt 相等，yield 流与生长流同源")
+	if updates.CropYieldRollSalt == updates.CropGrowthRollSalt {
+		t.Fatal("CropYieldRollSalt 与 CropGrowthRollSalt 相等，yield 流与生长流同源")
 	}
 	samples := []struct {
 		seed      int64
@@ -143,8 +145,8 @@ func TestCropYieldStreamIndependentOfGrowthStream(t *testing.T) {
 	}
 	divergences := 0
 	for _, sampled := range samples {
-		growthPass := cropGrowthRoll(sampled.seed, sampled.tick, sampled.dimension, sampled.position, 50)
-		wheat, _ := cropYieldRolls(sampled.seed, sampled.tick, sampled.dimension, sampled.position)
+		growthPass := sampler.CropGrowthRoll(sampled.seed, sampled.tick, sampled.dimension, sampled.position, 50)
+		wheat, _ := sampler.CropYieldRolls(sampled.seed, sampled.tick, sampled.dimension, sampled.position)
 		if growthPass != (wheat >= 2) {
 			divergences++
 		}

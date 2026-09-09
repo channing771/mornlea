@@ -843,7 +843,8 @@ func (engine *engineContext) completeMining(
 	// 短草的专用概率掉落分支（change natural-grass-seeds design 决策 4）：位于
 	// 容器/结构特殊分支之后、通用 `BlockDrop` 查询之前，且不进入作物多产物分支
 	// ——短草不是作物，种子的掉落语义只存在于这里。掉落与否由
-	// `shortGrassSeedDropRoll` 的位置稳定判定给出，与完成 tick、玩家、手持无关。
+	// `updates.Sampler` 的 `ShortGrassSeedDropRoll` 位置稳定判定给出，与完成
+	// tick、玩家、手持无关。
 	//
 	// 三条常数路径：
 	//   - 未命中：不调用 `PrepareDrop`、不需要掉落容量，直接清块并记录 mutation
@@ -855,7 +856,7 @@ func (engine *engineContext) completeMining(
 	//     全部不变；判定只依赖 seed/维度/坐标，稍后重试必然得到同一命中，
 	//     不能借重掷绕过容量，也不存在「先移块再放 drop」的吞资源窗口。
 	if core.IsWildGrass(block) {
-		if !shortGrassSeedDropRoll(engine.seed, dimensionID, target) {
+		if !sampler.ShortGrassSeedDropRoll(engine.seed, dimensionID, target) {
 			_, changed, err := dimension.SetBlock(target, core.AirID)
 			if err != nil {
 				return mapSetBlockError(err), true
@@ -917,11 +918,11 @@ func (engine *engineContext) completeMining(
 			engine.recordChange(dimensionID, target, core.AirID, pending)
 			return 0, false
 		}
-		n := cropYieldRollsPotato(engine.seed, engine.tick.Load(), dimensionID, target)
+		n := sampler.CropYieldRollsPotato(engine.seed, engine.tick.Load(), dimensionID, target)
 		var stacks [2]core.ItemStack
 		stacks[0] = core.ItemStack{Item: core.ItemPotato, Count: n}
 		stackCount := 1
-		if poisonRoll(engine.seed, engine.tick.Load(), dimensionID, target) {
+		if sampler.PoisonRoll(engine.seed, engine.tick.Load(), dimensionID, target) {
 			stacks[1] = core.ItemStack{Item: core.ItemPoisonousPotato, Count: 1}
 			stackCount = 2
 		}
@@ -952,7 +953,7 @@ func (engine *engineContext) completeMining(
 			engine.recordChange(dimensionID, target, core.AirID, pending)
 			return 0, false
 		}
-		n := cropYieldRollsCarrot(engine.seed, engine.tick.Load(), dimensionID, target)
+		n := sampler.CropYieldRollsCarrot(engine.seed, engine.tick.Load(), dimensionID, target)
 		stacks := [1]core.ItemStack{{Item: core.ItemCarrot, Count: n}}
 		next, capacityOK := chunk.PrepareDropBatch(stacks[:], blockIndex, engine.tunables.DropPickupDelayTicks)
 		if !capacityOK {
@@ -1032,7 +1033,7 @@ func (engine *engineContext) completeMining(
 	}
 
 	// 成熟小麦是全仓唯一的多产物方块：1–3 个小麦加 1–3 颗种子，具体数量由
-	// `cropYieldRolls` 对 (worldSeed, 完成本次采掘的权威 tick, 维度, 目标坐标)
+	// `updates.Sampler` 的 `CropYieldRolls` 对 (worldSeed, 完成本次采掘的权威 tick, 维度, 目标坐标)
 	// 的纯整数哈希给出。tick 取值点就是这一行 `engine.tick.Load()`：tick 在
 	// `Step` 内单调推进且单线程读写，`completeMining` 只在完成 tick 被调用一次，
 	// 因此同一株作物在同一权威 tick 上重新结算必然得到同一串数量，不依赖任何
@@ -1048,7 +1049,7 @@ func (engine *engineContext) completeMining(
 	// 批量预演复用破坏熔炉/箱子的 PrepareDropBatch：任一堆放不下就整体返回
 	// false，方块与掉落槽逐字节不变，绝不出现"小麦掉了、种子没掉"的半掉落。
 	if block == core.WheatStage7ID && harvestable {
-		wheatCount, seedCount := cropYieldRolls(engine.seed, engine.tick.Load(), dimensionID, target)
+		wheatCount, seedCount := sampler.CropYieldRolls(engine.seed, engine.tick.Load(), dimensionID, target)
 		stacks := [2]core.ItemStack{
 			{Item: item, Count: wheatCount},
 			{Item: core.ItemWheatSeeds, Count: seedCount},
@@ -1084,7 +1085,7 @@ func (engine *engineContext) completeMining(
 	if block == core.LeavesID && harvestable {
 		stacks := [2]core.ItemStack{{Item: item, Count: 1}}
 		stackCount := 1
-		if leavesSaplingDropRoll(engine.seed, dimensionID, target) {
+		if sampler.LeavesSaplingDropRoll(engine.seed, dimensionID, target) {
 			stacks[1] = core.ItemStack{Item: core.ItemSapling, Count: 1}
 			stackCount = 2
 		}

@@ -9,25 +9,10 @@ import (
 	"github.com/channing771/mornlea/packages/shared/physics"
 )
 
-// 被动牛吃草事件的固定数值契约（边界测试锁定，不随玩家数或被动牛数放大）。
-const (
-	// passiveGrazePeriodTicks 是吃草抽选的分母：命中即 1/600（约 30 秒每牛期望一次）。
-	passiveGrazePeriodTicks = 600
-	// passiveGrazeDurationTicks 是单次吃草事件的低头时长（`tick`）。
-	passiveGrazeDurationTicks = 20
-	// passiveGrazeRollSalt 让吃草抽选的哈希流与漫游朝向派生互相独立：两者若同
-	// 源，“朝某方向走”与“开始吃草”会出现结构性相关，某些朝向的牛永远不低头。
-	passiveGrazeRollSalt = 0x51ab3e4d07c3f291
-)
-
-// passiveGrazeHit 报告该牛本 `tick` 是否命中吃草抽选：(`worldSeed`、`tick`、
-// `id`) 的纯整数哈希对分母取模，不读全局随机数、不遍历 `map`，每牛每 `tick`
-// 常数时间。
-func passiveGrazeHit(seed int64, tick uint64, id uint64) bool {
-	hash := splitmix64(uint64(seed) ^ passiveGrazeRollSalt)
-	hash = splitmix64(hash ^ tick)
-	return splitmix64(hash^id)%passiveGrazePeriodTicks == 0
-}
+// passiveGrazeDurationTicks 是单次吃草事件的低头时长（`tick`）。吃草抽选的
+// 命中判定（盐值、1/600 分母与哈希链）收敛在 `updates.Sampler` 的
+// `PassiveGrazeHit`，本文件只保留事件推进。
+const passiveGrazeDurationTicks = 20
 
 // passiveGrazeSupport 返回实体脚下支撑格：几何取法与踩踏收集同形（脚底 Y 减
 // `physics.GroundProbe` 后下取整），保证吃草读到的“站立方块”与物理支撑判定
@@ -100,7 +85,7 @@ func (engine *engineContext) tryStartPassiveGraze(entry *passiveState) bool {
 	if entry.fleeTicks > 0 {
 		return false
 	}
-	if !passiveGrazeHit(engine.seed, engine.tick.Load(), entry.id) {
+	if !sampler.PassiveGrazeHit(engine.seed, engine.tick.Load(), entry.id) {
 		return false
 	}
 	dimension := engine.dimension(entry.dimension)
