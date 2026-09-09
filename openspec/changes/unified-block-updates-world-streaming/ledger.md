@@ -37,6 +37,8 @@
 
 - 6327eb67 (Task 2.4): runtime -count=2、realm/entity/fluid/updates/contract/audit 全绿、server -race 抽验 251s 绿（评审者亲跑）；评审逐语句比对 engine_step.go（唯一改动=删两次纯观测通知）、逐规则核验门面三规则与旧四处手写等价（含 bucket 写前校验 old==block 论证、~30 机械站点分类核验派生不可触发）、源序守卫与入队守卫正反判别力点名验证；256 tick 重放 KAT 与同 tick 变干测试零改动通过。
 
+- 2cdd3599 (Task 3.1): network/codec/protocol/tcp 四包 -race、server 登录/握手族、audit、client app 定点全绿（评审者亲跑）；golden hex 逐字节核对（v40=0x28、视距 32=0x20、版本字节 0x27→0x28）；评审独立核实 `config.Fields` 的 render.viewDistance Min 2/Max 64 与协议域同域（无「配置合法但登录被拒」回归）；sim/storage diff 为空。
+
 ## 进度
 
 - Ruling: Task 1.1 三处偏离全部接受 — (a) 每 kind 一个索引堆替代单堆：单堆下预算耗尽/未注册域条目占堆顶会破坏探视有界与域隔离，分域堆 + `candidateLess` 全局选择保持弹出序=全局全序（评审以测试本地独立 oracle 核验，夹具对 kind 优先序有判别力）；brief 的单堆描述是对实现的不当约束，spec 只约束弹出序与不变量。(b) `simAllowedEdges` 同步加边：`TestSimAllowedEdgesMatchesGlobalAllowed` 集合相等测试强制，非扩大范围。(c) `Advance(now)` 预算取自注册表：与 spec「域标识、每 tick 预算、处理回调」三元组一致，Register 可重复调用供 2.x 配置快照重注册。
@@ -50,4 +52,6 @@
 - Task 2.2: complete (commits fb9d02ee..35ba63e4, review PASS, 2 Minor)。Ruling 落实核验：②LenOf 口径 ③Scheduler doc ④fluid.Advance 改 AdvanceKinds(now, KindFluidFlow) 双向堵漏。Minor 路由：①跨维度全局双预算缺直接双维夹具（A 维耗尽全局额度后 B 维首候选顺延）——2.3 顺手补；②`dimension == nil` 防御分支语义从丢弃变保留——生产不可达（fluidQueues 只增不减）且重扫兜底、最终态一致，记台账不动作。
 - Task 2.3: complete (commits 47aaf241..9093b9b8, review PASS, 0 findings)。realm 本地 splitmix64 家族净删约 150 行、5 调用点逐位接线；新冻结重放 KAT（256 tick、四域写入、含恒真守卫）经评审者 /tmp 基线重建独立复现逐位一致；骑手一（10 盐两两互异+长度守卫）与骑手二（双维度全局预算夹具，判别力成立：预算误为每维一份即红）双双落地；注释-only 5 文件逐行核验无行为行（audit 反引号门禁驱动）。组 2 剩 2.4。
 - Task 2.4: complete (commits 240358e2..6327eb67, review PASS, 2 Minor)。相位表收敛 5 相位、执行顺序逐语句不变（三层证据：逐语句 diff + go/parser 源序守卫带咬人反例 + 零改动 256 tick 重放 KAT）；入队单点化为 `EnqueueBlockWrite` 门面（三规则单源，bucket/farming/placement 四直连点派生等价经逐规则核验，~30 机械站点派生不可触发分类核验），entity 生产文件扫描守卫带正反例；fluid_perf 流体/湿度两列退役为单列（旧列无断言、文档如实标注）。Minor 路由：① `watchFarmlandMoistureCandidateAtPhase` 死 helper（基线即零调用）与其不准确注释——4.1 顺手删除；② `companion_placement.go:178` 硬编码 `core.AirID` 未按 doc 透传写前旧值（当前安全已核验：同函数空气校验紧邻写入；(AirID, placement) 不触发湿窗口）——4.1 顺手改透传 SetBlock 返回值。**组 2（调度迁移）全部完成。**
+- Ruling: 3.1 拒绝码复用 `LoginProtocolViolation`(5) 接受 — 7 码枚举中 5 号语义「登录载荷违反协议」与域外视距精确匹配（评审核验非偷懒复用）；解码放行口走「交驱动回 LoginReject」与身份错误同模式（不裸断连），编码侧已拒故 wire 无合法域外产物。`LoginClient` 同步扩参（显式传值无隐藏默认）接受。版本矩阵两处同步、v39 失配拒绝经表达式循环自动继承。
+- Task 3.1: complete (commits a3377f40..2cdd3599, review PASS, 1 Minor)。三层拒绝证据（校验矩阵/假 stream 驱动/真实 TCP 原始字节）+ golden 逐字节 + fuzz 新种子；配置域与协议域同域（config.Fields render.viewDistance Min2/Max64 既有约束）。Minor 路由：packet.go 与 login.go 的域校验谓词双写——3.2 接触时提炼 `ValidLoginViewDistance` 谓词。
 -（SDD 执行期逐任务追加：Task 完成记录 + 评审结论 + Ruling）
