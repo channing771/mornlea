@@ -3,7 +3,7 @@
 ## 1. 统一调度器基座
 
 - [x] 1.1 新建 `packages/server/updates`：定时面 `Queue`（条目 `{pos,kind,dueTick}`、全序 `(dueTick,chunkX,chunkZ,y,z,x,kind)`、索引堆、只提前不推迟、每 kind 预算、kind 注册表）与随机面 `Sampler`（`sim/realm/environment.go` 的 splitmix64 链与 salt 常量原样搬迁导出）；性质测试（入队序无关、预算上界、探视守卫、重放逐位一致）；`packages/audit/dependency_test.go` `allowed` map 登记 `updates` 及 `fluid`/`sim/realm` 新边；验证 `go test ./packages/server/updates ./packages/audit -race -count=1`
-- [ ] 1.2 entity 侧哈希副本（`sim/entity` 的 passive_spawn/hostile_spawn/passive_graze/yield 等 splitmix64 拷贝）收敛到 `updates.Sampler`（行为逐位不变），audit 登记 `sim/entity → updates` 边；验证 `go test ./packages/server/sim/entity ./packages/audit -race -count=1`
+- [x] 1.2 entity 侧哈希副本（`sim/entity` 的 passive_spawn/hostile_spawn/passive_graze/yield 等 splitmix64 拷贝）收敛到 `updates.Sampler`（行为逐位不变），audit 登记 `sim/entity → updates` 边；验证 `go test ./packages/server/sim/entity ./packages/audit -race -count=1`
 
 ## 2. 调度迁移
 

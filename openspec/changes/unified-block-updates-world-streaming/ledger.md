@@ -30,10 +30,12 @@
 ## 验证证据（按 SHA 复用）
 
 - main@8d94a4e8: worktree `make rust` exit 0（/tmp/e19-rust-build.log）。
-- 9c901883→7e89002c (Task 1.1): `go test ./packages/server/updates -race -count=2` 双绿、`go test ./packages/audit -count=1` 绿、`gofmt -l` 空、`go vet` 绿（评审者亲跑）；KAT 锚点经 realm 私有函数独立重算逐位一致（评审者临时探针，已删）；实现期临时差分全扫约 40 万次 SplitMix64 + 判定网格全绿（探针已删，抓到手抄盐值笔误一枚并修正）。
+- 9c901883→6a9f2907 (Task 1.2): `go test ./packages/server/sim/entity -race -count=2` 双绿、`./packages/server/updates` 绿、`./packages/server/sim/runtime -race -count=1` 绿（runtime 委托路径回归）、`./packages/audit` 绿、`gofmt` 空（评审者亲跑）；评审者以 /tmp 探针对 63d733a2 旧实现做机械提取比对——SplitMix64 20 万输入、13 函数 5 万随机元组（含负种子/边界维度/chance 边界）逐位一致、26 个 KAT 锚点经旧实现原样复现、10 盐值两两互异；探针曾真实报出自身 bug 的 mismatch，比对具备判别力。
 
 ## 进度
 
 - Ruling: Task 1.1 三处偏离全部接受 — (a) 每 kind 一个索引堆替代单堆：单堆下预算耗尽/未注册域条目占堆顶会破坏探视有界与域隔离，分域堆 + `candidateLess` 全局选择保持弹出序=全局全序（评审以测试本地独立 oracle 核验，夹具对 kind 优先序有判别力）；brief 的单堆描述是对实现的不当约束，spec 只约束弹出序与不变量。(b) `simAllowedEdges` 同步加边：`TestSimAllowedEdgesMatchesGlobalAllowed` 集合相等测试强制，非扩大范围。(c) `Advance(now)` 预算取自注册表：与 spec「域标识、每 tick 预算、处理回调」三元组一致，Register 可重复调用供 2.x 配置快照重注册。
 - Task 1.1: complete (commits 9c901883..7e89002c, review PASS, 0 Critical/Important; deferred minors: ① `Handler` doc 未禁回调内重入 `Advance`（内层 defer 提前冲刷 deferred 会破坏外层一次推进至多一次；无现实调用方，2.1 写首个真实 handler 时顺手补 doc 禁令或 panic 守卫）② sampler.go 值接收器方法内冗余 `sampler := Sampler{}` 构造（纯风格，1.2 顺手清理））。
+- Ruling: Task 1.2 勘察与两处最小跟进接受 — entity 无有状态 RNG（此前调研所记 `entity.NewState` 为误报）；`yield.go` 的 realm 家族死副本直接删除、`ShortGrassSeedDropRoll` 保留 entity 纯转发 shim（runtime 委托与 server 夹具入口不变）；entity `AGENTS.md` 允许列表一行同步（局部指南与 audit 一致）；包级零值 `var sampler = updates.Sampler{}` 为无状态纯函数集合统一调用点，非可变状态。
+- Task 1.2: complete (commits 63d733a2..6a9f2907, review PASS, 0 Critical/Important; deferred minor: `TestSamplerDomainSaltsIndependent` 未扩展到 entity 家族、全量 10 盐值两两互异无单点断言（评审者已数值验证互异成立）——2.3 顺手补全量互异断言)。组 1（统一调度器基座）全部完成。
 -（SDD 执行期逐任务追加：Task 完成记录 + 评审结论 + Ruling）
