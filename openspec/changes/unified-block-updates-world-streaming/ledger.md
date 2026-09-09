@@ -1,0 +1,36 @@
+# ledger — unified-block-updates-world-streaming
+
+- Worktree: /Users/chen/work/mornlea/.worktrees/unified-block-updates-world-streaming, branch feat/unified-block-updates-world-streaming, base main@8d94a4e8。
+- Harness note: `task` tool 无 model 参数，子代理继承会话模型；skill 的模型分层只记意图。
+- Spec authority: openspec/changes/unified-block-updates-world-streaming/{proposal.md,specs/*/spec.md,design.md,tasks.md}。
+- 设计全文与批准记录：docs/superpowers/specs/2026-09-09-unified-block-updates-world-streaming-design.md（2026-09-09 用户显式批准）。
+
+## Pre-flight 裁决
+
+- Ruling: 合并范围 = 「裁剪合并 + 每玩家视距」— 用户 2026-09-09 问答裁决：任务 2 原描述约八成已落地（region 双 bank/兴趣管理/背压/Observe-Drain 已在 F-07、multidimension 等基线验证），只做剩余缺口并叠加每玩家视距；非区块存档 region 化、动态调视距、设置页滑块列非目标 — 若错，代价是后续独立 change 补做。
+- Ruling: 合并为单一 change — 两组文件集不交叠、可分别回退，合并理由是共享 scenario/perf 一次性重定与单一版本互斥窗口（用户明确要求合并开发）。
+- Ruling: 湿度 FIFO→dueTick 是唯一允许的行为可见变化 — 预算/平衡态/同 tick 重判保持，积压消费顺序改全序；`authoritative-farming` 出 MODIFIED delta（仅一条 Requirement 的一个 Scenario 措辞 + 承载方声明）。
+- Ruling: engine ABI 不升版 — 调度统一在 Go 侧，Rust kernel（fluid_eval_batch 等）接口不动；用户原文预期「大概率升版」经现状核对不成立。
+- Ruling: `authoritative-fluid`、`tunable-constants`、`chunk-persistence` 无 delta — 流体行为逐位不变、预算参数名值不变（region 上限走 server config）、磁盘并行化无可观察格式变化；若实现期发现规格措辞与迁移冲突，先补 delta 再继续。
+- Ruling: `bounded-benchmark-workload` 同时 MODIFIED 两条 Requirement — 版本链 Requirement（v23 + 迁移 22:23）与 B-33 的「追加材质层」Requirement（其 v22/21:22 钉值随版本链推进过期，改为「追加不单独升版 + 迁移随版本链走」）。
+
+## Pre-flight conflict scan
+
+| 交叠点 | 关系 | 结论 |
+|---|---|---|
+| 1.1 ↔ 2.1/2.2/2.3（`updates.Queue`/`Sampler`） | 1.1 产出、组 2 消费 | 顺序执行，组 2 各任务依赖 1.1 完成 |
+| 1.2 ↔ 2.3（`updates.Sampler` 消费方） | 1.2 收敛 entity 副本、2.3 收敛 realm 链 | 同一导出面两次接线，顺序执行无冲突 |
+| 2.4 → 2.1/2.2/2.3（`phaseBlockUpdates` 重排） | 2.4 汇总编排 | 2.4 最后做；`stepPhase` 观测常量测试在 2.4 内同步 |
+| 3.1 → 3.2 → 3.4（协议字段 → 会话半径 → 场景） | 链式依赖 | 顺序执行；3.4 依赖 3.2 的会话视距 |
+| 3.3（disk.go 拆锁） | 与组 2/3.1/3.2 文件集不交叠 | 可独立；`packages/server/server` config 字段与 3.1/3.2 无文件冲突 |
+| 版本矩阵（AGENTS.md/openspec/config.yaml/audit） | 3.1 升协议、3.4 升 scenario 各自同步矩阵 | 沿 multidimension 先例：版本升版任务自带矩阵同步并跑 `go test ./packages/audit -count=1`；4.1 只核验 |
+| `packages/audit/dependency_test.go` | 1.1（fluid/sim/realm）与 1.2（sim/entity）各加边 | 顺序提交，1.2 不重复加边 |
+| benchmark golden / `perf-baseline.json` | 3.4 触碰 scenario 版本 | 基线提升走显式流程（guard.mjs 高危路径），4.1 取证 |
+
+## 验证证据（按 SHA 复用）
+
+- main@8d94a4e8: worktree `make rust` exit 0（/tmp/e19-rust-build.log）。
+
+## 进度
+
+-（SDD 执行期逐任务追加：Task 完成记录 + 评审结论 + Ruling）
