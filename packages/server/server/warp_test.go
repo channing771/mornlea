@@ -326,14 +326,20 @@ func (host *warpTestHost) ExpectDepthsSnapshot(t *testing.T, player warpTestPlay
 	deadline := time.Now().Add(waitDeadline)
 	for time.Now().Before(deadline) {
 		host.Step(t)
+		// 判定整体在锁内完成：`publications` 映射与 `snapshotSent` 位都只在
+		// `stepMu` 下变更，锁外读取会与 tick 发布产生竞态。
 		host.running.stepMu.Lock()
-		session := host.running.sessions[player.session]
-		publications := session.publications
+		sent := false
+		if session := host.running.sessions[player.session]; session != nil {
+			if publication := session.publications[core.ChunkKey{
+				Dimension: core.Depths,
+				Pos:       warpDepthsAnchor,
+			}]; publication != nil && publication.snapshotSent {
+				sent = true
+			}
+		}
 		host.running.stepMu.Unlock()
-		if publication := publications[core.ChunkKey{
-			Dimension: core.Depths,
-			Pos:       warpDepthsAnchor,
-		}]; publication != nil && publication.snapshotSent {
+		if sent {
 			return
 		}
 	}
