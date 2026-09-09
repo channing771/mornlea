@@ -41,6 +41,8 @@
 
 - ef14f83c (Task 3.2): runtime -count=2、entity/contract、server 订阅/登录/传送族、network 四包、audit 全绿（评审者亲跑）；评审者做四变异测试全部咬人（去 +1 / 去 min 钳制 / 回退全局半径循环 / warp 丢视距）；storage/benchmark/engine/client diff 全空；`PlayerRestore.ViewDistance` 零值无歧义核验（不持久化、接纳点覆盖、wire 谓词拒 0）。
 
+- 04582298 (Task 3.3 修复轮): storage -race -count=2、server Persist/Storage/World/Backup 族、audit 全绿（复审者亲跑）；skip-busy 上界论证复核（超额全部在途 ⇒ ≤cap+在途）、备份过滤与门闩停靠测试反向钉住成立；TDD 红灯记录：compact 残留真实混入 + 停靠期间句柄 4>3 上界。
+
 ## 进度
 
 - Ruling: Task 1.1 三处偏离全部接受 — (a) 每 kind 一个索引堆替代单堆：单堆下预算耗尽/未注册域条目占堆顶会破坏探视有界与域隔离，分域堆 + `candidateLess` 全局选择保持弹出序=全局全序（评审以测试本地独立 oracle 核验，夹具对 kind 优先序有判别力）；brief 的单堆描述是对实现的不当约束，spec 只约束弹出序与不变量。(b) `simAllowedEdges` 同步加边：`TestSimAllowedEdgesMatchesGlobalAllowed` 集合相等测试强制，非扩大范围。(c) `Advance(now)` 预算取自注册表：与 spec「域标识、每 tick 预算、处理回调」三元组一致，Register 可重复调用供 2.x 配置快照重注册。
@@ -58,4 +60,8 @@
 - Task 3.1: complete (commits a3377f40..2cdd3599, review PASS, 1 Minor)。三层拒绝证据（校验矩阵/假 stream 驱动/真实 TCP 原始字节）+ golden 逐字节 + fuzz 新种子；配置域与协议域同域（config.Fields render.viewDistance Min2/Max64 既有约束）。Minor 路由：packet.go 与 login.go 的域校验谓词双写——3.2 接触时提炼 `ValidLoginViewDistance` 谓词。
 - Ruling: 3.2 链路形态接受 — `contract.PlayerRestore.ViewDistance`（0=未声明、不持久化、wire 谓词拒 0 故零值无歧义）避免 ~17 处签名扰动；`+1` 换算全仓仅 entity 一处、`boundedSessionViewRadius` 唯一钳制点、RegisterPlayer 与 reconcile 同源计算不漂移；warp 重建订阅携带声明视距；probe（ViewRadius=0）经公式自然保持零视界现状。审计 `expectedRuntimeSubscriptionFields` 白名单登记是该门禁的设计流程。
 - Task 3.2: complete (commits 1aa14463..ef14f83c, review PASS, 0 findings)。四 Scenario 双向精确集合相等 + 评审核实四变异全部咬人；谓词骑手落实（`ValidLoginViewDistance` + 闭域测试）；server 层接线测试用 ViewRadius=3 夹具的分层理由成立（OutboxCapacity 512 限制，数值钉住归 runtime 层）。
+- Ruling: 3.3 评审 I-1 裁决——delta spec R3 的「任一时刻 MUST NOT 超过 N」与其自身 Scenario「淘汰 MUST 被推迟」+「读写全成功」在「候选全在途且需打开新 region」时逻辑不相容（阻塞等待方案与 R1 并行目标相悖且无延迟预算约束），按流程先修产物：R3 改为「稳态收敛（每次插入/归还时收缩到上限内）+ 在途窗口内 MAY 超限但 MUST NOT 超过上限加在途引用数 + 最后引用归还后下次治理收回」——提交 8b74fa2e，实现与测试断言形态自洽。
+- Ruling: 3.3 修复轮的 skip-busy 选举（`electEvictableRegionLocked`）接受 — TDD 红灯证明旧「尾部在途即整轮让步」连修订后 R3 的窗口上界都违反（在途句柄沉尾后上方空闲句柄全部不可回收，无界增长）；选举淘汰首个 refs==0 使「超额必然全部在途 ⇒ ≤cap+在途」成立，且 LRU 语义保持（淘汰空闲集内最久未用者）。
+- Ruling: 3.3 修复者观察路由——`CreateRegion` 临时文件 `.create-*`（region.go:66）同属备份过滤盲区（交错窗口更短、无 hook 停靠点），4.1 收尾顺手补一行过滤（不单开任务）。
+- Task 3.3: complete (commits 2cfd1558→d19ffbd4 实现 + 8b74fa2e spec 修订 + 04582298 修复轮；review PASS-with-findings → 修复轮 → 复审 PASS)。拆锁形态：regionMu 只管缓存治理、chunk.Region.mu（既有）单 region 串行、五类独立锁、closing/closed 原子化、Close 排空等价；LRU+引用计数+skip-busy 选举；配置链路 server.Config.RegionHandleCacheCap(256)→OpenOptions；7+2 新测试钉住全部 spec Scenario。评审 I-2（Backup 漏 compact 临时文件，拆锁引入的真实回归）已修（一行过滤+门闩测试，TDD 先红后绿）。评审 M-2/M-3/M-4（Sync 全量 pin 扰动 LRU、Backup 与 Close 语义从互斥快照变尽力复制、ChunkKeys 快照粒度弱化为逐 region 提交点）记台账知悉——均为拆锁的既定代价，注释已声明。
 -（SDD 执行期逐任务追加：Task 完成记录 + 评审结论 + Ruling）
