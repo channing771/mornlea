@@ -607,7 +607,9 @@ func validatePlayerDTO(dto playerDTO) error {
 }
 
 func validatePlayerLocation(location PlayerLocation) error {
-	if location.Dimension != core.Overworld {
+	// 玩家位置与区块快照同值域：主世界与 `Depths` 放行，`Dimension >= 2`
+	// 拒绝（与区块信封的维度值域一致，编解码共用本函数故双向对称）。
+	if location.Dimension != core.Overworld && location.Dimension != core.Depths {
 		return fmt.Errorf("%w: unsupported player dimension %d", storagedef.ErrCorrupt, location.Dimension)
 	}
 	for _, position := range location.Position {

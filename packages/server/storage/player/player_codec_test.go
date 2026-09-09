@@ -97,6 +97,34 @@ func TestPlayerCodecRoundTrip(t *testing.T) {
 	}
 }
 
+// TestPlayerCodecRoundTripsDepthsLocations 覆盖多维存档的玩家位置值域：
+// `Current`、`Safe` 与个人重生点落在 `Depths` 时编解码必须往返，维度 2
+// 及以上仍被拒绝（见 `TestPlayerCodecRejectsInvalidSave`）。
+func TestPlayerCodecRoundTripsDepthsLocations(t *testing.T) {
+	id := fixturePlayerID()
+	want := fixturePlayerSave(id, 7)
+	want.Current.Dimension = core.Depths
+	want.Safe.Dimension = core.Depths
+	want.RespawnPresent = true
+	want.RespawnPosition = respawnFixturePosition
+	want.RespawnDimension = core.Depths
+	encoded, err := Encode(want)
+	if err != nil {
+		t.Fatalf("depths 玩家存档编码: %v", err)
+	}
+	got, err := Decode(id, encoded)
+	if err != nil {
+		t.Fatalf("depths 玩家存档解码: %v", err)
+	}
+	if got.Current != want.Current || got.Safe == nil || *got.Safe != *want.Safe ||
+		!got.RespawnPresent || got.RespawnPosition != want.RespawnPosition ||
+		got.RespawnDimension != want.RespawnDimension {
+		t.Fatalf("depths 位置往返 = (%+v, %+v, %+v/%d)，想要 (%+v, %+v, %+v/%d)",
+			got.Current, got.Safe, got.RespawnPosition, got.RespawnDimension,
+			want.Current, want.Safe, want.RespawnPosition, want.RespawnDimension)
+	}
+}
+
 func TestPlayerCodecCurrentSchemaRoundTripsSwordItems(t *testing.T) {
 	want := fixturePlayerSave(fixturePlayerID(), 27)
 	stacks := [...]core.ItemStack{
@@ -508,12 +536,12 @@ func TestPlayerCodecRejectsInvalidSave(t *testing.T) {
 		{"invalid player ID", func(save *PlayerSave) { save.PlayerID = core.PlayerID{} }},
 		{"zero revision", func(save *PlayerSave) { save.Revision = 0 }},
 		{"unnormalized name", func(save *PlayerSave) { save.DisplayName = " Chen " }},
-		{"invalid dimension", func(save *PlayerSave) { save.Current.Dimension = 1 }},
+		{"invalid dimension", func(save *PlayerSave) { save.Current.Dimension = 2 }},
 		{"nonfinite current position", func(save *PlayerSave) { save.Current.Position[0] = float32(math.Inf(1)) }},
 		{"nonfinite yaw", func(save *PlayerSave) { save.Yaw = float32(math.NaN()) }},
 		{"nonfinite pitch", func(save *PlayerSave) { save.Pitch = float32(math.Inf(-1)) }},
 		{"pitch too high", func(save *PlayerSave) { save.Pitch = float32(math.Pi/2) + 0.01 }},
-		{"invalid safe dimension", func(save *PlayerSave) { save.Safe.Dimension = 1 }},
+		{"invalid safe dimension", func(save *PlayerSave) { save.Safe.Dimension = 2 }},
 		{"health above max", func(save *PlayerSave) { save.Health = core.MaxHealth + 1 }},
 		{"hunger above max", func(save *PlayerSave) { save.Hunger = core.MaxHunger + 1 }},
 		{"saturation above hunger", func(save *PlayerSave) {
@@ -522,7 +550,7 @@ func TestPlayerCodecRejectsInvalidSave(t *testing.T) {
 		{"invalid respawn dimension", func(save *PlayerSave) {
 			save.RespawnPresent = true
 			save.RespawnPosition = respawnFixturePosition
-			save.RespawnDimension = 1
+			save.RespawnDimension = 2
 		}},
 		{"nonfinite respawn position", func(save *PlayerSave) {
 			save.RespawnPresent = true
@@ -580,7 +608,7 @@ func TestPlayerCodecRejectsCorruptEnvelope(t *testing.T) {
 		{"invalid nickname", func() []byte { p := bytes.Clone(encoded); p[48] = '\n'; repairPlayerCRC(p); return p }, storagedef.ErrCorrupt},
 		{"current dimension", func() []byte {
 			p := bytes.Clone(encoded)
-			binary.LittleEndian.PutUint32(p[52:], 1)
+			binary.LittleEndian.PutUint32(p[52:], 2)
 			repairPlayerCRC(p)
 			return p
 		}, storagedef.ErrCorrupt},
@@ -598,7 +626,7 @@ func TestPlayerCodecRejectsCorruptEnvelope(t *testing.T) {
 		{"safe flag", func() []byte { p := bytes.Clone(encoded); p[76] = 2; repairPlayerCRC(p); return p }, storagedef.ErrCorrupt},
 		{"safe dimension", func() []byte {
 			p := bytes.Clone(encoded)
-			binary.LittleEndian.PutUint32(p[77:], 1)
+			binary.LittleEndian.PutUint32(p[77:], 2)
 			repairPlayerCRC(p)
 			return p
 		}, storagedef.ErrCorrupt},
@@ -658,7 +686,7 @@ func TestPlayerCodecRejectsCorruptEnvelope(t *testing.T) {
 		{"respawn dimension", func() []byte {
 			p := bytes.Clone(encoded)
 			p[len(p)-playerRespawnBytes] = 1
-			binary.LittleEndian.PutUint32(p[len(p)-playerRespawnBytes+13:], 1)
+			binary.LittleEndian.PutUint32(p[len(p)-playerRespawnBytes+13:], 2)
 			repairPlayerCRC(p)
 			return p
 		}, storagedef.ErrCorrupt},
