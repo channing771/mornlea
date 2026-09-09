@@ -33,6 +33,8 @@
 - 9c901883→6a9f2907 (Task 1.2): `go test ./packages/server/sim/entity -race -count=2` 双绿、`./packages/server/updates` 绿、`./packages/server/sim/runtime -race -count=1` 绿（runtime 委托路径回归）、`./packages/audit` 绿、`gofmt` 空（评审者亲跑）；评审者以 /tmp 探针对 63d733a2 旧实现做机械提取比对——SplitMix64 20 万输入、13 函数 5 万随机元组（含负种子/边界维度/chance 边界）逐位一致、26 个 KAT 锚点经旧实现原样复现、10 盐值两两互异；探针曾真实报出自身 bug 的 mismatch，比对具备判别力。
 - 35ba63e4 (Task 2.2): updates/fluid -count=2、realm -count=2、runtime/entity/audit 全绿（评审者亲跑）；评审逐条核验 delta spec 条款与 9 条重定断言（数值断言零改动、顺序口径换全序口径处均有等价或更强断言、删除项确属失效 FIFO 机制）；oracle 三合一（真实入队路径 + ground truth + 重放一致 + 16 tick 收敛上界防活锁）判别力成立；探视界在过滤模式下不升反降。
 
+- 9093b9b8 (Task 2.3): realm -count=2、runtime/updates/entity/tuning/audit 全绿（评审者亲跑）；评审者独立复现加固——/tmp 重建基线 47aaf241（cargo release 重建，engine 零改动 ABI 稳定），旧 splitmix64 实现重放冻结表逐位一致 + 20 万组随机输入单元级比对 + sampler.go 区间零 diff 三层互证；realm 本地哈希家族与盐值常量零残留（PCG 鉴别常量非本家族）。
+
 ## 进度
 
 - Ruling: Task 1.1 三处偏离全部接受 — (a) 每 kind 一个索引堆替代单堆：单堆下预算耗尽/未注册域条目占堆顶会破坏探视有界与域隔离，分域堆 + `candidateLess` 全局选择保持弹出序=全局全序（评审以测试本地独立 oracle 核验，夹具对 kind 优先序有判别力）；brief 的单堆描述是对实现的不当约束，spec 只约束弹出序与不变量。(b) `simAllowedEdges` 同步加边：`TestSimAllowedEdgesMatchesGlobalAllowed` 集合相等测试强制，非扩大范围。(c) `Advance(now)` 预算取自注册表：与 spec「域标识、每 tick 预算、处理回调」三元组一致，Register 可重复调用供 2.x 配置快照重注册。
@@ -44,4 +46,5 @@
 - Ruling: 2.2 共享实例推进方式定为「kind 过滤 Advance」— `updates.Queue` 增加按 kind 子集推进的入口（缺省全注册域，向后兼容；1.1 的每域独立堆使该入口实现平凡），fluid 与 moisture 各自在自己的 tick 阶段按域过滤推进 — 为什么：湿度注册到同一实例后无过滤的 `Advance(now)` 会在湿度阶段连带弹出到期流体条目（`FluidFlowDelayTicks` 可调到 0 时必然发生），流体 handler 编码后无提交编排、且 `advanceWorld` 已过期；按域过滤同时保住每维度单实例、跨域全序与既有阶段顺序 — 若错，代价是回退为每域独立实例（跨域全序文档化损失，无行为影响）。
 - Ruling: 2.2 brief 内「范围外候选不重入队」与「保持原 dueTick 重入队」两句并存的歧义，按实现者读法裁决 — 范围外=HandleConsumed 检查即消费（与旧 FIFO pop 丢弃语义一致，且 delta spec「后续阶段最终排空」在静态积压下只有消费语义可满足）；原 dueTick 回插（HandleDeferred）专用于读预算不足的顺延并暂停该域本次推进（无活锁：预算每 tick 全局重建）。`HandleResult` 签名与 `ClearKind`（ResetFarmlandMoisture 只清湿度域）接受为必要最小 API。
 - Task 2.2: complete (commits fb9d02ee..35ba63e4, review PASS, 2 Minor)。Ruling 落实核验：②LenOf 口径 ③Scheduler doc ④fluid.Advance 改 AdvanceKinds(now, KindFluidFlow) 双向堵漏。Minor 路由：①跨维度全局双预算缺直接双维夹具（A 维耗尽全局额度后 B 维首候选顺延）——2.3 顺手补；②`dimension == nil` 防御分支语义从丢弃变保留——生产不可达（fluidQueues 只增不减）且重扫兜底、最终态一致，记台账不动作。
+- Task 2.3: complete (commits 47aaf241..9093b9b8, review PASS, 0 findings)。realm 本地 splitmix64 家族净删约 150 行、5 调用点逐位接线；新冻结重放 KAT（256 tick、四域写入、含恒真守卫）经评审者 /tmp 基线重建独立复现逐位一致；骑手一（10 盐两两互异+长度守卫）与骑手二（双维度全局预算夹具，判别力成立：预算误为每维一份即红）双双落地；注释-only 5 文件逐行核验无行为行（audit 反引号门禁驱动）。组 2 剩 2.4。
 -（SDD 执行期逐任务追加：Task 完成记录 + 评审结论 + Ruling）
