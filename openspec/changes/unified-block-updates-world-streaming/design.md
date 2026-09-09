@@ -39,7 +39,7 @@ chunk 级重扫队列（`fluidRescanState`/`farmlandMoistureRescanState`）与�
 
 ## D6 scenario v23 与 streaming 指标族
 
-- `benchmark/benchmark.go` `scenarioVersion 22→23` + 判定注释；`multiplayer_benchmark_scenario.go` 会话视距梯度（2/8/16/32，取值与顺序是场景身份）；探针 `ViewRadius=0` 改按会话视距启用订阅。
+- `benchmark/benchmark.go` `scenarioVersion 22→23` + 判定注释；`multiplayer_benchmark_scenario.go` 会话视距梯度 `2/4/6/8`（按登录顺序固定分配，取值与顺序是场景身份；上端收敛到 8 而非早期举例的 32——实测证明存档 job 单 FIFO 且生成排在全部装载之后、探针 Workers=1 ~3 job/tick，视距 32 的 4489 区块双趟 job 在探针窗口内零 Ready）；探针 `ViewRadius=0` 改按会话视距启用订阅（服务端上界 33 与生产默认一致）。
 - `streaming` 指标族（已加载区块数、加载时延 p50/p95/p99/max、峰值 RSS）进 `client.PerfReport`（稳定 JSON 契约扩展）与 `validateBenchmarkReport`；perfcheck `validate.go` 按版本选指标族、`compare.go` 白名单加 `22:23`；`docs/notes/perf-baseline.md` 取证。数值只记录。
 
 ## 受影响文件与门禁登记

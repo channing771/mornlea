@@ -41,7 +41,7 @@
 
 - ef14f83c (Task 3.2): runtime -count=2、entity/contract、server 订阅/登录/传送族、network 四包、audit 全绿（评审者亲跑）；评审者做四变异测试全部咬人（去 +1 / 去 min 钳制 / 回退全局半径循环 / warp 丢视距）；storage/benchmark/engine/client diff 全空；`PlayerRestore.ViewDistance` 零值无歧义核验（不持久化、接纳点覆盖、wire 谓词拒 0）。
 
-- 04582298 (Task 3.3 修复轮): storage -race -count=2、server Persist/Storage/World/Backup 族、audit 全绿（复审者亲跑）；skip-busy 上界论证复核（超额全部在途 ⇒ ≤cap+在途）、备份过滤与门闩停靠测试反向钉住成立；TDD 红灯记录：compact 残留真实混入 + 停靠期间句柄 4>3 上界。
+- fe58ce76 (Task 3.4): benchmark 包 -race -count=2、client/perfcheck -race、server Streaming|Observer 定点、audit 全绿（评审者亲跑）；评审核实瓶颈机制逐点（单 FIFO、生成排全装载后、Workers=1、channel 每 tick 补 2）与 4489 区块算术自洽；真实归档 v15 基线 JSON 自比较 exit 0 复核；PerfReport 追加式与 ≤22 放行有正反测试。
 
 ## 进度
 
@@ -64,4 +64,6 @@
 - Ruling: 3.3 修复轮的 skip-busy 选举（`electEvictableRegionLocked`）接受 — TDD 红灯证明旧「尾部在途即整轮让步」连修订后 R3 的窗口上界都违反（在途句柄沉尾后上方空闲句柄全部不可回收，无界增长）；选举淘汰首个 refs==0 使「超额必然全部在途 ⇒ ≤cap+在途」成立，且 LRU 语义保持（淘汰空闲集内最久未用者）。
 - Ruling: 3.3 修复者观察路由——`CreateRegion` 临时文件 `.create-*`（region.go:66）同属备份过滤盲区（交错窗口更短、无 hook 停靠点），4.1 收尾顺手补一行过滤（不单开任务）。
 - Task 3.3: complete (commits 2cfd1558→d19ffbd4 实现 + 8b74fa2e spec 修订 + 04582298 修复轮；review PASS-with-findings → 修复轮 → 复审 PASS)。拆锁形态：regionMu 只管缓存治理、chunk.Region.mu（既有）单 region 串行、五类独立锁、closing/closed 原子化、Close 排空等价；LRU+引用计数+skip-busy 选举；配置链路 server.Config.RegionHandleCacheCap(256)→OpenOptions；7+2 新测试钉住全部 spec Scenario。评审 I-2（Backup 漏 compact 临时文件，拆锁引入的真实回归）已修（一行过滤+门闩测试，TDD 先红后绿）。评审 M-2/M-3/M-4（Sync 全量 pin 扰动 LRU、Backup 与 Close 语义从互斥快照变尽力复制、ChunkKeys 快照粒度弱化为逐 region 提交点）记台账知悉——均为拆锁的既定代价，注释已声明。
+- Ruling: 3.4 梯度偏离接受——视距梯度收敛 `2/4/6/8`（按登录顺序固定）而非 design 早期举例的 2/8/16/32：实测证明存档 job 单 FIFO 且 generate 排全部 load 之后、探针 Workers=1 ~3 job/tick，视距 32 的 4489 区块双趟 job 在探针窗口内零 Ready、streaming 完整性门禁必败；delta spec 只要求「按会话视距启用订阅」无数值钉死，数值属场景身份细节（代码注释+专用测试双重钉死）。design.md D6 措辞已同步修正。**瓶颈观察记档（后续候选）**：存档 job 队列「生成排全部装载之后」的单 FIFO 语义是大世界冷启动的首个加载优先级改进点，不属本 change。
+- Task 3.4: complete (commits 5c3dff27..fe58ce76, review PASS-with-findings, 1 Important=design 措辞滞后已修, 2 Minor 观察)。StreamingObserver tick 路径成本有界（nil 门+当 tick 新切片+锁内同步与 InterestObserver 同模式）、探针 join 后汇总的 happens-before 核实、PerfReport 追加式、perfcheck `22:23` 唯一授权与旧报告兼容（真实 v15 基线自比较 exit 0）；M-1（端到端探针 -race 下被既有 skip 跳过、streaming 门禁只在非 race 生效——既有测试设计取舍，评审已用非 race 补证）与 M-2（冗余断言）记台账不动作。**组 3（流式收尾）全部完成。**
 -（SDD 执行期逐任务追加：Task 完成记录 + 评审结论 + Ruling）
