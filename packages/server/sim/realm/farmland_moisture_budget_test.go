@@ -7,10 +7,6 @@ import (
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-func farmlandMoisturePendingLen(state *farmlandMoistureState) int {
-	return len(state.pending) - state.head
-}
-
 func enqueueNonFarmlandCandidates(state *State, count int, skip map[core.BlockPos]struct{}) {
 	for index, added := 0, 0; added < count; index++ {
 		position := core.BlockPos{
@@ -47,7 +43,7 @@ func TestFarmlandMoistureBudgetCapsReadsAndEventuallyDrains(t *testing.T) {
 	if got := state.FarmlandBlockReads(); got != farmlandMoistureReadsPerTick {
 		t.Fatalf("首 tick 读取=%d，想要 %d", got, farmlandMoistureReadsPerTick)
 	}
-	if got := farmlandMoisturePendingLen(&state.environment.farmlandMoisture); got != 1 {
+	if got := state.FarmlandMoisturePendingLen(); got != 1 {
 		t.Fatalf("首 tick 后待办=%d，想要 1", got)
 	}
 
@@ -55,12 +51,14 @@ func TestFarmlandMoistureBudgetCapsReadsAndEventuallyDrains(t *testing.T) {
 	if got := state.FarmlandBlockReads(); got != 1 {
 		t.Fatalf("第二 tick 读取=%d，想要 1", got)
 	}
-	if got := farmlandMoisturePendingLen(&state.environment.farmlandMoisture); got != 0 {
+	if got := state.FarmlandMoisturePendingLen(); got != 0 {
 		t.Fatalf("第二 tick 后待办=%d，想要 0", got)
 	}
 }
 
-// TestFarmlandMoistureInspectionBudgetDefersOutOfScopeBacklog 锁定范围查询也受独立检查预算约束。
+// TestFarmlandMoistureInspectionBudgetDefersOutOfScopeBacklog 锁定范围查询也受独立检查预算约束：
+// 湿度阶段恰好检查统一调度器全序下的前 65,536 个候选并保留其余待办，该阶段读取为 0，
+// 后续阶段按同一全序排空剩余候选。
 func TestFarmlandMoistureInspectionBudgetDefersOutOfScopeBacklog(t *testing.T) {
 	const backlog = 65_537
 	state := NewState(core.Overworld)
@@ -78,7 +76,7 @@ func TestFarmlandMoistureInspectionBudgetDefersOutOfScopeBacklog(t *testing.T) {
 	if got := state.FarmlandBlockReads(); got != 0 {
 		t.Fatalf("首 tick 方块读取=%d，想要 0", got)
 	}
-	if got := farmlandMoisturePendingLen(&state.environment.farmlandMoisture); got != 1 {
+	if got := state.FarmlandMoisturePendingLen(); got != 1 {
 		t.Fatalf("首 tick 剩余候选=%d，想要 1", got)
 	}
 
@@ -89,29 +87,72 @@ func TestFarmlandMoistureInspectionBudgetDefersOutOfScopeBacklog(t *testing.T) {
 	if got := state.FarmlandBlockReads(); got != 0 {
 		t.Fatalf("次 tick 方块读取=%d，想要 0", got)
 	}
-	if got := farmlandMoisturePendingLen(&state.environment.farmlandMoisture); got != 0 {
+	if got := state.FarmlandMoisturePendingLen(); got != 0 {
+		t.Fatalf("次 tick 剩余候选=%d，想要 0", got)
+	}
+}
+
+// TestFarmlandMoistureBacklogDrainsInSchedulerTotalOrder 对「积压消费顺序=统一
+// 调度器确定性全序」有判别力：以全序递减的入队顺序（X 从大到小）制造 65,537 个
+// 范围外候选，首 tick 必须恰好消费全序最小的 65,536 个、只保留全序最大的 1 个，
+// 次 tick 排空它。旧 FIFO 按入队顺序消费，会把 X 最大者先消费掉——迁移后这是
+// authoritative-farming delta 允许的唯一顺序差异。
+func TestFarmlandMoistureBacklogDrainsInSchedulerTotalOrder(t *testing.T) {
+	const backlog = 65_537
+	state := NewState(core.Overworld)
+	for index := range backlog {
+		state.EnqueueFarmlandMoisture(core.Overworld, core.BlockPos{
+			X: int32(backlog - 1 - index),
+			Y: core.MinY,
+		})
+	}
+
+	advanceFarmlandMoistureTest(state, nil, 0)
+	if got := state.FarmlandCandidateInspections(); got != 65_536 {
+		t.Fatalf("首 tick 候选检查=%d，想要 65536", got)
+	}
+	if got := state.FarmlandMoisturePendingLen(); got != 1 {
+		t.Fatalf("首 tick 剩余候选=%d，想要 1", got)
+	}
+	last := core.BlockPos{X: int32(backlog - 1), Y: core.MinY}
+	if !state.FarmlandQueued(core.Overworld, last) {
+		t.Fatal("保留的必须是全序最大的候选，X 最大者不在待办中")
+	}
+	first := core.BlockPos{X: 0, Y: core.MinY}
+	if state.FarmlandQueued(core.Overworld, first) {
+		t.Fatal("全序最小的候选本应被首 tick 消费，却仍在待办中")
+	}
+
+	advanceFarmlandMoistureTest(state, nil, 1)
+	if got := state.FarmlandCandidateInspections(); got != 1 {
+		t.Fatalf("次 tick 候选检查=%d，想要 1", got)
+	}
+	if got := state.FarmlandMoisturePendingLen(); got != 0 {
 		t.Fatalf("次 tick 剩余候选=%d，想要 0", got)
 	}
 }
 
 // TestFarmlandMoistureBudgetDoesNotStorePartialNeighborhood 锁定邻域判断不可跨 tick 拆分。
+// 耕地目标放在全部非耕地候选之后（全序末尾）：首 tick 读完目标格后余额不足一次
+// 完整邻域判定，候选按原 dueTick 回插顺延，本 tick 读取恰为目标前的全部候选加
+// 目标 1 次；下一 tick 以完整 163 次读取重判。
 func TestFarmlandMoistureBudgetDoesNotStorePartialNeighborhood(t *testing.T) {
 	state := readyFarmlandMoistureState(t, core.ChunkPos{})
 	active := []core.ChunkKey{{Dimension: core.Overworld}}
-	target := core.BlockPos{X: 8, Y: 1, Z: 8}
+	target := core.BlockPos{X: core.SectionMask, Y: core.MaxY - 1, Z: core.SectionMask}
 	setFarmlandMoistureTestBlock(t, state, target, core.FarmlandDryID)
-	enqueueNonFarmlandCandidates(state, 65_374, map[core.BlockPos]struct{}{target: {}})
+	enqueueNonFarmlandCandidates(state, 65_374, nil)
 	state.EnqueueFarmlandMoisture(core.Overworld, target)
 
 	advanceFarmlandMoistureTest(state, active, 0)
 	if got := state.FarmlandBlockReads(); got != 65_375 {
 		t.Fatalf("余额不足 tick 的读取=%d，想要 65374 + 目标 1", got)
 	}
-	if got := farmlandMoisturePendingLen(&state.environment.farmlandMoisture); got != 1 {
-		t.Fatalf("余额不足后待办=%d，想要保留队首 1 项", got)
+	if got := state.FarmlandMoisturePendingLen(); got != 1 {
+		t.Fatalf("余额不足后待办=%d，想要顺延的耕地 1 项", got)
 	}
-	if got := state.environment.farmlandMoisture.pending[state.environment.farmlandMoisture.head]; got.position != target {
-		t.Fatalf("余额不足后队首=%+v，想要耕地 %+v", got, target)
+	if !state.FarmlandQueued(core.Overworld, target) {
+		t.Fatal("余额不足后顺延的必须是耕地目标本身")
 	}
 	if got, _ := state.Dimension(core.Overworld).BlockAt(target); got != core.FarmlandDryID {
 		t.Fatalf("余额不足时耕地变成 %d，邻域判断不应保存部分结果", got)
@@ -121,7 +162,7 @@ func TestFarmlandMoistureBudgetDoesNotStorePartialNeighborhood(t *testing.T) {
 	if got := state.FarmlandBlockReads(); got != 163 {
 		t.Fatalf("重试完整判断的读取=%d，想要 163", got)
 	}
-	if got := farmlandMoisturePendingLen(&state.environment.farmlandMoisture); got != 0 {
+	if got := state.FarmlandMoisturePendingLen(); got != 0 {
 		t.Fatalf("重试后待办=%d，想要 0", got)
 	}
 }
@@ -143,10 +184,10 @@ func runFarmlandMoistureBudgetReplay(t *testing.T) [][]core.BlockPos {
 	}
 
 	var ticks [][]core.BlockPos
-	for tick := 0; farmlandMoisturePendingLen(&state.environment.farmlandMoisture) > 0; tick++ {
+	for tick := 0; state.FarmlandMoisturePendingLen() > 0; tick++ {
 		if tick == 10 {
 			t.Fatalf("过预算待办在 10 tick 内没有排空，仍有 %d 项",
-				farmlandMoisturePendingLen(&state.environment.farmlandMoisture))
+				state.FarmlandMoisturePendingLen())
 		}
 		mutation := advanceFarmlandMoistureTest(state, active, uint64(tick))
 		batches := mutation.Commit()

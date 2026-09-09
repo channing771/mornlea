@@ -35,12 +35,29 @@ type Entry struct {
 	DueTick uint64
 }
 
-// Handler 是一个域的处理回调：`Advance` 按全序逐条弹出到期待办并同步调用
-// 所属域的回调。回调内可以调用 `Queue.Enqueue`（含对刚弹出的条目重新排队），
-// 这些入队会被推迟到本次推进结束后生效，因此同一条目在一次推进内至多被
-// 处理一次；回调内禁止重入 `Advance`/`Register`/`Clear`——重入会破坏预算
+// HandleResult 是处理回调对刚弹出条目的处置声明，决定调度器在回调返回后的
+// 动作。
+type HandleResult uint8
+
+const (
+	// HandleConsumed 表示条目本 tick 已终结——完成处理或确定性丢弃（如候选已
+	// 离开 active Ready 范围），不再回到队列。
+	HandleConsumed HandleResult = iota
+	// HandleDeferred 表示本 tick 无法完整处理该条目（如消费方的读取预算已
+	// 付不起一次完整判定）：调度器把它按原 dueTick 回插——条目继续占用待办、
+	// 保持其在确定性全序中的位置，后续推进按同一全序可达，不产生重复条目也
+	// 不丢失；同时所属域本次推进到此暂停，其余到期条目原样留队，避免在预算
+	// 已尽时反复弹出/回插放大成本。回插不重置该域本 tick 已消耗的预算。
+	HandleDeferred
+)
+
+// Handler 是一个域的处理回调：`Advance`/`AdvanceKinds` 按全序逐条弹出到期
+// 待办并同步调用所属域的回调，由返回值声明条目的处置。回调内可以调用
+// `Queue.Enqueue`（含对刚弹出条目的重新排队），这些入队会被推迟到本次推进
+// 结束后生效，因此同一条目在一次推进内至多被处理一次；回调内禁止重入
+// `Advance`/`AdvanceKinds`/`Register`/`Clear`/`ClearKind`——重入会破坏预算
 // 快照、注册表与推进期暂存路径的一致性，属未定义行为。
-type Handler func(entry Entry)
+type Handler func(entry Entry) HandleResult
 
 // item 是单域堆里的一条记录：位置与到期 tick（kind 隐含在所属堆里）。
 type item struct {
@@ -204,10 +221,13 @@ type Queue struct {
 	// examineLimitHits 累计探视守卫触发的次数。分域堆下它应当恒为 0，测试
 	// 断言这一点，让「守卫真的触发了」表现成 CI 红灯而不是静默吞吐损失。
 	examineLimitHits int
-	// budgetScratch/processedScratch 是 Advance 内的预算快照与每域已处理
-	// 计数，跨 tick 复用、按需增长，稳定后单次推进零分配。
+	// budgetScratch/processedScratch/pausedScratch 是 Advance 内的预算快照、
+	// 每域已弹出计数与每域暂停标记，跨 tick 复用、按需增长，稳定后单次推进
+	// 零分配。paused 用于 `HandleDeferred`：域内一旦顺延，本次推进不再从该
+	// 域弹出任何条目。
 	budgetScratch    []int
 	processedScratch []int
+	pausedScratch    []bool
 }
 
 // NewQueue 构造一个空的统一待更新队列。
@@ -228,7 +248,7 @@ func (q *Queue) heapFor(kind Kind) *kindHeap {
 // Register 登记一个域的每 tick 预算与处理回调；对已注册域重复调用是更新
 // （预算快照变化时调用方重注册即可）。budget 为负按 0 处理（本 tick 零处理，
 // 条目保留）。新域只经本方法挂载：未注册域的条目不会被处理，也不影响其他域。
-// 必须在 Advance 之外调用（处理回调内调用是未定义行为）。
+// 必须在 Advance/AdvanceKinds 之外调用（处理回调内调用是未定义行为）。
 func (q *Queue) Register(kind Kind, budget int, handle Handler) {
 	if handle == nil {
 		panic("updates: 注册域缺少处理回调")
@@ -283,6 +303,19 @@ func (q *Queue) Clear() {
 		heap.order = heap.order[:0]
 	}
 	q.pending = 0
+}
+
+// ClearKind 清空单个域的待更新项，注册表与其他域的待办不受影响。供共享同一
+// 实例的多域消费方按域重置（如 realm 在测试夹具里单独清空湿度域而保留流体域
+// 的待办）。
+func (q *Queue) ClearKind(kind Kind) {
+	heap := q.heaps[kind]
+	if heap == nil {
+		return
+	}
+	q.pending -= len(heap.order)
+	clear(heap.index)
+	heap.order = heap.order[:0]
 }
 
 // Len 返回当前排队的待更新项总数（含未注册域的条目；不含推进期间暂存的
@@ -386,32 +419,61 @@ func advanceExamineLimit(totalBudget, registeredKinds int) int {
 
 // Advance 推进到 now：按全局全序从各域堆顶选出最小的到期（dueTick<=now）
 // 待办，弹出并同步调用所属域处理回调，直至没有满足「已注册、预算有余、
-// 到期」的候选。返回本 tick 实际处理的条目数。
+// 到期」的候选。返回本 tick 实际处理的条目数（`HandleDeferred` 顺延的弹出
+// 不计入）。
 //
 // 语义：
 //   - 每域每 tick 处理量以其注册预算为上界；超预算与未到期的条目原地留在
 //     各自堆里、dueTick 不变，按原全序顺延到后续 Advance，不会被丢弃；
 //   - 未注册域的堆不参与选择：零处理、零预算消耗、不阻塞其他域，条目保留
 //     待该域注册；
+//   - 处理回调返回 `HandleDeferred` 时，该条目按原 dueTick 回插、所属域本次
+//     推进暂停，其余域照常参与选择；
 //   - 处理回调内的 `Enqueue`（含对刚弹出条目的重排）推迟到本次推进结束后
 //     统一生效，因此同一条目在一次推进内至多被处理一次；
 //   - 弹出顺序只由待办集合本身决定，与入队次序无关。
-func (q *Queue) Advance(now uint64) (processed int) {
+func (q *Queue) Advance(now uint64) int {
+	return q.advance(now, nil)
+}
+
+// AdvanceKinds 推进到 now，但只处理 kinds 命中的注册域：共享同一实例的多域
+// 消费方（如 realm 在同一调度器实例上分别推进流体与湿度域）用它在自己的
+// tick 阶段只结算自己的域。过滤集外域的到期条目不被弹出、不消耗预算、堆顶
+// 不被探视——其待办原样留队，等该域自己的推进入口按同一全序消费；未注册的
+// kind 只是过滤条件不命中，零处理也不是错误。kinds 为空时等价于 `Advance`
+// （全注册域，向后兼容）；命中多个域时保持跨域全局全序。返回本 tick 实际
+// 处理的条目数（口径与 `Advance` 一致）。
+func (q *Queue) AdvanceKinds(now uint64, kinds ...Kind) int {
+	return q.advance(now, kinds)
+}
+
+// advance 是 Advance/AdvanceKinds 的共同实现：filter 为 nil 或空表示推进全部
+// 注册域，否则只推进 filter 命中的注册域。
+func (q *Queue) advance(now uint64, filter []Kind) (processed int) {
 	q.lastAdvanceExamined = 0
 
-	// 预算快照与每域计数按 domainOrder 平行排列，跨 tick 复用。
+	// 预算快照与每域计数按 domainOrder 平行排列，跨 tick 复用。过滤集外的
+	// 域预算记 0：选择循环按「预算非零且有余额」跳过它，效果与未注册一致
+	// （不弹出、不耗预算、不探视堆顶）。
 	budgets := q.budgetScratch[:0]
 	spent := q.processedScratch[:0]
+	paused := q.pausedScratch[:0]
 	totalBudget := 0
+	participating := 0
 	for _, kind := range q.domainOrder {
-		budget := q.domains[kind].budget
+		budget := 0
+		if len(filter) == 0 || slices.Contains(filter, kind) {
+			budget = q.domains[kind].budget
+			participating++
+		}
 		budgets = append(budgets, budget)
 		spent = append(spent, 0)
+		paused = append(paused, false)
 		totalBudget += budget
 	}
-	q.budgetScratch, q.processedScratch = budgets, spent
+	q.budgetScratch, q.processedScratch, q.pausedScratch = budgets, spent, paused
 
-	limit := advanceExamineLimit(totalBudget, len(q.domainOrder))
+	limit := advanceExamineLimit(totalBudget, participating)
 
 	q.advancing = true
 	// 推进结束（含处理回调 panic）都要复位暂存路径并冲刷重入队，让队列
@@ -435,8 +497,9 @@ func (q *Queue) Advance(now uint64) (processed int) {
 		var bestItem item
 		var bestKind Kind
 		for slot, kind := range q.domainOrder {
-			if spent[slot] >= budgets[slot] {
-				// 预算耗尽的域连堆顶都不探视：它的积压不影响本 tick 成本。
+			if budgets[slot] == 0 || spent[slot] >= budgets[slot] || paused[slot] {
+				// 预算为零（未注册或被过滤）、预算耗尽或已暂停的域连堆顶都
+				// 不探视：它的积压不影响本 tick 成本。
 				continue
 			}
 			heap := q.heaps[kind]
@@ -454,14 +517,20 @@ func (q *Queue) Advance(now uint64) (processed int) {
 			}
 		}
 		if bestSlot < 0 {
-			// 没有任何「已注册、预算有余、到期」的候选：本 tick 到此为止。
+			// 没有任何「参与推进、预算有余、到期」的候选：本 tick 到此为止。
 			break
 		}
 		it := q.heaps[bestKind].pop()
 		q.pending--
 		spent[bestSlot]++
+		if q.domains[bestKind].handle(Entry{Pos: it.pos, Kind: bestKind, DueTick: it.dueTick}) == HandleDeferred {
+			// 顺延：按原 dueTick 回插（推进结束后经暂存路径生效，同一次推进
+			// 内不会被再次弹出），该域本次推进暂停。
+			q.deferred = append(q.deferred, Entry{Pos: it.pos, Kind: bestKind, DueTick: it.dueTick})
+			paused[bestSlot] = true
+			continue
+		}
 		processed++
-		q.domains[bestKind].handle(Entry{Pos: it.pos, Kind: bestKind, DueTick: it.dueTick})
 	}
 	return processed
 }

@@ -178,9 +178,8 @@ func TestFarmlandMoistureFluidLevelChangeDoesNotEnqueue(t *testing.T) {
 	engine.realm.ResetFarmlandMoisture()
 
 	adapter.SetBlock(water, core.WaterLevel1ID)
-	if engine.realm.FarmlandMoisturePendingLen() != 0 || engine.realm.FarmlandQueuedCount() != 0 {
-		t.Fatalf("流体等级变化产生了湿度候选：pending=%d queued=%d",
-			engine.realm.FarmlandMoisturePendingLen(), engine.realm.FarmlandQueuedCount())
+	if got := engine.realm.FarmlandMoisturePendingLen(); got != 0 {
+		t.Fatalf("流体等级变化产生了 %d 个湿度候选，想要 0", got)
 	}
 }
 

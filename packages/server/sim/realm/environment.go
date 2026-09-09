@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/channing771/mornlea/packages/server/fluid"
+	"github.com/channing771/mornlea/packages/server/updates"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/world"
 	"github.com/channing771/mornlea/packages/shared/worldgen"
@@ -48,15 +49,13 @@ type EnvironmentMutation struct {
 	state *State
 }
 
-type farmlandMoistureKey struct {
-	dimension core.DimensionID
-	position  core.BlockPos
-}
-
+// farmlandMoistureState 是湿度阶段的本 tick 计量与全块重扫状态。候选待办本身
+// 不在这里：自 FIFO → 统一调度器迁移（change unified-block-updates-world-streaming）
+// 起，湿度候选由各维度共享的 `updates.Queue` 实例承载（kind=FarmlandMoisture、
+// 新鲜入队 due=当 tick，经 `fluid.Queue.Scheduler()` 取得），消费顺序从入队序
+// 改为调度器确定性全序——这是 authoritative-farming delta 允许的唯一行为可见
+// 差异，预算、平衡态与同 tick 重判语义原样保持。
 type farmlandMoistureState struct {
-	pending              []farmlandMoistureKey
-	head                 int
-	queued               map[farmlandMoistureKey]struct{}
 	rescans              farmlandMoistureRescanState
 	candidateInspections int
 	blockReads           int
@@ -91,9 +90,16 @@ type environmentState struct {
 	fluidDimensionScratch []core.DimensionID
 	fluidRescan           fluidRescanState
 	farmlandMoisture      farmlandMoistureState
-	cropCellScratch       []int
-	cropCellsExamined     int
-	cropBlockReads        int
+	// moistureHandler 是注册进各维度调度器 FarmlandMoisture 域的稳定处理回调
+	// （只捕获 State 指针，构造一次跨 tick 复用）；moistureDimension/
+	// moistureMutation 是它每次推进时的工作上下文，由 AdvanceFarmlandMoisture
+	// 先设置再驱动对应维度，注册路径因此不产生闭包分配。
+	moistureHandler   updates.Handler
+	moistureDimension *Dimension
+	moistureMutation  *EnvironmentMutation
+	cropCellScratch   []int
+	cropCellsExamined int
+	cropBlockReads    int
 }
 
 // NewEnvironmentMutation 将环境参数附着到当前 tick 的区块事务。
@@ -141,21 +147,6 @@ func (state *State) SetEnvironmentTick(tick uint64, seed int64, cfg EnvironmentC
 	state.environment.tick = tick
 	state.environment.seed = seed
 	state.environment.config = cfg
-}
-
-func (state *farmlandMoistureState) pop() {
-	key := state.pending[state.head]
-	delete(state.queued, key)
-	state.head++
-	if state.head == len(state.pending) {
-		state.pending = state.pending[:0]
-		state.head = 0
-		return
-	}
-	if state.head >= 4096 && state.head*2 >= len(state.pending) {
-		state.pending = state.pending[state.head:]
-		state.head = 0
-	}
 }
 
 func (state *environmentState) fluidQueue(dimension core.DimensionID) *fluid.Queue {
@@ -242,20 +233,15 @@ func (state *State) CropBlockReads() int {
 	return state.environment.cropBlockReads
 }
 
+// enqueueFarmlandMoisture 把一格湿度候选排进该维度的统一调度器实例
+// （FarmlandMoisture 域、due=当前 tick）：无旧积压时它在同一权威 tick 的流体
+// 推进子阶段之后即被结算。去重与「只提前不推迟」由调度器的 (pos, kind) 键承载，
+// 这里不再自持队列结构。
 func (state *environmentState) enqueueFarmlandMoisture(dimension core.DimensionID, position core.BlockPos) {
 	if position.Y < core.MinY || position.Y >= core.MaxY {
 		return
 	}
-	moisture := &state.farmlandMoisture
-	if moisture.queued == nil {
-		moisture.queued = make(map[farmlandMoistureKey]struct{})
-	}
-	key := farmlandMoistureKey{dimension: dimension, position: position}
-	if _, exists := moisture.queued[key]; exists {
-		return
-	}
-	moisture.queued[key] = struct{}{}
-	moisture.pending = append(moisture.pending, key)
+	state.fluidQueue(dimension).Scheduler().Enqueue(position, updates.KindFarmlandMoisture, state.tick)
 }
 
 func (state *environmentState) enqueueFarmlandMoistureAroundFluid(
@@ -399,45 +385,81 @@ func (state *State) runFarmlandMoistureRescans(budget int) {
 	}
 }
 
-// AdvanceFarmlandMoisture 按既有 FIFO 和读取预算处理活动区块内的湿度候选。
+// AdvanceFarmlandMoisture 按统一调度器确定性全序与双预算处理活动区块内的湿度
+// 候选：每维度在自己的共享调度器实例上以 `AdvanceKinds(now, FarmlandMoisture)`
+// 结算（engine_step 的固定阶段序保证流体推进子阶段先行，新鲜候选同 tick 重判）。
+// 候选检查数与方块读取数的预算是跨维度合计的全局上界，由处理回调内的计量守卫
+// 承载；预算不足的候选按原 dueTick 回插顺延，不丢失。全块重扫保留在本阶段尾部。
 func (state *State) AdvanceFarmlandMoisture(active []core.ChunkKey, mutation *EnvironmentMutation) {
 	state.updateEnvironmentScope(active)
 	moisture := &state.environment.farmlandMoisture
 	moisture.blockReads = 0
 	moisture.candidateInspections = 0
-	for moisture.candidateInspections < farmlandMoistureCandidatesPerTick &&
-		moisture.blockReads < farmlandMoistureReadsPerTick && moisture.head < len(moisture.pending) {
-		key := moisture.pending[moisture.head]
-		moisture.candidateInspections++
-		chunkKey := core.ChunkKey{Dimension: key.dimension, Pos: key.position.Chunk()}
-		if _, ok := state.environment.scope[chunkKey]; !ok {
-			moisture.pop()
+	if state.environment.moistureHandler == nil {
+		state.environment.moistureHandler = state.newFarmlandMoistureHandler()
+	}
+	now := state.environment.tick
+	for _, id := range state.sortedFluidDimensions() {
+		queue := state.environment.fluidQueues[id]
+		if queue.Scheduler().LenOf(updates.KindFarmlandMoisture) == 0 {
 			continue
 		}
-		dimension := state.Dimension(key.dimension)
+		dimension := state.Dimension(id)
 		if dimension == nil {
-			moisture.pop()
 			continue
 		}
-		block, ready := dimension.BlockAt(key.position)
+		state.environment.moistureDimension = dimension
+		state.environment.moistureMutation = mutation
+		scheduler := queue.Scheduler()
+		scheduler.Register(updates.KindFarmlandMoisture, farmlandMoistureCandidatesPerTick, state.environment.moistureHandler)
+		scheduler.AdvanceKinds(now, updates.KindFarmlandMoisture)
+	}
+	state.runFarmlandMoistureRescans(farmlandMoistureReadsPerTick - moisture.blockReads)
+}
+
+// newFarmlandMoistureHandler 构造湿度域处理回调：每个被调度器弹出的候选先计入全局
+// 检查预算，再按「范围 → 读取守卫 → 目标格 → 邻域判定」推进；处置结果里
+// HandleDeferred 让调度器把候选按原 dueTick 回插并暂停湿度域——余额不足的
+// 判定不保存部分结果，候选继续占用待办、后续 tick 仍按全序可达。
+func (state *State) newFarmlandMoistureHandler() updates.Handler {
+	return func(entry updates.Entry) updates.HandleResult {
+		environment := &state.environment
+		moisture := &environment.farmlandMoisture
+		if moisture.candidateInspections >= farmlandMoistureCandidatesPerTick {
+			// 跨维度合计的检查预算已耗尽：本候选不消耗检查额度，按原 dueTick
+			// 顺延到下一 tick（另一维度可能已花完全局额度）。
+			return updates.HandleDeferred
+		}
+		moisture.candidateInspections++
+		dimension := environment.moistureDimension
+		chunkKey := core.ChunkKey{Dimension: dimension.id, Pos: entry.Pos.Chunk()}
+		if _, ok := environment.scope[chunkKey]; !ok {
+			// 候选离开 active Ready 范围：检查即丢弃（0 方块读取、计入检查数），
+			// 重入范围由全块重扫在固定预算内重建湿度。
+			return updates.HandleConsumed
+		}
+		if moisture.blockReads >= farmlandMoistureReadsPerTick {
+			// 连目标格的 1 次读取都付不起：不消耗读取，整条顺延。
+			return updates.HandleDeferred
+		}
+		block, ready := dimension.BlockAt(entry.Pos)
 		moisture.blockReads++
 		if !ready || !core.IsFarmland(block) {
-			moisture.pop()
-			continue
+			return updates.HandleConsumed
 		}
 		if farmlandMoistureReadsPerTick-moisture.blockReads < farmlandWetNeighborReads {
-			break
+			// 邻域判定不可跨 tick 拆分：保留待办并暂停本域推进，下一 tick 重判。
+			return updates.HandleDeferred
 		}
 		next := core.FarmlandDryID
-		if state.farmlandIsWet(dimension, key.position) {
+		if state.farmlandIsWet(dimension, entry.Pos) {
 			next = core.FarmlandWetID
 		}
 		if next != block {
-			_, _, _ = mutation.SetBlock(key.dimension, key.position, next)
+			_, _, _ = environment.moistureMutation.SetBlock(dimension.id, entry.Pos, next)
 		}
-		moisture.pop()
+		return updates.HandleConsumed
 	}
-	state.runFarmlandMoistureRescans(farmlandMoistureReadsPerTick - moisture.blockReads)
 }
 
 // Fluid 相关
@@ -885,7 +907,9 @@ func (state *State) AdvanceFluids(active []core.ChunkKey, mutation *Mutation) {
 	for _, id := range state.sortedFluidDimensions() {
 		queue := state.environment.fluidQueues[id]
 		dimension := state.Dimension(id)
-		if dimension == nil || queue.Len() == 0 {
+		// 跳过判断按 FluidFlow 域计量：同一调度器实例还承载湿度域的待办，
+		// 跨域总数（Len）非零不代表流体有待推进的到期项。
+		if dimension == nil || queue.Scheduler().LenOf(updates.KindFluidFlow) == 0 {
 			continue
 		}
 		queue.Advance(now, &fluidWorld{
@@ -1836,19 +1860,42 @@ func (state *State) FarmlandRescanCursor() int {
 func (state *State) FarmlandRescanPendingLen() int {
 	return len(state.environment.farmlandMoisture.rescans.pending)
 }
+
+// FarmlandQueued 报告 (dim, pos) 是否有排队的湿度候选（FarmlandMoisture 域）。
 func (state *State) FarmlandQueued(dim core.DimensionID, pos core.BlockPos) bool {
-	key := farmlandMoistureKey{dimension: dim, position: pos}
-	_, ok := state.environment.farmlandMoisture.queued[key]
+	_, ok := state.FarmlandMoistureDueTick(dim, pos)
 	return ok
 }
+
+// FarmlandMoistureDueTick 返回 (dim, pos) 当前湿度候选的到期 tick；未在队返回
+// false。供测试断言「只提前不推迟」的落位值，生产热路径不调用。
+func (state *State) FarmlandMoistureDueTick(dim core.DimensionID, pos core.BlockPos) (uint64, bool) {
+	queue := state.environment.fluidQueues[dim]
+	if queue == nil {
+		return 0, false
+	}
+	return queue.Scheduler().DueTick(pos, updates.KindFarmlandMoisture)
+}
+
 func (state *State) FarmlandRescanPending() []core.ChunkKey {
 	return append([]core.ChunkKey(nil), state.environment.farmlandMoisture.rescans.pending...)
 }
+
+// FarmlandMoisturePendingLen 返回全部维度 FarmlandMoisture 域的排队候选总数
+// （求和与 map 遍历顺序无关，结果确定）。
 func (state *State) FarmlandMoisturePendingLen() int {
-	return len(state.environment.farmlandMoisture.pending)
+	total := 0
+	for _, queue := range state.environment.fluidQueues {
+		total += queue.Scheduler().LenOf(updates.KindFarmlandMoisture)
+	}
+	return total
 }
-func (state *State) FarmlandMoistureHead() int { return state.environment.farmlandMoisture.head }
-func (state *State) FarmlandQueuedCount() int  { return len(state.environment.farmlandMoisture.queued) }
+
+// ResetFarmlandMoisture 清空湿度域的全部状态：各维度调度器上的 FarmlandMoisture
+// 待办、计量与全块重扫队列（流体域待办不受影响——测试夹具用它隔离湿度域）。
 func (state *State) ResetFarmlandMoisture() {
 	state.environment.farmlandMoisture = farmlandMoistureState{}
+	for _, queue := range state.environment.fluidQueues {
+		queue.Scheduler().ClearKind(updates.KindFarmlandMoisture)
+	}
 }

@@ -68,9 +68,9 @@ type Queue struct {
 	// Advance 每 tick 重注册预算时不产生闭包分配（稳态零分配的约束面见
 	// eval_alloc_test.go）。
 	evalHandler updates.Handler
-	// advanceWorld 是本次 Advance 的世界视图。evalHandler 在 queue.Advance
-	// 期间被同步调用，经它读取待编码格的 7 格邻域；推进期间本包不写世界，
-	// 读到的一律是 tick 起始状态。
+	// advanceWorld 是本次 Advance 的世界视图。evalHandler 在调度器推进
+	// FluidFlow 域期间被同步调用，经它读取待编码格的 7 格邻域；推进期间本包
+	// 不写世界，读到的一律是 tick 起始状态。
 	advanceWorld FluidWorld
 	// lastAdvanceExamined 镜像 queue 最近一次 Advance 探视的堆顶数。它是
 	// 「单 tick 成本与队列规模解耦」这条结构性属性的可观测量，供
@@ -96,8 +96,9 @@ func NewQueue() *Queue {
 	q := &Queue{queue: updates.NewQueue()}
 	// 回调只捕获 q 本体、在构造时创建一次：Advance 每 tick 以同一 Handler
 	// 值重注册预算，注册路径稳态零分配。
-	q.evalHandler = func(entry updates.Entry) {
+	q.evalHandler = func(entry updates.Entry) updates.HandleResult {
 		q.enqueueEvalItem(q.advanceWorld, entry.Pos)
+		return updates.HandleConsumed
 	}
 	// 构造即注册（零预算）：未经 Advance 重注册真实预算前零处理，条目只排队
 	// 不丢弃——预算归调用方所有，注册语义见 updates.Queue.Register。
@@ -127,8 +128,9 @@ func (q *Queue) Clear() {
 	q.queue.Clear()
 }
 
-// Len 返回当前排队的待更新项数（统一调度器实例上的待办总数；本队列只有
-// FluidFlow 域在使用，总数即流体待办数）。主要供测试与可观测性使用。
+// Len 返回当前排队的待更新项数（统一调度器实例上的待办总数；湿度等后续域经
+// `Scheduler()` 在同一实例注册后，总数含那些域的待办，不再是单纯的流体待办数）。
+// 主要供测试与可观测性使用。
 func (q *Queue) Len() int {
 	return q.queue.Len()
 }
@@ -138,7 +140,10 @@ func (q *Queue) Len() int {
 // 同一格同 tick 的跨域待办按统一全序断尾（如「先流体后湿度」）依赖各域共享
 // 同一实例；后续迁移域（耕地湿度等）应经本方法取得实例并在其上注册，而不是
 // 为每域另立第二套队列。流体域自身的预算与处理回调由 Advance 全权管理，
-// 调用方不得对本实例的 FluidFlow 域另行 Register。
+// 调用方不得对本实例的 FluidFlow 域另行 Register，也不得绕过 `fluid.Advance`
+// 直接推进 FluidFlow 域——Advance 的两阶段编排（批量求值、排序提交、变化格
+// 重入队）是流体域的唯一正确消费路径，直接 AdvanceKinds 会跳过提交编排并使
+// `advanceWorld` 视图过期。
 func (q *Queue) Scheduler() *updates.Queue {
 	return q.queue
 }
@@ -147,8 +152,9 @@ func (q *Queue) Scheduler() *updates.Queue {
 // 定义的位置全序，与处理次序无关，见下面第 4/5 点）。
 //
 // 语义：
-//  1. 待办的取出委托给统一调度器：queue.Advance(now) 按 `(dueTick, 位置)`
-//     全序从 FluidFlow 域弹出至多 budget 个到期项，逐条同步调用 evalHandler
+//  1. 待办的取出委托给统一调度器：queue.AdvanceKinds(now, KindFluidFlow) 按
+//     `(dueTick, 位置)` 全序从 FluidFlow 域弹出至多 budget 个到期项，逐条同步
+//     调用 evalHandler
 //     把 7 格邻域经 `w.BlockAt` 只读编码进 scratch（见 eval_native.go）。
 //     弹出即出队；单 tick 探视数被分域堆结构封在与预算同阶的常数内，与队列
 //     规模无关（论证见 updates.Queue 的类型注释）。budget 每次 Advance 经
@@ -202,7 +208,10 @@ func (q *Queue) Advance(now uint64, w FluidWorld, budget int, delay uint64) []co
 	q.advanceWorld = w
 	q.beginEvalBatch()
 	q.queue.Register(updates.KindFluidFlow, budget, q.evalHandler)
-	q.queue.Advance(now)
+	// 按域过滤推进：同一实例上还挂着湿度等其他域的到期待办，无过滤的 Advance
+	// 会连带弹出它们——那些域由各自 tick 阶段的入口（如
+	// `AdvanceFarmlandMoisture`）按同一全序消费。
+	q.queue.AdvanceKinds(now, updates.KindFluidFlow)
 	q.lastAdvanceExamined = q.queue.LastAdvanceExamined()
 	q.advanceExamineLimitHits = q.queue.ExamineLimitHits()
 	q.finishEvalBatch(pendingWrites)

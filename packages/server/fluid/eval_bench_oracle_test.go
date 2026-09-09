@@ -28,7 +28,7 @@ func oracleAdvance(q *Queue, now uint64, w FluidWorld, budget int, delay uint64)
 	}
 	q.advanceWorld = w
 	pendingWrites := make(map[core.BlockPos]core.BlockID)
-	q.queue.Register(updates.KindFluidFlow, budget, func(entry updates.Entry) {
+	q.queue.Register(updates.KindFluidFlow, budget, func(entry updates.Entry) updates.HandleResult {
 		for pos, id := range evalCell(entry.Pos, q.advanceWorld) {
 			if existing, ok := pendingWrites[pos]; ok {
 				pendingWrites[pos] = strongerWrite(existing, id)
@@ -36,8 +36,9 @@ func oracleAdvance(q *Queue, now uint64, w FluidWorld, budget int, delay uint64)
 				pendingWrites[pos] = id
 			}
 		}
+		return updates.HandleConsumed
 	})
-	q.queue.Advance(now)
+	q.queue.AdvanceKinds(now, updates.KindFluidFlow)
 	q.lastAdvanceExamined = q.queue.LastAdvanceExamined()
 	q.advanceExamineLimitHits = q.queue.ExamineLimitHits()
 

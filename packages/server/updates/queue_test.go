@@ -26,7 +26,10 @@ type recorder struct {
 }
 
 func (r *recorder) handler() Handler {
-	return func(entry Entry) { r.entries = append(r.entries, entry) }
+	return func(entry Entry) HandleResult {
+		r.entries = append(r.entries, entry)
+		return HandleConsumed
+	}
 }
 
 // queuedDueTick 是白盒助手：返回 (pos, kind) 当前排队条目的到期 tick。
@@ -365,7 +368,7 @@ func TestAdvanceExaminedBoundedIndependentOfBacklog(t *testing.T) {
 	const budget = 2
 	measure := func(backlog int) (examined, processed, hits int) {
 		q := NewQueue()
-		noop := func(Entry) {}
+		noop := func(Entry) HandleResult { return HandleConsumed }
 		q.Register(KindFluidFlow, budget, noop)
 		q.Register(KindFarmlandMoisture, budget, noop)
 		for i := range backlog {
@@ -405,13 +408,14 @@ func TestAdvanceProcessesEachEntryAtMostOncePerAdvance(t *testing.T) {
 	seen := make(map[core.BlockPos]int)
 	fresh := core.BlockPos{X: 999, Y: 1, Z: 999}
 	var rec recorder
-	q.Register(KindFluidFlow, 10, func(entry Entry) {
+	q.Register(KindFluidFlow, 10, func(entry Entry) HandleResult {
 		rec.entries = append(rec.entries, entry)
 		seen[entry.Pos]++
 		// 镜像流体的变更再入队：已处理条目以相同到期重新排队。
 		q.Enqueue(entry.Pos, entry.Kind, entry.DueTick)
 		// 新鲜待办：灌溉翻转触发的同 tick 湿度重判一类入队。
 		q.Enqueue(fresh, entry.Kind, entry.DueTick)
+		return HandleConsumed
 	})
 	for i := range 4 {
 		q.Enqueue(spreadPos(i), KindFluidFlow, 1)
