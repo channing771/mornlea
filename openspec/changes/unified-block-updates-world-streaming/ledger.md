@@ -39,6 +39,8 @@
 
 - 2cdd3599 (Task 3.1): network/codec/protocol/tcp 四包 -race、server 登录/握手族、audit、client app 定点全绿（评审者亲跑）；golden hex 逐字节核对（v40=0x28、视距 32=0x20、版本字节 0x27→0x28）；评审独立核实 `config.Fields` 的 render.viewDistance Min 2/Max 64 与协议域同域（无「配置合法但登录被拒」回归）；sim/storage diff 为空。
 
+- ef14f83c (Task 3.2): runtime -count=2、entity/contract、server 订阅/登录/传送族、network 四包、audit 全绿（评审者亲跑）；评审者做四变异测试全部咬人（去 +1 / 去 min 钳制 / 回退全局半径循环 / warp 丢视距）；storage/benchmark/engine/client diff 全空；`PlayerRestore.ViewDistance` 零值无歧义核验（不持久化、接纳点覆盖、wire 谓词拒 0）。
+
 ## 进度
 
 - Ruling: Task 1.1 三处偏离全部接受 — (a) 每 kind 一个索引堆替代单堆：单堆下预算耗尽/未注册域条目占堆顶会破坏探视有界与域隔离，分域堆 + `candidateLess` 全局选择保持弹出序=全局全序（评审以测试本地独立 oracle 核验，夹具对 kind 优先序有判别力）；brief 的单堆描述是对实现的不当约束，spec 只约束弹出序与不变量。(b) `simAllowedEdges` 同步加边：`TestSimAllowedEdgesMatchesGlobalAllowed` 集合相等测试强制，非扩大范围。(c) `Advance(now)` 预算取自注册表：与 spec「域标识、每 tick 预算、处理回调」三元组一致，Register 可重复调用供 2.x 配置快照重注册。
@@ -54,4 +56,6 @@
 - Task 2.4: complete (commits 240358e2..6327eb67, review PASS, 2 Minor)。相位表收敛 5 相位、执行顺序逐语句不变（三层证据：逐语句 diff + go/parser 源序守卫带咬人反例 + 零改动 256 tick 重放 KAT）；入队单点化为 `EnqueueBlockWrite` 门面（三规则单源，bucket/farming/placement 四直连点派生等价经逐规则核验，~30 机械站点派生不可触发分类核验），entity 生产文件扫描守卫带正反例；fluid_perf 流体/湿度两列退役为单列（旧列无断言、文档如实标注）。Minor 路由：① `watchFarmlandMoistureCandidateAtPhase` 死 helper（基线即零调用）与其不准确注释——4.1 顺手删除；② `companion_placement.go:178` 硬编码 `core.AirID` 未按 doc 透传写前旧值（当前安全已核验：同函数空气校验紧邻写入；(AirID, placement) 不触发湿窗口）——4.1 顺手改透传 SetBlock 返回值。**组 2（调度迁移）全部完成。**
 - Ruling: 3.1 拒绝码复用 `LoginProtocolViolation`(5) 接受 — 7 码枚举中 5 号语义「登录载荷违反协议」与域外视距精确匹配（评审核验非偷懒复用）；解码放行口走「交驱动回 LoginReject」与身份错误同模式（不裸断连），编码侧已拒故 wire 无合法域外产物。`LoginClient` 同步扩参（显式传值无隐藏默认）接受。版本矩阵两处同步、v39 失配拒绝经表达式循环自动继承。
 - Task 3.1: complete (commits a3377f40..2cdd3599, review PASS, 1 Minor)。三层拒绝证据（校验矩阵/假 stream 驱动/真实 TCP 原始字节）+ golden 逐字节 + fuzz 新种子；配置域与协议域同域（config.Fields render.viewDistance Min2/Max64 既有约束）。Minor 路由：packet.go 与 login.go 的域校验谓词双写——3.2 接触时提炼 `ValidLoginViewDistance` 谓词。
+- Ruling: 3.2 链路形态接受 — `contract.PlayerRestore.ViewDistance`（0=未声明、不持久化、wire 谓词拒 0 故零值无歧义）避免 ~17 处签名扰动；`+1` 换算全仓仅 entity 一处、`boundedSessionViewRadius` 唯一钳制点、RegisterPlayer 与 reconcile 同源计算不漂移；warp 重建订阅携带声明视距；probe（ViewRadius=0）经公式自然保持零视界现状。审计 `expectedRuntimeSubscriptionFields` 白名单登记是该门禁的设计流程。
+- Task 3.2: complete (commits 1aa14463..ef14f83c, review PASS, 0 findings)。四 Scenario 双向精确集合相等 + 评审核实四变异全部咬人；谓词骑手落实（`ValidLoginViewDistance` + 闭域测试）；server 层接线测试用 ViewRadius=3 夹具的分层理由成立（OutboxCapacity 512 限制，数值钉住归 runtime 层）。
 -（SDD 执行期逐任务追加：Task 完成记录 + 评审结论 + Ruling）
