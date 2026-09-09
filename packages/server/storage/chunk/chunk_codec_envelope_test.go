@@ -190,3 +190,40 @@ func TestChunkPayloadRejectsMalformedEnvelope(t *testing.T) {
 		})
 	}
 }
+
+// TestChunkDimensionAllowlistAcceptsDepthsRejectsBeyond 锁定区块维度值域：0/1
+// （主世界/`Depths`）可编解码，维度 2 及以上在保存入口与解码入口一律拒绝，
+// 磁盘既有数据不得被触碰（拒绝发生在任何落盘之前）。
+func TestChunkDimensionAllowlistAcceptsDepthsRejectsBeyond(t *testing.T) {
+	depthsKey := core.ChunkKey{Dimension: core.Depths, Pos: core.ChunkPos{X: -3, Z: 7}}
+	encoded, err := Encode(ChunkSave{
+		Key: depthsKey, Revision: 19, Chunk: codecFixtureChunk(depthsKey.Pos),
+	})
+	if err != nil {
+		t.Fatalf("Depths 保存被拒绝：%v", err)
+	}
+	decoded, err := Decode(depthsKey, 19, encoded)
+	if err != nil {
+		t.Fatalf("Depths 解码被拒绝：%v", err)
+	}
+	if decoded.Key != depthsKey {
+		t.Fatalf("Depths 回读键 = %+v，想要 %+v", decoded.Key, depthsKey)
+	}
+
+	beyond := core.ChunkKey{Dimension: core.DimensionID(2), Pos: core.ChunkPos{X: -3, Z: 7}}
+	beyondSave := ChunkSave{Key: beyond, Revision: 19, Chunk: codecFixtureChunk(beyond.Pos)}
+	if err := ValidateChunkSave(beyondSave); err == nil {
+		t.Fatal("维度 2 的保存请求通过了入口校验")
+	}
+	if _, err := Encode(beyondSave); err == nil {
+		t.Fatal("维度 2 的区块被编码")
+	}
+	logical := testLogicalChunk(beyond, 19, func(int) world.ContainerSnapshot {
+		return world.ContainerSnapshot{Kind: world.StorageSingle, Single: core.AirID}
+	})
+	if _, err := Decode(beyond, 19, testEnvelope(beyond, 19, logical)); !errors.Is(
+		err, storagedef.ErrCorrupt,
+	) {
+		t.Fatalf("维度 2 的解码错误 = %v，想要损坏拒绝", err)
+	}
+}

@@ -14,8 +14,13 @@ import (
 )
 
 const (
-	currentMetadataVersion uint32 = 4
-	metadataPayloadLength  uint32 = 41
+	currentMetadataVersion uint32 = 5
+	// metadataPayloadLength 是 v5 载荷长度：v4 的 41 字节之后追加维度表
+	//（维度数 u32、`Depths` 出生锚点 X/Z 各 u32、种子盐 u64，共 20 字节）。
+	metadataPayloadLength uint32 = 61
+	// legacyMetadataV4Version 是仍可读取的 v4；v4 只被读取和迁移，不再写出。
+	legacyMetadataV4Version       uint32 = 4
+	legacyMetadataV4PayloadLength uint32 = 41
 	// legacyMetadataV3Version 是仍可读取的 v3；v3 只被读取和迁移，不再写出。
 	legacyMetadataV3Version       uint32 = 3
 	legacyMetadataV3PayloadLength uint32 = 36
@@ -27,6 +32,11 @@ const (
 	legacyMetadataV2PayloadLength uint32 = 28
 	metadataHeaderLength                 = 12
 	metadataChecksumLength               = 4
+	// metadataDimensionCount 是 v5 维度表的维度数：主世界与 `Depths` 共两维。
+	metadataDimensionCount uint32 = 2
+	// depthsSeedSaltDefault 是旧档缺失维度表时的种子盐默认值：与世界生成侧
+	// 派生 `Depths` 地形种子的固定盐是同一常量。
+	depthsSeedSaltDefault uint64 = 0x9E3779B97F4A7C15
 )
 
 var (
@@ -76,6 +86,12 @@ func encodeMetadata(metadata Metadata) ([]byte, error) {
 	// 天气是 v4 相对 v3 的纯尾部追加：种类 1 字节在前，剩余时长 u32 紧随其后。
 	encoded = append(encoded, byte(metadata.WeatherKind))
 	encoded = binary.LittleEndian.AppendUint32(encoded, metadata.WeatherTicksRemaining)
+	// 维度表是 v5 相对 v4 的纯尾部追加：维度数固定为 2，其后是 `Depths`
+	// 出生锚点 X/Z 与种子盐。
+	encoded = binary.LittleEndian.AppendUint32(encoded, metadataDimensionCount)
+	encoded = binary.LittleEndian.AppendUint32(encoded, uint32(metadata.DepthsSpawnAnchor.X))
+	encoded = binary.LittleEndian.AppendUint32(encoded, uint32(metadata.DepthsSpawnAnchor.Z))
+	encoded = binary.LittleEndian.AppendUint64(encoded, metadata.DepthsSeedSalt)
 	encoded = binary.LittleEndian.AppendUint32(
 		encoded, crc32.Checksum(encoded, metadataCRCTable),
 	)
@@ -94,13 +110,16 @@ func decodeMetadata(encoded []byte) (Metadata, error) {
 	if version > currentMetadataVersion {
 		return Metadata{}, fmt.Errorf("%w: metadata version %d", ErrFutureVersion, version)
 	}
-	// v1、v2、v3 与 v4 各自有固定 payload 长度；旧版本读取后在内存中规范为当前
+	// v1、v2、v3、v4 与 v5 各自有固定 payload 长度；旧版本读取后在内存中规范为当前
 	// 版本：v1 世界时间与偏移均为零，v2 偏移为零，v1/v2/v3 天气均为晴天、
-	// 剩余时长均为零（零表示旧档未记录，恢复时按新世界默认值掷骰）。
+	// 剩余时长均为零（零表示旧档未记录，恢复时按新世界默认值掷骰），v1..v4 的
+	// `Depths` 出生锚点默认取主世界锚点、种子盐取固定盐。
 	var wantPayloadLength uint32
 	switch version {
 	case currentMetadataVersion:
 		wantPayloadLength = metadataPayloadLength
+	case legacyMetadataV4Version:
+		wantPayloadLength = legacyMetadataV4PayloadLength
 	case legacyMetadataV3Version:
 		wantPayloadLength = legacyMetadataV3PayloadLength
 	case legacyMetadataV2Version:
@@ -139,17 +158,32 @@ func decodeMetadata(encoded []byte) (Metadata, error) {
 			Z: int32(binary.LittleEndian.Uint32(payload[16:20])),
 		},
 	}
-	// 世界时间自 v2 起持久化，偏移自 v3 起持久化，天气自 v4 起持久化：
-	// 旧版本读入即升级，缺失的尾部字段按零值迁移，行为与升级前完全一致。
+	// 世界时间自 v2 起持久化，偏移自 v3 起持久化，天气自 v4 起持久化，
+	// 维度表自 v5 起持久化：旧版本读入即升级，缺失的尾部字段按零值迁移
+	// （天气为晴天、剩余时长为零，`Depths` 出生锚点默认取主世界锚点、种子盐
+	// 取固定盐），行为与升级前完全一致。
 	if version >= legacyMetadataV2Version {
 		metadata.WorldTimeTicks = binary.LittleEndian.Uint64(payload[20:28])
 	}
 	if version >= legacyMetadataV3Version {
 		metadata.DayPhaseOffset = binary.LittleEndian.Uint64(payload[28:36])
 	}
-	if version == currentMetadataVersion {
+	if version >= legacyMetadataV4Version {
 		metadata.WeatherKind = core.WeatherKind(payload[36])
 		metadata.WeatherTicksRemaining = binary.LittleEndian.Uint32(payload[37:41])
+	}
+	if version == currentMetadataVersion {
+		if dimCount := binary.LittleEndian.Uint32(payload[41:45]); dimCount != metadataDimensionCount {
+			return Metadata{}, fmt.Errorf("%w: metadata dimension count %d", ErrCorrupt, dimCount)
+		}
+		metadata.DepthsSpawnAnchor = core.ChunkPos{
+			X: int32(binary.LittleEndian.Uint32(payload[45:49])),
+			Z: int32(binary.LittleEndian.Uint32(payload[49:53])),
+		}
+		metadata.DepthsSeedSalt = binary.LittleEndian.Uint64(payload[53:61])
+	} else {
+		metadata.DepthsSpawnAnchor = metadata.SpawnAnchor
+		metadata.DepthsSeedSalt = depthsSeedSaltDefault
 	}
 	return metadata, nil
 }
