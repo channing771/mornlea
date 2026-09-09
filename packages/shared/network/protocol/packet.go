@@ -7,7 +7,11 @@ import (
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-// ProtocolVersion 是当前唯一支持的协议版本；v38 在 Play C→S 尾部追加
+// ProtocolVersion 是当前唯一支持的协议版本；v39 放行 `Depths`（维度 1）：
+// 玩家与区块类消息（`ChunkSnapshot`、`BlockChanges`、`ForgetChunks`、
+// `RequestChunkResync`、`PlayerState`、远端玩家系列）的 `Dimension` 接受
+// `Overworld` 与 `Depths`，`Dimension >= 2` 仍被拒绝，伙伴/敌怪/被动生物类
+// 消息继续只接受 `Overworld`；v38 在 Play C→S 尾部追加
 // ID 16/17 的水桶双命令 `CollectWater`/`PlaceWater`（u64 序号 + 两个 f32
 // 朝向，与 `TillSoil` 同形：目标与栏位由服务端权威决定），并新增
 // `RejectReason` 13/14（非流体源/桶态错配）；v37 在 `PlayerState` 载荷尾部
@@ -70,7 +74,7 @@ import (
 // v21 在 `PlayerState` 末尾追加 2 字节权威氧气（只发给玩家本人的权威
 // 值）；v20 追加 8 个流体方块编号（只扩方块 ID 集合，wire 形状不变），流体
 // 变更走既有区块变更通道（design.md D8）。
-const ProtocolVersion uint32 = 38
+const ProtocolVersion uint32 = 39
 
 // State 标识连接当前允许交换的 packet 集合。
 type State uint8

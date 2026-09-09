@@ -127,7 +127,7 @@ func TestPlaySemanticValidationMatchesMemoryAndTCP(t *testing.T) {
 		packet network.ClientPacket
 	}{
 		{"place block slot out of range", network.PlaceBlock{Slot: core.HotbarSlots}},
-		{"resync outside overworld", network.RequestChunkResync{Dimension: core.DimensionID(1)}},
+		{"resync dimension outside overworld and depths", network.RequestChunkResync{Dimension: core.DimensionID(2)}},
 	}
 	for _, packet := range packets {
 		t.Run(packet.name, func(t *testing.T) {

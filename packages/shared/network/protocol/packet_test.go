@@ -60,7 +60,7 @@ func TestValidateClientPacket(t *testing.T) {
 		{"inventory move same slot", StatePlay, MoveInventoryStack{From: 2, To: 2}},
 		{"crafting move out of range", StatePlay, MoveCraftingStack{From: 45, To: 0}},
 		{"crafting move both ends in inventory", StatePlay, MoveCraftingStack{From: 9, To: 10}},
-		{"resync outside overworld", StatePlay, RequestChunkResync{Dimension: core.DimensionID(1)}},
+		{"resync dimension outside overworld and depths", StatePlay, RequestChunkResync{Dimension: core.DimensionID(2)}},
 		{"play packet during handshake", StateHandshake, PlayerInput{}},
 		{"play packet during login", StateLogin, PlayerInput{}},
 	}
@@ -88,8 +88,8 @@ func TestProtocolV1StateAndErrorCodesAreFrozen(t *testing.T) {
 			t.Fatalf("%s state = %d, want %d", tc.name, tc.got, tc.want)
 		}
 	}
-	if ProtocolVersion != 38 {
-		t.Fatalf("protocol version = %d, want 38", ProtocolVersion)
+	if ProtocolVersion != 39 {
+		t.Fatalf("protocol version = %d, want 39", ProtocolVersion)
 	}
 
 	codes := []struct {

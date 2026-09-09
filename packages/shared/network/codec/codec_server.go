@@ -588,15 +588,15 @@ func validateServerWirePacket(state protocol.State, packet protocol.ServerPacket
 	}
 	switch message := packet.(type) {
 	case protocol.BlockChanges:
-		if message.Dimension != core.Overworld {
+		if message.Dimension != core.Overworld && message.Dimension != core.Depths {
 			return errInvalidDimension
 		}
 	case protocol.ForgetChunks:
-		if message.Dimension != core.Overworld {
+		if message.Dimension != core.Overworld && message.Dimension != core.Depths {
 			return errInvalidDimension
 		}
 	case protocol.PlayerState:
-		if message.Dimension != core.Overworld {
+		if message.Dimension != core.Overworld && message.Dimension != core.Depths {
 			return errInvalidDimension
 		}
 	}
