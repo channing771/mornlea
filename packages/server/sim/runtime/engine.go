@@ -30,10 +30,17 @@ type subscriptionState struct {
 	hasView                     bool
 	dimension                   core.DimensionID
 	center                      core.ChunkPos
-	wanted                      map[core.ChunkKey]struct{}
+	// radius 是该会话的生效订阅半径（方形视距循环边界）：注册时由声明
+	// 视距换算并按引擎视界钳制，对账时随实体派生值刷新。trusted observer
+	// 与未声明路径恒为引擎视界（缺省即上界）。
+	radius int
+	wanted map[core.ChunkKey]struct{}
 }
 
 type Engine struct {
+	// viewRadius 是引擎视界：会话订阅半径的缺省值与钳制上界。声明视距的
+	// 会话按 min(声明+1, viewRadius) 生效；trusted observer 与未声明路径
+	// 直接沿用它（含 ViewRadius=0 的探针服务端——两类路径同得 0）。
 	viewRadius         int
 	seed               int64
 	subscriptions      map[SessionID]*subscriptionState

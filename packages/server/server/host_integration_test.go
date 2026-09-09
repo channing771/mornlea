@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
 	networktcp "github.com/channing771/mornlea/packages/shared/network/tcp"
 )
@@ -103,5 +104,51 @@ func TestNewHostWiresEngineSeedFromStoreMetadata(t *testing.T) {
 	}
 	if got := host.world.engine.SeedForTest(); got != wantSeed {
 		t.Fatalf("engine 种子 = %d，想要 %d", got, wantSeed)
+	}
+}
+
+// TestHostLoginClampsDeclaredViewDistanceToServerBound 钉死 v40 登录协商的
+// 消费半部：客户端声明视距 64 超出服务端上界（本夹具 ViewRadius 3，换算后
+// 生效视距 2；33/32 的具体数值由 runtime 侧测试钉住）时登录仍成功，且会话
+// 订阅半径被钳制到服务端上界方形——activeLogin.ViewDistance 经注册通路
+// 换算为会话半径，不静默放大视界。
+func TestHostLoginClampsDeclaredViewDistanceToServerBound(t *testing.T) {
+	config := hostTestConfig()
+	config.ViewRadius = 3
+	host := mustNewHost(t, config, flatTestGenerator{}, newHostTestStore())
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	runDone := make(chan error, 1)
+	go func() { runDone <- host.Run(runCtx, nil) }()
+	t.Cleanup(func() {
+		cancelRun()
+		select {
+		case err := <-runDone:
+			if err != nil {
+				t.Errorf("Host Run cleanup: %v", err)
+			}
+		case <-time.After(waitDeadline):
+			t.Error("Host Run cleanup timed out")
+		}
+	})
+
+	identity := playerIdentity(13)
+	clientStream, serverStream := network.NewMemoryStreamPair(64)
+	done := make(chan error, 1)
+	go func() { done <- host.AcceptStream(context.Background(), serverStream) }()
+	client, err := network.LoginClient(context.Background(), clientStream, identity, 64)
+	if err != nil {
+		t.Fatalf("声明视距 64 的登录被拒绝: %v", err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+
+	waitReady(t, host, testLogin{Client: client, Identity: identity})
+	active := activeLoginForPlayer(t, host, identity.PlayerID)
+	inside := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: 3, Z: 3}}
+	outside := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: 4, Z: 0}}
+	if !host.world.engine.SessionWantsChunk(active.Session, inside) {
+		t.Fatalf("会话应订阅上界方形内区块 %+v", inside)
+	}
+	if host.world.engine.SessionWantsChunk(active.Session, outside) {
+		t.Fatalf("会话不应订阅上界方形外区块 %+v", outside)
 	}
 }

@@ -215,9 +215,10 @@ func (engine *engineContext) RegisterPlayer(id SessionID, restore PlayerRestore)
 	}
 	player.spawnWanted[restore.SpawnAnchor] = struct{}{}
 	engine.sessions[id] = &sessionState{
-		id:        id,
-		dimension: restore.SpawnDimension,
-		player:    player,
+		id:           id,
+		dimension:    restore.SpawnDimension,
+		viewDistance: restore.ViewDistance,
+		player:       player,
 	}
 	engine.subscriptionsDirty = true
 }

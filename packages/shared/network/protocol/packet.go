@@ -137,6 +137,14 @@ const (
 	LoginViewDistanceMax uint8 = 64
 )
 
+// ValidLoginViewDistance 报告 v 是否落在 `LoginStart.ViewDistance` 的合法
+// 闭区间。它是登录视距域判定的唯一谓词：wire 发送校验
+// （`ValidateClientPacket`）与服务端登录驱动（`BeginServerLogin`）都经由
+// 它拒绝域外值，两处范围比较不得再各写一份，避免域定义漂移。
+func ValidLoginViewDistance(v uint8) bool {
+	return v >= LoginViewDistanceMin && v <= LoginViewDistanceMax
+}
+
 // LoginStart 是客户端登录发起。`ViewDistance` 是客户端声明的期望视距
 // （v40 在 `DisplayName` 之后尾部追加的 1 字节 u8），编码为载荷最末一字节；
 // 取值域见 `LoginViewDistanceMin`/`LoginViewDistanceMax`。
@@ -233,7 +241,7 @@ func ValidateClientPacket(state State, packet ClientPacket) error {
 		if _, err := core.NormalizeDisplayName(loginStart.DisplayName); err != nil {
 			return fmt.Errorf("network: invalid login display name: %w", err)
 		}
-		if loginStart.ViewDistance < LoginViewDistanceMin || loginStart.ViewDistance > LoginViewDistanceMax {
+		if !ValidLoginViewDistance(loginStart.ViewDistance) {
 			return fmt.Errorf("network: login view distance %d outside range %d..%d",
 				loginStart.ViewDistance, LoginViewDistanceMin, LoginViewDistanceMax)
 		}

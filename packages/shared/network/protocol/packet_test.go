@@ -261,3 +261,19 @@ func tooManyValidBlockChanges() BlockChanges {
 	}
 	return BlockChanges{BaseRevision: 1, NewRevision: 2, Changes: changes}
 }
+
+// TestValidLoginViewDistanceMatchesClosedDomain 直接钉住域判定谓词本身：
+// 闭区间 2..64 之内（含两端）放行、域外（0、1、65、255）拒绝。wire 发送
+// 校验与服务端登录驱动共用该谓词，两处域漂移都会在这里先红。
+func TestValidLoginViewDistanceMatchesClosedDomain(t *testing.T) {
+	for _, valid := range []uint8{LoginViewDistanceMin, 8, LoginViewDistanceMax} {
+		if !ValidLoginViewDistance(valid) {
+			t.Fatalf("ValidLoginViewDistance(%d) = false，想要 true", valid)
+		}
+	}
+	for _, invalid := range []uint8{0, LoginViewDistanceMin - 1, LoginViewDistanceMax + 1, 255} {
+		if ValidLoginViewDistance(invalid) {
+			t.Fatalf("ValidLoginViewDistance(%d) = true，想要 false", invalid)
+		}
+	}
+}

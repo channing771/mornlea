@@ -107,8 +107,9 @@ func BeginServerLogin(ctx context.Context, stream ServerPacketStream, worldSeed 
 	}
 	// v40 视距域校验：域外值必须显式拒绝登录（复用 `LoginProtocolViolation`
 	// 冻结码——载荷携带协议声明域外的 wire 值即违反登录协议），绝不以
-	// 默认视距静默建立会话；对域内值的钳制属于接纳点，不在此处。
-	if start.ViewDistance < protocol.LoginViewDistanceMin || start.ViewDistance > protocol.LoginViewDistanceMax {
+	// 默认视距静默建立会话；对域内值的钳制属于接纳点，不在此处。域判定
+	// 经协议包的 `ValidLoginViewDistance` 谓词，与发送侧校验共用一处定义。
+	if !protocol.ValidLoginViewDistance(start.ViewDistance) {
 		_ = stream.Send(login, protocol.StateLogin, protocol.LoginReject{
 			Code:    protocol.LoginProtocolViolation,
 			Message: "视距非法",

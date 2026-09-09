@@ -250,11 +250,16 @@ type PlayerLocation struct {
 }
 
 type PlayerRestore struct {
-	Current          *PlayerLocation
-	Safe             *PlayerLocation
-	Yaw, Pitch       float32
-	SpawnDimension   core.DimensionID
-	SpawnAnchor      core.ChunkPos
+	Current        *PlayerLocation
+	Safe           *PlayerLocation
+	Yaw, Pitch     float32
+	SpawnDimension core.DimensionID
+	SpawnAnchor    core.ChunkPos
+	// ViewDistance 是该会话在登录协商中声明的期望视距（v40 `LoginStart`
+	// 域内值 2..64）；0 表示未声明（未经登录协商的注册路径）。它是会话
+	// 协商事实而非存档状态：不持久化、不进入快照，仅在注册时被换算为
+	// 订阅半径（声明 +1，按引擎视界上界钳制）后即完成使命。
+	ViewDistance     uint8
 	Inventory        core.Inventory
 	Health           uint8
 	Hunger           uint8

@@ -52,6 +52,18 @@ func newWarpTestHost(t *testing.T, seed int64) *warpTestHost {
 // 目标维生成失败的拒绝用例构造确切的 `ChunkFailed` 状态。
 func newWarpTestHostWithGenerator(t *testing.T, seed int64, generator Generator) *warpTestHost {
 	t.Helper()
+	return newWarpTestHostConfigured(t, seed, generator, 1)
+}
+
+// newWarpTestHostConfigured 是 `newWarpTestHostWithGenerator` 的视界可注入
+// 形态，供声明视距与引擎上界可区分的订阅断言构造夹具。
+func newWarpTestHostConfigured(
+	t *testing.T,
+	seed int64,
+	generator Generator,
+	viewRadius int,
+) *warpTestHost {
+	t.Helper()
 	store := storage.NewMemory(storage.Metadata{
 		FormatVersion:     5,
 		Seed:              seed,
@@ -61,7 +73,7 @@ func newWarpTestHostWithGenerator(t *testing.T, seed int64, generator Generator)
 		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
 	config := DefaultConfig(seed)
-	config.ViewRadius = 1
+	config.ViewRadius = viewRadius
 	config.Workers = 1
 	config.HeartbeatInterval = time.Hour
 	config.HeartbeatTimeout = time.Hour
@@ -80,14 +92,23 @@ func warpAnchorFor(dimension core.DimensionID) core.ChunkPos {
 // SpawnPlayer 接入一名指定维度的玩家并推进到出生就绪。
 func (host *warpTestHost) SpawnPlayer(t *testing.T, dimension core.DimensionID) warpTestPlayer {
 	t.Helper()
+	return host.SpawnPlayerWithRestore(t, contract.PlayerRestore{
+		SpawnDimension: dimension,
+		SpawnAnchor:    warpAnchorFor(dimension),
+	})
+}
+
+// SpawnPlayerWithRestore 是 `SpawnPlayer` 的恢复载荷可注入形态，供登录协商
+// 事实（如声明视距）随接入注入。
+func (host *warpTestHost) SpawnPlayerWithRestore(
+	t *testing.T,
+	restore contract.PlayerRestore,
+) warpTestPlayer {
+	t.Helper()
+	dimension := restore.SpawnDimension
 	client, endpoint := network.NewMemoryPair(64)
 	host.next++
-	spec := registrySessionSpecWithRestore(
-		host.next, 1, endpoint, contract.PlayerRestore{
-			SpawnDimension: dimension,
-			SpawnAnchor:    warpAnchorFor(dimension),
-		},
-	)
+	spec := registrySessionSpecWithRestore(host.next, 1, endpoint, restore)
 	if _, err := host.running.AttachSession(spec); err != nil {
 		t.Fatalf("接入维度 %d 会话: %v", dimension, err)
 	}
@@ -787,5 +808,36 @@ func TestWarpDropsSameTickInput(t *testing.T) {
 	landed := host.PlayerState(t, player)
 	if foot := publicationFootChunk(landed.Dimension, landed.State.Position); foot.Pos != warpDepthsAnchor {
 		t.Fatalf("落点区块 = %+v，想要 depths 锚点 %+v", foot, warpDepthsAnchor)
+	}
+}
+
+// TestWarpPreservesDeclaredViewDistance 钉住跨维传送的会话视距保持：传送以
+// 注销重建订阅实现，重建必须携带原会话在登录协商中声明的视距——传送后
+// 新维订阅仍是声明视距的方形（半径 3 < 引擎上界 5），不回落引擎缺省视界。
+func TestWarpPreservesDeclaredViewDistance(t *testing.T) {
+	host := newWarpTestHostConfigured(t, 42, playerTestGenerator{}, 5)
+	player := host.SpawnPlayerWithRestore(t, contract.PlayerRestore{
+		SpawnDimension: core.Overworld,
+		SpawnAnchor:    warpOverworldAnchor,
+		ViewDistance:   2,
+	})
+
+	host.SendChat(t, player, "/warp depths")
+	host.Step(t)
+	host.ExpectForget(t, player, core.Overworld)
+	host.StepUntilDimension(t, player, core.Depths)
+
+	engine := host.running.engine
+	inside := core.ChunkKey{Dimension: core.Depths, Pos: core.ChunkPos{
+		X: warpDepthsAnchor.X + 3, Z: warpDepthsAnchor.Z + 3,
+	}}
+	outside := core.ChunkKey{Dimension: core.Depths, Pos: core.ChunkPos{
+		X: warpDepthsAnchor.X + 4, Z: warpDepthsAnchor.Z,
+	}}
+	if !engine.SessionWantsChunk(player.session, inside) {
+		t.Fatalf("传送后应仍订阅声明视距方形内区块 %+v", inside)
+	}
+	if engine.SessionWantsChunk(player.session, outside) {
+		t.Fatalf("传送后不应订阅声明视距方形外区块 %+v", outside)
 	}
 }

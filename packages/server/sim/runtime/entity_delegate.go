@@ -76,16 +76,23 @@ func (engine *Engine) entityViewSnapshot() entity.ViewSnapshot {
 	return entity.NewViewSnapshot(entries)
 }
 
-// RegisterPlayer 同时建立 runtime 订阅记录与唯一的实体权威状态。
+// RegisterPlayer 同时建立 runtime 订阅记录与唯一的实体权威状态。声明视距
+// 随 `restore` 进入：换算与上界钳制经实体派生半径统一完成（读回注册后的
+// `SessionSubscription`，与对账路径同源），未声明路径沿用引擎视界缺省。
 func (engine *Engine) RegisterPlayer(id SessionID, restore PlayerRestore) {
 	if engine.subscriptions[id] != nil {
 		panic("sim: duplicate registered session")
 	}
 	engine.entities.RegisterPlayer(id, restore, engine.realm, engine.tunables)
+	radius := engine.viewRadius
+	if subscription, ok := engine.entities.SessionSubscription(id); ok {
+		radius = engine.boundedSessionViewRadius(subscription.Radius)
+	}
 	engine.subscriptions[id] = &subscriptionState{
 		hasView:   true,
 		dimension: restore.SpawnDimension,
 		center:    restore.SpawnAnchor,
+		radius:    radius,
 		wanted:    make(map[core.ChunkKey]struct{}),
 	}
 	engine.subscriptionsDirty = true

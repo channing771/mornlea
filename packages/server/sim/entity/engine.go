@@ -11,8 +11,12 @@ import (
 // sessionState 只保存玩家与玩法生命周期状态；命令序号、观察中心和区块订阅由
 // runtime 单独持有，避免把传输编排混入实体 owner。
 type sessionState struct {
-	id            SessionID
-	dimension     core.DimensionID
+	id        SessionID
+	dimension core.DimensionID
+	// viewDistance 是该会话登录协商中声明的期望视距（0 表示未声明）：
+	// 注册时随 `PlayerRestore` 进入、此后只读，经 `SessionSubscription`
+	// 派生成订阅半径供 runtime 消费；不持久化、不进入快照。
+	viewDistance  uint8
 	player        *playerState
 	container     core.ContainerRef
 	viewContainer bool

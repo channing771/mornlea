@@ -210,6 +210,9 @@ func (h *Host) acceptStream(
 		_ = pending.Reject(ctx, code, message)
 		return err
 	}
+	// 登录协商的会话侧声明随注册载荷进入引擎：订阅半径的换算与上界钳制在
+	// 引擎内单点完成（上界即引擎视界，与配置同源），host 不在此处解释。
+	restore.ViewDistance = active.ViewDistance
 
 	h.mu.Lock()
 	if h.nextSession == ^contract.SessionID(0) || h.nextGeneration == ^uint64(0) {
