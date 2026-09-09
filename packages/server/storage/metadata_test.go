@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/worldgen"
 )
 
 func TestMetadataEncodingIsDeterministic(t *testing.T) {
@@ -314,5 +315,19 @@ func TestMetadataAtomicReplaceReleasesTempPathAfterRename(t *testing.T) {
 				t.Fatalf("reused temp path = %q", bystander)
 			}
 		})
+	}
+}
+
+// TestDepthsSeedSaltMatchesWorldgen 断言存档默认盐与世界生成侧的种子盐是
+// 同一位模式：两侧同源于 `core.DepthsSeedSalt`（`depthsSeedSaltDefault` 直接
+// 绑定该常量，`worldgen.DepthsSeedSalt` 经运行时转换取 int64 位模式），
+// 此处经运行时转换逐值钉住，任一侧重新拼写字面量并漂移即红。
+func TestDepthsSeedSaltMatchesWorldgen(t *testing.T) {
+	salt := worldgen.DepthsSeedSalt
+	if depthsSeedSaltDefault != uint64(salt) {
+		t.Fatalf(
+			"存档默认盐 = %#x，世界生成盐 = %#x，两侧必须同源于 `core.DepthsSeedSalt`",
+			depthsSeedSaltDefault, uint64(salt),
+		)
 	}
 }

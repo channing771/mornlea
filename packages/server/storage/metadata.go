@@ -35,8 +35,8 @@ const (
 	// metadataDimensionCount 是 v5 维度表的维度数：主世界与 `Depths` 共两维。
 	metadataDimensionCount uint32 = 2
 	// depthsSeedSaltDefault 是旧档缺失维度表时的种子盐默认值：与世界生成侧
-	// 派生 `Depths` 地形种子的固定盐是同一常量。
-	depthsSeedSaltDefault uint64 = 0x9E3779B97F4A7C15
+	// 派生 `Depths` 地形种子的固定盐是同一常量（`core.DepthsSeedSalt`）。
+	depthsSeedSaltDefault uint64 = core.DepthsSeedSalt
 )
 
 var (

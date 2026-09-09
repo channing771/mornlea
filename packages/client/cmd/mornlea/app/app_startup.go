@@ -48,7 +48,7 @@ func openApplicationStore(
 		SpawnDimension:    core.Overworld,
 		SpawnAnchor:       core.ChunkPos{},
 		DepthsSpawnAnchor: core.ChunkPos{},
-		DepthsSeedSalt:    0x9E3779B97F4A7C15,
+		DepthsSeedSalt:    core.DepthsSeedSalt,
 	}
 	// benchmark、capture 与 motion 演示都要求世界状态与本机磁盘上的真实存档隔离：
 	// benchmark 为了性能测量不被磁盘 I/O 干扰，capture/motion 为了抓帧结果不随

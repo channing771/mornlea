@@ -238,7 +238,7 @@ func NewConnectionTestStore(seed int64) *ConnectionTestStore {
 		FormatVersion:     5,
 		Seed:              seed,
 		DepthsSpawnAnchor: core.ChunkPos{},
-		DepthsSeedSalt:    0x9E3779B97F4A7C15,
+		DepthsSeedSalt:    core.DepthsSeedSalt,
 	})}
 }
 

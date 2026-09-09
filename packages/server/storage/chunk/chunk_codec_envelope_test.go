@@ -212,8 +212,8 @@ func TestChunkDimensionAllowlistAcceptsDepthsRejectsBeyond(t *testing.T) {
 
 	beyond := core.ChunkKey{Dimension: core.DimensionID(2), Pos: core.ChunkPos{X: -3, Z: 7}}
 	beyondSave := ChunkSave{Key: beyond, Revision: 19, Chunk: codecFixtureChunk(beyond.Pos)}
-	if err := ValidateChunkSave(beyondSave); err == nil {
-		t.Fatal("维度 2 的保存请求通过了入口校验")
+	if err := ValidateChunkSave(beyondSave); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("维度 2 的保存校验错误 = %v，想要损坏拒绝", err)
 	}
 	if _, err := Encode(beyondSave); err == nil {
 		t.Fatal("维度 2 的区块被编码")

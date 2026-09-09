@@ -32,10 +32,11 @@
 - **WHEN** 发送 `/warp depths` 并完成 tick，再发送 `/warp overworld` 并完成 tick
 - **THEN** 两次 `PlayerState` 的 `Dimension` MUST 依次为 1、`Reset` 为 true，第二次为 0
 - **AND** 背包、血量、饥饿值 MUST 与传送前一致
+- **AND** 目标锚点区块尚未加载时 MUST 按登录冷启动语义暖起，而非拒绝
 
 #### Scenario: 非法传送被拒绝且不动
 
-- **GIVEN** 玩家处于死亡或待出生状态，或目标维度区块尚未就绪，或命令拼写非法
+- **GIVEN** 玩家处于死亡或待出生状态，或目标锚点区块已明确加载失败（`ChunkFailed`），或命令拼写非法
 - **WHEN** 发送传送命令并完成 tick
 - **THEN** 玩家维度与位置 MUST 保持不变
 - **AND** 玩家 MUST 收到 `CommandRejected`

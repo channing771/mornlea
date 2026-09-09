@@ -212,7 +212,7 @@ func measureMultiplayerServerProbe(duration time.Duration) (
 		FormatVersion: 5, Seed: benchmarkSeed,
 		SpawnDimension: core.Overworld, SpawnAnchor: core.ChunkPos{},
 		DepthsSpawnAnchor: core.ChunkPos{},
-		DepthsSeedSalt:    0x9E3779B97F4A7C15,
+		DepthsSeedSalt:    core.DepthsSeedSalt,
 	})
 	runCtx, cancelRun := context.WithTimeout(
 		context.Background(),

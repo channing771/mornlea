@@ -1098,7 +1098,7 @@ func TestNaturalSeedFarmingMemoryTCPParity(t *testing.T) {
 // `Reset` 置位（`Reset` 只在传送 tick 置位，读最终态会漏掉它）。
 func TestWarpParityMemoryVsTCP(t *testing.T) {
 	memoryStates := runWarpSequenceOverMemory(t, 42, []string{"/warp depths", "/warp overworld"})
-	tcpStates := runWarpSequenceOverTCP(t, 42, []string{"/warp depths", "/warp overworld"})
+	tcpStates := runWarpSequenceOverTCP(t, []string{"/warp depths", "/warp overworld"})
 	if len(memoryStates) != len(tcpStates) {
 		t.Fatalf("memory=%d tcp=%d", len(memoryStates), len(tcpStates))
 	}
@@ -1149,12 +1149,9 @@ func runWarpSequenceOverMemory(t *testing.T, seed int64, cmds []string) []warpSt
 // 真实 TCP 链路：复用磁盘重启 harness 的 dial + login helper，命令经客户端
 // endpoint 发送，结果从服务端的 wire `PlayerState` 流里扫描（`sawReset` 与
 // 落点就绪可能不在同一 tick，必须全程扫描，与内存侧的 `StepUntilDimension`
-// 语义对齐）。磁盘 harness 的世界种子固定为 42，与调用点一致。
-func runWarpSequenceOverTCP(t *testing.T, seed int64, cmds []string) []warpStepOutcome {
+// 语义对齐）。磁盘 harness 的世界种子固定为 42，故本 helper 不取种子参数。
+func runWarpSequenceOverTCP(t *testing.T, cmds []string) []warpStepOutcome {
 	t.Helper()
-	if seed != 42 {
-		t.Fatalf("TCP 传送 parity harness 种子固定为 42，得到 %d", seed)
-	}
 	host := startDiskHost(t, t.TempDir(), "127.0.0.1:0", playerTestGenerator{})
 	identity := integrationIdentity(0xA1, "WarpParity")
 	connected := dialIntegrationClient(t, host.Addr, identity)

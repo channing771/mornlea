@@ -167,8 +167,11 @@ func newWorld(
 		records, loadedQueues := companions.Restore()
 		for _, definition := range config.Companions {
 			restore := contract.CompanionRestore{
+				// 伙伴本变更只住主世界：`SpawnDimension` 写死 `core.Overworld`，
+				// 不跟随存档 `SpawnDimension`——`Depths` 出生的伙伴快照在
+				// wire 校验（`message_companion.go` 的 `Validate`）即被拒绝。
 				ID:             definition.ID,
-				SpawnDimension: metadata.SpawnDimension,
+				SpawnDimension: core.Overworld,
 				SpawnAnchor:    metadata.SpawnAnchor,
 			}
 			for index := range records {

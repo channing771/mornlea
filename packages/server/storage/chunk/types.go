@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"os"
 
+	"github.com/channing771/mornlea/packages/server/storage/storagedef"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/world"
 )
@@ -75,7 +76,10 @@ func ValidateChunkSave(save ChunkSave) error {
 	}
 	if save.Key.Dimension != core.Overworld && save.Key.Dimension != core.Depths {
 		return fmt.Errorf(
-			"storage: chunk save for %v has unsupported dimension %d", save.Key, save.Key.Dimension,
+			"%w: chunk save for %v has unsupported dimension %d",
+			storagedef.ErrCorrupt,
+			save.Key,
+			save.Key.Dimension,
 		)
 	}
 	if save.Revision == 0 {

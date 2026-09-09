@@ -720,3 +720,72 @@ func TestWarpCompanionAndHostileStayBehind(t *testing.T) {
 	}
 	stopFollowTask(t, host, clients)
 }
+
+// TestWarpDropsSameTickInput 覆盖传送事务「同 tick 冻结输入」：与 `/warp`
+// 同 tick 到达的旧维输入不得跨维生效。移动 drain 先于传送聊天 drain 进入
+// `engine` inbox，而注销重建会把订阅的 `lastSequence` 清零——重建后若不垫高
+// 到传送前水位，在途旧维序号会在新维通过序号过滤，以待出生身份被结算为
+// `RejectPlayerNotReady` 的伪拒绝下发客户端。此处同 tick 先送达旧维移动与
+// 瞄准输入再传送：客户端 MUST NOT 收到这些序号的拒绝，新维出生朝向 MUST
+// 与传送前快照一致，且传送本身仍下发 `Reset`。
+func TestWarpDropsSameTickInput(t *testing.T) {
+	host := newWarpTestHost(t, 42)
+	player := host.SpawnPlayer(t, core.Overworld)
+	// 先以一笔普通输入把朝向固定到已知值：`0.5` 与 `-1.0` 都在 `normalizeYaw`
+	// 的恒等区，前后比较不受归一化干扰。
+	host.running.enqueueIncoming(context.Background(), incomingCommand{
+		Session: player.session, Generation: 1,
+		Command: contract.Command{
+			Session: player.session, Sequence: 1,
+			Kind: contract.CommandPlayerInput, Yaw: 0.5,
+		},
+	})
+	host.Step(t)
+	before := host.PlayerState(t, player)
+	if before.Yaw != 0.5 {
+		t.Fatalf("前置失败：传送前朝向 = %v，想要 0.5", before.Yaw)
+	}
+	// 同 tick：在途旧维移动与瞄准输入先入 inbox，随后传送聊天到达。
+	host.running.enqueueIncoming(context.Background(), incomingCommand{
+		Session: player.session, Generation: 1,
+		Command: contract.Command{
+			Session: player.session, Sequence: 2,
+			Kind: contract.CommandPlayerInput, MoveX: 1, Yaw: 0.5,
+		},
+	})
+	host.running.enqueueIncoming(context.Background(), incomingCommand{
+		Session: player.session, Generation: 1,
+		Command: contract.Command{
+			Session: player.session, Sequence: 3,
+			Kind: contract.CommandPlaceBlock, Yaw: -1.0, Slot: 0,
+		},
+	})
+	host.SendChat(t, player, "/warp depths")
+	result := host.Step(t)
+	sawReset := false
+	for _, update := range result.Players {
+		if update.Session == player.session && update.Dimension == core.Depths && update.Reset {
+			sawReset = true
+		}
+	}
+	after := host.PlayerState(t, player)
+	if after.Dimension != core.Depths {
+		t.Fatalf("传送后维度 = %d，想要 %d", after.Dimension, core.Depths)
+	}
+	// 在途旧维输入不得下发伪拒绝：垫高水位后它们在序号过滤即被丢弃，
+	// 既不进待出生结算、也不占 `TickResult.Rejected`（`Step` 已排空出盒，
+	// backlog 即本 tick 的全部拒绝）。
+	if pending := host.rejected[player.session]; len(pending) != 0 {
+		t.Fatalf("同 tick 旧维输入被跨维结算：收到伪拒绝 %+v", pending)
+	}
+	if after.Yaw != before.Yaw {
+		t.Fatalf("同 tick 旧维输入跨维生效：出生朝向 %v -> %v", before.Yaw, after.Yaw)
+	}
+	if rest := host.StepUntilDimension(t, player, core.Depths); !sawReset && !rest {
+		t.Fatal("传送未下发 Reset 置位的玩家状态")
+	}
+	landed := host.PlayerState(t, player)
+	if foot := publicationFootChunk(landed.Dimension, landed.State.Position); foot.Pos != warpDepthsAnchor {
+		t.Fatalf("落点区块 = %+v，想要 depths 锚点 %+v", foot, warpDepthsAnchor)
+	}
+}

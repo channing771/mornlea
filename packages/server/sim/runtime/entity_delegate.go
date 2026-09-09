@@ -142,6 +142,38 @@ func (engine *Engine) UnregisterSession(id SessionID) (PlayerSnapshot, bool) {
 	return snapshot, ok
 }
 
+// InputSequenceHighWater 返回会话已见的最大输入序号：已消费的订阅水位与
+// 仍在 inbox 里排队的在途命令取大。传送在 `UnregisterSession` 之前调用它，
+// 重建后经 `RestoreInputSequence` 垫高新订阅——同 tick 在途的旧维输入随即
+// 在序号过滤中被丢弃，不再跨维生效；传送后客户端的新序号恒大于水位，
+// 不受影响。调用方须与 `Step` 及会话生命周期串行（服务端即持有 `stepMu`）。
+func (engine *Engine) InputSequenceHighWater(id SessionID) uint64 {
+	high := uint64(0)
+	if session := engine.subscriptions[id]; session != nil {
+		high = session.lastSequence
+	}
+	engine.inboxMu.Lock()
+	for _, command := range engine.commands {
+		if command.Session == id && command.Sequence > high {
+			high = command.Sequence
+		}
+	}
+	engine.inboxMu.Unlock()
+	return high
+}
+
+// RestoreInputSequence 把重建订阅的 `lastSequence` 垫高到传送前水位：只升
+// 不降，新订阅本就更高时保持不动。调用边界与 `InputSequenceHighWater` 相同。
+func (engine *Engine) RestoreInputSequence(id SessionID, highWater uint64) {
+	session := engine.subscriptions[id]
+	if session == nil {
+		return
+	}
+	if highWater > session.lastSequence {
+		session.lastSequence = highWater
+	}
+}
+
 func (engine *Engine) RegisterCompanion(restore CompanionRestore) {
 	engine.entities.RegisterCompanion(restore, engine.realm)
 	engine.subscriptionsDirty = true

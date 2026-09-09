@@ -45,13 +45,21 @@ const (
 	probeModeHeight  = 0
 	probeModeTerrain = 1
 	probeModeBase    = 2
-
-	// depthsSeedSalt 是 `Depths` 维度的种子盐:位模式即 `0x9E3779B97F4A7C15`
-	// (经典 64 位黄金比例常数)。字面量 `0x9E3779B97F4A7C15` 超出 int64
-	// 上界、不能直接写进 `^` 运算,故以其二进制补码相反数
-	// `-0x61C8864680B583EB` 表达,两者位模式相同。
-	depthsSeedSalt = int64(-0x61C8864680B583EB)
 )
+
+// DepthsSeedSalt 是 `Depths` 维度的种子盐：位模式与 `core.DepthsSeedSalt`
+// 相同（经典 64 位黄金比例常数），供 `dimSeed` 做种子异或。`core` 侧以
+// uint64 持有同一位模式（存档字段语义），此处经运行时转换取 int64
+// 位模式——包级 `var` 而非 `const` 是有意的：常量表达式不允许溢出转换，
+// 只有运行时转换能保留位模式。构造后只读，调用方不得修改。
+//
+// 字面量 `0x9E3779B97F4A7C15` 超出 int64 上界，不能直接写进 `^` 运算，
+// 故历史上曾以其二进制补码相反数 `-0x61C8864680B583EB` 表达；如今盐的
+// 唯一源头是 `core.DepthsSeedSalt`，此处不再拼写任何字面量。
+var DepthsSeedSalt = func() int64 {
+	salt := core.DepthsSeedSalt
+	return int64(salt)
+}()
 
 // Generator 按种子生成地形。
 //
@@ -74,7 +82,7 @@ type Generator struct {
 // 此处保持全函数、不在热路径抛错)。
 func dimSeed(base int64, dim core.DimensionID) int64 {
 	if dim == core.Depths {
-		return base ^ depthsSeedSalt
+		return base ^ DepthsSeedSalt
 	}
 	return base
 }

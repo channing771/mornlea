@@ -147,7 +147,7 @@ func run(ctx context.Context, args []string, injected dependencies) error {
 		Seed:              options.Seed,
 		SpawnDimension:    core.Overworld,
 		DepthsSpawnAnchor: core.ChunkPos{},
-		DepthsSeedSalt:    0x9E3779B97F4A7C15,
+		DepthsSeedSalt:    core.DepthsSeedSalt,
 	}})
 	if err != nil {
 		return fmt.Errorf("打开世界: %w", err)

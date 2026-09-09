@@ -97,6 +97,11 @@ func (server *Server) warpPlayer(session contract.SessionID, target core.Dimensi
 	}); ok && info.State == contract.ChunkFailed {
 		return reject(network.RejectChunkNotReady)
 	}
+	// 同 tick 在途输入不得跨维：移动 drain 先于传送聊天 drain 入 engine inbox，
+	// 而重建订阅会把 `lastSequence` 清零——不垫高水位的话，旧维序号会在新维
+	// 通过序号过滤，以待出生身份结算出伪拒绝。传送前取已见最大序号（已消费
+	// 水位与 inbox 在途取大），重建后垫回；`Reset` 照常下发。
+	preWarpHighWater := server.engine.InputSequenceHighWater(session)
 	if _, ok := server.engine.UnregisterSession(session); !ok {
 		return reject(network.RejectPlayerNotReady)
 	}
@@ -115,6 +120,7 @@ func (server *Server) warpPlayer(session contract.SessionID, target core.Dimensi
 		RespawnPosition:  snapshot.RespawnPosition,
 		RespawnDimension: snapshot.RespawnDimension,
 	})
+	server.engine.RestoreInputSequence(session, preWarpHighWater)
 	// 注销重建会换掉整份订阅记录，旧维兴趣集合随之消失、收敛时无从差分；
 	// 这里按会话已发布镜像显式遗忘旧维区块（同时丢弃其排队中的快照），
 	// 与收敛产生的 `Forget` 语义一致。失败只发生在慢客户端关闭路径，
