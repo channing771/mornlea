@@ -54,7 +54,7 @@ func TestProtocolTranscriptSuccessMatchesMemoryAndTCP(t *testing.T) {
 				serverDone <- err
 			}()
 
-			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(11))
+			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(11), 32)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -84,7 +84,7 @@ func TestProtocolTranscriptRejectMatchesMemoryAndTCP(t *testing.T) {
 				serverDone <- pending.Reject(context.Background(), network.LoginServerFull, "server full")
 			}()
 
-			_, err := network.LoginClient(context.Background(), clientStream, testIdentity(12))
+			_, err := network.LoginClient(context.Background(), clientStream, testIdentity(12), 32)
 			var remote *network.RemoteError
 			if !errors.As(err, &remote) || remote.State != network.StateLogin || remote.Code != uint8(network.LoginServerFull) || remote.Message != "server full" {
 				t.Fatalf("reject transcript = %#v", err)
@@ -110,7 +110,7 @@ func TestProtocolTranscriptRejectsEarlyPlayAcrossMemoryAndTCP(t *testing.T) {
 				serverDone <- server.Send(context.Background(), network.StatePlay, network.PlayerState{})
 			}()
 
-			_, err := network.LoginClient(context.Background(), client, testIdentity(13))
+			_, err := network.LoginClient(context.Background(), client, testIdentity(13), 32)
 			if err == nil || !strings.Contains(err.Error(), "protocol violation") {
 				t.Fatalf("early Play transcript error = %v", err)
 			}
@@ -177,7 +177,7 @@ func TestCommonBlockMaterialPlayTranscriptMatchesMemoryAndTCP(t *testing.T) {
 				serverDone <- err
 			}()
 
-			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(14))
+			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(14), 32)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -240,7 +240,7 @@ func TestGridCraftingTranscriptMatchesMemoryAndTCP(t *testing.T) {
 				serverDone <- err
 			}()
 
-			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(15))
+			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(15), 32)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -334,7 +334,7 @@ func TestV26ClientRejectsPriorServerAcrossTransports(t *testing.T) {
 					serverDone <- sendRawServerHello(server, legacy)
 				}()
 
-				_, err := network.LoginClient(context.Background(), client, testIdentity(23))
+				_, err := network.LoginClient(context.Background(), client, testIdentity(23), 32)
 				wantVersion := fmt.Sprintf("server protocol version %d", legacy)
 				if err == nil || !strings.Contains(err.Error(), "protocol violation") ||
 					!(strings.Contains(err.Error(), wantVersion) ||
@@ -671,7 +671,7 @@ func TestPassiveMessagesRoundTripMemoryAndTCP(t *testing.T) {
 				serverDone <- err
 			}()
 
-			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(23))
+			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(23), 32)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -716,7 +716,7 @@ func TestHostileMessagesRoundTripMemoryAndTCP(t *testing.T) {
 				serverDone <- err
 			}()
 
-			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(21))
+			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(21), 32)
 			if err != nil {
 				t.Fatal(err)
 			}

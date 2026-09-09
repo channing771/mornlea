@@ -178,7 +178,7 @@ func NewConnectionTestDependencies(t *testing.T) Dependencies {
 			unexpected("DialTCP")
 			return nil, nil
 		},
-		LoginClient: func(context.Context, network.ClientPacketStream, network.Identity) (network.ClientEndpoint, uint64, error) {
+		LoginClient: func(context.Context, network.ClientPacketStream, network.Identity, uint8) (network.ClientEndpoint, uint64, error) {
 			unexpected("LoginClient")
 			return nil, 0, nil
 		},

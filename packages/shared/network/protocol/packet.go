@@ -7,7 +7,11 @@ import (
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-// ProtocolVersion 是当前唯一支持的协议版本；v39 放行 `Depths`（维度 1）：
+// ProtocolVersion 是当前唯一支持的协议版本；v40 在 `LoginStart` 载荷尾部
+// （`DisplayName` 之后）追加 1 字节期望视距（u8，闭区间 2..64 合法：越界值
+// 由服务端登录驱动以 `LoginProtocolViolation` 回 `LoginReject` 拒绝登录，
+// 不钳制、也不以默认视距静默建会话），供每会话视距经登录协商；v39 放行
+// `Depths`（维度 1）：
 // 玩家与区块类消息（`ChunkSnapshot`、`BlockChanges`、`ForgetChunks`、
 // `RequestChunkResync`、`PlayerState`、远端玩家系列）的 `Dimension` 接受
 // `Overworld` 与 `Depths`，`Dimension >= 2` 仍被拒绝，伙伴/敌怪/被动生物类
@@ -41,6 +45,10 @@ import (
 // despawn 只携带 ID），并维护旧客户端握手拒绝语义；v29 在 `PlayerState` 尾部追加
 // `SaturationZero` 饱和度归零提示位（紧跟 `Hunger` 之后、`WorldTimeTicks` 之前）；v28 在 `PlayerInput` 尾部追加 `Sprinting` 疾跑位（紧跟 `Eating` 之后）；v27 新增 Play C→S ID 14 `BoneMeal`，v26 新增 Play S→C ID 20 `PlaceBlockSucceeded`，v25 只扩展既有 `Mining` 位语义不新增字段，v24 上线权威饥饿 Eating/Hunger 并拒绝 v23 及更早登录。
 //
+// v40 是纯追加：只在 `LoginStart` 载荷尾部新增 1 字节期望视距，不新增
+// packet、不改动既有包 ID、不改动既有 packet 的 wire 形状与全部长度上限、
+// 不新增 `RejectReason`（域外视距复用既有 `LoginProtocolViolation` 编号）；
+// 旧版握手拒绝是既有语义。
 // v38 是纯追加：只在 Play C→S 尾部新增 ID 16/17 的水桶双命令，不改动
 // 既有 packet 的 wire 形状与全部长度上限；新增的 `RejectReason` 13/14 只扩
 // 拒绝原因枚举，不改动既有编号；旧版握手拒绝是既有语义。
@@ -74,7 +82,7 @@ import (
 // v21 在 `PlayerState` 末尾追加 2 字节权威氧气（只发给玩家本人的权威
 // 值）；v20 追加 8 个流体方块编号（只扩方块 ID 集合，wire 形状不变），流体
 // 变更走既有区块变更通道（design.md D8）。
-const ProtocolVersion uint32 = 39
+const ProtocolVersion uint32 = 40
 
 // State 标识连接当前允许交换的 packet 集合。
 type State uint8
@@ -121,9 +129,21 @@ type HandshakeReject struct {
 
 func (HandshakeReject) serverPacket() {}
 
+// `LoginStart.ViewDistance` 的合法闭区间：v40 登录协商契约的一部分，wire
+// 层双侧（发送校验与服务端登录驱动）都只接受该区间内的值；区间外的钳制
+// 语义（服务端上界）属于上层兴趣管理，不在此处。
+const (
+	LoginViewDistanceMin uint8 = 2
+	LoginViewDistanceMax uint8 = 64
+)
+
+// LoginStart 是客户端登录发起。`ViewDistance` 是客户端声明的期望视距
+// （v40 在 `DisplayName` 之后尾部追加的 1 字节 u8），编码为载荷最末一字节；
+// 取值域见 `LoginViewDistanceMin`/`LoginViewDistanceMax`。
 type LoginStart struct {
-	PlayerID    core.PlayerID
-	DisplayName string
+	PlayerID     core.PlayerID
+	DisplayName  string
+	ViewDistance uint8
 }
 
 func (LoginStart) clientPacket() {}
@@ -212,6 +232,10 @@ func ValidateClientPacket(state State, packet ClientPacket) error {
 		}
 		if _, err := core.NormalizeDisplayName(loginStart.DisplayName); err != nil {
 			return fmt.Errorf("network: invalid login display name: %w", err)
+		}
+		if loginStart.ViewDistance < LoginViewDistanceMin || loginStart.ViewDistance > LoginViewDistanceMax {
+			return fmt.Errorf("network: login view distance %d outside range %d..%d",
+				loginStart.ViewDistance, LoginViewDistanceMin, LoginViewDistanceMax)
 		}
 		return nil
 	case StatePlay:
@@ -408,9 +432,9 @@ func InvalidServerPacket(state State, packet ServerPacket) error {
 // ValidateDecodedClientWirePacket 是解码侧的协议级校验入口：在主校验
 // `ValidateClientPacket` 之前放行 Handshake 的 `ClientHello` 与 Login 的
 // `LoginStart`，让登录状态机能对结构完整的握手/登录消息返回冻结的
-// `HandshakeVersionMismatch`/`LoginInvalidIdentity` 拒绝路径；其余 packet
-// 原样转发主校验，不接触任何字节层细节。导出供根包 Memory transport 与
-// 编解码层解码路径共用。
+// `HandshakeVersionMismatch`/`LoginInvalidIdentity`/`LoginProtocolViolation`
+// 拒绝路径（域外视距走后者）；其余 packet 原样转发主校验，不接触任何
+// 字节层细节。导出供根包 Memory transport 与编解码层解码路径共用。
 func ValidateDecodedClientWirePacket(state State, packet ClientPacket) error {
 	// The login state machine must observe every structurally valid hello in
 	// order to return the frozen HandshakeVersionMismatch response. Outbound
@@ -421,7 +445,9 @@ func ValidateDecodedClientWirePacket(state State, packet ClientPacket) error {
 		}
 	}
 	// A structurally complete LoginStart must reach the login driver so it can
-	// return the frozen LoginInvalidIdentity code for semantic identity errors.
+	// return the frozen LoginInvalidIdentity code for semantic identity errors
+	// and the frozen LoginProtocolViolation code for out-of-domain view
+	// distance, instead of a bare decode failure closing the connection.
 	if state == StateLogin {
 		if _, ok := packet.(LoginStart); ok {
 			return nil

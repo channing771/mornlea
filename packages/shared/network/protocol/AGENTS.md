@@ -49,6 +49,10 @@
 - `ValidateClientPacket`/`ValidateServerPacket` 是 Play 阶段逐字段校验的
   唯一入口：NaN/Inf、越界枚举、非法方块 ID、容量上限一律拒绝；
   `TestValidateClientPacket`/`TestValidateServerPacket` 钉死矩阵。
+- `LoginStart.ViewDistance`（v40 尾部追加）的合法闭区间由
+  `LoginViewDistanceMin`/`LoginViewDistanceMax` 常量钉死，域外值在
+  `ValidateClientPacket` 与根包登录驱动双侧拒绝（驱动侧回冻结
+  `LoginProtocolViolation`），钳制语义不落在本包。
 - `ChunkSnapshot.Validate`/`SectionData.Validate` 保证压缩区段可安全解码：
   `TestChunkSnapshotValidatesCanonicalSections`、
   `TestChunkSnapshotRejectsMalformedSections`、

@@ -139,7 +139,7 @@ func dialIntegrationClient(t *testing.T, address string, identity network.Identi
 	if err != nil {
 		t.Fatalf("DialTCP: %v", err)
 	}
-	endpoint, err := network.LoginClient(ctx, stream, identity)
+	endpoint, err := network.LoginClient(ctx, stream, identity, 32)
 	if err != nil {
 		t.Fatalf("LoginClient: %v", err)
 	}

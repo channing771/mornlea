@@ -26,7 +26,7 @@ func TestHostAllowsExactlyOneConcurrentLogin(t *testing.T) {
 
 	secondStream, secondServer := network.NewMemoryStreamPair(8)
 	go host.AcceptStream(context.Background(), secondServer)
-	_, err := network.LoginClient(context.Background(), secondStream, playerIdentity(2))
+	_, err := network.LoginClient(context.Background(), secondStream, playerIdentity(2), 32)
 	var remote *network.RemoteError
 	if !errors.As(err, &remote) || remote.State != network.StateLogin ||
 		network.LoginRejectCode(remote.Code) != network.LoginServerFull {
@@ -228,7 +228,7 @@ func TestLoginDeadlineCancelsBlockedHostPlayerLoad(t *testing.T) {
 	serverDone := make(chan error, 1)
 	started := time.Now()
 	go func() { serverDone <- host.AcceptStream(outer, server) }()
-	_, _ = network.LoginClient(outer, client, playerIdentity(14))
+	_, _ = network.LoginClient(outer, client, playerIdentity(14), 32)
 	select {
 	case <-serverDone:
 	case <-time.After(waitDeadline):
@@ -296,7 +296,7 @@ func TestHostReservesSlotBeforeSinglePlayerLoad(t *testing.T) {
 	}
 	identity := playerIdentity(9)
 	if err := firstClient.Send(context.Background(), network.StateLogin, network.LoginStart{
-		PlayerID: identity.PlayerID, DisplayName: identity.DisplayName,
+		PlayerID: identity.PlayerID, DisplayName: identity.DisplayName, ViewDistance: 32,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -381,7 +381,7 @@ func attemptMemoryLogin(host *Host, identity network.Identity) (network.ClientEn
 	client, server := network.NewMemoryStreamPair(32)
 	done := make(chan error, 1)
 	go func() { done <- host.AcceptStream(context.Background(), server) }()
-	endpoint, err := network.LoginClient(context.Background(), client, identity)
+	endpoint, err := network.LoginClient(context.Background(), client, identity, 32)
 	if err != nil {
 		<-done
 	}

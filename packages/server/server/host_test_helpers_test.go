@@ -79,7 +79,7 @@ func startMemoryLogin(t *testing.T, host *Host, identity network.Identity) testL
 	clientStream, serverStream := network.NewMemoryStreamPair(256)
 	done := make(chan error, 1)
 	go func() { done <- host.AcceptStream(context.Background(), serverStream) }()
-	client, err := network.LoginClient(context.Background(), clientStream, identity)
+	client, err := network.LoginClient(context.Background(), clientStream, identity, 32)
 	if err != nil {
 		t.Fatalf("LoginClient: %v", err)
 	}

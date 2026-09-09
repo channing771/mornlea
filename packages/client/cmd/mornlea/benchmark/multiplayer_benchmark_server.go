@@ -13,6 +13,9 @@ import (
 	application "github.com/channing771/mornlea/packages/client/cmd/mornlea/app"
 	"github.com/channing771/mornlea/packages/server/server"
 	"github.com/channing771/mornlea/packages/server/storage"
+	// 局部变量 `config`（server.Config）会遮蔽包名，编译默认渲染配置经
+	// 别名引用。
+	sharedconfig "github.com/channing771/mornlea/packages/shared/config"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
 	"github.com/channing771/mornlea/packages/shared/worldgen"
@@ -290,7 +293,9 @@ func measureMultiplayerServerProbe(duration time.Duration) (
 		serverDone := make(chan error, 1)
 		go func() { serverDone <- host.AcceptStream(runCtx, counting) }()
 		loginCtx, cancelLogin := context.WithTimeout(runCtx, 5*time.Second)
-		endpoint, err := network.LoginClient(loginCtx, clientStream, identity)
+		// 场景会话暂按编译默认配置声明 v40 视距（域内合法）；场景化视距
+		// 梯度属于 scenario v23 的后续工作。
+		endpoint, err := network.LoginClient(loginCtx, clientStream, identity, uint8(sharedconfig.Defaults().Render.ViewDistance))
 		cancelLogin()
 		if err != nil {
 			_ = counting.Close()

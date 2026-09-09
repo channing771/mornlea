@@ -150,7 +150,7 @@ func TestApplicationConnectionRemoteDialFailurePrecedesWindow(t *testing.T) {
 		return nil, dialErr
 	}
 	dependencies.LoginClient = func(
-		context.Context, network.ClientPacketStream, network.Identity,
+		context.Context, network.ClientPacketStream, network.Identity, uint8,
 	) (network.ClientEndpoint, uint64, error) {
 		loginCalls++
 		return nil, 0, errors.New("login called after dial failure")
@@ -175,7 +175,7 @@ func TestApplicationConnectionRemoteLoginFailureClosesStreamBeforeWindow(t *test
 		return stream, nil
 	}
 	dependencies.LoginClient = func(
-		context.Context, network.ClientPacketStream, network.Identity,
+		context.Context, network.ClientPacketStream, network.Identity, uint8,
 	) (network.ClientEndpoint, uint64, error) {
 		return nil, 0, loginErr
 	}
@@ -211,6 +211,7 @@ func TestApplicationConnectionRemoteLoginSuccessReturnsOwnedApplicationAfterGrap
 		_ context.Context,
 		got network.ClientPacketStream,
 		_ network.Identity,
+		_ uint8,
 	) (network.ClientEndpoint, uint64, error) {
 		if got != stream {
 			t.Fatalf("LoginClient stream=%T, want dialed stream", got)
@@ -388,7 +389,7 @@ func TestApplicationConnectionLocalLoginFailureCleansStreamsHostAndStoreBeforeWi
 		return clientStream, serverStream, nil
 	}
 	dependencies.LoginClient = func(
-		context.Context, network.ClientPacketStream, network.Identity,
+		context.Context, network.ClientPacketStream, network.Identity, uint8,
 	) (network.ClientEndpoint, uint64, error) {
 		return nil, 0, loginErr
 	}

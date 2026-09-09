@@ -20,8 +20,12 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		wantID  uint32
 		wantHex string
 	}{
-		{"hello", protocol.StateHandshake, protocol.ClientHello{ProtocolVersion: 39}, 0, "27"},
-		{"login start", protocol.StateLogin, protocol.LoginStart{PlayerID: id, DisplayName: "Chen"}, 0, "00112233445546778899aabbccddeeff044368656e"},
+		{"hello", protocol.StateHandshake, protocol.ClientHello{ProtocolVersion: 40}, 0, "28"},
+		// v40 新增：`LoginStart` 载荷尾部（`DisplayName` 之后）追加 1 字节
+		// `ViewDistance`（u8，合法域 2..64）。样本取 32（0x20）这个非零非满
+		// 值：取 0 会因域外值连编码都被拒绝，取 64 又与「恰好越界 +1」只差
+		// 一位，任何换位或漏写都会改变尾字节。
+		{"login start", protocol.StateLogin, protocol.LoginStart{PlayerID: id, DisplayName: "Chen", ViewDistance: 32}, 0, "00112233445546778899aabbccddeeff044368656e20"},
 		{"input", protocol.StatePlay, protocol.PlayerInput{Sequence: 1, MoveX: -1, MoveZ: 1, Jump: true, Yaw: 1.5, Pitch: -0.5, Mining: true}, 0, "0100000000000000ff01010000c03f000000bf" + "01" + "00" + "00"},
 		// v24 新增：进食位是载荷最末一字节。夹具刻意取 Mining=false、
 		// Eating=true——同真同假的样本无法分辨「两个布尔字节写反」的实现。
@@ -70,8 +74,8 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		wantID  uint32
 		wantHex string
 	}{
-		{"server hello", protocol.StateHandshake, protocol.ServerHello{ProtocolVersion: 39}, 0, "27"},
-		{"handshake reject", protocol.StateHandshake, protocol.HandshakeReject{ServerProtocolVersion: 39, Code: protocol.HandshakeVersionMismatch, Message: "no"}, 1, "2701026e6f"},
+		{"server hello", protocol.StateHandshake, protocol.ServerHello{ProtocolVersion: 40}, 0, "28"},
+		{"handshake reject", protocol.StateHandshake, protocol.HandshakeReject{ServerProtocolVersion: 40, Code: protocol.HandshakeVersionMismatch, Message: "no"}, 1, "2801026e6f"},
 		{"login success", protocol.StateLogin, protocol.LoginSuccess{PlayerID: id, WorldSeed: 0x1122334455667788}, 0, "00112233445546778899aabbccddeeff8877665544332211"},
 		{"login reject", protocol.StateLogin, protocol.LoginReject{Code: protocol.LoginInvalidIdentity, Message: "no"}, 1, "02026e6f"},
 		{"block changes", protocol.StatePlay, protocol.BlockChanges{Dimension: core.Overworld, Chunk: core.ChunkPos{X: 1, Z: -1}, BaseRevision: 1, NewRevision: 2, Changes: []protocol.BlockChange{{Position: core.BlockPos{X: 16, Y: -64, Z: -1}, Block: core.StoneID}}}, 1, "0000000001000000ffffffff010000000000000002000000000000000110000000c0ffffffffffffff0200"},

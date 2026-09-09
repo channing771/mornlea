@@ -240,7 +240,7 @@ func runGridMirrorScript(t *testing.T, transport string) gridMirrorTransportResu
 	defer cancel()
 	endpoint, err := network.LoginClient(ctx, clientStream, network.Identity{
 		PlayerID: gridMirrorPlayerID(t), DisplayName: "GridMirror",
-	})
+	}, 32)
 	if err != nil {
 		t.Fatalf("%s LoginClient: %v", transport, err)
 	}

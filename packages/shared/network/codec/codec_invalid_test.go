@@ -77,7 +77,7 @@ func TestRemotePlayerStatesRejectsNonCanonicalCountVarint(t *testing.T) {
 
 func TestSmallPacketRejectsMalformedPayloads(t *testing.T) {
 	validID := mustCodecPlayerID(t)
-	validClient := protocol.LoginStart{PlayerID: validID, DisplayName: "Chen"}
+	validClient := protocol.LoginStart{PlayerID: validID, DisplayName: "Chen", ViewDistance: 2}
 	_, validClientPayload, err := encodeClientPacketPayload(protocol.StateLogin, validClient)
 	if err != nil {
 		t.Fatal(err)

@@ -278,7 +278,7 @@ func runEightManualMultiplayer(t *testing.T, transport string, ticks uint64) mul
 				serverDone <- err
 			}(index, identity)
 			var loginErr error
-			endpoint, loginErr = network.LoginClient(loginCtx, clientStream, identity)
+			endpoint, loginErr = network.LoginClient(loginCtx, clientStream, identity, 32)
 			var serverErr error
 			select {
 			case serverErr = <-serverDone:

@@ -43,7 +43,7 @@ func TestNewApplicationCreatesAudioOnlyForWindowedMode(t *testing.T) {
 				dependencies.DialTCP = func(context.Context, string) (network.ClientPacketStream, error) {
 					return stream, nil
 				}
-				dependencies.LoginClient = func(context.Context, network.ClientPacketStream, network.Identity) (network.ClientEndpoint, uint64, error) {
+				dependencies.LoginClient = func(context.Context, network.ClientPacketStream, network.Identity, uint8) (network.ClientEndpoint, uint64, error) {
 					return endpoint, 0, nil
 				}
 				dependencies.NewWindow = func(int, int, string) (Window, error) {
@@ -82,7 +82,7 @@ func TestNewApplicationCreatesAudioOnlyForWindowedMode(t *testing.T) {
 				dependencies.DialTCP = func(context.Context, string) (network.ClientPacketStream, error) {
 					return stream, nil
 				}
-				dependencies.LoginClient = func(context.Context, network.ClientPacketStream, network.Identity) (network.ClientEndpoint, uint64, error) {
+				dependencies.LoginClient = func(context.Context, network.ClientPacketStream, network.Identity, uint8) (network.ClientEndpoint, uint64, error) {
 					return endpoint, 0, nil
 				}
 				dependencies.NewOffscreenRenderer = func(int, int) (*client.Renderer, error) {
@@ -177,7 +177,7 @@ func TestNewApplicationReturnsRegistryErrorBeforeClientSideEffects(t *testing.T)
 				called("DialTCP")
 				return nil, sideEffectErr
 			}
-			dependencies.LoginClient = func(context.Context, network.ClientPacketStream, network.Identity) (network.ClientEndpoint, uint64, error) {
+			dependencies.LoginClient = func(context.Context, network.ClientPacketStream, network.Identity, uint8) (network.ClientEndpoint, uint64, error) {
 				called("LoginClient")
 				return nil, 0, sideEffectErr
 			}

@@ -28,7 +28,7 @@ func TestHostTCPLoginDisconnectAndShutdown(t *testing.T) {
 	}
 	identity := playerIdentity(11)
 	loginCtx, cancelLogin := context.WithTimeout(context.Background(), waitDeadline)
-	client, err := network.LoginClient(loginCtx, stream, identity)
+	client, err := network.LoginClient(loginCtx, stream, identity, 32)
 	cancelLogin()
 	if err != nil {
 		t.Fatal(err)
@@ -50,6 +50,43 @@ func TestHostTCPLoginDisconnectAndShutdown(t *testing.T) {
 	}
 	if store.syncCount() != 1 || store.closeCount() != 1 {
 		t.Fatalf("TCP host store shutdown counts = sync %d close %d", store.syncCount(), store.closeCount())
+	}
+}
+
+// TestHostStoresNegotiatedViewDistanceOnActiveLogin 钉死 v40 登录协商的
+// 接纳半部：客户端声明的域内视距经 `PendingLogin` 抵达 host 后必须原样
+// 存入会话侧 activeLogin，供后续订阅半径换算消费；host 自身在此不钳制、
+// 不解释。登录成功应答在 promote 之后才发出，因此断言无需再等就绪。
+func TestHostStoresNegotiatedViewDistanceOnActiveLogin(t *testing.T) {
+	host := newTestHost(t)
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	runDone := make(chan error, 1)
+	go func() { runDone <- host.Run(runCtx, nil) }()
+	t.Cleanup(func() {
+		cancelRun()
+		select {
+		case err := <-runDone:
+			if err != nil {
+				t.Errorf("Host Run cleanup: %v", err)
+			}
+		case <-time.After(waitDeadline):
+			t.Error("Host Run cleanup timed out")
+		}
+	})
+
+	identity := playerIdentity(12)
+	clientStream, serverStream := network.NewMemoryStreamPair(64)
+	done := make(chan error, 1)
+	go func() { done <- host.AcceptStream(context.Background(), serverStream) }()
+	client, err := network.LoginClient(context.Background(), clientStream, identity, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+
+	active := activeLoginForPlayer(t, host, identity.PlayerID)
+	if got := active.ViewDistance; got != 8 {
+		t.Fatalf("会话侧视距 = %d，想要登录时声明的 8", got)
 	}
 }
 

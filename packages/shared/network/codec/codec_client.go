@@ -24,6 +24,9 @@ func encodeClientPacketPayload(state protocol.State, packet protocol.ClientPacke
 		message := packet.(protocol.LoginStart)
 		e.data = append(e.data, message.PlayerID[:]...)
 		e.string(message.DisplayName, 128)
+		// v40 起视距是载荷最末一字节（u8），紧跟长度前缀昵称之后；域外值
+		// 已被前置的 `ValidateClientPacket` 拒绝，此处只搬运。
+		e.u8(message.ViewDistance)
 	case protocol.StatePlay:
 		switch message := packet.(type) {
 		case protocol.PlayerInput:
@@ -127,13 +130,20 @@ func decodeClientPacketPayload(state protocol.State, packetID uint32, payload []
 		}
 		var id core.PlayerID
 		var name string
+		var viewDistance uint8
 		if data, readErr := d.take(len(id)); readErr != nil {
 			err = readErr
 		} else {
 			copy(id[:], data)
 			name, err = d.string(MaxSmallPayload, MaxSmallPayload)
+			if err == nil {
+				// v40 尾部 1 字节视距：缺失即截断、多余即尾随，均由原语
+				// 读错误与 `done()` 拒绝；域外值经解码放行口交给登录驱动
+				// 以冻结拒绝码处理。
+				viewDistance, err = d.u8()
+			}
 		}
-		packet = protocol.LoginStart{PlayerID: id, DisplayName: name}
+		packet = protocol.LoginStart{PlayerID: id, DisplayName: name, ViewDistance: viewDistance}
 	case protocol.StatePlay:
 		switch packetID {
 		case 0:
