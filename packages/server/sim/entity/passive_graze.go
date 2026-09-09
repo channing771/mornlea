@@ -115,10 +115,11 @@ func (engine *engineContext) settlePassiveGraze(
 	if !ready || block != core.GrassID {
 		return
 	}
-	if _, changed, err := dimension.SetBlock(entry.grazePos, core.DirtID); err != nil || !changed {
+	old, changed, err := dimension.SetBlock(entry.grazePos, core.DirtID)
+	if err != nil || !changed {
 		return
 	}
-	engine.recordChange(entry.dimension, entry.grazePos, core.DirtID, pending)
+	engine.recordChange(entry.dimension, entry.grazePos, old, core.DirtID, pending)
 	engine.touchChunk(
 		core.ChunkKey{Dimension: entry.dimension, Pos: entry.grazePos.Chunk()},
 		pending,

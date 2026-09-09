@@ -62,14 +62,14 @@ func (engine *engineContext) executeBoneMeal(
 		return RejectInvalidBlock, true
 	}
 	next := block + 1 // Stage0..6 连续递增即下一阶段；Stage7 已在上游拒绝。
-	_, changed, setErr := dimension.SetBlock(hit.Block, next)
+	old, changed, setErr := dimension.SetBlock(hit.Block, next)
 	if setErr != nil {
 		return mapSetBlockError(setErr), true
 	}
 	if !changed {
 		return RejectNoTarget, true
 	}
-	engine.recordChange(session.dimension, hit.Block, next, pending)
+	engine.recordChange(session.dimension, hit.Block, old, next, pending)
 	player.inventory.Hotbar = consumed
 	player.inventoryDirty = true
 	return 0, false

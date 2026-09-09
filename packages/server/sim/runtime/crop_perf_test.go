@@ -111,8 +111,9 @@ func cropPerfPlant(engine *Engine, chunks int) int {
 // runCropPerf 逐 tick 调 advanceCrops 并报告耗时与规模坐标。
 //
 // 直接调 advanceCrops 而不是整个 Step：Step 还包含掉落物、熔炉、流体与
-// finishChanges，混在一起的读数无法归因到作物阶段（这也正是 phaseCropAdvance
-// 单独登记而不折进 phaseFluidAdvance 的原因）。
+// finishChanges，混在一起的读数无法归因到随机面——旧的作物相位已并入
+// phaseBlockUpdates（流体/湿度/作物三相位收敛），相位观察面不再提供随机面的
+// 边界，逐面归因只剩直接调用这一条路。
 //
 // tick 每轮 +1 是必要的：抽样是 (seed, tick, 位置) 的纯函数，tick 不动的话
 // 每一轮抽到的是同一批格，测出来的是被 CPU 缓存彻底喂熟的最好情况。

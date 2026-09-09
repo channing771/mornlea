@@ -97,10 +97,10 @@ func (engine *engineContext) executePlacement(
 	}
 	// 流体格不算被占用：射线现在会穿过水命中水下的固体，落点因此常常是一格水，
 	// 放置必须直接把它覆盖掉（与 Minecraft 系的「向水里放方块」同语义）。覆盖
-	// 走的是下面同一条 SetBlock → recordChange 路径，因此该格及其六个面邻格会被
-	// enqueueFluidUpdate 重新入队，被切断的下游流动水才会按规则变干，水面不会
-	// 留下一个不会被填回的洞。湿度候选不能挂在通用 `recordChange`；`SetBlock`
-	// 确认写入变化后，还要用本处已有的写前与写后方块编号单独判流体 membership。
+	// 走的是下面同一条 SetBlock → recordChange 路径，统一入队门面拿到写前与
+	// 写后的方块编号后派生全部反activate入队：目标格及其六个面邻格被重新入队
+	// 流体域（被切断的下游流动水按规则变干，水面不会留下不会被填回的洞），
+	// 覆盖流体时的湿窗口重判也由门面按流体 membership 变化条件派生。
 	occupied := (block != core.AirID && !core.IsFluid(block)) || placementOverlapsPlayer(
 		placement,
 		target,
@@ -232,7 +232,7 @@ func (engine *engineContext) executePlacement(
 		}
 		chestSlot, reserveChest = slot, true
 	}
-	_, changed, setErr := dimension.SetBlock(target, placement)
+	old, changed, setErr := dimension.SetBlock(target, placement)
 	if setErr != nil {
 		return mapSetBlockError(setErr), true
 	}
@@ -240,12 +240,10 @@ func (engine *engineContext) executePlacement(
 		engine.recordChange(
 			dimensionID,
 			target,
+			old,
 			placement,
 			pending,
 		)
-		if core.IsFluid(block) != core.IsFluid(placement) {
-			engine.realm.EnqueueFarmlandMoistureAroundFluid(dimensionID, target)
-		}
 		if reserveFurnace {
 			targetChunk.CommitFurnace(furnaceSlot, targetIndex)
 		}

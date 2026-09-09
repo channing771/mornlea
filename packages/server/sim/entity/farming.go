@@ -97,7 +97,7 @@ func (engine *engineContext) executeTillSoil(
 	}
 
 	// —— 以下是唯一的写入区：全部校验已过 ——
-	_, changed, setErr := dimension.SetBlock(hit.Block, core.FarmlandDryID)
+	old, changed, setErr := dimension.SetBlock(hit.Block, core.FarmlandDryID)
 	if setErr != nil {
 		return mapSetBlockError(setErr), true
 	}
@@ -106,8 +106,9 @@ func (engine *engineContext) executeTillSoil(
 		// 不写变更也不扣耐久。
 		return RejectNoTarget, true
 	}
-	engine.recordChange(session.dimension, hit.Block, core.FarmlandDryID, pending)
-	engine.realm.EnqueueFarmlandMoisture(session.dimension, hit.Block)
+	// 翻地写前校验保证旧值恒为草/泥土类可翻方块：新造耕地的单格湿度候选（当
+	// tick 重判）由统一入队门面按 (old, block) 派生，不再单独入队。
+	engine.recordChange(session.dimension, hit.Block, old, core.FarmlandDryID, pending)
 	// 疲劳表（见 hunger.go）：翻地完成累积固定疲劳。它和扣耐久一样只出现在
 	// 这个唯一的写入区里，因此拒绝路径在结构上就不可能累积疲劳。
 	player.applyExhaustion(exhaustionTillMilli, engine.tunables.ExhaustionThresholdMilli)

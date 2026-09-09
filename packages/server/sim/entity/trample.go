@@ -119,11 +119,11 @@ func (engine *engineContext) settleTrampleCell(
 	if !hasCrop {
 		// 上方无作物：耕地转泥土是方块转换而非破坏，本身不掉落任何物品
 		//（spec：耕地转泥土本身 MUST NOT 产生掉落物）。
-		_, changed, err := dimension.SetBlock(cell.position, core.DirtID)
+		old, changed, err := dimension.SetBlock(cell.position, core.DirtID)
 		if err != nil || !changed {
 			return
 		}
-		engine.recordChange(cell.dimension, cell.position, core.DirtID, pending)
+		engine.recordChange(cell.dimension, cell.position, old, core.DirtID, pending)
 		return
 	}
 
@@ -189,14 +189,15 @@ func (engine *engineContext) commitTrample(
 	crop core.BlockPos,
 	pending *pendingChunkChanges,
 ) bool {
-	if _, changed, err := dimension.SetBlock(cell.position, core.DirtID); err != nil || !changed {
-		return false
-	}
-	engine.recordChange(cell.dimension, cell.position, core.DirtID, pending)
-	_, changed, err := dimension.SetBlock(crop, core.AirID)
+	groundOld, changed, err := dimension.SetBlock(cell.position, core.DirtID)
 	if err != nil || !changed {
 		return false
 	}
-	engine.recordChange(cell.dimension, crop, core.AirID, pending)
+	engine.recordChange(cell.dimension, cell.position, groundOld, core.DirtID, pending)
+	cropOld, changed, err := dimension.SetBlock(crop, core.AirID)
+	if err != nil || !changed {
+		return false
+	}
+	engine.recordChange(cell.dimension, crop, cropOld, core.AirID, pending)
 	return true
 }

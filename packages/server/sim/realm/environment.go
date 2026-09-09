@@ -116,7 +116,9 @@ func (state *State) NewEnvironmentMutation(
 	return &EnvironmentMutation{Mutation: mutation, state: state}
 }
 
-// SetBlock 写入一格并把真实变更登记到本次环境事务。
+// SetBlock 写入一格并把真实变更登记到本次环境事务；写入成功后的定时面反
+// activate入队（流体域与条件湿窗口）由统一门面 enqueueBlockWrite 派生，环境
+// 写入方因此与 entity 侧 recordChange 共享同一份入队策略。
 func (mutation *EnvironmentMutation) SetBlock(
 	dimensionID core.DimensionID,
 	position core.BlockPos,
@@ -131,10 +133,7 @@ func (mutation *EnvironmentMutation) SetBlock(
 		return old, changed, err
 	}
 	mutation.Record(dimensionID, position, block)
-	mutation.state.environment.enqueueFluidUpdate(dimensionID, position)
-	if core.IsFluid(old) != core.IsFluid(block) {
-		mutation.state.environment.enqueueFarmlandMoistureAroundFluid(dimensionID, position)
-	}
+	mutation.state.environment.enqueueBlockWrite(dimensionID, position, old, block)
 	return old, true, nil
 }
 
@@ -180,6 +179,9 @@ func (state *environmentState) enqueueFluidUpdate(dimension core.DimensionID, po
 	}
 }
 
+// 以下三个细粒度入队方法自统一门面 EnqueueBlockWrite 落地起只服务测试夹具
+// 直连（按需构造单域待办），生产写入方必须走门面——入队策略只有一个真源，
+// 由 sim/entity 的入队入口守卫测试钉住唯一性。
 func (state *State) EnqueueFluidUpdate(dimension core.DimensionID, position core.BlockPos) {
 	state.environment.enqueueFluidUpdate(dimension, position)
 }
@@ -190,6 +192,43 @@ func (state *State) EnqueueFarmlandMoisture(dimension core.DimensionID, position
 
 func (state *State) EnqueueFarmlandMoistureAroundFluid(dimension core.DimensionID, position core.BlockPos) {
 	state.environment.enqueueFarmlandMoistureAroundFluid(dimension, position)
+}
+
+// EnqueueBlockWrite 是权威方块写入后的统一入队门面：写入方（entity 侧经
+// recordChange、环境事务经 EnvironmentMutation.SetBlock）在写块成功后以写前
+// 旧值 old 与新值 block 调用它，全部定时面反activate入队由 (old, block) 的
+// 方块类别派生，策略只有一个真源：
+//   - 流体域：恒入队目标格及其 6 面邻域，邻接流体获得重估机会；
+//   - 湿度域：流体成员变化（IsFluid(old) != IsFluid(block)）按湿窗口入队；
+//   - 湿度域：新造耕地（IsFarmland(block) 且非 IsFarmland(old)）单格入队，
+//     due=当 tick，流体推进子阶段之后即重判。
+//
+// 三条规则分别继承自门面化之前 recordChange 的流体入队、bucket/placement 的
+// 条件湿窗口与翻地的单格湿度候选，各写入方的入队语义（哪些格、几邻域、湿度
+// 窗口）逐不变；新增写入方只接线这一个入口。
+func (state *State) EnqueueBlockWrite(
+	dimension core.DimensionID,
+	position core.BlockPos,
+	old, block core.BlockID,
+) {
+	state.environment.enqueueBlockWrite(dimension, position, old, block)
+}
+
+// enqueueBlockWrite 是统一入队门面的实现：按 (old, block) 依次派生流体域与
+// 两个湿度域条件。入队顺序（流体在先）与门面化之前各调用点的写法一致；两个
+// 域的待办按 (pos, kind) 去重、只提前不推迟，入队先后对队列终态无影响。
+func (state *environmentState) enqueueBlockWrite(
+	dimension core.DimensionID,
+	position core.BlockPos,
+	old, block core.BlockID,
+) {
+	state.enqueueFluidUpdate(dimension, position)
+	if core.IsFluid(old) != core.IsFluid(block) {
+		state.enqueueFarmlandMoistureAroundFluid(dimension, position)
+	}
+	if core.IsFarmland(block) && !core.IsFarmland(old) {
+		state.enqueueFarmlandMoisture(dimension, position)
+	}
 }
 
 func (state *State) FluidQueue(dimension core.DimensionID) *fluid.Queue {

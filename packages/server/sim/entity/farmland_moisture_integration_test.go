@@ -39,10 +39,9 @@ func (adapter *fluidWorld) SetBlock(position core.BlockPos, block core.BlockID) 
 		x, _, z := position.Local()
 		chunk.SetBlock(x, position.Y, z, block)
 	})
-	if core.IsFluid(old) != core.IsFluid(block) {
-		adapter.engine.realm.EnqueueFarmlandMoistureAroundFluid(adapter.id, position)
-	}
-	adapter.engine.recordChange(adapter.id, position, block, adapter.pending)
+	// recordChange 的统一入队门面按 (old, block) 派生湿窗口，与旧夹具里
+	// 「成员变化时显式 EnqueueFarmlandMoistureAroundFluid」的净效果一致。
+	adapter.engine.recordChange(adapter.id, position, old, block, adapter.pending)
 }
 
 func fluidNeighbors(position core.BlockPos) [6]core.BlockPos {

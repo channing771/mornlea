@@ -173,7 +173,9 @@ func (engine *engineContext) completeCompanionPlacement(
 		// 意图（多伙伴竞争），对齐玩家的 RejectOccupied 语义整体拒绝不扣料。
 		return false
 	}
-	engine.recordChange(entry.dimension, target, placement, pending)
+	// 写前校验保证旧值恒为空气（伙伴放置不覆盖流体），统一入队门面按
+	// (AirID, placement) 派生入队时不会触发湿窗口。
+	engine.recordChange(entry.dimension, target, core.AirID, placement, pending)
 	if reserveFurnace {
 		targetChunk.CommitFurnace(furnaceSlot, targetIndex)
 	}
