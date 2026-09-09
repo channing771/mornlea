@@ -163,6 +163,12 @@ const (
 	SnowLayer2BlockID
 	SnowLayer3BlockID
 	SnowLayer4BlockID
+	// SaplingID 是橡树树苗的稳定方块编号，只追加在四档雪层之后：方块 ID 是
+	// 协议稳定值，重排会破坏既有存档与线上字节。树苗是零碰撞、非不透明、
+	// 不发光的植物方块，由 ItemSapling 放置在泥土或草方块上方，并在露天且
+	// 空间足够时按随机 tick 生长成橡树；树形几何由 engine 侧单一真源提供，
+	// 本包只负责编号、谓词与名称。
+	SaplingID
 	// BlockIDMax 是合法方块编号的独占上界（最后一个合法 BlockID + 1），本身不是
 	// 方块枚举成员，与物品侧的 ItemIDMax 同形。它供哨兵与穷举测试以
 	// 「id < BlockIDMax」表达「全部已注册方块」，替代「某个具体编号恰为枚举末项」

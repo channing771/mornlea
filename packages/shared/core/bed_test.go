@@ -55,8 +55,8 @@ func TestBedBlockIDsAppendAfterTorches(t *testing.T) {
 		t.Fatalf("ShortGrassID = %d，必须紧随 BedHeadEastID(%d)",
 			core.ShortGrassID, core.BedHeadEastID)
 	}
-	if core.BlockIDMax != 89 {
-		t.Fatalf("BlockIDMax = %d，必须后移到 89（短草与四档雪层之后）", core.BlockIDMax)
+	if core.BlockIDMax != 90 {
+		t.Fatalf("BlockIDMax = %d，必须后移到 90（短草、四档雪层与树苗之后）", core.BlockIDMax)
 	}
 	// 形态编号两两不同：八个形态必须解析为八个不同的方块。
 	seen := map[core.BlockID]bool{}
@@ -157,9 +157,9 @@ func TestBedDirAndPlacementMapping(t *testing.T) {
 }
 
 // TestItemBedRegistration 锁定床物品的稳定语义：编号紧随腐肉物品（夜行者行
-// 先合并占 45，床顺延为 46）、剑、牛肉与水桶批次追加后哨兵为 57、堆叠 64、无耐久、不是食物也不是
-// 工具；放置映射按门先例给出默认形态（南向床尾），采掘映射把八个床形态全部
-// 还原成恰好 1 个床物品。
+// 先合并占 45，床顺延为 46）、剑、牛肉、水桶与树苗批次追加后哨兵为 58、堆叠 64、
+// 无耐久、不是食物也不是工具；放置映射按门先例给出默认形态（南向床尾），采掘
+// 映射把八个床形态全部还原成恰好 1 个床物品。
 func TestItemBedRegistration(t *testing.T) {
 	if core.ItemBed != core.ItemRottenFlesh+1 {
 		t.Fatalf("ItemBed = %d，必须紧随 ItemRottenFlesh(%d)", core.ItemBed, core.ItemRottenFlesh)
@@ -167,8 +167,8 @@ func TestItemBedRegistration(t *testing.T) {
 	if core.ItemBed != 46 {
 		t.Fatalf("ItemBed = %d，必须稳定为 46", core.ItemBed)
 	}
-	if core.ItemIDMax != 57 {
-		t.Fatalf("ItemIDMax = %d，必须在水桶批次后移到 57", core.ItemIDMax)
+	if core.ItemIDMax != 58 {
+		t.Fatalf("ItemIDMax = %d，必须在水桶与树苗批次后移到 58", core.ItemIDMax)
 	}
 	if !core.RegisteredItem(core.ItemBed) {
 		t.Fatal("ItemBed 未注册")

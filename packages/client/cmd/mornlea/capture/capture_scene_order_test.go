@@ -20,22 +20,23 @@ import (
 // 硬理由，见 `TestWaterUnderwaterCaptureSceneIsLast`。变基排序协调:far-horizon
 // 插在 water-underwater 之前(倒数第二);其 `Apply` 显式清空 ai-companion 留下的
 // 全部呈现状态,与前一场景互相独立。bed-night 按 spec delta 插在 torch-night
-// 之后、ai-companion 之前（与 materials-showcase 之间）。常显 HUD 的三个
-// capture 场景随常显层 GPU 呈现退役从表中移除，呈现验收由 WebView HUD 组件
-// 断言与 frontend/visual 部件基线承接。
+// 之后、ai-companion 之前（与 materials-showcase 之间）。sapling-growth 按 spec
+// delta「树苗与橡树再生基线场景」插在 oak-grove 之后、ai-companion 之前。常显
+// HUD 的三个 capture 场景随常显层 GPU 呈现退役从表中移除，呈现验收由 WebView
+// HUD 组件断言与 frontend/visual 部件基线承接。
 func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 	wantNames := []string{
 		"terrain-noon", "avatar-nametag",
 		"debug-panel", "skylight-tunnel", "block-light-room", "torch-night", "bed-night",
 		"materials-showcase",
-		"target-block-feedback", "grass-closeup", "oak-grove", "ai-companion", "sword-combat",
+		"target-block-feedback", "grass-closeup", "oak-grove", "sapling-growth", "ai-companion", "sword-combat",
 		"hostile-mob", "passive-herd", "passive-graze", "water-surface-slope", "bucket-pond", "mining-crack-early", "mining-crack-heavy",
 		"rain-noon", "camera-third-back", "camera-third-front", "snow-cover",
 		"main-menu", "settings-menu", "avatar-detail",
 		"far-horizon", "water-underwater",
 	}
-	if len(captureScenes) != 29 {
-		t.Fatalf("正式场景数=%d，想要 29", len(captureScenes))
+	if len(captureScenes) != 30 {
+		t.Fatalf("正式场景数=%d，想要 30", len(captureScenes))
 	}
 	gotNames := make([]string, len(captureScenes))
 	for index, scene := range captureScenes {

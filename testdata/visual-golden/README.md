@@ -2,13 +2,13 @@
 
 本目录统一存放视觉回归基线，均为测试夹具二进制。
 
-- `world/`：无窗口世界场景基线 29 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
+- `world/`：无窗口世界场景基线 30 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
 - `motion/`：过程 GIF 基线 11 个（被动牛 4 剧本 + motion 演示 7 个），只验呈现、不进比对，对应 `cmd/mornlea/capture/passive_death_scripts.go` 的 `passiveDeathGIFScripts` 与各 motion 演示入口（按 tick 步进抓帧，标准库 `image/gif` 编码）。
 - `ui/`：前端 UI 部件基线 30 张，对应 `packages/engine/crates/mornlea_client/frontend/visual/fixture-names.ts` 的 `fixtureNames`。
 
 旧目录 `cmd/mornlea/capture/testdata/golden/` 与 `engine/crates/mornlea_client/frontend/visual/golden/` 已清空，仅剩空目录，不再写入。
 
-## world（29 张）
+## world（30 张）
 
 文件名即场景名加 `.png` 后缀，场景定义与顺序以 `captureScenes` 为准。
 
@@ -25,6 +25,7 @@
 | `target-block-feedback.png` | `target-block-feedback` | 相机正前方命中块的高亮描边与定位反馈。 |
 | `grass-closeup.png` | `grass-closeup` | 近景草地条上短草列的交叉面片与贴地形态，短草外观的可辨识基线。 |
 | `oak-grove.png` | `oak-grove` | 橡树群落的树冠、树干与林下地表的组合呈现。 |
+| `sapling-growth.png` | `sapling-growth` | 同一片草地支撑面上近处树苗与远处运行时橡树的对照：树苗经四 quad cutout 路径呈现（交叉斜面、上缘透空、贴地生长），橡树由 `worldgen.TreeBlocks` 的运行时树形几何长成，树干与树冠可辨。 |
 | `ai-companion.png` | `ai-companion` | AI 伙伴在正午世界中的跟随站位与其呈现状态。 |
 | `sword-combat.png` | `sword-combat` | 持剑攻击姿态与权威命中标记同帧的战斗反馈。 |
 | `hostile-mob.png` | `hostile-mob` | 午夜草地火把亮池边缘夜行者群的站位与受击追逐态。 |
@@ -85,7 +86,7 @@
 
 motion 过程 GIF 只验呈现、不进比对：`make visual-check` 只比对 `world/` PNG
 （GIF 剧本不设阈值也不进比对；纯比对运行缺省不生成，`GIFS=1` 显式请求或
-更新基线时才生成），`world/` 的 28 张 PNG 纪律也不含它。
+更新基线时才生成），`world/` 的 30 张 PNG 纪律也不含它。
 
 | 演示文件 | 场景 | 帧数/时长 | 生成入口 |
 |---|---|---|---|

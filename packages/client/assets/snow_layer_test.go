@@ -101,11 +101,11 @@ func TestSnowLayerEntersMeshSnapshot(t *testing.T) {
 	}
 }
 
-// TestSnowLayerLayersAppendAtEnumEnd 锁定材质层追加纪律：两张雪层只能追加在
-// 枚举末位（人物层之后、layerCount 之前），既有冻结层号（植物 31..54、火把
-// 59、床 60..67、短草 68、裂纹 69..78）一律不动，也不得落进植物 material
-// 区间（否则会被渲染成交叉斜面）。
-func TestSnowLayerLayersAppendAtEnumEnd(t *testing.T) {
+// TestSnowLayerLayersAppendAfterHumanLayers 锁定材质层追加纪律：两张雪层只能
+// 追加在人物层之后（后续追加层继续排在它们之后，`layerCount` 由末位层决定），
+// 既有冻结层号（植物 31..54、火把 59、床 60..67、短草 68、裂纹 69..78）一律
+// 不动，也不得落进植物 material 区间（否则会被渲染成交叉斜面）。
+func TestSnowLayerLayersAppendAfterHumanLayers(t *testing.T) {
 	registry := assets.NewRegistry()
 	if assets.LayerSnowLayerTop != assets.LayerSnowLayerSide-1 {
 		t.Fatalf("雪层两层必须相邻：top=%d side=%d", assets.LayerSnowLayerTop, assets.LayerSnowLayerSide)
@@ -114,8 +114,8 @@ func TestSnowLayerLayersAppendAtEnumEnd(t *testing.T) {
 		t.Fatalf("雪层两层必须追加在人物层 %d 之后，实际 top=%d",
 			assets.LayerHumanClayLeg, assets.LayerSnowLayerTop)
 	}
-	if got, want := registry.LayerCount(), int(assets.LayerSnowLayerSide)+1; got != want {
-		t.Fatalf("LayerCount = %d，想要覆盖雪层追加后的 %d", got, want)
+	if got, want := registry.LayerCount(), int(assets.LayerSapling)+1; got != want {
+		t.Fatalf("LayerCount = %d，想要覆盖雪层与后续追加层后的 %d", got, want)
 	}
 	if mesh.PlantMaterial(assets.LayerSnowLayerTop) || mesh.PlantMaterial(assets.LayerSnowLayerSide) {
 		t.Fatal("雪层材质层落进了植物区间：会被渲染成交叉斜面")

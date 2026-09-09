@@ -21,8 +21,15 @@ func IsCrop(id BlockID) bool {
 // 作物仍由 `IsCrop` 精确判定，两者互不重叠。
 func IsWildGrass(id BlockID) bool { return id == ShortGrassID }
 
+// IsSapling 报告 id 是否是橡树树苗方块。
+//
+// 树苗是第二个非作物植物方块：与短草共用植物的透明、零碰撞与交叉斜面语义，
+// 但自身是可放置、可采掘、可生长的独立方块（短草没有物品也没有通用掉落）。
+// 三族互不重叠——树苗刻意不算作物，否则骨粉催熟一类的作物分支会顺带作用到它。
+func IsSapling(id BlockID) bool { return id == SaplingID }
+
 // IsPlant 报告 id 是否使用植物的透明、零碰撞与交叉斜面语义。
-func IsPlant(id BlockID) bool { return IsCrop(id) || IsWildGrass(id) }
+func IsPlant(id BlockID) bool { return IsCrop(id) || IsWildGrass(id) || IsSapling(id) }
 
 // CropStage 返回作物方块的生长阶段 0..7。
 //

@@ -3,7 +3,7 @@
 //! 逐条镜像 Go `internal/fluid/rules.go` 的三段纯整数规则——`evalCell` 的
 //! 「陈旧项跳过 → 非源存活判定 → 垂直优先即返 → 水平传播等级 +1 且 ≤7」、
 //! `flowingSurvives` 的「上方任意流体或更强水平邻居」、`Replaceable` 的判定表
-//! (空气/植物(作物与短草)/门四态/源不可替换/弱水可被强水替换,分支顺序与
+//! (空气/植物(作物、短草与树苗)/门四态/源不可替换/弱水可被强水替换,分支顺序与
 //! Go 侧一致)。
 //! kernel 只回答「本次求值想写哪些格」,队列、预算与写入编排留在 Go 侧。
 //!
@@ -43,7 +43,8 @@ const MAX_FLUID_LEVEL: u8 = 7;
 // Air=0、Barrier=1、Stone=2、WaterSource=27..WaterLevel7=34(流体 8 连号,
 // WaterLevelN == WaterSource+N)、WheatStage0..7=37..44、Workbench=45、
 // PotatoStage0..7=46..53、CarrotStage0..7=54..61、门下半 62..69
-// (南/西/北/东 × 关/开,开态 = 63/65/67/69)、门上半 70、ShortGrass=84。
+// (南/西/北/东 × 关/开,开态 = 63/65/67/69)、门上半 70、ShortGrass=84、
+// Sapling=89(只追加在四档雪层 85..88 之后)。
 pub(crate) const AIR: u16 = 0;
 /// Barrier:越界/未就绪世界读的替身,重扫 kernel 与 Go `fluidRescanBlockAt`
 /// 共用同一语义(Barrier 不可替换,视作密封)。
@@ -65,6 +66,11 @@ const DOOR_UPPER: u16 = 70;
 /// ShortGrass:原创短草的协议稳定编号,被流动水覆盖时零掉落且不受掉落容量
 /// 限制——该结算语义在 Go sim 写入侧,这里只参与可替换判定。
 pub(crate) const SHORT_GRASS: u16 = 84;
+/// Sapling:橡树树苗的协议稳定编号(Go `core.SaplingID`)。树苗是第二个非作物
+/// 植物方块(短草是第一个),与作物、短草一样对流动水可替换;被覆盖后的掉落
+/// 结算(1 个树苗及其容量原子拒绝)在 Go sim 写入侧,不在作物掉落表上——
+/// kernel 只回答「能不能写」,这里只参与可替换判定。
+pub(crate) const SAPLING: u16 = 89;
 
 /// 镜像 Go `core.IsFluid`:流体 = 源 + 7 档流动水,共 8 个连续编号。
 pub(crate) fn is_fluid(id: u16) -> bool {
@@ -89,11 +95,11 @@ fn is_crop(id: u16) -> bool {
         || (CARROT_STAGE_0..=CARROT_STAGE_7).contains(&id)
 }
 
-/// 镜像 Go `core.IsPlant`:作物 ∪ 短草。植物的「可被流动水替换」共有语义
-/// 收口在这一个谓词,短草不得只在编号上特判——否则后续植物消费者会与作物
-/// 判定面漂移。农业状态机语义仍只认 `is_crop`。
+/// 镜像 Go `core.IsPlant`:作物 ∪ 短草 ∪ 树苗。植物的「可被流动水替换」共有
+/// 语义收口在这一个谓词,短草与树苗不得只在编号上特判——否则后续植物消费者
+/// 会与作物判定面漂移。农业状态机语义仍只认 `is_crop`。
 fn is_plant(id: u16) -> bool {
-    is_crop(id) || id == SHORT_GRASS
+    is_crop(id) || id == SHORT_GRASS || id == SAPLING
 }
 
 /// 镜像 Go `core.IsDoor`:下半 62..69 加上半 70。
@@ -110,12 +116,12 @@ fn is_door_open_lower(id: u16) -> bool {
 }
 
 /// 镜像 Go `fluid.Replaceable` 的判定表,分支顺序与 Go 侧一致:
-/// 空气→真;上半门→假;开启下半门→真;关闭门→假;植物(作物与短草)→真;
+/// 空气→真;上半门→假;开启下半门→真;关闭门→假;植物(作物、短草与树苗)→真;
 /// 非流体→假;源→假;流体按等级比较(更弱的可被更强的新水替换)。
 ///
 /// `new_level` 由调用方按当前传播算出(垂直恒为 1,水平为 N+1),本函数只做
-/// 纯比较;作物冲毁后的掉落结算是权威写入侧(Go sim)的职责,短草覆盖零掉落
-/// 且不预留容量——两者 kernel 都不感知。
+/// 纯比较;作物与树苗冲毁后的掉落结算是权威写入侧(Go sim)的职责,短草覆盖
+/// 零掉落且不预留容量——三者 kernel 都不感知。
 /// 重扫 kernel 以 `replaceable(id, 1)` 复用本表做密封(不动点)判定。
 pub(crate) fn replaceable(target: u16, new_level: u8) -> bool {
     if target == AIR {
@@ -341,8 +347,8 @@ mod tests {
         // 方块编号钉位:这些数值与 Go `internal/core/block.go` 的 iota 实测值
         // 逐一对应(空气 0、Barrier 1、石头 2、源 27、流动水 28..34、麦
         // 37..44、工作台 45、马铃薯 46..53、胡萝卜 54..61、下半门 62..69、
-        // 上半门 70、短草 84)。重排即破坏协议稳定契约,本断言负责在 Rust 侧
-        // 被误改时报警。
+        // 上半门 70、短草 84、树苗 89)。重排即破坏协议稳定契约,本断言负责在
+        // Rust 侧被误改时报警。
         assert_eq!(AIR, 0);
         assert_eq!(BARRIER, 1);
         assert_eq!(WATER_SOURCE, 27);
@@ -356,6 +362,7 @@ mod tests {
         assert_eq!(DOOR_LOWER_SOUTH_CLOSED, 62);
         assert_eq!(DOOR_UPPER, 70);
         assert_eq!(SHORT_GRASS, 84);
+        assert_eq!(SAPLING, 89);
         assert_eq!(STONE, 2);
     }
 
@@ -386,6 +393,10 @@ mod tests {
         // `is_plant`,农业状态机仍只认 `is_crop`(镜像 Go `core.IsPlant`)。
         assert!(is_plant(SHORT_GRASS));
         assert!(!is_crop(SHORT_GRASS));
+        // 树苗同理:第二个非作物植物方块(短草是第一个),与短草共用植物放行,
+        // 但不进入任何作物分支。
+        assert!(is_plant(SAPLING));
+        assert!(!is_crop(SAPLING));
         assert!(!is_plant(WORKBENCH));
         assert!(!is_plant(STONE));
         // 门区间与四个开启下半门。
@@ -417,6 +428,9 @@ mod tests {
         // 产出任何掉落物,也不预留掉落容量。
         assert!(replaceable(SHORT_GRASS, 1));
         assert!(replaceable(SHORT_GRASS, 7));
+        // 树苗可替换:水淹即冲毁,掉落 1 个自身与容量原子拒绝都在 sim 写入侧。
+        assert!(replaceable(SAPLING, 1));
+        assert!(replaceable(SAPLING, 7));
         // 门:开启下半可流入,关闭下半与上半不可。
         assert!(replaceable(DOOR_LOWER_SOUTH_OPEN, 1));
         assert!(!replaceable(DOOR_LOWER_SOUTH_CLOSED, 1));
@@ -592,6 +606,35 @@ mod tests {
             GRASS,
             AIR,
             SHORT_GRASS,
+        ));
+        let next = WATER_SOURCE + 1;
+        assert_writes(&out, &[(3, next), (5, next), (6, next)]);
+    }
+
+    #[test]
+    fn sapling_is_replaced_vertically_and_horizontally() {
+        // 树苗与作物、短草同走植物放行:垂直优先命中下方树苗,只写下方一条
+        // 等级 1,不再向任何水平方向传播。
+        let out = eval(&cells(
+            WATER_SOURCE,
+            STONE,
+            SAPLING,
+            STONE,
+            STONE,
+            STONE,
+            STONE,
+        ));
+        assert_writes(&out, &[(2, WATER_SOURCE + 1)]);
+        // 水平分支:+x 与 −z 是树苗可写入,−x 是树苗脚下的草方块必须挡水,
+        // +z 空气照常写入。
+        let out = eval(&cells(
+            WATER_SOURCE,
+            STONE,
+            STONE,
+            SAPLING,
+            GRASS,
+            AIR,
+            SAPLING,
         ));
         let next = WATER_SOURCE + 1;
         assert_writes(&out, &[(3, next), (5, next), (6, next)]);

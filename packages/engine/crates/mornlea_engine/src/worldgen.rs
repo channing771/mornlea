@@ -63,6 +63,27 @@ const IRON_SALT: u64 = 0xC2B2_AE3D_27D4_EB4F;
 const OAK_TREE_CELL_SHIFT: u32 = 3;
 const OAK_TREE_SALT: u64 = 0xA24B_AED4_963E_E407;
 
+/// 运行时树形几何(树苗长成橡树)的参数派生 salt,ASCII "SAPLTREE"。
+///
+/// 与 `OAK_TREE_SALT`(世界生成 8×8 候选格网格)和
+/// `SHORT_GRASS_GENERATION_SALT`(自然短草列)完全独立:生长几何必须能从
+/// 任意根坐标确定性派生,不能借用世界生成的候选格网格,否则同一坐标的
+/// 生长结果会随区块生成顺序与候选格布局漂移。冻结后不得改动,改动即让
+/// 既有世界里的树苗长成另一棵树。
+const TREE_BLOCKS_SALT: u64 = 0x5341_504C_5452_4545;
+
+/// 运行时树形几何写入的方块编号:协议稳定值,与 Go `core` 的 `OakLogID`
+/// (17)与 `LeavesID`(19)逐一对应,只能追加不能重排。
+const TREE_BLOCKS_OAK_LOG: u16 = 17;
+const TREE_BLOCKS_LEAVES: u16 = 19;
+
+/// 运行时树形几何的记录上限。
+///
+/// 最坏普通橡树(高 7、蓬松档)是 7 条原木 + 20+20+8+5+5 条树叶 = 65 条,
+/// 128 是防御性上界:越过它说明层形实现已经偏离普通橡树家族,按输出溢出
+/// 显式失败而不是静默截断。
+const TREE_BLOCKS_MAX_RECORDS: usize = 128;
+
 /// 自然短草列判定的冻结 salt(natural-grass-seeds design 决策 3)。
 /// 只借用既有 `ore_hash` wrapping 整数哈希,不用全局 RNG、浮点概率或
 /// 区块内坐标;`hash & 3 == 0` 给合格草地列恰 1/4 的独立稀疏命中,与玩家
@@ -102,6 +123,31 @@ pub(crate) struct Materials {
 }
 
 impl Materials {
+    /// 运行时树形几何专用材料表:普通橡树(`rare = false`、`branch_count = 0`)
+    /// 的层形判定只读 `air`、`oak_log`、`leaves` 三项,其余字段在运行时路径
+    /// 不可达。
+    ///
+    /// 不可达字段一律填 1(既非空气也非原木/树叶):一旦后续改动让普通档读了
+    /// 新字段,比较结果会立刻偏离测试预期,而不是静默取到 0 蒙混过关。三项
+    /// 编号是协议稳定值,由 `runtime_block_ids_match_go_core` 钉位。
+    const RUNTIME_TREE: Materials = Materials {
+        air: 0,
+        stone: 1,
+        dirt: 1,
+        grass: 1,
+        bedrock: 1,
+        snow: 1,
+        sand: 1,
+        clay: 1,
+        gravel: 1,
+        iron_ore: 1,
+        coal_ore: 1,
+        oak_log: TREE_BLOCKS_OAK_LOG,
+        leaves: TREE_BLOCKS_LEAVES,
+        water: 1,
+        short_grass: 1,
+    };
+
     /// 按 header 编码顺序展开为数组,供互异性校验使用。
     pub(crate) fn as_array(&self) -> [u16; 15] {
         [
@@ -674,6 +720,161 @@ pub(crate) fn dense_index(lx: i32, y: i32, lz: i32) -> usize {
     layer * (SECTION_SIZE as usize) * (SECTION_SIZE as usize)
         + (lz as usize) * (SECTION_SIZE as usize)
         + lx as usize
+}
+
+// ---- 运行时树形几何(树苗长成橡树) ----
+//
+// `mornlea_tree_blocks` 的带内契约:输入 28 字节 `MTB1` magic(4) +
+// layout u32 LE(4,必须 1) + 世界种子 i64 LE(8) + 根坐标 x/y/z i32 LE(12);
+// 输出 `count u32` LE + 每条 8 字节 `dx i8 | dy i8 | dz i8 | reserved u8 |
+// block u16 LE | reserved u16`。记录是相对根格的偏移,根格自身(偏移全零)
+// 是树干底。布局与世界生成共用的 `MGW1` header 无关:本入口只吃种子与根
+// 坐标,不读 perm、材料表或区块坐标。
+
+/// 运行时树形几何的输入字节数。
+pub(crate) const TREE_BLOCKS_INPUT_BYTES: usize = 28;
+/// 输入布局版本,唯一合法值。
+const TREE_BLOCKS_LAYOUT: u32 = 1;
+/// 单条记录字节数。
+pub(crate) const TREE_BLOCKS_RECORD_BYTES: usize = 8;
+/// 输出头部字节数:`count u32`。
+pub(crate) const TREE_BLOCKS_COUNT_BYTES: usize = 4;
+/// 输出静态最大字节数:头部 + 记录上限 × 单条长度。
+pub(crate) const TREE_BLOCKS_MAX_OUTPUT_BYTES: usize =
+    TREE_BLOCKS_COUNT_BYTES + TREE_BLOCKS_MAX_RECORDS * TREE_BLOCKS_RECORD_BYTES;
+/// 根坐标 Y 的上界(含)。最坏普通橡树高 7、顶格在 `root_y + 8`,因此根格
+/// 必须低到让最坏几何完整落在 `[WORLD_MIN_Y, WORLD_MAX_Y)` 内;不满足即
+/// 按输入越界拒绝,而不是返回被截断的几何。
+const TREE_BLOCKS_MAX_ROOT_Y: i32 = WORLD_MAX_Y - 9;
+
+/// 运行时树形几何请求:世界种子与树苗根坐标。
+pub(crate) struct TreeBlocksRequest {
+    pub seed: i64,
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+}
+
+/// 运行时树形几何的一条记录:相对根坐标的偏移与方块编号。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct TreeBlock {
+    pub dx: i8,
+    pub dy: i8,
+    pub dz: i8,
+    pub block: u16,
+}
+
+/// 解析运行时树形几何输入;任何违约返回 None(FFI 层转为 StatusInput)。
+///
+/// 校验项:长度精确等于 28、magic `MTB1`、layout 等于 1、根坐标 Y 落在
+/// `[WORLD_MIN_Y, TREE_BLOCKS_MAX_ROOT_Y]`,以及 X/Z 的 ±2 邻域不越出 i32
+/// 值域(否则几何坐标加法会回绕)。X/Z 本身无世界边界约束——它们只参与
+/// 哈希,几何偏移与绝对坐标无关。
+pub(crate) fn parse_tree_blocks_input(bytes: &[u8]) -> Option<TreeBlocksRequest> {
+    if bytes.len() != TREE_BLOCKS_INPUT_BYTES
+        || &bytes[0..4] != b"MTB1"
+        || read_u32(bytes, 4) != TREE_BLOCKS_LAYOUT
+    {
+        return None;
+    }
+    let request = TreeBlocksRequest {
+        seed: read_i64(bytes, 8),
+        x: read_i32(bytes, 16),
+        y: read_i32(bytes, 20),
+        z: read_i32(bytes, 24),
+    };
+    // 几何要取根 ±2 的水平邻域;坐标贴近 i32 边界时加法会回绕,回绕后的
+    // 坐标虽然仍是合法 i32,却已经不是调用方给的那棵树,按越界坐标拒绝。
+    let neighborhood_fits = request.x.checked_add(2).is_some()
+        && request.x.checked_sub(2).is_some()
+        && request.z.checked_add(2).is_some()
+        && request.z.checked_sub(2).is_some();
+    let fits_world_height = (WORLD_MIN_Y..=TREE_BLOCKS_MAX_ROOT_Y).contains(&request.y);
+    (neighborhood_fits && fits_world_height).then_some(request)
+}
+
+/// 由 `TREE_BLOCKS_SALT` 从 (世界种子, 根坐标) 派生普通橡树参数。
+///
+/// 高度取 `5 + hash % 3`(5..7),蓬松位取另一段位域;珍异与分杈恒关,
+/// 因此层形只走 `oak_tree_block_at` 的普通档。
+fn runtime_oak_tree(request: &TreeBlocksRequest) -> OakTree {
+    let hash = ore_hash(
+        request.seed,
+        request.x,
+        request.y,
+        request.z,
+        TREE_BLOCKS_SALT,
+    );
+    OakTree {
+        root_x: request.x,
+        root_y: request.y,
+        root_z: request.z,
+        height: (5 + hash % 3) as i32,
+        fluffy: (hash >> 3) & 1 == 1,
+        rare: false,
+        branch_count: 0,
+        branch_dir: [0, 0],
+    }
+}
+
+/// 计算运行时树形几何:相对根坐标的方块偏移列表,根格自身为树干底。
+///
+/// 层形复用 `oak_tree_block_at` 的普通档(`rare = false`、`branch_count = 0`),
+/// 与世界生成的树冠共用同一份实现,不产生珍异巨树或分杈。遍历序固定为
+/// dy 外层、dz 中层、dx 内层,记录顺序因此完全由输入决定。
+///
+/// 记录数超过 `TREE_BLOCKS_MAX_RECORDS` 时返回 None(防御性上界,正常几何
+/// 不可能触发),由调用方转为显式输出溢出状态;不产生部分结果。
+pub(crate) fn tree_blocks(request: &TreeBlocksRequest) -> Option<Vec<TreeBlock>> {
+    let tree = runtime_oak_tree(request);
+    let materials = Materials::RUNTIME_TREE;
+    let mut records = Vec::with_capacity(TREE_BLOCKS_MAX_RECORDS);
+    for dy in 0..=tree.height + 1 {
+        for dz in -2..=2 {
+            for dx in -2..=2 {
+                let block = oak_tree_block_at(
+                    &tree,
+                    &materials,
+                    request.x + dx,
+                    request.y + dy,
+                    request.z + dz,
+                );
+                if block == materials.air {
+                    continue;
+                }
+                if records.len() == TREE_BLOCKS_MAX_RECORDS {
+                    return None;
+                }
+                records.push(TreeBlock {
+                    dx: dx as i8,
+                    dy: dy as i8,
+                    dz: dz as i8,
+                    block,
+                });
+            }
+        }
+    }
+    Some(records)
+}
+
+/// 把树形几何编码为输出布局:`count u32` LE 加每条 8 字节记录。
+///
+/// 保留字节恒写 0,保证输出字节完全由输入决定。
+pub(crate) fn encode_tree_blocks(records: &[TreeBlock], out: &mut [u8]) {
+    debug_assert_eq!(
+        out.len(),
+        TREE_BLOCKS_COUNT_BYTES + records.len() * TREE_BLOCKS_RECORD_BYTES
+    );
+    out[0..4].copy_from_slice(&(records.len() as u32).to_le_bytes());
+    for (index, record) in records.iter().enumerate() {
+        let offset = TREE_BLOCKS_COUNT_BYTES + index * TREE_BLOCKS_RECORD_BYTES;
+        out[offset] = record.dx as u8;
+        out[offset + 1] = record.dy as u8;
+        out[offset + 2] = record.dz as u8;
+        out[offset + 3] = 0;
+        out[offset + 4..offset + 6].copy_from_slice(&record.block.to_le_bytes());
+        out[offset + 6..offset + 8].fill(0);
+    }
 }
 
 // ---- ABI 编码常量与解析 ----
@@ -2096,5 +2297,281 @@ mod tests {
                 }
             }
         }
+    }
+}
+
+/// 运行时树形几何(`tree_blocks`)的主题测试。
+///
+/// 该入口与世界生成的 8×8 候选格橡树是两条独立路径:参数由 `TREE_BLOCKS_SALT`
+/// 从 (世界种子, 根坐标) 派生,因此这里既不断言世界生成行为,也不复用
+/// `oak_tree_for_cell` 的语料;层形复用由「记录集合逐层等于普通档树冠层」
+/// 这一可观察断言覆盖。
+#[cfg(test)]
+mod tree_blocks_tests {
+    use super::*;
+
+    /// 构造一条根坐标取世界高度中段(远离上下界)的请求。
+    fn request(seed: i64, x: i32, z: i32) -> TreeBlocksRequest {
+        TreeBlocksRequest { seed, x, y: 64, z }
+    }
+
+    /// 树干高度:根列上的原木条数。运行时几何只把根列写为原木(无分杈),
+    /// 因此它同时是树高。
+    fn trunk_height(records: &[TreeBlock]) -> i32 {
+        records
+            .iter()
+            .filter(|record| {
+                record.dx == 0 && record.dz == 0 && record.block == TREE_BLOCKS_OAK_LOG
+            })
+            .count() as i32
+    }
+
+    /// 指定层上满足条件的树叶条数。
+    fn leaves_matching(records: &[TreeBlock], dy: i32, keep: impl Fn(i32, i32) -> bool) -> usize {
+        records
+            .iter()
+            .filter(|record| {
+                i32::from(record.dy) == dy
+                    && record.block == TREE_BLOCKS_LEAVES
+                    && keep(i32::from(record.dx), i32::from(record.dz))
+            })
+            .count()
+    }
+
+    #[test]
+    fn geometry_is_deterministic_and_bounded() {
+        let mut fluffy_seen = false;
+        let mut standard_seen = false;
+        for seed in [1i64, 42, -7, 20_260_909] {
+            for (x, z) in [
+                (0i32, 0i32),
+                (-137, 902),
+                (15, -16),
+                (1_000_003, -2_000_004),
+            ] {
+                let first = tree_blocks(&request(seed, x, z)).expect("合法请求必须成功");
+                let second = tree_blocks(&request(seed, x, z)).expect("合法请求必须成功");
+                assert_eq!(first, second, "同输入必须逐记录一致");
+
+                assert!(first.len() <= TREE_BLOCKS_MAX_RECORDS);
+                // 根格自身是第一条记录,且恒为树干底。
+                assert_eq!(
+                    (first[0].dx, first[0].dy, first[0].dz, first[0].block),
+                    (0, 0, 0, TREE_BLOCKS_OAK_LOG)
+                );
+                let height = trunk_height(&first);
+                assert!((5..=7).contains(&height), "树高 {height} 超出 5..7");
+                for record in &first {
+                    assert!(
+                        record.dx.abs() <= 2 && record.dz.abs() <= 2,
+                        "水平半径超出 2"
+                    );
+                    assert!((0..=height + 1).contains(&i32::from(record.dy)), "dy 越界");
+                    assert!(
+                        record.block == TREE_BLOCKS_OAK_LOG || record.block == TREE_BLOCKS_LEAVES,
+                        "几何只允许原木与树叶"
+                    );
+                    if record.block == TREE_BLOCKS_OAK_LOG {
+                        // 无分杈:原木只出现在根列。
+                        assert_eq!((record.dx, record.dz), (0, 0), "原木偏离根列");
+                    }
+                }
+                if first
+                    .iter()
+                    .any(|record| i32::from(record.dy) == height + 1)
+                {
+                    fluffy_seen = true;
+                } else {
+                    standard_seen = true;
+                }
+            }
+        }
+        assert!(fluffy_seen && standard_seen, "样本必须覆盖蓬松与标准两档");
+    }
+
+    #[test]
+    fn geometry_reuses_normal_crown_tiers() {
+        let mut fluffy_checked = false;
+        let mut standard_checked = false;
+        for seed in 0..64i64 {
+            let records = tree_blocks(&request(seed, 8, -8)).expect("合法请求必须成功");
+            let height = trunk_height(&records);
+            let fluffy = records
+                .iter()
+                .any(|record| i32::from(record.dy) == height + 1);
+            if fluffy && fluffy_checked || !fluffy && standard_checked {
+                continue;
+            }
+            // 顶下两层:去角 5×5 各 21 格,中心被树干占用,故树叶 20 条。
+            for dy in [height - 3, height - 2] {
+                assert_eq!(
+                    leaves_matching(&records, dy, |dx, dz| !(dx.abs() == 2 && dz.abs() == 2)),
+                    20,
+                    "层 dy={dy} 不是去角 5×5"
+                );
+            }
+            // 顶下层:3×3 去掉中心树干,树叶 8 条。
+            assert_eq!(
+                leaves_matching(&records, height - 1, |dx, dz| dx.abs() <= 1
+                    && dz.abs() <= 1),
+                8,
+                "顶下层不是 3×3"
+            );
+            // 顶层:十字 5 条。
+            assert_eq!(
+                leaves_matching(&records, height, |dx, dz| dx.abs() + dz.abs() <= 1),
+                5,
+                "顶层不是十字"
+            );
+            // 蓬松档在顶上再加一层同形十字;标准档顶上第二层为空。
+            assert_eq!(
+                leaves_matching(&records, height + 1, |dx, dz| dx.abs() + dz.abs() <= 1),
+                if fluffy { 5 } else { 0 },
+                "蓬松层不符"
+            );
+            // 总条数 = 树干 + 两层去角 5×5 + 3×3 + 十字 + 可选蓬松十字。
+            let expected = height as usize + 20 + 20 + 8 + 5 + if fluffy { 5 } else { 0 };
+            assert_eq!(records.len(), expected, "记录条数与普通档层形不符");
+            if fluffy {
+                fluffy_checked = true;
+            } else {
+                standard_checked = true;
+            }
+            if fluffy_checked && standard_checked {
+                return;
+            }
+        }
+        panic!("样本未覆盖蓬松与标准两档");
+    }
+
+    #[test]
+    fn geometry_is_independent_of_worldgen_and_short_grass_salts() {
+        // 独立冻结 salt 是「生长几何与世界生成结果无关」的根因;一旦复用
+        // 任一既有 salt,同一坐标的生长几何会与世界生成树形产生耦合。
+        assert_ne!(TREE_BLOCKS_SALT, OAK_TREE_SALT);
+        assert_ne!(TREE_BLOCKS_SALT, SHORT_GRASS_GENERATION_SALT);
+        // 同一坐标在世界生成候选格 salt 与运行时 salt 下必须给出不同的哈希。
+        assert_ne!(
+            ore_hash(42, 3, 64, -5, TREE_BLOCKS_SALT),
+            ore_hash(42, 3, 64, -5, OAK_TREE_SALT)
+        );
+    }
+
+    #[test]
+    fn parse_rejects_bad_input() {
+        let valid = {
+            let mut bytes = Vec::new();
+            bytes.extend_from_slice(b"MTB1");
+            bytes.extend_from_slice(&TREE_BLOCKS_LAYOUT.to_le_bytes());
+            bytes.extend_from_slice(&42i64.to_le_bytes());
+            bytes.extend_from_slice(&7i32.to_le_bytes());
+            bytes.extend_from_slice(&64i32.to_le_bytes());
+            bytes.extend_from_slice(&(-9i32).to_le_bytes());
+            bytes
+        };
+        assert_eq!(valid.len(), TREE_BLOCKS_INPUT_BYTES);
+        let parsed = parse_tree_blocks_input(&valid).expect("合法输入必须解析成功");
+        assert_eq!((parsed.seed, parsed.x, parsed.y, parsed.z), (42, 7, 64, -9));
+
+        let bad_magic = {
+            let mut bytes = valid.clone();
+            bytes[0] = b'X';
+            bytes
+        };
+        let bad_layout = {
+            let mut bytes = valid.clone();
+            bytes[4..8].copy_from_slice(&2u32.to_le_bytes());
+            bytes
+        };
+        let mut too_short = valid.clone();
+        too_short.pop();
+        let mut too_long = valid.clone();
+        too_long.push(0);
+        // 根坐标越界:低于世界下界、以及高到最矮的普通橡树也放不下。
+        let below_world = {
+            let mut bytes = valid.clone();
+            bytes[20..24].copy_from_slice(&(WORLD_MIN_Y - 1).to_le_bytes());
+            bytes
+        };
+        let above_world = {
+            let mut bytes = valid.clone();
+            bytes[20..24].copy_from_slice(&(WORLD_MAX_Y - 8).to_le_bytes());
+            bytes
+        };
+        // 水平邻域越出 i32 值域:坐标本身合法,但根 ±2 会回绕,必须拒绝。
+        let x_at_max = {
+            let mut bytes = valid.clone();
+            bytes[16..20].copy_from_slice(&i32::MAX.to_le_bytes());
+            bytes
+        };
+        let z_at_min = {
+            let mut bytes = valid.clone();
+            bytes[24..28].copy_from_slice(&i32::MIN.to_le_bytes());
+            bytes
+        };
+        for (name, bytes) in [
+            ("magic", &bad_magic),
+            ("layout", &bad_layout),
+            ("too_short", &too_short),
+            ("too_long", &too_long),
+            ("below_world", &below_world),
+            ("above_world", &above_world),
+            ("x_at_max", &x_at_max),
+            ("z_at_min", &z_at_min),
+        ] {
+            assert!(
+                parse_tree_blocks_input(bytes).is_none(),
+                "{name} 必须被拒绝"
+            );
+        }
+        // i32 值域内最靠边的合法根坐标仍必须接受:邻域恰好不越界。
+        let mut edge = valid.clone();
+        edge[16..20].copy_from_slice(&(i32::MAX - 2).to_le_bytes());
+        edge[24..28].copy_from_slice(&(i32::MIN + 2).to_le_bytes());
+        parse_tree_blocks_input(&edge).expect("i32 边界内 2 格的根坐标必须被接受");
+        // 最高合法根坐标:最坏普通橡树(高 7)恰好落在世界上界内。
+        let mut highest = valid.clone();
+        highest[20..24].copy_from_slice(&(WORLD_MAX_Y - 9).to_le_bytes());
+        let parsed = parse_tree_blocks_input(&highest).expect("最高合法根坐标必须被接受");
+        let records = tree_blocks(&parsed).expect("最高合法根坐标必须能放下");
+        let top = records
+            .iter()
+            .map(|record| parsed.y + i32::from(record.dy))
+            .max()
+            .expect("几何非空");
+        assert!(top < WORLD_MAX_Y, "几何越出世界上界: {top}");
+    }
+
+    #[test]
+    fn encode_writes_count_and_fixed_records() {
+        let records = vec![
+            TreeBlock {
+                dx: 0,
+                dy: 0,
+                dz: 0,
+                block: TREE_BLOCKS_OAK_LOG,
+            },
+            TreeBlock {
+                dx: -2,
+                dy: 3,
+                dz: 2,
+                block: TREE_BLOCKS_LEAVES,
+            },
+        ];
+        let mut out =
+            vec![0xAAu8; TREE_BLOCKS_COUNT_BYTES + records.len() * TREE_BLOCKS_RECORD_BYTES];
+        encode_tree_blocks(&records, &mut out);
+        assert_eq!(&out[0..4], &2u32.to_le_bytes());
+        assert_eq!(&out[4..12], &[0, 0, 0, 0, 17, 0, 0, 0]);
+        assert_eq!(&out[12..20], &[0xFE, 3, 2, 0, 19, 0, 0, 0]);
+    }
+
+    #[test]
+    fn runtime_block_ids_match_go_core() {
+        // 运行时几何写入的方块编号是协议稳定值,与 Go `core` 的 `AirID`(0)、
+        // `OakLogID`(17)、`LeavesID`(19)逐一对应;重排即破坏跨语言契约。
+        assert_eq!(Materials::RUNTIME_TREE.air, 0);
+        assert_eq!(TREE_BLOCKS_OAK_LOG, 17);
+        assert_eq!(TREE_BLOCKS_LEAVES, 19);
     }
 }
