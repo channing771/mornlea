@@ -28,16 +28,22 @@ type Config struct {
 	TickObserver          func(time.Duration)
 	ScheduledTickObserver func(time.Time, time.Duration)
 	InterestObserver      func(time.Duration)
-	SpawnDimension        core.DimensionID
-	SpawnAnchor           core.ChunkPos
-	TrustedObserver       bool
-	SaveWorkers           int
-	SaveChunks            int
-	SaveBytes             int
-	AutosaveTicks         uint64
-	RetryBaseTicks        uint64
-	RetryMaxTicks         uint64
-	UnsavedBytes          int64
+	// StreamingObserver 是流式指标族的观测点：每个权威 tick 结束时收到本
+	// tick 的订阅装载请求键（BeginLoading 侧 `Acquire`）与就绪键（`Ready`，
+	// 存档装载与生成两条路径的公共终点）。切片来自当 tick 的 `TickResult`，
+	// 只读且调用同步发生在 step 锁内，观察者必须只做有界记录、不得回调
+	// 服务端。nil 保持零开销缺省。
+	StreamingObserver func(acquired []core.ChunkKey, ready []core.ChunkKey)
+	SpawnDimension    core.DimensionID
+	SpawnAnchor       core.ChunkPos
+	TrustedObserver   bool
+	SaveWorkers       int
+	SaveChunks        int
+	SaveBytes         int
+	AutosaveTicks     uint64
+	RetryBaseTicks    uint64
+	RetryMaxTicks     uint64
+	UnsavedBytes      int64
 	// RegionHandleCacheCap 是磁盘存档层同时保持打开的 region 文件句柄上限，
 	// 经 OpenOptions 传入 DiskStore；零值在装配层回落为默认上限。
 	RegionHandleCacheCap int

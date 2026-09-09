@@ -6,6 +6,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 func runBenchmarkTestInputBoundary(_ context.Context, _ uint64, action func() error) error {
@@ -158,5 +160,49 @@ func TestBenchmarkServerEpochPreservesScheduledTickTime(t *testing.T) {
 	epoch.observeScheduledTick(scheduled, time.Millisecond)
 	if signal := <-epoch.signals; !signal.scheduled.Equal(scheduled) {
 		t.Fatalf("scheduled tick=%s want=%s", signal.scheduled, scheduled)
+	}
+}
+
+func TestBenchmarkServerEpochPairsChunkStreamingBeginWithReady(t *testing.T) {
+	epoch := newBenchmarkServerEpoch()
+	// 固定时钟让时延断言有确定值：每次观测推进 5ms。
+	tick := 0
+	epoch.streamingNow = func() time.Time {
+		tick++
+		return time.Unix(0, int64(tick)*int64(5*time.Millisecond))
+	}
+	near := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: 1, Z: -1}}
+	far := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: 30, Z: 30}}
+	// t=5ms：两个区块进入 BeginLoading。
+	epoch.observeChunkStreaming([]core.ChunkKey{near, far}, nil)
+	// t=10ms：near 就绪 → 5ms 时延样本。
+	epoch.observeChunkStreaming(nil, []core.ChunkKey{near})
+	// t=15ms：far 就绪（10ms 样本），near 重复就绪不得重复计数。
+	epoch.observeChunkStreaming(nil, []core.ChunkKey{far, near})
+	summary := epoch.streamingSummary()
+	if summary.LoadedChunks != 2 {
+		t.Fatalf("loaded chunks=%d want=2（重复就绪须去重）", summary.LoadedChunks)
+	}
+	latency := summary.LoadLatency
+	if latency.Samples != 2 {
+		t.Fatalf("load latency samples=%d want=2", latency.Samples)
+	}
+	if latency.P50MS != 5 || latency.P95MS != 10 || latency.P99MS != 10 || latency.MaxMS != 10 {
+		t.Fatalf("load latency=%+v want p50=5 p95/p99/max=10ms", latency)
+	}
+}
+
+func TestBenchmarkServerEpochStreamingSkipsReadyWithoutBegin(t *testing.T) {
+	epoch := newBenchmarkServerEpoch()
+	base := time.Unix(0, 0)
+	epoch.streamingNow = func() time.Time { return base }
+	// CancelUnload 直接就绪的区块没有 BeginLoading 前置，不得产出零值时延。
+	epoch.observeChunkStreaming(nil, []core.ChunkKey{{Pos: core.ChunkPos{X: 7}}})
+	summary := epoch.streamingSummary()
+	if summary.LoadedChunks != 1 {
+		t.Fatalf("loaded chunks=%d want=1（未配对的就绪仍计入加载计数）", summary.LoadedChunks)
+	}
+	if summary.LoadLatency.Samples != 0 {
+		t.Fatalf("无前置装载的就绪产出时延样本=%+v", summary.LoadLatency)
 	}
 }

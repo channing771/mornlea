@@ -13,9 +13,6 @@ import (
 	application "github.com/channing771/mornlea/packages/client/cmd/mornlea/app"
 	"github.com/channing771/mornlea/packages/server/server"
 	"github.com/channing771/mornlea/packages/server/storage"
-	// 局部变量 `config`（server.Config）会遮蔽包名，编译默认渲染配置经
-	// 别名引用。
-	sharedconfig "github.com/channing771/mornlea/packages/shared/config"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
 	"github.com/channing771/mornlea/packages/shared/worldgen"
@@ -193,16 +190,20 @@ func runBenchmarkServerMeasuredWindow(
 func measureMultiplayerServerProbe(duration time.Duration) (
 	client.MultiplayerSummary,
 	client.PhaseSummary,
+	client.StreamingSummary,
 	error,
 ) {
 	if duration < 10*time.Second {
-		return client.MultiplayerSummary{}, client.PhaseSummary{},
+		return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{},
 			fmt.Errorf("多人服务端探针时长 %s < 10s", duration)
 	}
 	epoch := newBenchmarkServerEpoch()
 	config := server.DefaultConfig(benchmarkSeed)
 	config.MaxPlayers = 8
-	config.ViewRadius = 0
+	// 服务端视界上界与生产默认（33）一致：会话按场景梯度声明 2..32 的视距
+	// 经 v40 登录协商各自生效，按会话视距的订阅从此真正驱动区块装载与流式
+	// （v22 之前的探针把上界钉 0、订阅为空，行为与缺省视界时代一致）。
+	config.ViewRadius = 33
 	config.Workers = 1
 	config.SaveWorkers = 2
 	config.OutboxCapacity = benchmarkOutboxLimit
@@ -211,6 +212,7 @@ func measureMultiplayerServerProbe(duration time.Duration) (
 	config.HeartbeatTimeout = time.Hour
 	config.ScheduledTickObserver = epoch.observeScheduledTick
 	config.InterestObserver = epoch.observeInterest
+	config.StreamingObserver = epoch.observeChunkStreaming
 	store := storage.NewMemory(storage.Metadata{
 		FormatVersion: 5, Seed: benchmarkSeed,
 		SpawnDimension: core.Overworld, SpawnAnchor: core.ChunkPos{},
@@ -224,7 +226,7 @@ func measureMultiplayerServerProbe(duration time.Duration) (
 	defer cancelRun()
 	host, err := server.NewHost(runCtx, config, worldgen.New(benchmarkSeed, false), store)
 	if err != nil {
-		return client.MultiplayerSummary{}, client.PhaseSummary{}, errors.Join(
+		return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{}, errors.Join(
 			fmt.Errorf("创建多人 benchmark Host: %w", err),
 			store.Close(),
 		)
@@ -275,17 +277,23 @@ func measureMultiplayerServerProbe(duration time.Duration) (
 	}()
 
 	scenario := application.NewMultiplayerBenchmarkScenario()
+	if len(scenario.ViewDistances) != len(scenario.Spawns)+1 {
+		return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{}, fmt.Errorf(
+			"场景视距梯度长度=%d 与会话数=%d 不一致",
+			len(scenario.ViewDistances), len(scenario.Spawns)+1,
+		)
+	}
 	identities := make([]network.Identity, 0, 8)
 	identities = append(identities, network.Identity{PlayerID: scenario.LocalPlayerID, DisplayName: "本地玩家"})
 	for _, spawn := range scenario.Spawns {
 		identities = append(identities, network.Identity{PlayerID: spawn.PlayerID, DisplayName: spawn.DisplayName})
 	}
-	for _, identity := range identities {
+	for index, identity := range identities {
 		clientStream, serverStream := network.NewMemoryStreamPair(4096)
 		codec, err := network.NewCodec()
 		if err != nil {
 			_ = clientStream.Close()
-			return client.MultiplayerSummary{}, client.PhaseSummary{}, err
+			return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{}, err
 		}
 		counting := &canonicalCountingServerStream{
 			inner: serverStream, codec: codec, bytes: &outbound, epoch: epoch,
@@ -293,13 +301,13 @@ func measureMultiplayerServerProbe(duration time.Duration) (
 		serverDone := make(chan error, 1)
 		go func() { serverDone <- host.AcceptStream(runCtx, counting) }()
 		loginCtx, cancelLogin := context.WithTimeout(runCtx, 5*time.Second)
-		// 场景会话暂按编译默认配置声明 v40 视距（域内合法）；场景化视距
-		// 梯度属于 scenario v23 的后续工作。
-		endpoint, err := network.LoginClient(loginCtx, clientStream, identity, uint8(sharedconfig.Defaults().Render.ViewDistance))
+		// 每个会话在 v40 登录协商中声明场景梯度分配的视距（索引顺序：本地
+		// 玩家在前、远端按 Spawns 顺序在后），服务端按各自视距建立订阅。
+		endpoint, err := network.LoginClient(loginCtx, clientStream, identity, scenario.ViewDistances[index])
 		cancelLogin()
 		if err != nil {
 			_ = counting.Close()
-			return client.MultiplayerSummary{}, client.PhaseSummary{}, fmt.Errorf("登录 %s: %w", identity.DisplayName, err)
+			return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{}, fmt.Errorf("登录 %s: %w", identity.DisplayName, err)
 		}
 		drainDone := make(chan error, 1)
 		go func(endpoint network.ClientEndpoint) {
@@ -326,7 +334,7 @@ func measureMultiplayerServerProbe(duration time.Duration) (
 		if stats.ActivePlayers > len(identities) {
 			loginPoll.Stop()
 			cancelLoginReady()
-			return client.MultiplayerSummary{}, client.PhaseSummary{}, fmt.Errorf(
+			return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{}, fmt.Errorf(
 				"多人服务端登录数越界: active=%d want=%d",
 				stats.ActivePlayers, len(identities),
 			)
@@ -337,7 +345,7 @@ func measureMultiplayerServerProbe(duration time.Duration) (
 			loginPoll.Stop()
 			err := loginReadyCtx.Err()
 			cancelLoginReady()
-			return client.MultiplayerSummary{}, client.PhaseSummary{}, fmt.Errorf(
+			return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{}, fmt.Errorf(
 				"等待多人服务端登录稳定: active=%d want=%d: %w",
 				stats.ActivePlayers, len(identities), err,
 			)
@@ -352,21 +360,21 @@ func measureMultiplayerServerProbe(duration time.Duration) (
 		case signal := <-epoch.signals:
 			lastWarmupSignal = signal
 			if signal.measured {
-				return client.MultiplayerSummary{}, client.PhaseSummary{},
+				return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{},
 					fmt.Errorf("warm-up tick %d 被标记为 measured", tick+1)
 			}
 			if stats := host.Stats(); stats.ActivePlayers != len(identities) {
-				return client.MultiplayerSummary{}, client.PhaseSummary{}, fmt.Errorf(
+				return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{}, fmt.Errorf(
 					"多人服务端 warm-up tick %d 玩家提前退出: active=%d want=%d",
 					tick+1, stats.ActivePlayers, len(identities),
 				)
 			}
 		case <-runCtx.Done():
-			return client.MultiplayerSummary{}, client.PhaseSummary{}, runCtx.Err()
+			return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{}, runCtx.Err()
 		}
 	}
 	if stats := host.Stats(); stats.ActivePlayers != len(identities) {
-		return client.MultiplayerSummary{}, client.PhaseSummary{}, fmt.Errorf(
+		return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{}, fmt.Errorf(
 			"多人服务端 warm-up 后登录不完整: active=%d want=%d",
 			stats.ActivePlayers, len(identities),
 		)
@@ -383,7 +391,7 @@ func measureMultiplayerServerProbe(duration time.Duration) (
 	}
 	firstInputDeadline, err := benchmarkServerInputDeadline(lastWarmupSignal, len(epoch.signals))
 	if err != nil {
-		return client.MultiplayerSummary{}, client.PhaseSummary{}, fmt.Errorf(
+		return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{}, fmt.Errorf(
 			"warm-up 后首组 input boundary: %w", err,
 		)
 	}
@@ -393,10 +401,10 @@ func measureMultiplayerServerProbe(duration time.Duration) (
 	})
 	cancelFirstInput()
 	if err != nil {
-		return client.MultiplayerSummary{}, client.PhaseSummary{}, err
+		return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{}, err
 	}
 	if !time.Now().Before(firstInputDeadline) {
-		return client.MultiplayerSummary{}, client.PhaseSummary{}, errors.New(
+		return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{}, errors.New(
 			"warm-up 后首组 input boundary 超过 50ms deadline",
 		)
 	}
@@ -410,7 +418,7 @@ func measureMultiplayerServerProbe(duration time.Duration) (
 		client.ProcessRSSBytes,
 	)
 	if err != nil {
-		return client.MultiplayerSummary{}, client.PhaseSummary{}, err
+		return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{}, err
 	}
 	outboxHigh, jobsHigh, doneHigh, peakRSS :=
 		window.outboxHigh, window.jobsHigh, window.doneHigh, window.peakRSS
@@ -431,18 +439,30 @@ func measureMultiplayerServerProbe(duration time.Duration) (
 		peakRSS,
 	)
 	if invalid {
-		return client.MultiplayerSummary{}, client.PhaseSummary{}, fmt.Errorf(
+		return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{}, fmt.Errorf(
 			"多人服务端探针不完整: overflow=%v outbound=%d interest=%+v ticks=%+v queues=%d/%d/%d rss=%d",
 			epoch.overflow.Load(), outbound.Load(), interestSummary, tickSummary,
 			outboxHigh, jobsHigh, doneHigh, peakRSS,
 		)
 	}
 	if err := cleanup(); err != nil {
-		return client.MultiplayerSummary{}, client.PhaseSummary{}, err
+		return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{}, err
 	}
 	cleaned = true
+	// streaming 汇总必须在 cleanup（join 服务端 run goroutine）之后读取：
+	// 与 `ticks`/`interest` 不同，流式观察覆盖探针全生命周期、没有 measuring
+	// 相位门兜底，cleanup 之前的任何读取都与仍在推进的权威 tick 数据竞争。
+	// 峰值内存复用既有 RSS 采样路径。
+	streaming := epoch.streamingSummary()
+	streaming.PeakRSSBytes = peakRSS
+	if !validBenchmarkServerStreaming(streaming) {
+		return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{}, fmt.Errorf(
+			"多人服务端流式探针不完整: streaming=%+v（按会话视距的订阅未真正加载区块）",
+			streaming,
+		)
+	}
 	if stats := host.Stats(); stats != (server.HostStats{}) {
-		return client.MultiplayerSummary{}, client.PhaseSummary{}, fmt.Errorf("多人服务端 cleanup 队列未归零: %+v", stats)
+		return client.MultiplayerSummary{}, client.PhaseSummary{}, client.StreamingSummary{}, fmt.Errorf("多人服务端 cleanup 队列未归零: %+v", stats)
 	}
 	return client.MultiplayerSummary{
 		InterestDiff:        interestSummary,
@@ -451,10 +471,23 @@ func measureMultiplayerServerProbe(duration time.Duration) (
 		PlayerJobsHighWater: jobsHigh,
 		PlayerDoneHighWater: doneHigh,
 		PeakRSSBytes:        peakRSS,
-	}, tickSummary, nil
+	}, tickSummary, streaming, nil
 }
 
 func validBenchmarkServerProbe(overflow bool, outbound uint64, interestSamples, tickFrames int, peakRSS uint64) bool {
 	return !overflow && outbound != 0 &&
 		interestSamples == benchmarkServerInterestSamples && tickFrames == benchmarkServerMeasuredTicks && peakRSS != 0
+}
+
+// benchmarkStreamingMinLoadedChunks 是流式探针的确定性下界：视距梯度里最小
+// 的会话（视距 2 → 订阅半径 3）订阅方形恰为 7×7=49 个区块，全部会话中心
+// 相邻，并集必然覆盖它。低于该值说明按会话视距的订阅没有真正驱动区块加载
+// （例如服务端视界上界被回退为 0）。
+const benchmarkStreamingMinLoadedChunks = 49
+
+// validBenchmarkServerStreaming 校验流式指标族的探针完整性；数值本身只记录，
+// 除完整性外不设阈值。
+func validBenchmarkServerStreaming(streaming client.StreamingSummary) bool {
+	return streaming.LoadedChunks >= benchmarkStreamingMinLoadedChunks &&
+		streaming.LoadLatency.Samples > 0 && streaming.PeakRSSBytes != 0
 }

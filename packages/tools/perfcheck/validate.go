@@ -180,7 +180,58 @@ func validateV6Report(label string, report client.PerfReport) error {
 		multiplayer.PeakRSSBytes == 0 {
 		return fmt.Errorf("%s v6 multiplayer 标量指标不完整: %+v", label, multiplayer)
 	}
+	// streaming 指标族自 scenario v23（世界流式收尾）起进入报告；历史场景
+	// 报告没有该族，按版本放行。数值只记录：这里只校验完整性与分位单调。
+	if report.ScenarioVersion >= 23 {
+		streaming := report.Streaming
+		if streaming.LoadedChunks <= 0 || streaming.LoadLatency.Samples <= 0 ||
+			streaming.LoadLatency.P50MS <= 0 || streaming.LoadLatency.P95MS <= 0 ||
+			streaming.LoadLatency.P99MS <= 0 || streaming.LoadLatency.MaxMS <= 0 ||
+			streaming.PeakRSSBytes == 0 {
+			return fmt.Errorf("%s v23 streaming 指标不完整: %+v", label, streaming)
+		}
+		if streaming.LoadLatency.P50MS > streaming.LoadLatency.P95MS ||
+			streaming.LoadLatency.P95MS > streaming.LoadLatency.P99MS ||
+			streaming.LoadLatency.P99MS > streaming.LoadLatency.MaxMS {
+			return fmt.Errorf("%s v23 streaming 分位数非单调: %+v", label, streaming.LoadLatency)
+		}
+	}
 	return nil
+}
+
+// appendStreamingRegressions 输出 streaming 指标族（v23 起）的相对退化记录。
+// 该族只记录不阻断：记录进入返回值（由调用方打印），比较器不因此失败。
+func appendStreamingRegressions(
+	failures []string,
+	baseline client.StreamingSummary,
+	current client.StreamingSummary,
+	threshold float64,
+) []string {
+	latency := baseline.LoadLatency
+	currentLatency := current.LoadLatency
+	for _, metric := range []struct {
+		name              string
+		baseline, current float64
+	}{
+		{name: "p50_ms", baseline: latency.P50MS, current: currentLatency.P50MS},
+		{name: "p95_ms", baseline: latency.P95MS, current: currentLatency.P95MS},
+		{name: "p99_ms", baseline: latency.P99MS, current: currentLatency.P99MS},
+		{name: "max_ms", baseline: latency.MaxMS, current: currentLatency.MaxMS},
+	} {
+		failures = appendRegression(
+			failures, "streaming load_latency", metric.name,
+			metric.baseline, metric.current, threshold,
+		)
+	}
+	failures = appendRegression(
+		failures, "streaming", "loaded_chunks",
+		float64(baseline.LoadedChunks), float64(current.LoadedChunks), threshold,
+	)
+	failures = appendRegression(
+		failures, "streaming", "peak_rss_bytes",
+		float64(baseline.PeakRSSBytes), float64(current.PeakRSSBytes), threshold,
+	)
+	return failures
 }
 
 func appendV6MultiplayerRegressions(
