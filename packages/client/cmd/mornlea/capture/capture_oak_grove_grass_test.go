@@ -90,7 +90,7 @@ func prepareOakGroveWithoutShortGrass(app SceneApplication) error {
 	generator := worldgen.New(captureOakGroveSeed, config.Defaults().FluidEnabled)
 	for z := int32(-1); z <= 1; z++ {
 		for x := int32(-1); x <= 1; x++ {
-			chunk := generator.GenerateChunk(core.ChunkPos{X: x, Z: z})
+			chunk := generator.GenerateChunk(core.Overworld, core.ChunkPos{X: x, Z: z})
 			for y := int32(core.MinY); y < core.MaxY; y++ {
 				for localZ := int32(0); localZ < core.SectionSize; localZ++ {
 					for localX := int32(0); localX < core.SectionSize; localX++ {

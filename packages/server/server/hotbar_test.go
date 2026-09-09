@@ -243,10 +243,12 @@ func TestFullHotbarStillBreaksBlockIntoGroundDrop(t *testing.T) {
 
 func hotbarTestStore(config server.Config) storage.WorldStore {
 	return storage.NewMemory(storage.Metadata{
-		FormatVersion:  4,
-		Seed:           config.Seed,
-		SpawnDimension: config.SpawnDimension,
-		SpawnAnchor:    config.SpawnAnchor,
+		FormatVersion:     5,
+		Seed:              config.Seed,
+		SpawnDimension:    config.SpawnDimension,
+		SpawnAnchor:       config.SpawnAnchor,
+		DepthsSpawnAnchor: config.SpawnAnchor,
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
 }
 

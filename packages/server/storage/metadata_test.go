@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/worldgen"
 )
 
 func TestMetadataEncodingIsDeterministic(t *testing.T) {
@@ -175,6 +176,63 @@ type injectedMetadataDirectory struct {
 	closeErr error
 }
 
+// `encodeLegacyMetadataV4` 手工构造一份 CRC 有效的 metadata v4 字节。
+// 生产代码只写当前版本，v4 样本必须由测试自己保留。
+func encodeLegacyMetadataV4(metadata Metadata) []byte {
+	encoded := make([]byte, 0, metadataHeaderLength+41+metadataChecksumLength)
+	encoded = append(encoded, metadataMagic[:]...)
+	encoded = binary.LittleEndian.AppendUint32(encoded, 4)
+	encoded = binary.LittleEndian.AppendUint32(encoded, 41)
+	encoded = binary.LittleEndian.AppendUint64(encoded, uint64(metadata.Seed))
+	encoded = binary.LittleEndian.AppendUint32(encoded, uint32(metadata.SpawnDimension))
+	encoded = binary.LittleEndian.AppendUint32(encoded, uint32(metadata.SpawnAnchor.X))
+	encoded = binary.LittleEndian.AppendUint32(encoded, uint32(metadata.SpawnAnchor.Z))
+	encoded = binary.LittleEndian.AppendUint64(encoded, metadata.WorldTimeTicks)
+	encoded = binary.LittleEndian.AppendUint64(encoded, metadata.DayPhaseOffset)
+	encoded = append(encoded, byte(metadata.WeatherKind))
+	encoded = binary.LittleEndian.AppendUint32(encoded, metadata.WeatherTicksRemaining)
+	return binary.LittleEndian.AppendUint32(
+		encoded, crc32.Checksum(encoded, metadataCRCTable),
+	)
+}
+
+// TestMetadataV4MigratesToV5DepthsDefault 覆盖「v4 旧档默认迁移」：v4 文件缺失
+// 维度表尾部，读入即规范为当前版本，`Depths` 出生锚点默认取主世界锚点，种子盐
+// 取世界生成侧的固定盐。
+func TestMetadataV4MigratesToV5DepthsDefault(t *testing.T) {
+	v4 := Metadata{
+		FormatVersion:         4,
+		Seed:                  42,
+		SpawnDimension:        core.Overworld,
+		SpawnAnchor:           core.ChunkPos{X: 3, Z: -2},
+		WorldTimeTicks:        12345,
+		DayPhaseOffset:        678,
+		WeatherKind:           core.WeatherRain,
+		WeatherTicksRemaining: 5000,
+	}
+	loaded, err := decodeMetadata(encodeLegacyMetadataV4(v4))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.FormatVersion != 5 {
+		t.Fatalf("迁移后版本 = %d，想要 5", loaded.FormatVersion)
+	}
+	if loaded.DepthsSpawnAnchor != loaded.SpawnAnchor {
+		t.Fatalf(
+			"Depths 出生锚点 = %+v，想要主世界锚点 %+v",
+			loaded.DepthsSpawnAnchor, loaded.SpawnAnchor,
+		)
+	}
+	if loaded.DepthsSeedSalt != 0x9E3779B97F4A7C15 {
+		t.Fatalf("Depths 种子盐 = %#x，想要 0x9E3779B97F4A7C15", loaded.DepthsSeedSalt)
+	}
+	if loaded.Seed != v4.Seed || loaded.SpawnAnchor != v4.SpawnAnchor ||
+		loaded.WorldTimeTicks != v4.WorldTimeTicks || loaded.DayPhaseOffset != v4.DayPhaseOffset ||
+		loaded.WeatherKind != v4.WeatherKind || loaded.WeatherTicksRemaining != v4.WeatherTicksRemaining {
+		t.Fatalf("v4 迁移丢了既有字段：%+v", loaded)
+	}
+}
+
 func (directory *injectedMetadataDirectory) Sync() error {
 	return directory.syncErr
 }
@@ -257,5 +315,19 @@ func TestMetadataAtomicReplaceReleasesTempPathAfterRename(t *testing.T) {
 				t.Fatalf("reused temp path = %q", bystander)
 			}
 		})
+	}
+}
+
+// TestDepthsSeedSaltMatchesWorldgen 断言存档默认盐与世界生成侧的种子盐是
+// 同一位模式：两侧同源于 `core.DepthsSeedSalt`（`depthsSeedSaltDefault` 直接
+// 绑定该常量，`worldgen.DepthsSeedSalt` 经运行时转换取 int64 位模式），
+// 此处经运行时转换逐值钉住，任一侧重新拼写字面量并漂移即红。
+func TestDepthsSeedSaltMatchesWorldgen(t *testing.T) {
+	salt := worldgen.DepthsSeedSalt
+	if depthsSeedSaltDefault != uint64(salt) {
+		t.Fatalf(
+			"存档默认盐 = %#x，世界生成盐 = %#x，两侧必须同源于 `core.DepthsSeedSalt`",
+			depthsSeedSaltDefault, uint64(salt),
+		)
 	}
 }

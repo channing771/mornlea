@@ -389,6 +389,22 @@ func (server *Server) onlinePlanPlayersSnapshot() []companion.PlanPlayer {
 	return companion.BoundOnlinePlayers(players)
 }
 
+// onlinePlayerDimension 解析指定玩家的当前权威维度：会话注册表定位会话，
+// 权威模拟给出维度。调用方必须持有 stepMu。
+func (server *Server) onlinePlayerDimension(
+	playerID core.PlayerID,
+) (core.DimensionID, bool) {
+	sessionID, ok := server.playerSessions[playerID]
+	if !ok {
+		return 0, false
+	}
+	player, ok := server.engine.Player(sessionID)
+	if !ok {
+		return 0, false
+	}
+	return player.Dimension, true
+}
+
 // hasAirNeighbor 报告 (x,y,z) 的六邻域中是否存在空气。邻居越出世界竖直边界
 // 视为空气（地表/床底面向界外的面是可见的）。
 func (v companionChunkView) hasAirNeighbor(x, y, z int32) bool {

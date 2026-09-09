@@ -21,7 +21,7 @@ var fluidPublicationSource = core.BlockPos{X: 0, Y: 1, Z: -5}
 type fluidGenerator struct{}
 
 // GenerateChunk 实现 Generator。
-func (fluidGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (fluidGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	chunk := world.NewChunk(position)
 	for x := range core.SectionSize {
 		for z := range core.SectionSize {
@@ -44,7 +44,9 @@ func (fluidGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
 //   - 整个过程中出现的服务端消息类型必须全部落在本变更之前就存在的集合里。
 func TestFluidChangesBroadcastOverExistingChunkChannel(t *testing.T) {
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 4, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
 	config := hostTestConfig()
 	config.ViewRadius = 1

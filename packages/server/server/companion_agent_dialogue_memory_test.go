@@ -15,6 +15,7 @@ import (
 	"github.com/channing771/mornlea/packages/server/server/persistence"
 	"github.com/channing771/mornlea/packages/server/storage"
 	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
 )
 
@@ -444,7 +445,7 @@ func TestMemoryReconcileAcquireIncludesInactiveTombstoneWithoutPausingActive(t *
 	activeID := chatTestCompanionID(1)
 	inactiveID := chatTestCompanionID(2)
 	tombstone := companionBootstrapIdentity(0x7a)
-	store := storage.NewMemory(storage.Metadata{FormatVersion: 4, Seed: 42})
+	store := storage.NewMemory(storage.Metadata{FormatVersion: 5, Seed: 42, DepthsSpawnAnchor: core.ChunkPos{}, DepthsSeedSalt: 0x9E3779B97F4A7C15})
 	companions := persistence.NewCompanions(store, storage.StoredCompanions{
 		Revision:         7,
 		AgentNamespaceID: companionBootstrapIdentity(0x70),

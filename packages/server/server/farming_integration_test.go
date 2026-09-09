@@ -69,7 +69,9 @@ func runPlantingParityScript(t *testing.T, transport string) plantingParityResul
 	t.Helper()
 	identity := integrationIdentity(0x9d, "Planter")
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 4, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
 	var initial core.Inventory
 	// 石锄配方（recipe 9，2×2、镜像位关闭）需要石头纵列 + 木棍纵列共四个

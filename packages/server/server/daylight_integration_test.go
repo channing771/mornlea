@@ -26,7 +26,7 @@ const (
 // roofHole 是屋顶上唯一的洞，位于出生列正上方。
 var roofHole = core.ChunkPos{X: 0, Z: 0}
 
-func (roofTestGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (roofTestGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	chunk := world.NewChunk(position)
 	for z := 0; z < core.SectionSize; z++ {
 		for x := 0; x < core.SectionSize; x++ {

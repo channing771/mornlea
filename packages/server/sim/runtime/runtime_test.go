@@ -287,3 +287,13 @@ func TestHostileActionsQueuedAtPhaseBoundaryRunInCurrentTick(t *testing.T) {
 		t.Fatalf("action 延迟到下一空闲 tick 才结算：first=%+v second=%+v", first, second)
 	}
 }
+
+func TestEngineBootsTwoDimensions(t *testing.T) {
+	engine := NewEngine(2, 0, 1234)
+	if engine.dimension(core.Overworld) == nil {
+		t.Fatal("overworld missing")
+	}
+	if engine.dimension(core.Depths) == nil {
+		t.Fatal("depths missing")
+	}
+}

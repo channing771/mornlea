@@ -76,6 +76,12 @@ func (server *Server) drainIncomingChats(tickTunables runtime.TickTunables) []ch
 			continue
 		}
 
+		// 传送命名空间先于伙伴寻址拦截：`/warp depths|overworld` 走权威传送
+		// 事务，命名空间内的拼写错误走传送拒绝，两者都不产生聊天事件。
+		if isWarpCommand(chat.command.Text) {
+			server.handleWarpChat(chat)
+			continue
+		}
 		name, command, reason := parseCompanionAddress(chat.command.Text)
 		// 停止旁路：寻址成功、目标已配置且指令文本 trim 后精确等于「停止」时
 		// 绕过 FIFO。成功的停止不在这里产生聊天投递——TaskStopped 广播由本

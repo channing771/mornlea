@@ -84,8 +84,11 @@ func (RequestChunkResync) clientMessage() {}
 func (RequestChunkResync) clientPacket()  {}
 
 func (request RequestChunkResync) Validate() error {
-	if request.Dimension != core.Overworld {
-		return errors.New("network: chunk resync dimension is not overworld")
+	// 玩家与区块类消息接受双维：`Overworld` 与 `Depths` 放行，
+	// `Dimension >= 2` 拒绝。Memory 与 TCP 共用本校验，
+	// 编解码层的同值域镜像只做纵深，不另定值域。
+	if request.Dimension != core.Overworld && request.Dimension != core.Depths {
+		return errors.New("network: chunk resync dimension is not overworld or depths")
 	}
 	return nil
 }

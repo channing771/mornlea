@@ -92,7 +92,7 @@ const (
 type floodCropGenerator struct{}
 
 // GenerateChunk 实现 Generator。
-func (floodCropGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (floodCropGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	chunk := world.NewChunk(position)
 	for x := range core.SectionSize {
 		for z := range core.SectionSize {
@@ -194,7 +194,9 @@ func recordFluidCropParity(t *testing.T, transport string) fluidCropParityRecord
 	tuning.SetTunables(tunables)
 
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 4, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
 	config := hostTestConfig()
 	config.ViewRadius = floodCropParityViewRadius

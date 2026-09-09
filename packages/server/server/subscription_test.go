@@ -45,7 +45,7 @@ func TestServerSubscriptionAcquisitionOrderAndBounds(t *testing.T) {
 
 type emptyGenerator struct{}
 
-func (emptyGenerator) GenerateChunk(pos core.ChunkPos) *world.Chunk {
+func (emptyGenerator) GenerateChunk(_ core.DimensionID, pos core.ChunkPos) *world.Chunk {
 	return world.NewChunk(pos)
 }
 

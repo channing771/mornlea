@@ -29,8 +29,8 @@ var multiplayerRestartStartPositions = [...][3]float32{
 
 type multiplayerRestartGenerator struct{}
 
-func (multiplayerRestartGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
-	chunk := flatTestGenerator{}.GenerateChunk(position)
+func (multiplayerRestartGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
+	chunk := flatTestGenerator{}.GenerateChunk(core.Overworld, position)
 	if multiplayerRestartTarget.Chunk() == position {
 		x, _, z := multiplayerRestartTarget.Local()
 		chunk.SetBlock(x, multiplayerRestartTarget.Y, z, core.StoneID)
@@ -78,7 +78,9 @@ func runEightPlayersSurviveDiskRestart(t *testing.T) {
 	root := t.TempDir()
 	identities := make([]network.Identity, multiplayerClientCount)
 	seedStore, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 4, Seed: seed, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: seed, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	}})
 	if err != nil {
 		t.Fatalf("OpenDisk seed: %v", err)
@@ -269,7 +271,9 @@ func runEightPlayersSurviveDiskRestart(t *testing.T) {
 func startMultiplayerRestartHost(t *testing.T, root string, seed int64) multiplayerRestartHost {
 	t.Helper()
 	store, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 4, Seed: seed, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: seed, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	}})
 	if err != nil {
 		t.Fatalf("OpenDisk host: %v", err)

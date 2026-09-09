@@ -84,7 +84,7 @@ func (RemotePlayerSpawn) serverPacket()  {}
 func (spawn RemotePlayerSpawn) Validate() error {
 	name, err := core.NormalizeDisplayName(spawn.DisplayName)
 	if err != nil || name != spawn.DisplayName || !spawn.PlayerID.Valid() ||
-		spawn.Dimension != core.Overworld || !finiteVec3(spawn.Position) ||
+		(spawn.Dimension != core.Overworld && spawn.Dimension != core.Depths) || !finiteVec3(spawn.Position) ||
 		!finite32(spawn.Yaw) || !finite32(spawn.Pitch) {
 		return errors.New("network: invalid remote player spawn")
 	}
@@ -135,7 +135,7 @@ func (states RemotePlayerStates) Validate() error {
 }
 
 func (state RemotePlayerState) validate() error {
-	if !state.PlayerID.Valid() || state.Dimension != core.Overworld || !finiteVec3(state.Position) ||
+	if !state.PlayerID.Valid() || (state.Dimension != core.Overworld && state.Dimension != core.Depths) || !finiteVec3(state.Position) ||
 		!finite32(state.Yaw) || !finite32(state.Pitch) {
 		return errors.New("invalid remote player state")
 	}
@@ -146,6 +146,11 @@ func (PlayerState) serverMessage() {}
 func (PlayerState) serverPacket()  {}
 
 func (state PlayerState) Validate() error {
+	// 玩家状态与远端玩家同值域：双维放行，`Dimension >= 2` 在协议层直接
+	// 拒绝，保证 Memory 与 TCP 两条传输得出同一结论，不依赖编解码镜像。
+	if state.Dimension != core.Overworld && state.Dimension != core.Depths {
+		return errors.New("network: player state dimension is not overworld or depths")
+	}
 	for _, value := range state.Position {
 		if !finite32(value) {
 			return errors.New("network: player state has non-finite position")

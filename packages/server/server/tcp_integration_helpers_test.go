@@ -62,11 +62,11 @@ func (store *trackedMemoryStore) LoadChunk(ctx context.Context, key core.ChunkKe
 	return store.MemoryStore.LoadChunk(ctx, key)
 }
 
-func (flatGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (flatGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	return integrationChunk(position, core.StoneID)
 }
 
-func (changedGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (changedGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	return integrationChunk(position, core.DirtID)
 }
 
@@ -96,7 +96,9 @@ func integrationPlayerID() core.PlayerID {
 func startDiskHost(t *testing.T, root, address string, generator Generator) integrationHost {
 	t.Helper()
 	store, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 4, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	}})
 	if err != nil {
 		t.Fatalf("OpenDisk: %v", err)
@@ -413,7 +415,9 @@ func seedIntegrationPlayer(
 ) {
 	t.Helper()
 	store, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 4, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	}})
 	if err != nil {
 		t.Fatal(err)

@@ -672,7 +672,7 @@ func containsChunk(keys []core.ChunkKey, pos core.ChunkPos) bool {
 	return false
 }
 
-func (playerTestGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (playerTestGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	chunk := world.NewChunk(position)
 	for z := 0; z < core.SectionSize; z++ {
 		for x := 0; x < core.SectionSize; x++ {

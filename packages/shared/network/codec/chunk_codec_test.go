@@ -170,7 +170,7 @@ func TestChunkSnapshotEncodeRejectsNonOverworldDimension(t *testing.T) {
 	codec := mustNewCodec(t)
 	defer codec.Close()
 	snapshot := fixtureSnapshot(core.ChunkPos{X: -3, Z: 7}, 19)
-	snapshot.Dimension = core.DimensionID(1)
+	snapshot.Dimension = core.DimensionID(2)
 
 	if _, _, err := codec.EncodeServer(protocol.StatePlay, snapshot); err == nil {
 		t.Fatal("non-Overworld snapshot encoded")
@@ -183,7 +183,7 @@ func TestChunkSnapshotDecodeRejectsNonOverworldDimension(t *testing.T) {
 	codec := mustNewCodec(t)
 	defer codec.Close()
 	snapshot := fixtureSnapshot(core.ChunkPos{X: -3, Z: 7}, 19)
-	snapshot.Dimension = core.DimensionID(1)
+	snapshot.Dimension = core.DimensionID(2)
 	logical, _ := testLogicalSnapshot(snapshot)
 	payload := testZstdEnvelope(t, logical, uint32(len(logical)))
 

@@ -77,7 +77,9 @@ const steadyFrameMeshWorkMax = application.SteadyFrameMeshWorkMax
 
 func measurePlayerPersistenceSummary() (client.PersistenceSummary, error) {
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 4, Seed: benchmarkSeed, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: benchmarkSeed, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    core.DepthsSeedSalt,
 	})
 	id := core.PlayerID{0xa1, 0x63, 0xd4, 0x99, 0x36, 0x55, 0x43, 0xd5, 0x87, 0x30, 0xe5, 0x9d, 0x11, 0x0c, 0x21, 0x76}
 	recorder := application.NewSaveRecorder(256)

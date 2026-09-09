@@ -13,7 +13,7 @@ import (
 const MaxSmallPayload = 64 << 10
 
 var (
-	errInvalidDimension = errors.New("network: dimension is not overworld")
+	errInvalidDimension = errors.New("network: dimension is not overworld or depths")
 	errInvalidCount     = errors.New("network: packet count is outside 1..4096")
 	errCountShortInput  = errors.New("network: packet count exceeds remaining payload")
 )

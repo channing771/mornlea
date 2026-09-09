@@ -167,8 +167,11 @@ func newWorld(
 		records, loadedQueues := companions.Restore()
 		for _, definition := range config.Companions {
 			restore := contract.CompanionRestore{
+				// 伙伴本变更只住主世界：`SpawnDimension` 写死 `core.Overworld`，
+				// 不跟随存档 `SpawnDimension`——`Depths` 出生的伙伴快照在
+				// wire 校验（`message_companion.go` 的 `Validate`）即被拒绝。
 				ID:             definition.ID,
-				SpawnDimension: metadata.SpawnDimension,
+				SpawnDimension: core.Overworld,
 				SpawnAnchor:    metadata.SpawnAnchor,
 			}
 			for index := range records {
@@ -184,6 +187,9 @@ func newWorld(
 		// 注入在线玩家权威源：规划快照的 OnlinePlayers 填充与 follow 目标
 		// 的在线性/位置解析共用同一会话注册表读取路径。
 		server.companionManager.onlinePlayers = server.onlinePlanPlayersSnapshot
+		// 注入玩家维度权威源：follow 的跨维保持据此判定目标是否已传送到
+		// 另一维度，调用方必须持有 stepMu（与在线玩家快照同一边界）。
+		server.companionManager.playerDimension = server.onlinePlayerDimension
 		// 恢复接线：任务域载荷在首个 tick 之前回填槽位（Planning/
 		// Validating 归一为 Queued，Running 保留进度且路径留空待重算）。
 		server.companionManager.restoreQueues(loadedQueues)

@@ -19,6 +19,7 @@ import (
 	"github.com/channing771/mornlea/packages/client/client"
 	"github.com/channing771/mornlea/packages/server/server"
 	"github.com/channing771/mornlea/packages/server/storage"
+	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
 )
 
@@ -153,7 +154,7 @@ func TestNewApplicationReturnsRegistryErrorBeforeClientSideEffects(t *testing.T)
 			configure: func(dependencies *Dependencies, called func(string)) {
 				dependencies.OpenStore = func(context.Context, Options) (storage.WorldStore, error) {
 					called("OpenStore")
-					return storage.NewMemory(storage.Metadata{FormatVersion: 4, Seed: 42}), nil
+					return storage.NewMemory(storage.Metadata{FormatVersion: 5, Seed: 42, DepthsSpawnAnchor: core.ChunkPos{}, DepthsSeedSalt: 0x9E3779B97F4A7C15}), nil
 				}
 			},
 		},

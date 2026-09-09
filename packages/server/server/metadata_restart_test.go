@@ -20,7 +20,9 @@ import (
 func openRestartWorld(t *testing.T, root string, seed int64) (*Server, *storage.DiskStore) {
 	t.Helper()
 	store, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 4, Seed: seed, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: seed, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	}})
 	if err != nil {
 		t.Fatalf("OpenDisk: %v", err)
@@ -74,7 +76,9 @@ func TestDiskLegacyMetadataStartsAtZeroAndUpgradesOnShutdown(t *testing.T) {
 
 	// 先用当前程序建立世界，再把 world.meta 换成等价的 v1 字节。
 	seedStore, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 4, Seed: seed, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: seed, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	}})
 	if err != nil {
 		t.Fatalf("OpenDisk seed: %v", err)
@@ -117,8 +121,8 @@ func TestDiskLegacyMetadataStartsAtZeroAndUpgradesOnShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version := binary.LittleEndian.Uint32(onDisk[4:8]); version != 4 {
-		t.Fatalf("关服后磁盘 metadata 版本 = %d，想要 4", version)
+	if version := binary.LittleEndian.Uint32(onDisk[4:8]); version != 5 {
+		t.Fatalf("关服后磁盘 metadata 版本 = %d，想要 5", version)
 	}
 
 	reopened, reopenedStore := openRestartWorld(t, root, seed)
@@ -155,7 +159,9 @@ func TestDiskAutosaveMigratesLegacyMetadata(t *testing.T) {
 	const seed int64 = 77
 
 	seedStore, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 4, Seed: seed, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: seed, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -186,7 +192,7 @@ func TestDiskAutosaveMigratesLegacyMetadata(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if binary.LittleEndian.Uint32(onDisk[4:8]) == 4 {
+		if binary.LittleEndian.Uint32(onDisk[4:8]) == 5 {
 			decoded := store.Metadata()
 			if decoded.Seed != seed {
 				t.Fatalf("迁移后种子 = %d，想要 %d", decoded.Seed, seed)
@@ -207,7 +213,9 @@ func TestDiskMetadataSaveFailureKeepsOldFileAndFailsShutdown(t *testing.T) {
 	const seed int64 = 1234
 
 	store, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 4, Seed: seed, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: seed, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	}})
 	if err != nil {
 		t.Fatal(err)

@@ -44,9 +44,11 @@ type persistenceTestStore struct {
 func newPersistenceTestStore() *persistenceTestStore {
 	return &persistenceTestStore{
 		metadata: storage.Metadata{
-			FormatVersion:  4,
-			Seed:           42,
-			SpawnDimension: core.Overworld,
+			FormatVersion:     5,
+			Seed:              42,
+			SpawnDimension:    core.Overworld,
+			DepthsSpawnAnchor: core.ChunkPos{},
+			DepthsSeedSalt:    0x9E3779B97F4A7C15,
 		},
 		started:  make(chan []storage.ChunkSave, 16),
 		returned: make(chan struct{}, 16),

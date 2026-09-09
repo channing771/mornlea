@@ -132,7 +132,7 @@ func TestRainNoonPrepareLoadsFixedSeedTerrain(t *testing.T) {
 	for z := int32(-1); z <= 1; z++ {
 		for x := int32(-1); x <= 1; x++ {
 			position := core.ChunkPos{X: x, Z: z}
-			want := generator.GenerateChunk(position)
+			want := generator.GenerateChunk(core.Overworld, position)
 			gotHash, gotRevision, loaded := app.Mirror().Hash(core.Overworld, position)
 			if !loaded || gotRevision != 1 || gotHash != want.Hash() {
 				t.Fatalf("chunk (%d,%d) hash/revision/loaded=(%x,%d,%v)，想要 (%x,1,true)",

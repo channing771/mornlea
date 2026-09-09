@@ -628,7 +628,7 @@ func newOakPersistenceGenerator(marker core.BlockID) *countingPersistenceGenerat
 	return generator
 }
 
-func (generator *countingPersistenceGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (generator *countingPersistenceGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	generator.mu.Lock()
 	generator.calls[position]++
 	generator.mu.Unlock()
@@ -682,7 +682,7 @@ func (generator *countingPersistenceGenerator) calledPositions() []core.ChunkPos
 }
 
 func persistenceChunk(position core.ChunkPos, marker core.BlockID) *world.Chunk {
-	chunk := server.FlatTestGenerator{}.GenerateChunk(position)
+	chunk := server.FlatTestGenerator{}.GenerateChunk(core.Overworld, position)
 	chunk.SetBlock(core.SectionSize-1, 10, core.SectionSize-1, marker)
 	chunk.Compact()
 	return chunk
@@ -705,10 +705,12 @@ func openPersistentDiskStore(t *testing.T, root string) *storage.DiskStore {
 	t.Helper()
 	store, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{
 		Create: storage.Metadata{
-			FormatVersion:  4,
-			Seed:           42,
-			SpawnDimension: core.Overworld,
-			SpawnAnchor:    core.ChunkPos{},
+			FormatVersion:     5,
+			Seed:              42,
+			SpawnDimension:    core.Overworld,
+			SpawnAnchor:       core.ChunkPos{},
+			DepthsSpawnAnchor: core.ChunkPos{},
+			DepthsSeedSalt:    0x9E3779B97F4A7C15,
 		},
 	})
 	if err != nil {

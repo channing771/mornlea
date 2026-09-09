@@ -277,14 +277,14 @@ func runNaturalSeedFarmingScript(
 	// 与服务端权威 1/8 判定。夹具另在登录就绪后对已加载权威区块重读同一格。
 	// 任何一条失败都说明冻结样本失效，脚本不降级、不搜索。
 	probe := worldgen.New(naturalFarmingSeed, true)
-	if got := probe.HeightAt(naturalFarmingGrass.X, naturalFarmingGrass.Z); got != naturalFarmingFarmland.Y {
+	if got := probe.HeightAt(core.Overworld, naturalFarmingGrass.X, naturalFarmingGrass.Z); got != naturalFarmingFarmland.Y {
 		t.Fatalf("冻结样本前提失效：出生列高度 = %d，想要海平面草架 %d",
 			got, naturalFarmingFarmland.Y)
 	}
-	if got := probe.BaseBlockAt(naturalFarmingFarmland); got != core.GrassID {
+	if got := probe.BaseBlockAt(core.Overworld, naturalFarmingFarmland); got != core.GrassID {
 		t.Fatalf("冻结样本前提失效：样本格下方 = %d，想要 %d", got, core.GrassID)
 	}
-	if got := probe.BaseBlockAt(naturalFarmingGrass); got != core.ShortGrassID {
+	if got := probe.BaseBlockAt(core.Overworld, naturalFarmingGrass); got != core.ShortGrassID {
 		t.Fatalf("冻结样本前提失效：样本格 = %d，想要自然生成的 %d",
 			got, core.ShortGrassID)
 	}
@@ -298,10 +298,12 @@ func runNaturalSeedFarmingScript(
 	// 一次性材料包，脚本第一步要看的正是这份材料包不再携带种子。生成器用
 	// 生产 worldgen.New（流体开启 = 生产默认配置），不经任何测试生成旁路。
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion:  4,
-		Seed:           naturalFarmingSeed,
-		SpawnDimension: core.Overworld,
-		SpawnAnchor:    naturalFarmingAnchor,
+		FormatVersion:     5,
+		Seed:              naturalFarmingSeed,
+		SpawnDimension:    core.Overworld,
+		SpawnAnchor:       naturalFarmingAnchor,
+		DepthsSpawnAnchor: naturalFarmingAnchor,
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
 	config := hostTestConfig()
 	config.ViewRadius = 1

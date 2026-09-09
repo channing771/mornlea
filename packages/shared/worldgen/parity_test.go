@@ -27,9 +27,9 @@ func assertTreeAcrossChunksConsistent(t *testing.T, seed int64, rootX, rootZ int
 	t.Helper()
 	production := worldgen.New(seed, false)
 
-	surface := production.HeightAt(rootX, rootZ)
+	surface := production.HeightAt(core.Overworld, rootX, rootZ)
 	pos := core.BlockPos{X: rootX, Y: surface, Z: rootZ}
-	if got := production.TerrainBlockAt(pos); got != core.GrassID {
+	if got := production.TerrainBlockAt(core.Overworld, pos); got != core.GrassID {
 		t.Fatalf("语料前提失效: (%d,%d) 地表=%d，想要 GrassID", rootX, rootZ, got)
 	}
 
@@ -37,7 +37,7 @@ func assertTreeAcrossChunksConsistent(t *testing.T, seed int64, rootX, rootZ int
 		BlockAt(x int, y int32, z int) core.BlockID
 	}{}
 	for _, chunkPos := range chunks {
-		generated[chunkPos] = production.GenerateChunk(chunkPos)
+		generated[chunkPos] = production.GenerateChunk(core.Overworld, chunkPos)
 	}
 	blockAt := func(pos core.BlockPos) (core.BlockID, bool) {
 		chunk, covered := generated[pos.Chunk()]
@@ -70,7 +70,7 @@ func assertTreeAcrossChunksConsistent(t *testing.T, seed int64, rootX, rootZ int
 				if !covered {
 					continue
 				}
-				if want := production.BaseBlockAt(pos); got != want {
+				if want := production.BaseBlockAt(core.Overworld, pos); got != want {
 					t.Fatalf("跨界树 %+v: 区块=%d 单点查询=%d", pos, got, want)
 				}
 				if got == core.OakLogID || got == core.LeavesID {
@@ -118,7 +118,7 @@ func TestRareOakTreeSpansChunkBorderConsistently(t *testing.T) {
 				if radial != 3 {
 					continue
 				}
-				if production.BaseBlockAt(core.BlockPos{X: rootX + dx, Y: y, Z: rootZ + dz}) == core.LeavesID {
+				if production.BaseBlockAt(core.Overworld, core.BlockPos{X: rootX + dx, Y: y, Z: rootZ + dz}) == core.LeavesID {
 					wide = true
 					break
 				}
@@ -180,7 +180,7 @@ func TestRareOakTreeNegativeCoordinatesConsistent(t *testing.T) {
 					if radial != 3 {
 						continue
 					}
-					if production.BaseBlockAt(core.BlockPos{X: tc.rootX + dx, Y: y, Z: tc.rootZ + dz}) == core.LeavesID {
+					if production.BaseBlockAt(core.Overworld, core.BlockPos{X: tc.rootX + dx, Y: y, Z: tc.rootZ + dz}) == core.LeavesID {
 						wide = true
 						break
 					}

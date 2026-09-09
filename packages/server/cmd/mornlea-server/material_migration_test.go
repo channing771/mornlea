@@ -20,7 +20,7 @@ import (
 func TestMigrateNaturalMaterialsDoesNotIntroduceOakTrees(t *testing.T) {
 	generator := worldgen.New(42, false)
 	root := core.BlockPos{X: -4, Y: 65, Z: -4}
-	if got := generator.BaseBlockAt(root); got != core.OakLogID {
+	if got := generator.BaseBlockAt(core.Overworld, root); got != core.OakLogID {
 		t.Fatalf("测试夹具树根 = %v，期望 %v", got, core.OakLogID)
 	}
 
@@ -115,7 +115,7 @@ func TestMigrateNaturalMaterialsPreservesOtherBlocksAndPayloads(t *testing.T) {
 	generator := worldgen.New(seed, false)
 	for index := range natural {
 		position := blockPosition(key.Pos, index, core.MinY, 0)
-		want.SetBlock(index, core.MinY, 0, generator.TerrainBlockAt(position))
+		want.SetBlock(index, core.MinY, 0, generator.TerrainBlockAt(core.Overworld, position))
 	}
 
 	candidate, changed, err := migrateNaturalMaterials(generator, storage.StoredChunk{
@@ -141,7 +141,7 @@ func TestMigrateNaturalMaterialsPreservesOtherBlocksAndPayloads(t *testing.T) {
 func TestMigrateNaturalMaterialsKeepsRevisionWhenUnchanged(t *testing.T) {
 	key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: 1, Z: -1}}
 	generator := worldgen.New(42, false)
-	chunk := generator.GenerateChunk(key.Pos)
+	chunk := generator.GenerateChunk(core.Overworld, key.Pos)
 
 	candidate, changed, err := migrateNaturalMaterials(generator, storage.StoredChunk{
 		Key: key, Revision: 13, PersistedRevision: 13, Chunk: chunk,
@@ -170,13 +170,15 @@ func TestMaterialMigrationRealDiskRoundTrip(t *testing.T) {
 	unchangedKey := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: -3, Z: -2}}
 	otherDimensionKey := core.ChunkKey{Dimension: 1, Pos: core.ChunkPos{X: -4, Z: 5}}
 	changedBefore, changedAfter := materialMigrationDiskFixture(t, generator, changedKey)
-	unchanged := generator.GenerateChunk(unchangedKey.Pos)
+	unchanged := generator.GenerateChunk(core.Overworld, unchangedKey.Pos)
 	otherDimension := world.NewChunk(otherDimensionKey.Pos)
 	otherDimension.SetBlock(0, core.MinY, 0, core.StoneID)
 
 	store, err := storage.OpenDisk(ctx, worldPath, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 4,
-		Seed:          42,
+		FormatVersion:     5,
+		Seed:              42,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -224,8 +226,10 @@ func TestMaterialMigrationRealDiskRetriesProgressFailureWithoutSecondRevision(t 
 	chunk.SetBlock(0, core.MinY, 0, core.StoneID)
 
 	store, err := storage.OpenDisk(ctx, worldPath, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 4,
-		Seed:          42,
+		FormatVersion:     5,
+		Seed:              42,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -255,7 +259,7 @@ func TestMaterialMigrationRealDiskRetriesProgressFailureWithoutSecondRevision(t 
 		t.Fatalf("进度失败后不应有正式状态，Stat 错误: %v", err)
 	}
 	want := chunk.Clone()
-	want.SetBlock(0, core.MinY, 0, worldgen.New(42, false).TerrainBlockAt(blockPosition(key.Pos, 0, core.MinY, 0)))
+	want.SetBlock(0, core.MinY, 0, worldgen.New(42, false).TerrainBlockAt(core.Overworld, blockPosition(key.Pos, 0, core.MinY, 0)))
 	assertMaterialMigrationDiskChunk(t, worldPath, key, 6, want)
 
 	if err := migrateMaterials(ctx, worldPath, backupPath); err != nil {
@@ -711,7 +715,7 @@ type materialMigrationTestStore struct {
 
 func newMaterialMigrationTestStore(seed int64) *materialMigrationTestStore {
 	return &materialMigrationTestStore{
-		metadata: storage.Metadata{FormatVersion: 4, Seed: seed},
+		metadata: storage.Metadata{FormatVersion: 5, Seed: seed, DepthsSpawnAnchor: core.ChunkPos{}, DepthsSeedSalt: 0x9E3779B97F4A7C15},
 		chunks:   make(map[core.ChunkKey]storage.StoredChunk),
 	}
 }
@@ -891,7 +895,7 @@ func materialMigrationDiskFixture(
 
 	want := chunk.Clone()
 	for x := range 7 {
-		want.SetBlock(x, core.MinY, 0, generator.TerrainBlockAt(blockPosition(key.Pos, x, core.MinY, 0)))
+		want.SetBlock(x, core.MinY, 0, generator.TerrainBlockAt(core.Overworld, blockPosition(key.Pos, x, core.MinY, 0)))
 	}
 	return chunk, want
 }

@@ -504,3 +504,41 @@ func TestDeathWithUnverifiedRespawnKeepsRecord(t *testing.T) {
 		t.Fatal("未验证失效的重生点记录不应被清除")
 	}
 }
+
+// TestDeathCrossDimensionBedFallsBackToDeathDimensionAnchor 覆盖多维 delta
+// 规约「跨维床失效回落本维锚点」：重生点床在主世界、死亡时位于 depths 时，
+// 延迟校验不得跨维复用那张床——回落死亡所在维的出生锚点，且主世界床记录保留
+// 到返回后仍可用。
+func TestDeathCrossDimensionBedFallsBackToDeathDimensionAnchor(t *testing.T) {
+	engine := twoPlayerWorld(t)
+	session, yaw, pitch := placeSleepBed(t, engine, sleepBedFoot, 3.5)
+	if result := interactBed(engine, session, 10, yaw, pitch); len(result.Rejected) != 0 {
+		t.Fatalf("入睡被拒绝: %+v", result.Rejected)
+	}
+	// 搬运到 depths：模拟传送落位后的权威状态——会话维度与出生锚点均为新维，
+	// 个人重生点仍指向主世界的床。候选列按新锚点重建：生产侧传送经注销重建，
+	// `RegisterPlayer` 本来就会做这件事，这里手动搬运才需显式重算。
+	depthsAnchor := core.ChunkPos{X: 8, Z: -8}
+	loadFlatChunks(t, engine.realm.EnsureDimension(core.Depths), 7, 9, -9, -7)
+	engine.sessions[session].dimension = core.Depths
+	moved := engine.sessions[session].player
+	moved.anchor = depthsAnchor
+	moved.candidates = spawnCandidates(depthsAnchor, engine.tunables.SpawnRadius)
+	moved.candidateChunks = spawnCandidateChunks(moved.candidates)
+	moved.spawnWanted = map[core.ChunkPos]struct{}{depthsAnchor: {}}
+
+	player := respawnWhenDead(t, engine, session)
+	if player.Dimension != core.Depths {
+		t.Fatalf("跨维死亡后维度 = %d，想要留在 depths", player.Dimension)
+	}
+	foot := (core.BlockPos{
+		X: int32(player.State.Position.X()),
+		Z: int32(player.State.Position.Z()),
+	}).Chunk()
+	if foot != depthsAnchor {
+		t.Fatalf("跨维死亡后落点区块 = %+v，想要 depths 锚点 %+v", foot, depthsAnchor)
+	}
+	if !engine.sessions[session].player.respawnPresent {
+		t.Fatal("跨维回落不得清除主世界床记录，返回后仍须可用")
+	}
+}

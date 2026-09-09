@@ -90,6 +90,7 @@ func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
 		panic("sim: negative view radius")
 	}
 	realmState := realm.NewState(core.Overworld)
+	realmState.EnsureDimension(core.Depths)
 	engine := &Engine{
 		viewRadius:    viewRadius,
 		seed:          seed,

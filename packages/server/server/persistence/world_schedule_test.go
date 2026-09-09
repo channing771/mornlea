@@ -259,7 +259,9 @@ func TestSaveCompletionAheadOfSnapshotAcceptsBoundedPersistedRevision(t *testing
 func TestSaveCompletionEqualToNewerAuthorityDoesNotClaimForeignContent(t *testing.T) {
 	key := chunkKey(0, 0)
 	memory := storage.NewMemory(storage.Metadata{
-		FormatVersion: 4, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
 	foreign := world.NewChunk(key.Pos)
 	foreign.SetBlock(7, 10, 7, core.DirtID)

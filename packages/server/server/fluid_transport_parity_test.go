@@ -32,7 +32,7 @@ const damParityTicks = 320
 type damGenerator struct{}
 
 // GenerateChunk 实现 Generator。
-func (damGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (damGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	chunk := world.NewChunk(position)
 	for x := range core.SectionSize {
 		for z := range core.SectionSize {
@@ -96,7 +96,9 @@ func TestMemoryTCPFluidDamBreakBroadcastParity(t *testing.T) {
 func recordDamParity(t *testing.T, transport string) damParityRecord {
 	t.Helper()
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 4, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
 	config := hostTestConfig()
 	config.ViewRadius = 1

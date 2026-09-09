@@ -43,10 +43,12 @@ func openApplicationStore(
 		return nil, nil
 	}
 	metadata := storage.Metadata{
-		FormatVersion:  4,
-		Seed:           options.Seed,
-		SpawnDimension: core.Overworld,
-		SpawnAnchor:    core.ChunkPos{},
+		FormatVersion:     5,
+		Seed:              options.Seed,
+		SpawnDimension:    core.Overworld,
+		SpawnAnchor:       core.ChunkPos{},
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    core.DepthsSeedSalt,
 	}
 	// benchmark、capture 与 motion 演示都要求世界状态与本机磁盘上的真实存档隔离：
 	// benchmark 为了性能测量不被磁盘 I/O 干扰，capture/motion 为了抓帧结果不随

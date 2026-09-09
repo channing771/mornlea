@@ -23,7 +23,9 @@ func TestTCPDropSelectedItemSurvivesRestart(t *testing.T) {
 
 	// 预置一个含煤炭的玩家存档：煤炭是不可放置物品，同时覆盖已注册物品边界。
 	seedStore, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 4, Seed: seed, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: seed, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	}})
 	if err != nil {
 		t.Fatalf("OpenDisk seed: %v", err)
@@ -135,7 +137,9 @@ func TestTCPToolDurabilitySurvivesRestart(t *testing.T) {
 	want := core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: full - 5}
 
 	seedStore, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 4, Seed: seed, SpawnDimension: core.Overworld,
+		FormatVersion: 5, Seed: seed, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	}})
 	if err != nil {
 		t.Fatalf("OpenDisk seed: %v", err)

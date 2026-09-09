@@ -69,6 +69,12 @@ type Metadata struct {
 	// WeatherTicksRemaining 是当前天气段的剩余权威 tick 数，metadata v4 起
 	// 持久化；旧版本世界迁移后为零，零表示旧档未记录、恢复时按新世界默认值掷骰。
 	WeatherTicksRemaining uint32
+	// DepthsSpawnAnchor 是第二维度（`Depths`）的出生区块锚点，metadata v5 起
+	// 持久化；v4 及更早世界读入即迁移为与主世界锚点相同的值。
+	DepthsSpawnAnchor core.ChunkPos
+	// DepthsSeedSalt 是派生 `Depths` 维度地形种子的盐，metadata v5 起持久化；
+	// v4 及更早世界读入即迁移为世界生成侧的固定盐常量。
+	DepthsSeedSalt uint64
 }
 
 // RegionKey 是 region 文件键的别名再导出，定义在 region 格式原语包。

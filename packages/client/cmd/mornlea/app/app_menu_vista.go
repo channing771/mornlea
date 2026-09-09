@@ -130,7 +130,7 @@ func newMenuVista(
 	center := core.ChunkPos{X: menuVistaAnchorX, Z: menuVistaAnchorZ}
 	// 相机地面取锚点中心的最高实心方块：纯单点查询，同种子逐位一致；
 	// 海底下界防御保证相机永远在海面与地形之上。
-	groundY := generator.HeightAt(
+	groundY := generator.HeightAt(core.Overworld,
 		menuVistaAnchorX*core.SectionSize+core.SectionSize/2,
 		menuVistaAnchorZ*core.SectionSize+core.SectionSize/2,
 	)
@@ -202,7 +202,7 @@ func (v *menuVista) pump(workMax int) {
 		}
 		position := v.queue[0]
 		v.queue = v.queue[1:]
-		chunk := v.generator.GenerateChunk(position)
+		chunk := v.generator.GenerateChunk(core.Overworld, position)
 		// 区块 ID 全部来自 worldgen 生产路径，快照校验在此不可达；违约即
 		// 编程错误，与远环生成同一 fail-fast 口径。
 		snapshot, err := server.BuildChunkSnapshot(core.Overworld, chunk, v.nextRevision)

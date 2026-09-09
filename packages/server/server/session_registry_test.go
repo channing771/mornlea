@@ -105,7 +105,7 @@ func TestSessionRegistryAcceptsArbitraryPlayerID(t *testing.T) {
 		running.engine.SubmitGenerated(contract.GeneratedChunk{
 			Dimension: key.Dimension,
 			Pos:       key.Pos,
-			Chunk:     playerTestGenerator{}.GenerateChunk(key.Pos),
+			Chunk:     playerTestGenerator{}.GenerateChunk(core.Overworld, key.Pos),
 		})
 	}
 	ready := running.engine.Step()
@@ -677,10 +677,12 @@ func testRestore() contract.PlayerRestore {
 
 func testStore() storage.Store {
 	return storage.NewMemory(storage.Metadata{
-		FormatVersion:  4,
-		Seed:           1,
-		SpawnDimension: core.Overworld,
-		SpawnAnchor:    core.ChunkPos{},
+		FormatVersion:     5,
+		Seed:              1,
+		SpawnDimension:    core.Overworld,
+		SpawnAnchor:       core.ChunkPos{},
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
 }
 
