@@ -219,6 +219,9 @@ func copyWorldBackup(ctx context.Context, source, destination string) ([]backupD
 		if relative == "world.lock" || relative == backupIdentityName {
 			return nil
 		}
+		// 跳过原子替换与 region 落盘的全部临时命名家族：聚合文件的 `.tmp-*`、
+		// Compact 的 `.compact-*` 与 CreateRegion 的 `.create-*`，半写候选
+		// 不得混入备份；备份自身的临时目录位于目标侧，不在此处理。
 		matchedTemporary, err := filepath.Match(".*.tmp-*", entry.Name())
 		if err != nil {
 			return err
@@ -227,7 +230,11 @@ func copyWorldBackup(ctx context.Context, source, destination string) ([]backupD
 		if err != nil {
 			return err
 		}
-		if relative != "." && (matchedTemporary || matchedCompact) {
+		matchedCreate, err := filepath.Match(".*.create-*", entry.Name())
+		if err != nil {
+			return err
+		}
+		if relative != "." && (matchedTemporary || matchedCompact || matchedCreate) {
 			if entry.IsDir() {
 				return filepath.SkipDir
 			}

@@ -23,6 +23,9 @@ func TestWorldBackupCopiesCompleteWorldAndReusesMatchingBackup(t *testing.T) {
 		filepath.Join(source, ".world.meta.tmp-ignore"),
 		filepath.Join(source, "players", ".player.tmp-ignore"),
 		filepath.Join(source, "dimensions", ".scan.tmp-ignore", "entry"),
+		// CreateRegion 落盘 region 前经 `.create-*` 临时文件原子提交，备份过滤
+		// 必须与其余临时命名同等跳过半写的 region 候选。
+		filepath.Join(source, "dimensions", "0", "regions", ".r.-2.1.region.create-ignore"),
 	}
 	for _, path := range temporaryPaths {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -49,6 +52,7 @@ func TestWorldBackupCopiesCompleteWorldAndReusesMatchingBackup(t *testing.T) {
 		".world.meta.tmp-ignore",
 		filepath.Join("players", ".player.tmp-ignore"),
 		filepath.Join("dimensions", ".scan.tmp-ignore"),
+		filepath.Join("dimensions", "0", "regions", ".r.-2.1.region.create-ignore"),
 	} {
 		if _, err := os.Lstat(filepath.Join(destination, relativePath)); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("备份不应包含 %q，Lstat 错误: %v", relativePath, err)
@@ -503,8 +507,8 @@ func snapshotWorldBackupSource(t *testing.T, root string) map[string]worldBackup
 	return snapshot
 }
 
-// assertBackupFreeOfTemporaryResidue 断言备份目录内没有任何原子替换或
-// Compact 的临时文件残留，正式文件（含身份文件）不受影响。
+// assertBackupFreeOfTemporaryResidue 断言备份目录内没有任何原子替换、Compact
+// 或 CreateRegion 的临时文件残留，正式文件（含身份文件）不受影响。
 func assertBackupFreeOfTemporaryResidue(t *testing.T, destination string) {
 	t.Helper()
 	err := filepath.WalkDir(destination, func(path string, entry fs.DirEntry, walkErr error) error {
@@ -519,7 +523,11 @@ func assertBackupFreeOfTemporaryResidue(t *testing.T, destination string) {
 		if err != nil {
 			return err
 		}
-		if matchedTemporary || matchedCompact {
+		matchedCreate, err := filepath.Match(".*.create-*", entry.Name())
+		if err != nil {
+			return err
+		}
+		if matchedTemporary || matchedCompact || matchedCreate {
 			t.Errorf("备份包含临时文件残留 %q", path)
 		}
 		return nil
