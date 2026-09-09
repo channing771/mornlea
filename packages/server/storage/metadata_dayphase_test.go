@@ -99,7 +99,7 @@ func TestMetadataV5GoldenBytes(t *testing.T) {
 }
 
 // TestMetadataV4LegacyGoldenBytes 冻结 v4 的字节布局（本变更一字不改）：它是
-// 「v4 旧档仍然可读」的字节级证据，与 encodeLegacyMetadataV4 的现场构造互相
+// 「v4 旧档仍然可读」的字节级证据，与 `encodeLegacyMetadataV4` 的现场构造互相
 // 印证，防止 legacy 助手本身悄悄偏离历史格式。
 func TestMetadataV4LegacyGoldenBytes(t *testing.T) {
 	legacy := Metadata{

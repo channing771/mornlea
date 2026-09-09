@@ -175,7 +175,7 @@ type injectedMetadataDirectory struct {
 	closeErr error
 }
 
-// encodeLegacyMetadataV4 手工构造一份 CRC 有效的 metadata v4 字节。
+// `encodeLegacyMetadataV4` 手工构造一份 CRC 有效的 metadata v4 字节。
 // 生产代码只写当前版本，v4 样本必须由测试自己保留。
 func encodeLegacyMetadataV4(metadata Metadata) []byte {
 	encoded := make([]byte, 0, metadataHeaderLength+41+metadataChecksumLength)
