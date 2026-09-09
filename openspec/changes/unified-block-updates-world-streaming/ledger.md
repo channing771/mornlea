@@ -31,7 +31,7 @@
 
 - main@8d94a4e8: worktree `make rust` exit 0（/tmp/e19-rust-build.log）。
 - 9c901883→6a9f2907 (Task 1.2): `go test ./packages/server/sim/entity -race -count=2` 双绿、`./packages/server/updates` 绿、`./packages/server/sim/runtime -race -count=1` 绿（runtime 委托路径回归）、`./packages/audit` 绿、`gofmt` 空（评审者亲跑）；评审者以 /tmp 探针对 63d733a2 旧实现做机械提取比对——SplitMix64 20 万输入、13 函数 5 万随机元组（含负种子/边界维度/chance 边界）逐位一致、26 个 KAT 锚点经旧实现原样复现、10 盐值两两互异；探针曾真实报出自身 bug 的 mismatch，比对具备判别力。
-- ce049bf3 (Task 2.1): fluid/updates/realm/runtime/audit 全绿（评审者亲跑，fluid -count=2）；`MORNLEA_FLUID_PERF=1` 三场景 PASS；评审对新旧堆实现逐行机械比对（lessItem/lessPos/sift/push/pop/swap 逐字一致、去重/Clear/预算语义等价、四种退出路径探视计数逐步对应）；稳态 1 allocs/op（24B，迁移前既有的 pendingWrites map，Register 重注册零分配）。
+- 35ba63e4 (Task 2.2): updates/fluid -count=2、realm -count=2、runtime/entity/audit 全绿（评审者亲跑）；评审逐条核验 delta spec 条款与 9 条重定断言（数值断言零改动、顺序口径换全序口径处均有等价或更强断言、删除项确属失效 FIFO 机制）；oracle 三合一（真实入队路径 + ground truth + 重放一致 + 16 tick 收敛上界防活锁）判别力成立；探视界在过滤模式下不升反降。
 
 ## 进度
 
@@ -42,4 +42,6 @@
 - Task 2.1: complete (commits c5378e73..ce049bf3, review PASS-with-findings, 0 Critical/Important, 3 Minor)。实现差异接受：5 个只读观测口供白盒断言、fluid.Queue 镜像字段使 queue_bounded_test 断言逐字不动、`Scheduler()` 同实例注册通道（kind 断尾序保证同格同 tick 先流体后湿度）；realm 零改动；Handler 重入禁令已兑现（1.1 遗留①）。
 - Ruling: 2.1 评审三 Minor 路由 — ① `BenchmarkAdvanceEval` ~310.6µs→~341.4µs（+~10%，record-only，跨域候选扫描+间接回调推测；记入 perf 台账，2.2 对照、4.1 取证）② realm `queue.Len()==0` 跳过判断（environment.go:888）在湿度注册同实例后口径变为跨域总数——2.2 必须改用 `LenOf(KindFluidFlow)` ③ `advanceWorld` 残留引用隐患——2.2 在 `Scheduler()` doc 补「不得绕过 `fluid.Advance` 直接推进 FluidFlow 域」。
 - Ruling: 2.2 共享实例推进方式定为「kind 过滤 Advance」— `updates.Queue` 增加按 kind 子集推进的入口（缺省全注册域，向后兼容；1.1 的每域独立堆使该入口实现平凡），fluid 与 moisture 各自在自己的 tick 阶段按域过滤推进 — 为什么：湿度注册到同一实例后无过滤的 `Advance(now)` 会在湿度阶段连带弹出到期流体条目（`FluidFlowDelayTicks` 可调到 0 时必然发生），流体 handler 编码后无提交编排、且 `advanceWorld` 已过期；按域过滤同时保住每维度单实例、跨域全序与既有阶段顺序 — 若错，代价是回退为每域独立实例（跨域全序文档化损失，无行为影响）。
+- Ruling: 2.2 brief 内「范围外候选不重入队」与「保持原 dueTick 重入队」两句并存的歧义，按实现者读法裁决 — 范围外=HandleConsumed 检查即消费（与旧 FIFO pop 丢弃语义一致，且 delta spec「后续阶段最终排空」在静态积压下只有消费语义可满足）；原 dueTick 回插（HandleDeferred）专用于读预算不足的顺延并暂停该域本次推进（无活锁：预算每 tick 全局重建）。`HandleResult` 签名与 `ClearKind`（ResetFarmlandMoisture 只清湿度域）接受为必要最小 API。
+- Task 2.2: complete (commits fb9d02ee..35ba63e4, review PASS, 2 Minor)。Ruling 落实核验：②LenOf 口径 ③Scheduler doc ④fluid.Advance 改 AdvanceKinds(now, KindFluidFlow) 双向堵漏。Minor 路由：①跨维度全局双预算缺直接双维夹具（A 维耗尽全局额度后 B 维首候选顺延）——2.3 顺手补；②`dimension == nil` 防御分支语义从丢弃变保留——生产不可达（fluidQueues 只增不减）且重扫兜底、最终态一致，记台账不动作。
 -（SDD 执行期逐任务追加：Task 完成记录 + 评审结论 + Ruling）
