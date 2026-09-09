@@ -21,13 +21,13 @@ func TestCanonicalItemIDsStayStable(t *testing.T) {
 }
 
 // TestItemIDMaxGuardsExhaustiveEnumeration 锁定 ItemIDMax 独占哨兵与枚举末项的
-// 关系：当前最后一个合法物品必须是水桶。物品演进
+// 关系：当前最后一个合法物品必须是橡树树苗。物品演进
 // 纪律是只能在哨兵之前追加；将来追加新物品时第一个断言变红，迫使开发者同步
 // 审视全部以「item < ItemIDMax」为穷举界的测试（例如 companion 的 place 注册表
 // 覆盖测试），而不是让穷举测试静默失去对新物品的覆盖。
 func TestItemIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
-	if core.ItemWaterBucket != core.ItemIDMax-1 {
-		t.Fatalf("ItemID 枚举末项不再是 ItemWaterBucket（ItemIDMax-1 = %d）；"+
+	if core.ItemSapling != core.ItemIDMax-1 {
+		t.Fatalf("ItemID 枚举末项不再是 ItemSapling（ItemIDMax-1 = %d）；"+
 			"新增物品必须同步审视全部以 ItemIDMax 为穷举界的测试", core.ItemIDMax-1)
 	}
 	// 哨兵之外不得再出现已注册物品：若有人把新物品追加在哨兵之后，穷举界会
@@ -40,8 +40,8 @@ func TestItemIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
 }
 
 func TestBucketIDsAppendBeforeSentinels(t *testing.T) {
-	if core.ItemEmptyBucket != 55 || core.ItemWaterBucket != 56 || core.ItemIDMax != 57 {
-		t.Fatalf("桶编号 = %d/%d/哨兵 %d，想要 55/56/57", core.ItemEmptyBucket, core.ItemWaterBucket, core.ItemIDMax)
+	if core.ItemEmptyBucket != 55 || core.ItemWaterBucket != 56 || core.ItemIDMax != 58 {
+		t.Fatalf("桶编号 = %d/%d/哨兵 %d，想要 55/56/58", core.ItemEmptyBucket, core.ItemWaterBucket, core.ItemIDMax)
 	}
 	for _, id := range []core.ItemID{core.ItemEmptyBucket, core.ItemWaterBucket} {
 		if limit, ok := core.ItemStackLimit(id); !ok || limit != 1 {
@@ -54,8 +54,11 @@ func TestBucketIDsAppendBeforeSentinels(t *testing.T) {
 }
 
 func TestItemIDsAppendOnly(t *testing.T) {
-	if core.ItemWaterBucket != core.ItemIDMax-1 {
-		t.Fatal("Water bucket must be last before Max")
+	if core.ItemSapling != core.ItemIDMax-1 {
+		t.Fatal("Sapling must be last before Max")
+	}
+	if core.ItemWaterBucket != core.ItemSapling-1 {
+		t.Fatal("Water bucket must sit right before the sapling")
 	}
 	if core.ItemEmptyBucket != core.ItemWaterBucket-1 {
 		t.Fatal("Empty bucket must sit right before water bucket")
@@ -142,8 +145,8 @@ func TestSwordItemsAreRegisteredWithFixedSemantics(t *testing.T) {
 			}
 		})
 	}
-	if core.ItemIDMax != 57 {
-		t.Fatalf("ItemIDMax = %d，想要 57", core.ItemIDMax)
+	if core.ItemIDMax != 58 {
+		t.Fatalf("ItemIDMax = %d，想要 58", core.ItemIDMax)
 	}
 	for _, item := range []core.ItemID{core.ItemNone, core.ItemDirt} {
 		if core.IsIntactSword(item) {
@@ -590,8 +593,8 @@ func TestBrokenToolsAreRegisteredAndUnstackable(t *testing.T) {
 // TestGridCraftingIDsAppendBeforeSentinels 锁定格子工作台批次追加的稳定编号：
 // 木棍 `ItemStick=37`、工作台物品 `ItemWorkbench=38`、骨粉 `ItemBoneMeal=39`
 // （三者 + 马铃薯/胡萝卜/毒土豆都曾紧贴 `ItemIDMax` 哨兵之前；门、火把、腐肉、
-// 床与剑批次依次追加后哨兵曾为 53，生/熟牛肉批次再追加后哨兵曾为 55，空桶与
-// 水桶批次再追加后哨兵为 57），
+// 床与剑批次依次追加后哨兵曾为 53，生/熟牛肉批次再追加后哨兵曾为 55，空桶、
+// 水桶与树苗批次再追加后哨兵为 58），
 // 工作台方块 `WorkbenchID=45`（紧随
 // `WheatStage7ID`，后接马铃薯/胡萝卜，该批次落定后 `BlockIDMax` 为 62；门 9 个
 // 与火把五形态追加后现为 76）。
@@ -644,7 +647,7 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 			core.ItemBed, core.ItemRottenFlesh)
 	}
 	// 生/熟牛肉紧随剑批次追加在哨兵之前：剑的稳定编号（47..52）不受影响；
-	// 空桶与水桶紧随熟牛肉追加在哨兵之前，哨兵后移到 57。
+	// 空桶、水桶与树苗紧随熟牛肉追加在哨兵之前，哨兵后移到 58。
 	if core.ItemRawBeef != core.ItemBrokenIronSword+1 {
 		t.Fatalf("ItemRawBeef = %d，必须紧随 ItemBrokenIronSword(%d)",
 			core.ItemRawBeef, core.ItemBrokenIronSword)
@@ -661,8 +664,8 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 		t.Fatalf("ItemWaterBucket = %d，必须紧随 ItemEmptyBucket(%d)",
 			core.ItemWaterBucket, core.ItemEmptyBucket)
 	}
-	if core.ItemIDMax != 57 {
-		t.Fatalf("ItemIDMax = %d，必须在水桶批次后移到 57", core.ItemIDMax)
+	if core.ItemIDMax != 58 {
+		t.Fatalf("ItemIDMax = %d，必须在水桶与树苗批次后移到 58", core.ItemIDMax)
 	}
 	if core.WorkbenchID != 45 {
 		t.Fatalf("WorkbenchID = %d，必须稳定为 45 且紧随 WheatStage7ID(%d)",
@@ -685,7 +688,7 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 			core.DoorUpper, core.DoorLowerEastOpen)
 	}
 	// 火把五形态紧随门方块追加，床八形态紧随火把追加，短草再追加为 84、四档
-	// 雪层 85..88，方块侧哨兵随之后移到 89。
+	// 雪层 85..88、橡树树苗 89，方块侧哨兵随之后移到 90。
 	if core.TorchStandingID != core.DoorUpper+1 {
 		t.Fatalf("TorchStandingID = %d，必须紧随 DoorUpper(%d)",
 			core.TorchStandingID, core.DoorUpper)
@@ -694,8 +697,8 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 		t.Fatalf("BedFootSouthID = %d，必须紧随 TorchWallNegZID(%d)",
 			core.BedFootSouthID, core.TorchWallNegZID)
 	}
-	if core.ShortGrassID != core.BedHeadEastID+1 || core.BlockIDMax != 89 {
-		t.Fatalf("短草/BlockIDMax = %d/%d，必须紧随 BedHeadEastID(%d) 为 84、哨兵 89",
+	if core.ShortGrassID != core.BedHeadEastID+1 || core.BlockIDMax != 90 {
+		t.Fatalf("短草/BlockIDMax = %d/%d，必须紧随 BedHeadEastID(%d) 为 84、哨兵 90",
 			core.ShortGrassID, core.BlockIDMax, core.BedHeadEastID)
 	}
 }
@@ -743,7 +746,7 @@ func TestWorkbenchItemPlacesAndDropsBack(t *testing.T) {
 }
 
 // TestTorchItemIsRegisteredStackableMaterial 锁定火把物品语义：编号 44（紧随
-// 门物品；其后依次追加腐肉、床、剑、牛肉与水桶批次，ItemIDMax 后移到 57）、
+// 门物品；其后依次追加腐肉、床、剑、牛肉、水桶与树苗批次，ItemIDMax 后移到 58）、
 // 堆叠 64、没有耐久、不是工具、不是食物。
 // 放置不经 ItemPlacement（面向无关的旧窗口），只经 PlaceableBlockAtFace 的
 // 面 → 形态映射——因此火把对 ItemPlacement 必须保持不可放置，防止任何调用方
@@ -765,8 +768,8 @@ func TestTorchItemIsRegisteredStackableMaterial(t *testing.T) {
 		t.Fatalf("ItemBed = %d，必须紧随 ItemRottenFlesh(%d)",
 			core.ItemBed, core.ItemRottenFlesh)
 	}
-	if core.ItemIDMax != 57 {
-		t.Fatalf("ItemIDMax = %d，必须后移到 57", core.ItemIDMax)
+	if core.ItemIDMax != 58 {
+		t.Fatalf("ItemIDMax = %d，必须后移到 58", core.ItemIDMax)
 	}
 	if !core.RegisteredItem(core.ItemTorch) {
 		t.Fatal("ItemTorch 未注册")
@@ -812,7 +815,7 @@ func TestTorchFormsDropBackOneTorch(t *testing.T) {
 }
 
 func TestItemDoorPlacementDrop(t *testing.T) {
-	if core.ItemDoor != 43 || core.ItemIDMax != 57 {
+	if core.ItemDoor != 43 || core.ItemIDMax != 58 {
 		t.Fatal("ItemDoor IDs")
 	}
 	if got, ok := core.ItemPlacement(core.ItemDoor); !ok || got != core.DoorLowerSouthClosed {

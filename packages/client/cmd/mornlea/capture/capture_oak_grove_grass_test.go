@@ -249,11 +249,11 @@ func TestOakGroveSceneShowsIdentifiableNaturalShortGrass(t *testing.T) {
 // TestCaptureOfficialSceneListMatchesWorldRouting 钉住正式场景清单在 HUD 三场景
 // 退役、mining-crack 对、`grass-closeup`、牛群 `passive-herd` 与吃草
 // `passive-graze`、雨天 `rain-noon`、双机位 `camera-third-back/front`、雪景
-// `snow-cover` 与水桶 `bucket-pond` 加入后恰好 29 项；完整数量与冻结顺序断言由
-// capture_scene_order_test.go 的清单守卫承担。
+// `snow-cover`、水桶 `bucket-pond` 与树苗生长 `sapling-growth` 加入后恰好 30 项；
+// 完整数量与冻结顺序断言由 capture_scene_order_test.go 的清单守卫承担。
 func TestCaptureOfficialSceneListMatchesWorldRouting(t *testing.T) {
-	if len(captureScenes) != 29 {
-		t.Fatalf("正式 capture 场景数=%d，想要恰好 29", len(captureScenes))
+	if len(captureScenes) != 30 {
+		t.Fatalf("正式 capture 场景数=%d，想要恰好 30", len(captureScenes))
 	}
 }
 

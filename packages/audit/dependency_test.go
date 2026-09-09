@@ -35,6 +35,13 @@ import (
 // 依赖 packages/shared/world，即便设计意图允许，也不预先登记未使用的边）；fluid MUST
 // NOT 反向依赖 sim/network/render/storage，否则它会退化成 sim 的内部实现，丧失
 // 独立测试的意义。
+//
+// packages/server/sim/realm → packages/shared/worldgen（变更 oak-sapling-regrowth）：随机
+// tick 的树苗生长需要 engine 的树形几何，realm 经 worldgen 的既有 ABI 桥（与
+// `MGW1` 同包，只有 nativeabi 接触 C ABI）取回相对根坐标的方块偏移列表并逐格
+// 校验/写入。树形数值仍只在 Rust 计算、Go 侧无几何实现与 fallback；worldgen 只
+// 依赖 core/world/nativeabi，不反向依赖任何 sim 包，因此这条边是「环境推进消费
+// 世界生成数值」，不引入反向耦合。
 var allowed = map[string][]string{
 	"packages/audit":                            {},
 	"packages/client/audio":                     {},
@@ -55,7 +62,7 @@ var allowed = map[string][]string{
 	"packages/shared/profile":                   {"packages/shared/core"},
 	"packages/server/sim/contract":              {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world"},
 	"packages/server/sim/entity":                {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "packages/server/sim/contract", "packages/server/sim/realm", "packages/shared/tuning"},
-	"packages/server/sim/realm":                 {"packages/shared/core", "packages/server/fluid", "packages/shared/world"},
+	"packages/server/sim/realm":                 {"packages/shared/core", "packages/server/fluid", "packages/shared/world", "packages/shared/worldgen"},
 	"packages/server/sim/runtime":               {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "packages/server/sim/contract", "packages/server/sim/entity", "packages/server/sim/realm", "packages/shared/tuning"},
 	"packages/shared/tuning":                    {"packages/shared/core"},
 	"packages/server/storage": {
@@ -409,7 +416,7 @@ func TestClientCommandDependencyViolationsDetectDrift(t *testing.T) {
 // 与合成反向边。
 var simAllowedEdges = map[string][]string{
 	"packages/server/sim/contract": {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world"},
-	"packages/server/sim/realm":    {"packages/shared/core", "packages/server/fluid", "packages/shared/world"},
+	"packages/server/sim/realm":    {"packages/shared/core", "packages/server/fluid", "packages/shared/world", "packages/shared/worldgen"},
 	"packages/server/sim/entity":   {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "packages/server/sim/contract", "packages/server/sim/realm", "packages/shared/tuning"},
 	"packages/server/sim/runtime":  {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "packages/server/sim/contract", "packages/server/sim/entity", "packages/server/sim/realm", "packages/shared/tuning"},
 }
@@ -569,7 +576,7 @@ func TestSimDependencyViolationsDetectDrift(t *testing.T) {
 	contractEdges := func() map[string][]string {
 		return map[string][]string{
 			"packages/server/sim/contract": {"packages/shared/core", "packages/shared/world", "packages/shared/companion", "packages/shared/physics"},
-			"packages/server/sim/realm":    {"packages/shared/core", "packages/server/fluid", "packages/shared/world"},
+			"packages/server/sim/realm":    {"packages/shared/core", "packages/server/fluid", "packages/shared/world", "packages/shared/worldgen"},
 			"packages/server/sim/entity":   {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "packages/server/sim/contract", "packages/server/sim/realm", "packages/shared/tuning"},
 			"packages/server/sim/runtime":  {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "packages/server/sim/contract", "packages/server/sim/entity", "packages/server/sim/realm", "packages/shared/tuning"},
 		}

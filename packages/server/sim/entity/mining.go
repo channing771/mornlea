@@ -65,6 +65,14 @@ func miningRule(block core.BlockID, held core.ItemID) (uint16, bool) {
 	if core.IsWildGrass(block) {
 		return 1, true
 	}
+	// 树苗与手持无关：任意状态（空手、普通物品、任一工具）1 tick 采掘，同短草
+	// 一样取最小权威量子。harvestable=true 表示本格必掉一个自身——树苗的单一
+	// `BlockDrop` 在 `completeMining` 的通用路径结算，没有独立概率判定（额外
+	// 掉树苗的判定属于树叶那一侧）。判据用 `core.IsSapling` 而不是点名编号，
+	// 与短草同一契约。
+	if core.IsSapling(block) {
+		return 1, true
+	}
 	// 雪层四档与手持无关：任意状态（空手、普通物品、任一工具）1 tick 采除，
 	// 同短草一样取最小权威量子——spec Scenario「徒手移除无掉落」要求徒手即可。
 	// harvestable=false：雪层没有对应物品，任何手持都没有掉落资格，「无掉落」
@@ -305,14 +313,12 @@ func (engine *engineContext) advanceMining(
 		// 也不得有这一行。疲劳刻意不进下方的耐久豁免：疲劳的判定点是「玩家的
 		// 成功采掘」，与工具磨损语义无关。
 		player.applyExhaustion(exhaustionMiningMilli, engine.tunables.ExhaustionThresholdMilli)
-		// 完成时选中物与 `consumeToolDurability` 读的是同一个栏位（采掘中途换手
-		// 会重置进度，不存在「开始持锄、完成持镐」的窗口），豁免与扣耐久必然
-		// 判定同一件工具。短草走第三类豁免（`wildGrassDurabilityExempt`）：
+		// 完成时选中物与 `consumeMiningToolDurability` 读的是同一个栏位（采掘
+		// 中途换手会重置进度，不存在「开始持锄、完成持镐」的窗口），豁免与扣
+		// 耐久必然判定同一件工具。四类豁免按**被移除方块**判定，玩家与伙伴共用
+		// 同一个入口（见 `consumeMiningToolDurability`）：豁免命中时
 		// `consumeToolDurability` 整体不被调用，耐久 1 的工具也不会转损坏形态。
-		held := player.inventory.Hotbar.Slots[player.inventory.Hotbar.Selected].Item
-		if !hoeHarvestDurabilityExempt(minedBlock, held) &&
-			!wildGrassDurabilityExempt(minedBlock) &&
-			consumeToolDurability(&player.actorState) {
+		if consumeMiningToolDurability(&player.actorState, minedBlock) {
 			player.inventoryDirty = true
 		}
 	}
@@ -471,7 +477,7 @@ func (engine *engineContext) completeCompanionMining(
 			entry.inventory = staged
 			entry.inventoryDirty = true
 		}
-		if consumeToolDurability(&entry.actorState) {
+		if consumeMiningToolDurability(&entry.actorState, entry.mining.block) {
 			entry.inventoryDirty = true
 		}
 		entry.mining = miningState{}
@@ -498,7 +504,7 @@ func (engine *engineContext) completeCompanionMining(
 		entry.inventory = staged
 		entry.inventoryDirty = true
 	}
-	if consumeToolDurability(&entry.actorState) {
+	if consumeMiningToolDurability(&entry.actorState, entry.mining.block) {
 		entry.inventoryDirty = true
 	}
 	entry.mining = miningState{}
@@ -509,7 +515,7 @@ func (engine *engineContext) completeCompanionMining(
 // 在伙伴背包副本上按固定序逐堆预演，任一堆放不下即该 tick 整体不结算（方块、
 // 容器内容物、耐久、背包全部不变，进度保持满格）；预演通过后同一权威 tick 内
 // `SetBlock` 空气 + 停用容器槽（`DeactivateChest`/`DeactivateFurnace`，对齐玩家
-// 路径 `completeMining` 的顺序）+ 背包提交副本 + `consumeToolDurability`，随后经
+// 路径 `completeMining` 的顺序）+ 背包提交副本 + `consumeMiningToolDurability`，随后经
 // `recordChange` 汇入既有 `pendingChunkChanges` 广播，不新增协议消息。
 //
 // 容器记录经 chunk record 读取（`ChestAt`/`Chest`/`FurnaceAt`/`Furnace`），与玩家
@@ -576,36 +582,71 @@ func (engine *engineContext) completeCompanionContainerMining(
 	}
 	entry.inventory = staged
 	entry.inventoryDirty = true
-	if consumeToolDurability(&entry.actorState) {
+	if consumeMiningToolDurability(&entry.actorState, entry.mining.block) {
 		entry.inventoryDirty = true
 	}
 	entry.mining = miningState{}
 }
 
-// hoeHarvestDurabilityExempt 报告一次玩家采掘完成是否豁免扣耐久：被移除的方块
+// hoeHarvestDurabilityExempt 报告一次权威采掘完成是否豁免扣耐久：被移除的方块
 // 是作物（`core.IsCrop`，小麦八个生长阶段）且完成时选中物是完好锄头
 // （`core.TillingTool`）。这是 authoritative-farming 遗留 16 所说的「作物 × 锄头」
-// 豁免，tool-durability 三类成功破坏豁免中的第一类（另两类：完好剑在任何破坏
+// 豁免，tool-durability 四类成功破坏豁免中的第一类（另三类：完好剑在任何破坏
 // 路径上的豁免在 `consumeToolDurability` 内，短草 × 任意工具的豁免在
-// `wildGrassDurabilityExempt`）。锄头破坏非作物仍沿用既有扣耐久规则；损坏形态
-// 被 `core.TillingTool` 显式排除（它只枚举两个完好锄头编号），因此持损坏锄头
-// 收获作物走不进豁免——本就没有耐久可扣。伙伴采掘路径
-// （`completeCompanionMining`）不设本守卫：`companionMineableBlock` 的防御清单
-// 已显式拒绝全部农业方块，豁免在伙伴侧不可达，加守卫是死代码。
+// `wildGrassDurabilityExempt`，树苗 × 任意工具的豁免在 `saplingDurabilityExempt`）。
+// 锄头破坏非作物仍沿用既有扣耐久规则；损坏形态被 `core.TillingTool` 显式排除
+// （它只枚举两个完好锄头编号），因此持损坏锄头收获作物走不进豁免——本就没有
+// 耐久可扣。本谓词对伙伴同样求值（`consumeMiningToolDurability` 是两类 actor 的
+// 共用入口），但伙伴侧恒为假：`companionMineableBlock` 的防御清单已显式拒绝
+// 全部农业方块，作物在伙伴侧不可达。
 func hoeHarvestDurabilityExempt(block core.BlockID, item core.ItemID) bool {
 	return core.IsCrop(block) && core.TillingTool(item)
 }
 
-// wildGrassDurabilityExempt 报告一次玩家成功采掘是否属于「短草 × 任意工具」
+// wildGrassDurabilityExempt 报告一次权威采掘完成是否属于「短草 × 任意工具」
 // 零磨损豁免（tool-durability 的第三类）：被移除方块是短草（`core.IsWildGrass`）
 // 时，无论完成时选中栏是空手、普通物品还是任一完好工具（镐、锄头、剑，含
 // 剩余耐久恰好为 1 的工具），都不扣减耐久，也不把耐久 1 的工具转为损坏形态
 // ——调用方因此整体跳过 `consumeToolDurability`，自然没有耐久侧的 inventory
 // dirty。判定只看被移除方块、与手持无关；短草不是作物（`IsCrop` 为假），本豁免
 // 与「作物 × 锄头」类互不重叠，持锄头破坏短草以外的方块仍按既有规则磨损。
-// 伙伴路径不可达：`companionMineableBlock` 已显式拒绝短草。
+// 本谓词对伙伴同样求值，但伙伴侧恒为假：`companionMineableBlock` 已显式拒绝
+// 短草，短草在伙伴侧不可达。
 func wildGrassDurabilityExempt(block core.BlockID) bool {
 	return core.IsWildGrass(block)
+}
+
+// saplingDurabilityExempt 报告一次权威采掘完成是否属于「树苗 × 任意工具」
+// 零磨损豁免（tool-durability 的第四类）：被移除方块是树苗（`core.IsSapling`）
+// 时，无论完成时选中栏是空手、普通物品还是任一完好工具（含剩余耐久恰好为 1
+// 的工具），都不扣减耐久，也不把耐久 1 的工具转为损坏形态——调用方因此整体
+// 跳过 `consumeToolDurability`。判定只看被移除方块、与手持无关；树苗不是作物
+// （`IsCrop` 为假），本豁免与「作物 × 锄头」类互不重叠，持锄头破坏树苗以外的
+// 方块仍按既有规则磨损。伙伴侧同样可达：树苗按通用单一掉落规则可被伙伴采掘
+// （`companionMineableBlock` 不拒绝它），两类 actor 的采掘完成都经
+// `consumeMiningToolDurability` 这一入口判定。
+func saplingDurabilityExempt(block core.BlockID) bool {
+	return core.IsSapling(block)
+}
+
+// consumeMiningToolDurability 是玩家与伙伴**权威采掘完成**共用的耐久入口：
+// 先按「被移除方块」判定四类豁免（作物 × 完好锄头、短草 × 任意、树苗 × 任意；
+// 完好剑在 `consumeToolDurability` 内按选中物判定），豁免命中即整体跳过扣减并
+// 返回 false，否则按既有规则扣一点耐久并返回是否发生写入。
+//
+// 豁免必须对两类 actor 同样成立：短草在伙伴侧因 `companionMineableBlock` 显式
+// 拒绝而不可达，树苗则可采掘——若伙伴结算直接调 `consumeToolDurability`，同一
+// 株树苗会因 actor 不同产生两种磨损结果（tool-durability 的豁免条款按被移除
+// 方块判定，与 actor 无关）。翻地（`farming.go`）不移除任何方块，四类豁免都没
+// 有判定对象，仍直接调用 `consumeToolDurability`。
+func consumeMiningToolDurability(actor *actorState, block core.BlockID) bool {
+	held := actor.inventory.Hotbar.Slots[actor.inventory.Hotbar.Selected].Item
+	if hoeHarvestDurabilityExempt(block, held) ||
+		wildGrassDurabilityExempt(block) ||
+		saplingDurabilityExempt(block) {
+		return false
+	}
+	return consumeToolDurability(actor)
 }
 
 // consumeToolDurability 在成功方块动作后扣减选中工具的耐久，完好剑除外。
@@ -1014,6 +1055,41 @@ func (engine *engineContext) completeMining(
 		}
 		next, capacityOK := chunk.PrepareDropBatch(
 			stacks[:], blockIndex, engine.tunables.DropPickupDelayTicks,
+		)
+		if !capacityOK {
+			return RejectDropCapacity, true
+		}
+		_, changed, err := dimension.SetBlock(target, core.AirID)
+		if err != nil {
+			return mapSetBlockError(err), true
+		}
+		if !changed {
+			return RejectNoTarget, true
+		}
+		engine.recordChange(dimensionID, target, core.AirID, pending)
+		chunk.CommitDropBatch(next)
+		return 0, false
+	}
+
+	// 树叶的额外树苗掉落分支（spec「树叶按冻结判定额外掉落树苗」）：树叶沿用
+	// 既有自身掉落，位置稳定判定命中时再额外掉 1 个树苗。两者必须是**同一次
+	// 原子结算**——`PrepareDropBatch` 把两堆一起预演，任一堆放不下就整体返回
+	// `RejectDropCapacity`（树叶保留、进度清零、掉落槽与 revision 不变），绝不
+	// 出现「树叶掉了、树苗放不下」的半掉落。未命中时只预演树叶自身掉落，不
+	// 要求也不预留树苗的容量。判定只吃 (world seed, 维度, 坐标) 且不含完成
+	// tick，因此重试必然命中同一结果，不能借重掷绕过容量。
+	//
+	// `harvestable` 恒为真（树叶在任意手持下都是 5 tick 可收获），条件与成熟
+	// 小麦分支同形：为假时落到下方通用路径，只清块不产掉落。
+	if block == core.LeavesID && harvestable {
+		stacks := [2]core.ItemStack{{Item: item, Count: 1}}
+		stackCount := 1
+		if leavesSaplingDropRoll(engine.seed, dimensionID, target) {
+			stacks[1] = core.ItemStack{Item: core.ItemSapling, Count: 1}
+			stackCount = 2
+		}
+		next, capacityOK := chunk.PrepareDropBatch(
+			stacks[:stackCount], blockIndex, engine.tunables.DropPickupDelayTicks,
 		)
 		if !capacityOK {
 			return RejectDropCapacity, true

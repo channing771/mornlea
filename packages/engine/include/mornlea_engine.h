@@ -4,7 +4,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* ABI v10:worldgen `MGW1` 请求材料表由 14 项扩为 15 项(末项 short_grass,
+/* ABI v11:新增运行时树形几何出口 mornlea_tree_blocks(树苗长成橡树的无状态
+ * 纯函数):输入 28 字节 = MTB1 magic(4)+ layout u32(4,必须为 1)+ 世界种子
+ * i64(8)+ 根坐标 x/y/z i32(12);输出 = count u32 加每条 8 字节记录
+ * (dx i8、dy i8、dz i8、保留 u8、block u16 LE、保留 u16),记录上限 128。
+ * 几何由独立冻结 salt 从 (世界种子, 根坐标) 派生,限定为普通橡树家族
+ * (高度 5..7、水平半径 ≤ 2、普通与蓬松两档固定树冠、无分杈、无珍异巨树),
+ * 不依赖世界生成的 8×8 候选格网格,因此 GenerateChunk/BaseBlockAt 逐格不变
+ * ——oak-sapling-regrowth 变更。既有入口签名与语义不变。engine 与 Go 侧是
+ * 同一不可跨版本混装的 release unit。
+ * ABI v10:worldgen `MGW1` 请求材料表由 14 项扩为 15 项(末项 short_grass,
  * 位于偏移 52,perm 后移到偏移 54):带内 layout 2 → 3、公共 header 564 →
  * 566 字节、chunk 输入 572 → 574 字节、probe 输入 570 + 16×N(输出仍为每条
  * 8 字节)、LOD 壳输入 580 → 582 字节;自然短草在树与海水之后按确定性整数
@@ -44,7 +53,7 @@
  * release unit。
  * ABI v4:worldgen `MGW1` header 的材料表由 13 项扩到 14 项(末项 water,
  * 占用 v3 的 reserved 槽,header 总长仍为 564 字节)。 */
-#define MORNLEA_ENGINE_ABI_VERSION 10u
+#define MORNLEA_ENGINE_ABI_VERSION 11u
 
 #define MORNLEA_STATUS_OK 0u
 #define MORNLEA_STATUS_ABI_VERSION 1u
@@ -102,6 +111,38 @@ uint32_t mornlea_worldgen_chunk(
     size_t output_len);
 
 uint32_t mornlea_worldgen_probe(
+    uint32_t abi_version,
+    const uint8_t *input,
+    size_t input_len,
+    uint8_t *output,
+    size_t output_len);
+
+/*
+ * mornlea_tree_blocks:运行时树形几何(无状态纯函数)。
+ *
+ * 输入 28 字节(LE)= MTB1 magic(4)+ layout u32(4,必须为 1)+ 世界种子
+ * i64(8)+ 根坐标 x i32(16)+ y i32(20)+ z i32(24)。
+ *
+ * 输出 = count u32(0)+ count 条 8 字节记录:dx i8(0)| dy i8(1)| dz i8(2)|
+ * 保留 u8(3,恒 0)| block u16 LE(4)| 保留 u16(6,恒 0)。偏移相对根坐标,
+ * 根格自身(偏移全零)是树干底第一条记录,顺序固定为 dy → dz → dx。
+ * 记录数上限 128,输出静态上界 1028 字节。
+ *
+ * 几何由独立冻结 salt 从 (世界种子, 根坐标) 确定性派生,限定为普通橡树
+ * 家族(高度 5..7、水平半径 ≤ 2、普通与蓬松两档固定树冠、无分杈、无珍异
+ * 巨树),不依赖世界生成的 8×8 候选格网格、区块生成顺序或进程级随机源。
+ *
+ * 根坐标 y 必须落在 [WORLD_MIN_Y, WORLD_MAX_Y - 9]:最坏普通橡树(高 7)
+ * 的顶格在 root_y + 8,越界即按输入违约拒绝,而不是返回被截断的几何。
+ * 根坐标 x/z 的 ±2 邻域不得越出 i32 值域,否则几何坐标加法会回绕。
+ *
+ * abi_version 不匹配返回 MORNLEA_STATUS_ABI_VERSION;指针、范围或重叠
+ * 违约返回 MORNLEA_STATUS_INVALID_ARGUMENT;输入内容违约(长度、magic、
+ * layout、根坐标越界)返回 MORNLEA_STATUS_INPUT;输出容量不足或记录数
+ * 超过上限返回 MORNLEA_STATUS_OUTPUT_OVERFLOW;Rust panic 收敛为
+ * MORNLEA_STATUS_PANIC。任何失败路径都不写入输出缓冲。
+ */
+uint32_t mornlea_tree_blocks(
     uint32_t abi_version,
     const uint8_t *input,
     size_t input_len,

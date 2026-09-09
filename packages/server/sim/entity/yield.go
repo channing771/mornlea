@@ -271,3 +271,38 @@ func ShortGrassSeedDropRoll(
 ) bool {
 	return shortGrassSeedDropRoll(seed, dimension, position)
 }
+
+// leavesSaplingDropSalt 让树叶→树苗判定的哈希流与短草种子掉落、作物产量、
+// 作物生长及毒土豆判定互相独立：没有它，「这格额外掉树苗」可能与同坐标的
+// 「短草掉种子」在相同 (seed, 坐标) 前缀上同源，出现结构性相关。值是冻结
+// 常量（design.md D2），不得改动。
+//
+// 取 ASCII "SAPLINGS" 的位模式（沿 `shortGrassSeedDropSalt` 取 "GRASS_SED"
+// 的先例）：字面量本身可被人眼复核，且与短草 salt 的八个字节逐一不同。
+const leavesSaplingDropSalt = 0x5341_504C_494E_4753
+
+// leavesSaplingDropRoll 报告 position 上的树叶被玩家采掘完成时是否额外掉落
+// 恰好 1 个树苗：`hash & 7 == 0` 即确定性 1/8 命中。
+//
+// 折叠形状与输入集合逐字复用 `shortGrassSeedDropRoll`：纯整数、无浮点、无全局
+// RNG、零分配，输入刻意**只有** world seed、维度与方块坐标——没有完成 tick、
+// 玩家或手持。因此同一 (worldSeed, dimension, position) 的判定永远一致，掉落
+// 容量被拒后的重试不可能把「应掉树苗」重掷成「不掉树苗」（重试稳定性是规格
+// 条款，不是实现巧合）。有符号的维度与坐标先转 uint32 再零扩展，负坐标按
+// 补码位模式与正坐标一一对应。`hash & 7` 取低三位：splitmix64 的低位雪崩充分，
+// 且 2^64 是 8 的整数倍，`& 7` 没有取模偏差，不需要拒绝采样。
+//
+// 调用点只有 `completeMining` 的树叶分支，每次完成结算恰好调用一次；命中时
+// 树苗与树叶自身掉落合并为同一次 `PrepareDropBatch` 预演。
+func leavesSaplingDropRoll(
+	seed int64,
+	dimension core.DimensionID,
+	position core.BlockPos,
+) bool {
+	hash := splitmix64(uint64(seed) ^ leavesSaplingDropSalt)
+	hash = splitmix64(hash ^ uint64(uint32(dimension)))
+	hash = splitmix64(hash ^ uint64(uint32(position.X)))
+	hash = splitmix64(hash ^ uint64(uint32(position.Y)))
+	hash = splitmix64(hash ^ uint64(uint32(position.Z)))
+	return hash&7 == 0
+}

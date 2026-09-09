@@ -9,6 +9,7 @@ import (
 	"github.com/channing771/mornlea/packages/server/fluid"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/world"
+	"github.com/channing771/mornlea/packages/shared/worldgen"
 )
 
 const (
@@ -483,7 +484,7 @@ func (w *fluidWorld) SetBlock(position core.BlockPos, id core.BlockID) {
 	if old == id {
 		return
 	}
-	if w.settleFloodedCrop(chunk, position, old, id) {
+	if w.settleFloodedCrop(chunk, position, old, id) || w.settleFloodedSapling(chunk, position, old, id) {
 		if next := chunk.BlockAt(x, position.Y, z); core.IsFluid(old) != core.IsFluid(next) {
 			w.state.environment.enqueueFarmlandMoistureAroundFluid(w.id, position)
 		}
@@ -542,6 +543,37 @@ func (w *fluidWorld) settleFloodedCrop(
 		return true
 	}
 	return false
+}
+
+// settleFloodedSapling 在流体写入的目标格当前是树苗时结算冲毁：掉落恰好 1 个
+// 树苗，容量不足时原子拒绝并保留树苗、把该格重新排程等待重试（与 `settleFloodedCrop`
+// 同语义——任何时刻都不会出现树苗已被替换而掉落物未产出的状态）。
+func (w *fluidWorld) settleFloodedSapling(
+	chunk *world.Chunk,
+	position core.BlockPos,
+	old core.BlockID,
+	id core.BlockID,
+) bool {
+	if !core.IsSapling(old) || !core.IsFluid(id) {
+		return false
+	}
+	blockIndex, indexed := world.ChunkBlockIndex(position)
+	if !indexed {
+		return true
+	}
+	x, _, z := position.Local()
+	stacks := [1]core.ItemStack{{Item: core.ItemSapling, Count: 1}}
+	next, capacityOK := chunk.PrepareDropBatch(
+		stacks[:], blockIndex, w.state.environment.config.DropPickupDelayTicks,
+	)
+	if !capacityOK {
+		w.state.environment.enqueueFluidUpdate(w.id, position)
+		return true
+	}
+	chunk.SetBlock(x, position.Y, z, id)
+	w.mutation.Record(w.id, position, id)
+	chunk.CommitDropBatch(next)
+	return true
 }
 
 type fluidBoundaryPlane struct {
@@ -1015,6 +1047,25 @@ func farmlandRevertRoll(seed int64, tick uint64, dimension core.DimensionID, pos
 	return hash%100 < uint64(farmlandRevertChancePercent)
 }
 
+// saplingGrowthRollSalt 让树苗生长判定的哈希流与作物生长、耕地退化及产量/掉落
+// 各流互相独立：取 ASCII "SAPLGROW" 的位模式，与 entity 侧树叶掉落判定用的
+// "SAPLINGS" 刻意不同——同一棵树苗的「生长」与「被采掘后掉落」是两条互不相关
+// 的判定，同源会让两者的命中在固定样本上系统性同步。
+const saplingGrowthRollSalt = 0x5341_504C_4752_4F57
+
+// saplingGrowthRoll 报告本 tick 是否推进 position 上的树苗：判定只依赖世界
+// 种子、权威 tick、维度与坐标（与 `cropGrowthRoll`/`farmlandRevertRoll` 同形，
+// 不用进程级随机源、不读 map 遍历序、不感知玩家与手持物），命中率 1/8。
+func saplingGrowthRoll(seed int64, tick uint64, dimension core.DimensionID, position core.BlockPos) bool {
+	hash := splitmix64(uint64(seed) ^ saplingGrowthRollSalt)
+	hash = splitmix64(hash ^ tick)
+	hash = splitmix64(hash ^ uint64(uint32(dimension)))
+	hash = splitmix64(hash ^ uint64(uint32(position.X)))
+	hash = splitmix64(hash ^ uint64(uint32(position.Y)))
+	hash = splitmix64(hash ^ uint64(uint32(position.Z)))
+	return hash&7 == 0
+}
+
 func (state *State) AdvanceCrops(active []core.ChunkKey, mutation *Mutation) {
 	samples := int(state.environment.config.RandomTicksPerSection)
 	state.environment.cropCellsExamined = 0
@@ -1065,9 +1116,10 @@ func (state *State) AdvanceCrops(active []core.ChunkKey, mutation *Mutation) {
 	}
 }
 
-// advanceCropCell 是随机 tick 抽中一格后的判定分发器：作物生长、干耕地退化、
-// 积雪/消融共用同一抽样与预算，各分支互斥（作物与耕地命中后直接返回），至多
-// 写 1 格。
+// advanceCropCell 是随机 tick 抽中一格后的判定分发器：作物生长、树苗生长、
+// 干耕地退化、积雪/消融共用同一抽样与预算，各分支互斥（作物、树苗与耕地命中后
+// 直接返回）。作物与耕地分支至多写 1 格；树苗生长按树形几何整棵写入（见
+// `advanceSaplingCell`）。
 func (state *State) advanceCropCell(
 	dimension *Dimension,
 	dimensionID core.DimensionID,
@@ -1120,9 +1172,122 @@ func (state *State) advanceCropCell(
 		mutation.Record(dimensionID, position, core.DirtID)
 		return
 	}
+	if core.IsSapling(block) {
+		state.advanceSaplingCell(dimension, dimensionID, chunk, position, tick, mutation)
+		return
+	}
 	// 既非作物也非干耕地：按白名单地表交给积雪/消融判定（内部再拒非白名单与
 	// 非空气上方，多数命中到此为止零额外读取）。
 	state.advanceSnowCover(dimension, dimensionID, chunk, position, block, mutation)
+}
+
+// saplingGrowthWrite 是一次生长写入的记账项：目标格、写入后的方块与写入前的
+// 旧值。旧值只用于失败回滚，不回滚则不必保留。
+type saplingGrowthWrite struct {
+	position core.BlockPos
+	block    core.BlockID
+	old      core.BlockID
+}
+
+// advanceSaplingCell 尝试让随机 tick 抽中的树苗长成一棵普通橡树。
+//
+// 判定序（全部满足才尝试写入，任一步不满足都保持树苗原样、后续 tick 可重试）：
+//
+//  1. 支撑：正下方仍是 `DirtID` 或 `GrassID`；
+//  2. 露天：本列最高非空气格不高于树苗自身（复用作物同式 `cropSkyExposed`）；
+//  3. 根坐标上界：`root.Y <= core.MaxY - 9`。engine 只接受该上界内的根坐标，
+//     越界请求以硬状态拒绝并让 Go 桥 panic；玩家可以在高处搭塔种苗，因此这条
+//     前置守卫是必须的；
+//  4. 独立冻结 salt 的 1/8 判定 `saplingGrowthRoll` 命中；
+//  5. 树形几何（engine ABI 单一真源）的每条记录都在世界高度内且当前是 `AirID`
+//     或 `ShortGrassID`。树苗自身那一格（树干底）例外：它就是被替换的格；
+//  6. 全部目标区块处于 Ready。
+//
+// 写入全有或全无：先逐格保存旧值再写，任一格写入失败即把已写入的格恢复为旧值，
+// 不登记任何变更；成功后每个被改写的格经 `Mutation.Record` 登记，受影响区块的
+// revision 由既有提交路径各推进一次。覆盖短草不产生掉落（环境生长不是种子来源）。
+//
+// 读取预算：支撑 1 次读取后，只有判定命中才会求值树形几何并逐格校验（至多
+// `128` 格），因此每 tick 的读取总量仍以「被考察格数 × 128」为上界。
+func (state *State) advanceSaplingCell(
+	dimension *Dimension,
+	dimensionID core.DimensionID,
+	chunk *world.Chunk,
+	position core.BlockPos,
+	tick uint64,
+	mutation *Mutation,
+) {
+	below := core.BlockPos{X: position.X, Y: position.Y - 1, Z: position.Z}
+	belowBlock, belowReady := dimension.BlockAt(below)
+	state.environment.cropBlockReads++
+	if !belowReady || (belowBlock != core.DirtID && belowBlock != core.GrassID) {
+		return
+	}
+	if !cropSkyExposed(chunk, position) {
+		return
+	}
+	if position.Y > core.MaxY-9 {
+		return
+	}
+	if !saplingGrowthRoll(state.environment.seed, tick, dimensionID, position) {
+		return
+	}
+	records := worldgen.TreeBlocks(state.environment.seed, position)
+	for _, record := range records {
+		target := core.BlockPos{
+			X: position.X + int32(record.DX),
+			Y: position.Y + int32(record.DY),
+			Z: position.Z + int32(record.DZ),
+		}
+		if target == position {
+			continue
+		}
+		if target.Y < core.MinY || target.Y >= core.MaxY {
+			return
+		}
+		block, _ := dimension.BlockAt(target)
+		state.environment.cropBlockReads++
+		if block != core.AirID && block != core.ShortGrassID {
+			return
+		}
+	}
+	// 目标区块就绪前置：任一未就绪即放弃，避免写到一半才发现（零副作用）。
+	// 未就绪区块的格在上面的空间校验里读作空气，因此这条检查是唯一的就绪闸门。
+	for _, record := range records {
+		target := core.BlockPos{
+			X: position.X + int32(record.DX),
+			Y: position.Y + int32(record.DY),
+			Z: position.Z + int32(record.DZ),
+		}
+		if _, ready := dimension.ReadyChunk(target.Chunk()); !ready {
+			return
+		}
+	}
+	writes := make([]saplingGrowthWrite, 0, len(records))
+	for _, record := range records {
+		target := core.BlockPos{
+			X: position.X + int32(record.DX),
+			Y: position.Y + int32(record.DY),
+			Z: position.Z + int32(record.DZ),
+		}
+		old, changed, err := dimension.SetBlock(target, record.Block)
+		if err != nil {
+			for _, write := range writes {
+				_, _, _ = dimension.SetBlock(write.position, write.old)
+			}
+			return
+		}
+		if changed {
+			writes = append(writes, saplingGrowthWrite{
+				position: target,
+				block:    record.Block,
+				old:      old,
+			})
+		}
+	}
+	for _, write := range writes {
+		mutation.Record(dimensionID, write.position, write.block)
+	}
 }
 
 // Torch/Bed support
@@ -1189,6 +1354,94 @@ func (state *State) invalidateWildGrassAbove(
 		return
 	}
 	mutation.Record(dimensionID, above, core.AirID)
+}
+
+// saplingSweepCell 是树苗复核快照里的一条已变位置：维度加方块坐标唯一定位一格。
+// 与短草/火把/床的复核快照同形但各自独立，避免一条 sweep 的目标类型被另一条改动。
+type saplingSweepCell struct {
+	dimension core.DimensionID
+	position  core.BlockPos
+}
+
+// SweepUnsupportedSaplings 清除失去泥土/草地支撑的树苗：取得本 mutation 当前
+// `ChangedBlocks()` 的稳定快照，对每个变化格只检查正上方一格——若上方是树苗且
+// 变化格的最终值不再是 `DirtID` 或 `GrassID`，就把树苗清为空气并掉落恰好 1 个
+// 树苗，登记到同一 mutation。
+//
+// 掉落走与采掘同形的原子路径：先 `PrepareDrop` 预检容量，容量不足整次清除被
+// 拒绝（树苗保留、不写方块、不登记变更），后续支撑变化可重试。有界性与短草
+// sweep 相同：快照在入口一次取定、不递归重扫，工作量严格正比于本 tick 已受预算
+// 约束的 changed set 大小。本 sweep 与短草 sweep 同相位、先于火把与床复核执行，
+// 因此后两者能看到树苗清除产生的新变更。
+func (state *State) SweepUnsupportedSaplings(mutation *Mutation) {
+	changes := mutation.ChangedBlocks()
+	if len(changes) == 0 {
+		return
+	}
+	cells := make([]saplingSweepCell, len(changes))
+	for index, change := range changes {
+		cells[index] = saplingSweepCell{dimension: change.Dimension, position: change.Position}
+	}
+	for _, cell := range cells {
+		state.invalidateSaplingAbove(cell.dimension, cell.position, mutation)
+	}
+}
+
+// invalidateSaplingAbove 检查 position 正上方一格：那里是树苗且 position 的最终
+// 内容不再是泥土或草地时，树苗支撑失效，同 mutation 清除并掉落一个树苗。支撑格
+// 读取变化后的最终值——同 tick 内多次写入以最后一次为准，被换回泥土/草地的支撑
+// 不触发清除。上方格未加载（跨区块边界）时跳过：树苗所在区块必然已就绪才会被
+// 生成，未就绪意味着整列已随区块卸载，没有可复核的权威状态（短草与火把复核
+// 同款取舍）。
+func (state *State) invalidateSaplingAbove(
+	dimensionID core.DimensionID,
+	position core.BlockPos,
+	mutation *Mutation,
+) {
+	dimension := state.Dimension(dimensionID)
+	if dimension == nil {
+		return
+	}
+	above := core.BlockPos{X: position.X, Y: position.Y + 1, Z: position.Z}
+	block, ready := dimension.BlockAt(above)
+	if !ready || !core.IsSapling(block) {
+		return
+	}
+	supportBlock, supportReady := dimension.BlockAt(position)
+	if !supportReady || supportBlock == core.DirtID || supportBlock == core.GrassID {
+		return
+	}
+	state.removeUnsupportedSapling(dimensionID, above, mutation)
+}
+
+// removeUnsupportedSapling 把失去支撑的树苗清为空气并掉落 1 个树苗。容量预检
+// 先于写入：预检失败整次拒绝，树苗与区块状态逐字段保持不变。
+func (state *State) removeUnsupportedSapling(
+	dimensionID core.DimensionID,
+	position core.BlockPos,
+	mutation *Mutation,
+) {
+	dimension := state.Dimension(dimensionID)
+	chunk, recordOK := dimension.ReadyChunk(position.Chunk())
+	index, indexOK := world.ChunkBlockIndex(position)
+	if !recordOK || !indexOK {
+		return
+	}
+	slot, capacityOK := chunk.PrepareDrop(core.ItemSapling, index)
+	if !capacityOK {
+		return
+	}
+	_, changed, err := dimension.SetBlock(position, core.AirID)
+	if err != nil || !changed {
+		return
+	}
+	mutation.Record(dimensionID, position, core.AirID)
+	chunk.CommitDrop(
+		slot,
+		core.ItemStack{Item: core.ItemSapling, Count: 1},
+		index,
+		state.environment.config.DropPickupDelayTicks,
+	)
 }
 
 func torchSupportOffset(block core.BlockID) (core.BlockPos, bool) {

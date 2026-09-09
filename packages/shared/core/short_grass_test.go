@@ -14,8 +14,8 @@ func TestShortGrassStableBlockIdentityHasNoItem(t *testing.T) {
 	if got := core.ShortGrassID; got != expectedShortGrassID {
 		t.Fatalf("ShortGrassID = %d，想要 %d", got, expectedShortGrassID)
 	}
-	if got, want := core.BlockIDMax, core.BlockID(89); got != want {
-		t.Fatalf("BlockIDMax = %d，想要追加短草与四档雪层后的 %d", got, want)
+	if got, want := core.BlockIDMax, core.BlockID(90); got != want {
+		t.Fatalf("BlockIDMax = %d，想要追加短草、四档雪层与树苗后的 %d", got, want)
 	}
 	if !core.RegisteredBlock(expectedShortGrassID) {
 		t.Fatalf("短草编号 %d 未注册", expectedShortGrassID)
@@ -29,8 +29,8 @@ func TestShortGrassStableBlockIdentityHasNoItem(t *testing.T) {
 	if got, ok := core.BlockDrop(expectedShortGrassID); ok || got != core.ItemNone {
 		t.Fatalf("BlockDrop(短草) = (%d,%v)，短草不得登记通用掉落", got, ok)
 	}
-	if got, want := core.ItemIDMax, core.ItemID(57); got != want {
-		t.Fatalf("ItemIDMax = %d，想要保持 %d：短草不得追加物品编号", got, want)
+	if got, want := core.ItemIDMax, core.ItemID(58); got != want {
+		t.Fatalf("ItemIDMax = %d，想要 %d：短草自身不追加物品，哨兵因树苗批次后移", got, want)
 	}
 	faces := [...]core.BlockFace{
 		core.BlockFaceNegX, core.BlockFacePosX, core.BlockFaceNegY,
@@ -52,10 +52,11 @@ func TestPlantPredicatesKeepCropsAndWildGrassDistinct(t *testing.T) {
 	for id := core.BlockID(0); id < core.BlockIDMax; id++ {
 		wantCrop := core.IsCrop(id)
 		wantWildGrass := id == core.ShortGrassID
+		wantSapling := id == core.SaplingID
 		if got := core.IsWildGrass(id); got != wantWildGrass {
 			t.Fatalf("IsWildGrass(%d) = %v，想要 %v", id, got, wantWildGrass)
 		}
-		if got, want := core.IsPlant(id), wantCrop || wantWildGrass; got != want {
+		if got, want := core.IsPlant(id), wantCrop || wantWildGrass || wantSapling; got != want {
 			t.Fatalf("IsPlant(%d) = %v，想要 %v", id, got, want)
 		}
 	}

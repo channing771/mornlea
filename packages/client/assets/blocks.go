@@ -196,7 +196,14 @@ const (
 	// 位于 LayerItemCoal 之后的原创内部区，不开放材质包文件覆盖。
 	LayerSnowLayerTop  = LayerHumanSageHead + 48
 	LayerSnowLayerSide = LayerHumanSageHead + 49
-	layerCount         = LayerHumanSageHead + 50
+	// LayerSapling 是橡树树苗独占的原创程序化 cutout 层（小树干 + 叶团）。它
+	// 只能追加在雪层之后，保持全部冻结层号（植物 31..54、火把 59、床 60..67、
+	// 短草 68、裂纹 69..78）与人物/雪层区间不变；与短草同形，六个面共用一层，
+	// Rust mesher 正是靠「六个面的 material 都落在植物集合」认出植物格并改出
+	// 四条交叉斜面。层号位于 `LayerItemCoal` 之后的原创内部区，不开放材质包
+	// 文件覆盖（与雪层、人物层同口径）。
+	LayerSapling = LayerHumanSageHead + 50
+	layerCount   = LayerSapling + 1
 )
 
 type textureBinding struct {
@@ -383,6 +390,7 @@ func NewRegistry() *Registry {
 	}
 	r.layers[LayerSnowLayerTop] = snowLayerTopTexture()
 	r.layers[LayerSnowLayerSide] = snowLayerSideTexture()
+	r.layers[LayerSapling] = saplingTexture()
 	r.refreshItemIcons()
 	// ids 覆盖 core 的全部已注册方块编号，上界一律用独占哨兵 core.BlockIDMax
 	// 表达——写死某个具体末位编号（历史上写过 WaterLevel7ID）会在追加新编号时
@@ -390,7 +398,7 @@ func NewRegistry() *Registry {
 	// RegistryView::face_visible 只做位图查表、缺条目一律判不可见，漏掉谁就等于
 	// 谁永远不出面（流体当年正是这样差点画不出水）。
 	// 条目数必须不超过 packages/client/mesh.nativeMaxRegistryEntries 与 Rust 的
-	// MAX_REGISTRY_ENTRIES（当前已注册 85 个方块，上限 96；上限扩容必须
+	// MAX_REGISTRY_ENTRIES（当前已注册 90 个方块，上限 96；上限扩容必须
 	// Go/Rust 两侧同批同步）。
 	ids := make([]world.BlockID, 0, int(core.BlockIDMax))
 	for id := core.AirID; id < core.BlockIDMax; id++ {
@@ -601,6 +609,11 @@ func (r *Registry) Material(id world.BlockID, f mesh.Face) uint16 {
 		if core.IsWildGrass(id) {
 			return LayerShortGrass
 		}
+		// 树苗与短草同形：六个面共用一张 cutout 层，Rust mesher 靠植物材质
+		// 集合认出该格并改出四条交叉斜面。
+		if core.IsSapling(id) {
+			return LayerSapling
+		}
 		// 五种火把形态共用同一张竖直火柄 cutout 层：Rust 的 model dispatcher
 		// 只读 face 0 的 material，几何（交叉斜面/贴面斜板）由 model tag 决定，
 		// 材质六面同层不会串味。
@@ -730,7 +743,7 @@ func (r *Registry) Model(id world.BlockID) uint8 {
 func isCutoutLayer(layer int) bool {
 	return layer == int(LayerLeaves) || layer == int(LayerGlass) ||
 		(layer >= int(LayerWheat0) && layer <= int(LayerCarrot7)) || layer == int(LayerTorch) ||
-		layer == int(LayerShortGrass) ||
+		layer == int(LayerShortGrass) || layer == int(LayerSapling) ||
 		(layer >= int(LayerCrack0) && layer <= int(LayerCrack9)) ||
 		layer == int(LayerRawBeef) || layer == int(LayerCookedBeef) ||
 		(layer >= int(LayerItemCoal) && layer <= int(LayerItemWaterBucket))
