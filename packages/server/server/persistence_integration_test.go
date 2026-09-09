@@ -628,7 +628,7 @@ func newOakPersistenceGenerator(marker core.BlockID) *countingPersistenceGenerat
 	return generator
 }
 
-func (generator *countingPersistenceGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (generator *countingPersistenceGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	generator.mu.Lock()
 	generator.calls[position]++
 	generator.mu.Unlock()
@@ -682,7 +682,7 @@ func (generator *countingPersistenceGenerator) calledPositions() []core.ChunkPos
 }
 
 func persistenceChunk(position core.ChunkPos, marker core.BlockID) *world.Chunk {
-	chunk := server.FlatTestGenerator{}.GenerateChunk(position)
+	chunk := server.FlatTestGenerator{}.GenerateChunk(core.Overworld, position)
 	chunk.SetBlock(core.SectionSize-1, 10, core.SectionSize-1, marker)
 	chunk.Compact()
 	return chunk

@@ -20,7 +20,7 @@ import (
 // preUpgradeSavedChunk 构造升级前已保存的区块:生产生成器生成同种子世界后
 // 把自然短草归一为空气——这正是升级前程序写出的内容,作为已保存语料。
 func preUpgradeSavedChunk(pos core.ChunkPos) *world.Chunk {
-	chunk := worldgen.New(42, false).GenerateChunk(pos)
+	chunk := worldgen.New(42, false).GenerateChunk(core.Overworld, pos)
 	for y := int32(core.MinY); y < core.MaxY; y++ {
 		for z := 0; z < core.SectionSize; z++ {
 			for x := 0; x < core.SectionSize; x++ {

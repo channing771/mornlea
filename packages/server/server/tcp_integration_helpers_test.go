@@ -62,11 +62,11 @@ func (store *trackedMemoryStore) LoadChunk(ctx context.Context, key core.ChunkKe
 	return store.MemoryStore.LoadChunk(ctx, key)
 }
 
-func (flatGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (flatGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	return integrationChunk(position, core.StoneID)
 }
 
-func (changedGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (changedGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	return integrationChunk(position, core.DirtID)
 }
 

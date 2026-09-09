@@ -49,7 +49,7 @@ type panicGenerator struct {
 	calls   map[core.ChunkPos]int
 }
 
-func (generator *panicGenerator) GenerateChunk(pos core.ChunkPos) *world.Chunk {
+func (generator *panicGenerator) GenerateChunk(_ core.DimensionID, pos core.ChunkPos) *world.Chunk {
 	generator.mu.Lock()
 	if generator.calls == nil {
 		generator.calls = make(map[core.ChunkPos]int)
@@ -70,4 +70,28 @@ func (generator *panicGenerator) callsFor(pos core.ChunkPos) int {
 	generator.mu.Lock()
 	defer generator.mu.Unlock()
 	return generator.calls[pos]
+}
+
+// TestTerrainProbeCarriesDimension 锁定高度探针的维度归属:默认探针读主世界
+// 高度图,按维探针读本维高度图——传送落点的新维出生扫描依赖该语义,而不是
+// 主世界高度。
+func TestTerrainProbeCarriesDimension(t *testing.T) {
+	const seed int64 = 42
+	overworld := server.NewTerrainProbe(seed)
+	explicit := server.NewTerrainProbeForDimension(seed, core.Overworld)
+	depths := server.NewTerrainProbeForDimension(seed, core.Depths)
+	diverged := false
+	for x := int32(-48); x < 48; x += 7 {
+		for z := int32(-48); z < 48; z += 11 {
+			if overworld.HeightAt(x, z) != explicit.HeightAt(x, z) {
+				t.Fatalf("默认探针与主世界探针在 (%d,%d) 高度不一致", x, z)
+			}
+			if overworld.HeightAt(x, z) != depths.HeightAt(x, z) {
+				diverged = true
+			}
+		}
+	}
+	if !diverged {
+		t.Fatal("采样区内双维探针高度全一致,探针未携带维度")
+	}
 }

@@ -24,7 +24,7 @@ import (
 
 type miningParityGenerator struct{}
 
-func (miningParityGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (miningParityGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	chunk := integrationChunk(position, core.StoneID)
 	for _, target := range []core.BlockPos{{X: -1, Y: 1, Z: -6}, {X: 1, Y: 1, Z: -6}} {
 		if target.Chunk() != position {
@@ -45,7 +45,7 @@ func (miningParityGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk 
 // parity 世界按契约保持无背景生物写入（背景实体消息同样被比对过滤）。
 type barrenParityGenerator struct{}
 
-func (barrenParityGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (barrenParityGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	chunk := world.NewChunk(position)
 	for z := 0; z < core.SectionSize; z++ {
 		for x := 0; x < core.SectionSize; x++ {

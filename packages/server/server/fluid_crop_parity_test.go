@@ -92,7 +92,7 @@ const (
 type floodCropGenerator struct{}
 
 // GenerateChunk 实现 Generator。
-func (floodCropGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (floodCropGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	chunk := world.NewChunk(position)
 	for x := range core.SectionSize {
 		for z := range core.SectionSize {

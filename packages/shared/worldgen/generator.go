@@ -45,14 +45,38 @@ const (
 	probeModeHeight  = 0
 	probeModeTerrain = 1
 	probeModeBase    = 2
+
+	// depthsSeedSalt 是 `Depths` 维度的种子盐:位模式即 `0x9E3779B97F4A7C15`
+	// (经典 64 位黄金比例常数)。字面量 `0x9E3779B97F4A7C15` 超出 `int64`
+	// 上界、不能直接写进 `^` 运算,故以其二进制补码相反数
+	// `-0x61C8864680B583EB` 表达,两者位模式相同。
+	depthsSeedSalt = int64(-0x61C8864680B583EB)
 )
 
 // Generator 按种子生成地形。
 //
-// New 之后 header 只读共享,每次调用使用独立缓冲,可并发调用。
+// New 之后 header 只读共享,每次调用使用独立缓冲,可并发调用。生成器常驻
+// 双维 header(各 566 字节):主世界 header 与 `Depths` header 只在种子盐上
+// 不同,engine 侧零改动,复用同一套 `nativeabi` 调用。
 type Generator struct {
-	// header 是预编码的 566 字节 `MGW1` 公共 header(seed、材料表、perm)。
-	header []byte
+	// primary 是构造时声明的主维度,只决定 `Header` 返回哪一维的 header;
+	// 按维查询(`GenerateChunk`/`HeightAt` 等)一律以传入的 `dim` 为准,
+	// 不受 `primary` 影响,任何实例都能回答任意维度,不存在半初始化实例。
+	primary core.DimensionID
+	// overworld 是主世界种子的预编码 `MGW1` header,与历史版本逐字节一致。
+	overworld []byte
+	// depths 是盐化种子的预编码 `MGW1` header,只服务 `Depths` 查询。
+	depths []byte
+}
+
+// dimSeed 按维度派生世界种子:主世界保持基础种子(既有世界逐字节不变),
+// `Depths` 异或固定盐后独立演化;未知维度回落主世界(值域由协议层收紧,
+// 此处保持全函数、不在热路径抛错)。
+func dimSeed(base int64, dim core.DimensionID) int64 {
+	if dim == core.Depths {
+		return base ^ depthsSeedSalt
+	}
+	return base
 }
 
 // New 创建一个地形生成器。
@@ -66,6 +90,28 @@ type Generator struct {
 // engine 侧因此没有任何开关分支。短草无门控:它只在注水结算后仍为空气的
 // 命中草地列写入,编号恒取 core.ShortGrassID。
 func New(seed int64, fluidEnabled bool) *Generator {
+	return NewForDimension(seed, fluidEnabled, core.Overworld)
+}
+
+// NewForDimension 创建以 `dim` 为主维度的地形生成器。
+//
+// 双维 header 常驻(内存 1KB 量级):单维调用方(如某维出生扫描的探针)用它
+// 自文档化意图,但实例仍能回答任意维度的查询。`dim` 只决定 `Header` 返回
+// 哪一维,不限制查询维度。
+func NewForDimension(seed int64, fluidEnabled bool, dim core.DimensionID) *Generator {
+	if dim != core.Depths {
+		dim = core.Overworld
+	}
+	return &Generator{
+		primary:   dim,
+		overworld: buildHeader(dimSeed(seed, core.Overworld), fluidEnabled),
+		depths:    buildHeader(dimSeed(seed, core.Depths), fluidEnabled),
+	}
+}
+
+// buildHeader 预编码单一种子的 566 字节 `MGW1` 公共 header(seed、材料表、
+// perm),由 `New` 家族按维度种子各调一次。
+func buildHeader(seed int64, fluidEnabled bool) []byte {
 	header := make([]byte, worldgenHeaderBytes)
 	copy(header[:4], worldgenMagic)
 	binary.LittleEndian.PutUint32(header[4:8], worldgenLayout)
@@ -92,7 +138,7 @@ func New(seed int64, fluidEnabled bool) *Generator {
 	// perm 从偏移 54 开始:24..54 恰好是 15 项材料表,末项 short_grass
 	// 占 52..54。
 	copy(header[54:], perm[:])
-	return &Generator{header: header}
+	return header
 }
 
 // permTable 用给定种子构造 512 项 Perlin 置换表(0..255 重复两遍)。
@@ -113,19 +159,28 @@ func permTable(seed int64) [512]byte {
 	return perm
 }
 
-// Header 返回生成器预编码的 566 字节 `MGW1` 公共 header(seed、材料表、
-// perm)。返回切片与生成器内部共享，构造后只读——调用方不得修改，否则
-// 会同时污染近环 worldgen 与所有共享方。远环壳生成(internal/lod)用同一
-// 种子构造的 header 与近环逐字节一致，保证同一世界的近环与远环地形来自
-// 同一份确定性输入。
+// Header 返回生成器主维度的预编码 566 字节 `MGW1` 公共 header(seed、
+// 材料表、perm)。`New` 构造的主维度即主世界,历史调用方(远环壳生成、菜单
+// 全景)语义不变;`NewForDimension` 构造的返回其声明维度。返回切片与生成器
+// 内部共享，构造后只读——调用方不得修改，否则会同时污染近环 worldgen 与
+// 所有共享方。远环壳生成(internal/lod)用同一种子构造的 header 与近环逐字
+// 节一致，保证同一世界的近环与远环地形来自同一份确定性输入。
 func (g *Generator) Header() []byte {
-	return g.header
+	return g.headerFor(g.primary)
+}
+
+// headerFor 取某维度的预编码 header;未知维度回落主世界(与 `dimSeed` 同策)。
+func (g *Generator) headerFor(dim core.DimensionID) []byte {
+	if dim == core.Depths {
+		return g.depths
+	}
+	return g.overworld
 }
 
 // probe 执行一条单点查询,返回 8 字节结果记录。
-func (g *Generator) probe(mode uint32, x, y, z int32) []byte {
+func (g *Generator) probe(dim core.DimensionID, mode uint32, x, y, z int32) []byte {
 	input := make([]byte, 0, worldgenHeaderBytes+4+worldgenProbeRecordBytes)
-	input = append(input, g.header...)
+	input = append(input, g.headerFor(dim)...)
 	input = binary.LittleEndian.AppendUint32(input, 1)
 	input = binary.LittleEndian.AppendUint32(input, mode)
 	input = binary.LittleEndian.AppendUint32(input, uint32(x))
@@ -136,9 +191,9 @@ func (g *Generator) probe(mode uint32, x, y, z int32) []byte {
 	return output
 }
 
-// HeightAt 返回世界坐标 (wx,wz) 处最高实心方块的 Y。
-func (g *Generator) HeightAt(wx, wz int32) int32 {
-	output := g.probe(probeModeHeight, wx, 0, wz)
+// HeightAt 返回指定维度世界坐标 (wx,wz) 处最高实心方块的 Y。
+func (g *Generator) HeightAt(dim core.DimensionID, wx, wz int32) int32 {
+	output := g.probe(dim, probeModeHeight, wx, 0, wz)
 	return int32(binary.LittleEndian.Uint32(output[0:4]))
 }
 
@@ -148,8 +203,8 @@ func (g *Generator) HeightAt(wx, wz int32) int32 {
 // core.AirID，注水只作用于 BaseBlockAt 与 GenerateChunk。这个不对称是必需的
 // ——BaseBlockAt 以"地形非空即早返回"的方式叠加橡树，若地形层就把空气改写成
 // 水，早返回会吞掉橡树分支，海平面以下的树会整棵消失。
-func (g *Generator) TerrainBlockAt(pos core.BlockPos) core.BlockID {
-	output := g.probe(probeModeTerrain, pos.X, pos.Y, pos.Z)
+func (g *Generator) TerrainBlockAt(dim core.DimensionID, pos core.BlockPos) core.BlockID {
+	output := g.probe(dim, probeModeTerrain, pos.X, pos.Y, pos.Z)
 	return core.BlockID(binary.LittleEndian.Uint16(output[4:6]))
 }
 
@@ -160,8 +215,8 @@ func (g *Generator) TerrainBlockAt(pos core.BlockPos) core.BlockID {
 // 仍为空气的格返回 core.WaterSourceID；树与海水结算后仍为空气、且判定
 // 命中的草地表面正上方格返回 core.ShortGrassID。需要纯地形结果的调用方
 // 用 TerrainBlockAt(地形与高度语义忽略装饰短草)。
-func (g *Generator) BaseBlockAt(pos core.BlockPos) core.BlockID {
-	output := g.probe(probeModeBase, pos.X, pos.Y, pos.Z)
+func (g *Generator) BaseBlockAt(dim core.DimensionID, pos core.BlockPos) core.BlockID {
+	output := g.probe(dim, probeModeBase, pos.X, pos.Y, pos.Z)
 	return core.BlockID(binary.LittleEndian.Uint16(output[4:6]))
 }
 
@@ -170,9 +225,9 @@ func (g *Generator) BaseBlockAt(pos core.BlockPos) core.BlockID {
 // 一次 native 调用产出 dense 数组;Go 侧只把非 air 方块写入 chunk,
 // 与旧实现"地形只写到地表高度、树只写原木/树叶"的写入集合一致,
 // palette 构建路径保持不变。
-func (g *Generator) GenerateChunk(pos core.ChunkPos) *world.Chunk {
+func (g *Generator) GenerateChunk(dim core.DimensionID, pos core.ChunkPos) *world.Chunk {
 	input := make([]byte, 0, worldgenHeaderBytes+8)
-	input = append(input, g.header...)
+	input = append(input, g.headerFor(dim)...)
 	input = binary.LittleEndian.AppendUint32(input, uint32(pos.X))
 	input = binary.LittleEndian.AppendUint32(input, uint32(pos.Z))
 	dense := make([]byte, worldgenChunkOutputBytes)

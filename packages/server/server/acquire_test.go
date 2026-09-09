@@ -178,7 +178,7 @@ type countingGenerator struct {
 	calls int
 }
 
-func (generator *countingGenerator) GenerateChunk(pos core.ChunkPos) *world.Chunk {
+func (generator *countingGenerator) GenerateChunk(_ core.DimensionID, pos core.ChunkPos) *world.Chunk {
 	generator.mu.Lock()
 	generator.calls++
 	generator.mu.Unlock()

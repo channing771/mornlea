@@ -105,7 +105,7 @@ func TestSessionRegistryAcceptsArbitraryPlayerID(t *testing.T) {
 		running.engine.SubmitGenerated(contract.GeneratedChunk{
 			Dimension: key.Dimension,
 			Pos:       key.Pos,
-			Chunk:     playerTestGenerator{}.GenerateChunk(key.Pos),
+			Chunk:     playerTestGenerator{}.GenerateChunk(core.Overworld, key.Pos),
 		})
 	}
 	ready := running.engine.Step()

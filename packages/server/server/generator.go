@@ -11,11 +11,13 @@ import (
 )
 
 type Generator interface {
-	GenerateChunk(core.ChunkPos) *world.Chunk
+	GenerateChunk(core.DimensionID, core.ChunkPos) *world.Chunk
 }
 
 type TerrainProbe struct {
 	generator *worldgen.Generator
+	// dimension 是探针归属的维度,构造后不变;高度查询一律落到该维的高度图。
+	dimension core.DimensionID
 }
 
 // NewTerrainProbe 创建只查询地表高度的探针。
@@ -23,11 +25,17 @@ type TerrainProbe struct {
 // 固定传 fluidEnabled=false:探针只用 HeightAt,而高度图由地形噪声决定,
 // 与海平面注水无关,传 false 可避免它依赖调用方的配置。
 func NewTerrainProbe(seed int64) *TerrainProbe {
-	return &TerrainProbe{generator: worldgen.New(seed, false)}
+	return NewTerrainProbeForDimension(seed, core.Overworld)
+}
+
+// NewTerrainProbeForDimension 创建归属指定维度的高度探针:传送落点的新维
+// 出生扫描用它读该维高度图,而不是主世界高度。
+func NewTerrainProbeForDimension(seed int64, dim core.DimensionID) *TerrainProbe {
+	return &TerrainProbe{generator: worldgen.NewForDimension(seed, false, dim), dimension: dim}
 }
 
 func (probe *TerrainProbe) HeightAt(x, z int32) int32 {
-	return probe.generator.HeightAt(x, z)
+	return probe.generator.HeightAt(probe.dimension, x, z)
 }
 
 func runGeneration(
@@ -59,7 +67,7 @@ func runGeneration(
 			)
 		}
 	}()
-	result.Chunk = generator.GenerateChunk(key.Pos)
+	result.Chunk = generator.GenerateChunk(key.Dimension, key.Pos)
 	if result.Chunk == nil {
 		result.Err = fmt.Errorf(
 			"generator returned nil at dimension=%d chunk=(%d,%d)",

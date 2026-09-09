@@ -290,7 +290,7 @@ func readySpawnChunkForDeterministicReplay(t *testing.T, running *Server) {
 	running.engine.SubmitGenerated(contract.GeneratedChunk{
 		Dimension: spawnKey.Dimension,
 		Pos:       spawnKey.Pos,
-		Chunk:     playerTestGenerator{}.GenerateChunk(spawnKey.Pos),
+		Chunk:     playerTestGenerator{}.GenerateChunk(core.Overworld, spawnKey.Pos),
 	})
 	ready := running.StepForTest()
 	if len(ready.Ready) != 1 || ready.Ready[0] != spawnKey {

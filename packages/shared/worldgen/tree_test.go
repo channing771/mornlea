@@ -34,8 +34,8 @@ func TestOakTreeBlockAtUsesFixedCrownAndLogPriority(t *testing.T) {
 	const rootX, rootZ = int32(-4), int32(-4)
 	generator := worldgen.New(seed, false)
 
-	surface := generator.HeightAt(rootX, rootZ)
-	if got := generator.TerrainBlockAt(core.BlockPos{X: rootX, Y: surface, Z: rootZ}); got != core.GrassID {
+	surface := generator.HeightAt(core.Overworld, rootX, rootZ)
+	if got := generator.TerrainBlockAt(core.Overworld, core.BlockPos{X: rootX, Y: surface, Z: rootZ}); got != core.GrassID {
 		t.Fatalf("语料前提失效: (%d,%d) 地表=%d，想要 GrassID", rootX, rootZ, got)
 	}
 	rootY := surface + 1
@@ -43,7 +43,7 @@ func TestOakTreeBlockAtUsesFixedCrownAndLogPriority(t *testing.T) {
 	// 树干顶自下而上扫描得出,同时核实「该列真的长着树」的语料前提。
 	topY := int32(-1)
 	for y := rootY; y < core.MaxY; y++ {
-		if generator.BaseBlockAt(core.BlockPos{X: rootX, Y: y, Z: rootZ}) != core.OakLogID {
+		if generator.BaseBlockAt(core.Overworld, core.BlockPos{X: rootX, Y: y, Z: rootZ}) != core.OakLogID {
 			break
 		}
 		topY = y
@@ -52,7 +52,7 @@ func TestOakTreeBlockAtUsesFixedCrownAndLogPriority(t *testing.T) {
 		t.Fatalf("语料前提失效: 树高 %d，想要普通档 5..7", height)
 	}
 
-	chunk := generator.GenerateChunk(core.ChunkPos{X: -1, Z: -1})
+	chunk := generator.GenerateChunk(core.Overworld, core.ChunkPos{X: -1, Z: -1})
 	at := func(x, y, z int32) core.BlockID {
 		lx, _, lz := core.BlockPos{X: x, Y: y, Z: z}.Local()
 		return chunk.BlockAt(lx, y, lz)
@@ -187,7 +187,7 @@ func TestGeneratedChunkKeepsIntersectingLogs(t *testing.T) {
 	// 树的主干穿过该列,而非孤立的巧合方块。
 	belowTrunk := core.BlockPos{X: intersection.X, Y: intersection.Y - 1, Z: intersection.Z}
 	lx, _, lz := belowTrunk.Local()
-	chunk := generator.GenerateChunk(belowTrunk.Chunk())
+	chunk := generator.GenerateChunk(core.Overworld, belowTrunk.Chunk())
 	if got := chunk.BlockAt(lx, belowTrunk.Y, lz); got != core.OakLogID {
 		t.Fatalf("语料前提失效: 交叉格下方 %+v=%d，想要树干", belowTrunk, got)
 	}
@@ -200,7 +200,7 @@ func TestGeneratedChunkKeepsIntersectingLogs(t *testing.T) {
 			X: intersection.X + offset[0], Y: intersection.Y, Z: intersection.Z + offset[1],
 		}
 		nx, _, nz := pos.Local()
-		neighborChunk := generator.GenerateChunk(pos.Chunk())
+		neighborChunk := generator.GenerateChunk(core.Overworld, pos.Chunk())
 		if got := neighborChunk.BlockAt(nx, pos.Y, nz); got == core.LeavesID {
 			neighborLeaf = true
 			break
@@ -213,7 +213,7 @@ func TestGeneratedChunkKeepsIntersectingLogs(t *testing.T) {
 	if got := chunk.BlockAt(lx, intersection.Y, lz); got != core.OakLogID {
 		t.Fatalf("生产区块交叉格=%d，想要 OakLogID", got)
 	}
-	if got := generator.BaseBlockAt(intersection); got != core.OakLogID {
+	if got := generator.BaseBlockAt(core.Overworld, intersection); got != core.OakLogID {
 		t.Fatalf("BaseBlockAt 交叉格=%d，想要 OakLogID", got)
 	}
 }
@@ -223,14 +223,14 @@ func TestBaseBlockAtMatchesGeneratedChunkWithOakTrees(t *testing.T) {
 	// 覆盖正负坐标的六个区块外加含珍异大树的 chunk (-1,0)(根列 (-7,*,15)、
 	// 树高 8,大冠与分杈落界内),新规则的冠形与分杈一致性一并锁定。
 	for _, chunkPos := range []core.ChunkPos{{X: -1, Z: -1}, {X: 0, Z: -1}, {X: 0, Z: 0}, {X: 1, Z: 0}, {X: 0, Z: 1}, {X: 1, Z: 1}, {X: -1, Z: 0}} {
-		chunk := generator.GenerateChunk(chunkPos)
+		chunk := generator.GenerateChunk(core.Overworld, chunkPos)
 		baseX := chunkPos.X << core.SectionShift
 		baseZ := chunkPos.Z << core.SectionShift
 		for z := int32(0); z < core.SectionSize; z++ {
 			for x := int32(0); x < core.SectionSize; x++ {
 				for y := int32(core.MinY); y < core.MaxY; y++ {
 					position := core.BlockPos{X: baseX + x, Y: y, Z: baseZ + z}
-					if got, want := generator.BaseBlockAt(position), chunk.BlockAt(int(x), y, int(z)); got != want {
+					if got, want := generator.BaseBlockAt(core.Overworld, position), chunk.BlockAt(int(x), y, int(z)); got != want {
 						t.Fatalf("chunk=%+v BaseBlockAt(%+v)=%d，GenerateChunk=%d", chunkPos, position, got, want)
 					}
 				}
@@ -251,12 +251,12 @@ func TestOakTrunkColumnsAreContinuous(t *testing.T) {
 	trunks := 0
 	for cx := int32(-2); cx < 2; cx++ {
 		for cz := int32(-2); cz < 2; cz++ {
-			chunk := production.GenerateChunk(core.ChunkPos{X: cx, Z: cz})
+			chunk := production.GenerateChunk(core.Overworld, core.ChunkPos{X: cx, Z: cz})
 			for lx := 0; lx < core.SectionSize; lx++ {
 				for lz := 0; lz < core.SectionSize; lz++ {
 					wx := cx*core.SectionSize + int32(lx)
 					wz := cz*core.SectionSize + int32(lz)
-					surface := production.HeightAt(wx, wz)
+					surface := production.HeightAt(core.Overworld, wx, wz)
 					if chunk.BlockAt(lx, surface, lz) != core.GrassID {
 						continue
 					}
@@ -275,7 +275,7 @@ func TestOakTrunkColumnsAreContinuous(t *testing.T) {
 						if got := chunk.BlockAt(lx, y, lz); got != core.OakLogID {
 							t.Fatalf("(%d,%d,%d) 树干空洞=%d,想要 OakLogID", wx, y, wz, got)
 						}
-						if got := production.BaseBlockAt(core.BlockPos{X: wx, Y: y, Z: wz}); got != core.OakLogID {
+						if got := production.BaseBlockAt(core.Overworld, core.BlockPos{X: wx, Y: y, Z: wz}); got != core.OakLogID {
 							t.Fatalf("BaseBlockAt(%d,%d,%d)=%d,树干与整块分叉", wx, y, wz, got)
 						}
 					}
@@ -299,12 +299,12 @@ func TestTreeColumnsRespectWorldHeightBounds(t *testing.T) {
 	trees := 0
 	for cx := int32(-2); cx < 2; cx++ {
 		for cz := int32(-2); cz < 2; cz++ {
-			chunk := production.GenerateChunk(core.ChunkPos{X: cx, Z: cz})
+			chunk := production.GenerateChunk(core.Overworld, core.ChunkPos{X: cx, Z: cz})
 			for lx := 0; lx < core.SectionSize; lx++ {
 				for lz := 0; lz < core.SectionSize; lz++ {
 					wx := cx*core.SectionSize + int32(lx)
 					wz := cz*core.SectionSize + int32(lz)
-					surface := production.HeightAt(wx, wz)
+					surface := production.HeightAt(core.Overworld, wx, wz)
 					if chunk.BlockAt(lx, surface, lz) != core.GrassID {
 						continue
 					}
@@ -328,10 +328,10 @@ func TestTreeColumnsRespectWorldHeightBounds(t *testing.T) {
 	}
 	for wx := int32(-32); wx < 32; wx++ {
 		for wz := int32(-32); wz < 32; wz++ {
-			if got := production.BaseBlockAt(core.BlockPos{X: wx, Y: core.MaxY, Z: wz}); got != core.AirID {
+			if got := production.BaseBlockAt(core.Overworld, core.BlockPos{X: wx, Y: core.MaxY, Z: wz}); got != core.AirID {
 				t.Fatalf("上界外 BaseBlockAt(%d,%d,%d)=%d,想要空气", wx, core.MaxY, wz, got)
 			}
-			if got := production.BaseBlockAt(core.BlockPos{X: wx, Y: core.MinY - 1, Z: wz}); got != core.AirID {
+			if got := production.BaseBlockAt(core.Overworld, core.BlockPos{X: wx, Y: core.MinY - 1, Z: wz}); got != core.AirID {
 				t.Fatalf("下界外 BaseBlockAt(%d,%d,%d)=%d,想要空气", wx, core.MinY-1, wz, got)
 			}
 		}
@@ -357,7 +357,7 @@ func branchLogDirections(production *worldgen.Generator, rootX, rootZ, topY int3
 				if along < 1 || along > 3 {
 					continue
 				}
-				if production.BaseBlockAt(core.BlockPos{X: rootX + dx, Y: y, Z: rootZ + dz}) != core.OakLogID {
+				if production.BaseBlockAt(core.Overworld, core.BlockPos{X: rootX + dx, Y: y, Z: rootZ + dz}) != core.OakLogID {
 					continue
 				}
 				key := [2]int32{0, 0}
@@ -385,12 +385,12 @@ func TestOrdinaryOakHasNoBranches(t *testing.T) {
 	production := worldgen.New(42, false)
 	for _, root := range [][2]int32{{-4, -4}, {16, 18}, {-32, -4}} {
 		rootX, rootZ := root[0], root[1]
-		surface := production.HeightAt(rootX, rootZ)
-		if got := production.TerrainBlockAt(core.BlockPos{X: rootX, Y: surface, Z: rootZ}); got != core.GrassID {
+		surface := production.HeightAt(core.Overworld, rootX, rootZ)
+		if got := production.TerrainBlockAt(core.Overworld, core.BlockPos{X: rootX, Y: surface, Z: rootZ}); got != core.GrassID {
 			t.Fatalf("语料前提失效: (%d,%d) 地表=%d，想要 GrassID", rootX, rootZ, got)
 		}
 		topY := surface
-		for topY+1 < core.MaxY && production.BaseBlockAt(core.BlockPos{X: rootX, Y: topY + 1, Z: rootZ}) == core.OakLogID {
+		for topY+1 < core.MaxY && production.BaseBlockAt(core.Overworld, core.BlockPos{X: rootX, Y: topY + 1, Z: rootZ}) == core.OakLogID {
 			topY++
 		}
 		if height := topY - surface; height < 5 || height > 7 {
@@ -416,12 +416,12 @@ func TestOakHeightAndCrownTiersAreDiverse(t *testing.T) {
 	seenStandard, seenFluffy := false, false
 	for cx := int32(-2); cx < 2; cx++ {
 		for cz := int32(-2); cz < 2; cz++ {
-			chunk := production.GenerateChunk(core.ChunkPos{X: cx, Z: cz})
+			chunk := production.GenerateChunk(core.Overworld, core.ChunkPos{X: cx, Z: cz})
 			for lx := 0; lx < core.SectionSize; lx++ {
 				for lz := 0; lz < core.SectionSize; lz++ {
 					wx := cx*core.SectionSize + int32(lx)
 					wz := cz*core.SectionSize + int32(lz)
-					surface := production.HeightAt(wx, wz)
+					surface := production.HeightAt(core.Overworld, wx, wz)
 					if chunk.BlockAt(lx, surface, lz) != core.GrassID {
 						continue
 					}
@@ -474,7 +474,7 @@ func TestOakHeightAndCrownTiersAreDiverse(t *testing.T) {
 	}
 
 	at := func(x, y, z int32) core.BlockID {
-		return production.BaseBlockAt(core.BlockPos{X: x, Y: y, Z: z})
+		return production.BaseBlockAt(core.Overworld, core.BlockPos{X: x, Y: y, Z: z})
 	}
 	assertOrdinaryCrownLayers(t, at, firstStandard[0], firstStandard[1], firstStandard[2])
 	assertStandardTopAir(t, at, firstStandard[0], firstStandard[1], firstStandard[2])

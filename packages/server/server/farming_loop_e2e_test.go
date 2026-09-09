@@ -277,14 +277,14 @@ func runNaturalSeedFarmingScript(
 	// 与服务端权威 1/8 判定。夹具另在登录就绪后对已加载权威区块重读同一格。
 	// 任何一条失败都说明冻结样本失效，脚本不降级、不搜索。
 	probe := worldgen.New(naturalFarmingSeed, true)
-	if got := probe.HeightAt(naturalFarmingGrass.X, naturalFarmingGrass.Z); got != naturalFarmingFarmland.Y {
+	if got := probe.HeightAt(core.Overworld, naturalFarmingGrass.X, naturalFarmingGrass.Z); got != naturalFarmingFarmland.Y {
 		t.Fatalf("冻结样本前提失效：出生列高度 = %d，想要海平面草架 %d",
 			got, naturalFarmingFarmland.Y)
 	}
-	if got := probe.BaseBlockAt(naturalFarmingFarmland); got != core.GrassID {
+	if got := probe.BaseBlockAt(core.Overworld, naturalFarmingFarmland); got != core.GrassID {
 		t.Fatalf("冻结样本前提失效：样本格下方 = %d，想要 %d", got, core.GrassID)
 	}
-	if got := probe.BaseBlockAt(naturalFarmingGrass); got != core.ShortGrassID {
+	if got := probe.BaseBlockAt(core.Overworld, naturalFarmingGrass); got != core.ShortGrassID {
 		t.Fatalf("冻结样本前提失效：样本格 = %d，想要自然生成的 %d",
 			got, core.ShortGrassID)
 	}

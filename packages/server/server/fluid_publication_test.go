@@ -21,7 +21,7 @@ var fluidPublicationSource = core.BlockPos{X: 0, Y: 1, Z: -5}
 type fluidGenerator struct{}
 
 // GenerateChunk 实现 Generator。
-func (fluidGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (fluidGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	chunk := world.NewChunk(position)
 	for x := range core.SectionSize {
 		for z := range core.SectionSize {

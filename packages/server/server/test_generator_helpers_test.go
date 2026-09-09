@@ -15,7 +15,7 @@ type FlatTestGenerator = flatTestGenerator
 
 var playerIntegrationObstacle = core.BlockPos{X: 0, Y: 1, Z: -6}
 
-func (flatTestGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (flatTestGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	chunk := world.NewChunk(position)
 	for z := 0; z < core.SectionSize; z++ {
 		for x := 0; x < core.SectionSize; x++ {

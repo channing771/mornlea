@@ -29,8 +29,8 @@ var multiplayerRestartStartPositions = [...][3]float32{
 
 type multiplayerRestartGenerator struct{}
 
-func (multiplayerRestartGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
-	chunk := flatTestGenerator{}.GenerateChunk(position)
+func (multiplayerRestartGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
+	chunk := flatTestGenerator{}.GenerateChunk(core.Overworld, position)
 	if multiplayerRestartTarget.Chunk() == position {
 		x, _, z := multiplayerRestartTarget.Local()
 		chunk.SetBlock(x, multiplayerRestartTarget.Y, z, core.StoneID)

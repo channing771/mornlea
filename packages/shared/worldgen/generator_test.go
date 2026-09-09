@@ -24,7 +24,7 @@ func TestGenerateChunkGolden(t *testing.T) {
 	for _, pos := range []core.ChunkPos{
 		{X: 0, Z: 0}, {X: 1, Z: 0}, {X: -1, Z: -1}, {X: 37, Z: -104},
 	} {
-		c := g.GenerateChunk(pos)
+		c := g.GenerateChunk(core.Overworld, pos)
 		h := sha256.New()
 		for y := int32(core.MinY); y < core.MaxY; y++ {
 			for z := 0; z < core.SectionSize; z++ {
@@ -61,8 +61,8 @@ func TestGenerateChunkGolden(t *testing.T) {
 
 func TestGenerateChunkIsDeterministic(t *testing.T) {
 	pos := core.ChunkPos{X: 5, Z: -3}
-	a := worldgen.New(1234, false).GenerateChunk(pos)
-	b := worldgen.New(1234, false).GenerateChunk(pos)
+	a := worldgen.New(1234, false).GenerateChunk(core.Overworld, pos)
+	b := worldgen.New(1234, false).GenerateChunk(core.Overworld, pos)
 	for y := int32(core.MinY); y < core.MaxY; y++ {
 		for z := 0; z < core.SectionSize; z++ {
 			for x := 0; x < core.SectionSize; x++ {
@@ -81,11 +81,11 @@ func TestBaseBlockAtMatchesGeneratedChunk(t *testing.T) {
 		{X: 16, Z: -16},
 		{X: -19, Z: -33},
 	} {
-		chunk := generator.GenerateChunk(horizontal.Chunk())
+		chunk := generator.GenerateChunk(core.Overworld, horizontal.Chunk())
 		x, _, z := horizontal.Local()
 		for y := int32(core.MinY); y < core.MaxY; y++ {
 			position := core.BlockPos{X: horizontal.X, Y: y, Z: horizontal.Z}
-			got := generator.BaseBlockAt(position)
+			got := generator.BaseBlockAt(core.Overworld, position)
 			want := chunk.BlockAt(x, position.Y, z)
 			if got != want {
 				t.Fatalf(
@@ -101,7 +101,7 @@ func TestBaseBlockAtMatchesGeneratedChunk(t *testing.T) {
 		{Y: core.MinY - 1},
 		{Y: core.MaxY},
 	} {
-		if got := generator.BaseBlockAt(position); got != core.AirID {
+		if got := generator.BaseBlockAt(core.Overworld, position); got != core.AirID {
 			t.Fatalf("世界高度外 BaseBlockAt(%+v) = %d", position, got)
 		}
 	}
@@ -110,8 +110,8 @@ func TestBaseBlockAtMatchesGeneratedChunk(t *testing.T) {
 func TestGenerateChunkIsSeamlessAcrossBorders(t *testing.T) {
 	g := worldgen.New(99, false)
 	for wz := int32(-40); wz < 40; wz++ {
-		h0 := g.HeightAt(15, wz)
-		h1 := g.HeightAt(16, wz)
+		h0 := g.HeightAt(core.Overworld, 15, wz)
+		h1 := g.HeightAt(core.Overworld, 16, wz)
 		if d := h0 - h1; d > 4 || d < -4 {
 			t.Fatalf("区块边界 x=15/16, z=%d 处高度突变 %d", wz, d)
 		}
@@ -119,7 +119,7 @@ func TestGenerateChunkIsSeamlessAcrossBorders(t *testing.T) {
 }
 
 func TestGeneratedChunkCompresses(t *testing.T) {
-	c := worldgen.New(7, false).GenerateChunk(core.ChunkPos{X: 0, Z: 0})
+	c := worldgen.New(7, false).GenerateChunk(core.Overworld, core.ChunkPos{X: 0, Z: 0})
 	c.Compact()
 
 	total := 0
@@ -142,11 +142,61 @@ func TestGeneratedChunkCompresses(t *testing.T) {
 func BenchmarkGenerateChunkWithOakTrees(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
-		worldgen.New(42, false).GenerateChunk(core.ChunkPos{X: -1, Z: -1})
+		worldgen.New(42, false).GenerateChunk(core.Overworld, core.ChunkPos{X: -1, Z: -1})
 	}
 }
 
 // digestChunkBytes 把区块全部体素按 golden 相同的 y/z/x 顺序做摘要,用于
+// TestGenerateChunkDimensionSaltDiverges 锁定维度种子派生:同区块在主世界与
+// `Depths` 由各自维度种子独立确定,位置相同但内容分叉。
+func TestGenerateChunkDimensionSaltDiverges(t *testing.T) {
+	g := worldgen.New(42, false)
+	overworld := g.GenerateChunk(core.Overworld, core.ChunkPos{X: 0, Z: 0})
+	depths := g.GenerateChunk(core.Depths, core.ChunkPos{X: 0, Z: 0})
+	if overworld == nil || depths == nil {
+		t.Fatal("nil chunk")
+	}
+	if overworld.Pos != depths.Pos {
+		t.Fatal("pos must match, dimension differs")
+	}
+	if digestChunkBytes(overworld) == digestChunkBytes(depths) {
+		t.Fatal("同种子同区块在双维输出逐字节一致,维度盐未生效")
+	}
+}
+
+// TestNewForDimensionMatchesDimQuery 锁定单维构造器与按维查询一致:
+// `NewForDimension` 只是声明主维度,不改变任一维度的输出。
+func TestNewForDimensionMatchesDimQuery(t *testing.T) {
+	base := worldgen.New(42, false)
+	single := worldgen.NewForDimension(42, false, core.Depths)
+	pos := core.ChunkPos{X: -1, Z: 3}
+	for _, dim := range []core.DimensionID{core.Overworld, core.Depths} {
+		if digestChunkBytes(base.GenerateChunk(dim, pos)) != digestChunkBytes(single.GenerateChunk(dim, pos)) {
+			t.Fatalf("dim=%d 单维构造器与 New 输出不一致", dim)
+		}
+		if base.HeightAt(dim, 7, -11) != single.HeightAt(dim, 7, -11) {
+			t.Fatalf("dim=%d 单维构造器与 New 高度不一致", dim)
+		}
+	}
+}
+
+// TestHeightAtDimensionSaltDiverges 锁定高度图维度化:新维出生扫描必须读到
+// 本维高度,而不是主世界高度。
+func TestHeightAtDimensionSaltDiverges(t *testing.T) {
+	g := worldgen.New(42, false)
+	diverged := false
+	for x := int32(-48); x < 48; x += 7 {
+		for z := int32(-48); z < 48; z += 11 {
+			if g.HeightAt(core.Overworld, x, z) != g.HeightAt(core.Depths, x, z) {
+				diverged = true
+			}
+		}
+	}
+	if !diverged {
+		t.Fatal("采样区内双维高度全一致,维度盐未作用于高度图")
+	}
+}
+
 // 锁定生成纯度(不是 golden 本身,golden 仍由 TestGenerateChunkGolden 持有)。
 func digestChunkBytes(chunk *world.Chunk) string {
 	h := sha256.New()
@@ -171,14 +221,14 @@ func TestGenerateChunkHasNoCrossChunkState(t *testing.T) {
 	fresh := worldgen.New(42, false)
 	want := make(map[core.ChunkPos]string, len(positions))
 	for _, pos := range positions {
-		want[pos] = digestChunkBytes(fresh.GenerateChunk(pos))
+		want[pos] = digestChunkBytes(fresh.GenerateChunk(core.Overworld, pos))
 	}
 	shared := worldgen.New(42, false)
 	neighborSeed := worldgen.New(43, false)
 	for i := len(positions) - 1; i >= 0; i-- {
 		pos := positions[i]
-		_ = neighborSeed.GenerateChunk(pos)
-		if got := digestChunkBytes(shared.GenerateChunk(pos)); got != want[pos] {
+		_ = neighborSeed.GenerateChunk(core.Overworld, pos)
+		if got := digestChunkBytes(shared.GenerateChunk(core.Overworld, pos)); got != want[pos] {
 			t.Fatalf("chunk(%d,%d) 输出受生成顺序/交错种子影响,疑似跨区块状态", pos.X, pos.Z)
 		}
 	}

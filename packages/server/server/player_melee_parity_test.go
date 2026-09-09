@@ -96,7 +96,7 @@ func TestEightPlayersSameTickPrimaryInputKeepsSessionOrder(t *testing.T) {
 	key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{}}
 	memory := storage.NewMemory(storage.Metadata{FormatVersion: 4, Seed: seed, SpawnDimension: core.Overworld})
 	if _, err := memory.SaveBatch(context.Background(), []storage.ChunkSave{{
-		Key: key, Revision: 1, Chunk: multiplayerManualGenerator{}.GenerateChunk(key.Pos),
+		Key: key, Revision: 1, Chunk: multiplayerManualGenerator{}.GenerateChunk(core.Overworld, key.Pos),
 	}}); err != nil {
 		t.Fatal(err)
 	}

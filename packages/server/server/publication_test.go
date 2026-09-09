@@ -445,7 +445,7 @@ type gatedGenerator struct {
 	flat    bool
 }
 
-func (generator *gatedGenerator) GenerateChunk(pos core.ChunkPos) *world.Chunk {
+func (generator *gatedGenerator) GenerateChunk(_ core.DimensionID, pos core.ChunkPos) *world.Chunk {
 	<-generator.release
 	return generator.chunk(pos)
 }

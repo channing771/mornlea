@@ -37,8 +37,8 @@ var multiplayerStartPositions = [...]mgl32.Vec3{
 
 type multiplayerManualGenerator struct{}
 
-func (multiplayerManualGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
-	chunk := flatTestGenerator{}.GenerateChunk(position)
+func (multiplayerManualGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
+	chunk := flatTestGenerator{}.GenerateChunk(core.Overworld, position)
 	if multiplayerManualTarget.Chunk() == position {
 		_, _, z := multiplayerManualTarget.Local()
 		for x := 0; x < core.SectionSize; x++ {
@@ -214,7 +214,7 @@ func runEightManualMultiplayer(t *testing.T, transport string, ticks uint64) mul
 	const seed int64 = 160016
 	key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{}}
 	memory := storage.NewMemory(storage.Metadata{FormatVersion: 4, Seed: seed, SpawnDimension: core.Overworld})
-	if _, err := memory.SaveBatch(context.Background(), []storage.ChunkSave{{Key: key, Revision: 1, Chunk: multiplayerManualGenerator{}.GenerateChunk(key.Pos)}}); err != nil {
+	if _, err := memory.SaveBatch(context.Background(), []storage.ChunkSave{{Key: key, Revision: 1, Chunk: multiplayerManualGenerator{}.GenerateChunk(core.Overworld, key.Pos)}}); err != nil {
 		t.Fatalf("seed initial wanted union: %v", err)
 	}
 	tracked := &trackedMemoryStore{MemoryStore: memory}

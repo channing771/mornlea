@@ -28,7 +28,7 @@ type controlledInteractionGenerator struct {
 	release <-chan struct{}
 }
 
-func (generator controlledInteractionGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (generator controlledInteractionGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	if position == (core.ChunkPos{Z: -1}) {
 		select {
 		case generator.started <- struct{}{}:
@@ -623,7 +623,7 @@ func TestTCPPlayerAndWorldSaveFailureRecovery(t *testing.T) {
 
 type blockedGenerator map[core.BlockPos]core.BlockID
 
-func (generator blockedGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (generator blockedGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	chunk := integrationChunk(position, core.StoneID)
 	for block, id := range generator {
 		if block.Chunk() != position {

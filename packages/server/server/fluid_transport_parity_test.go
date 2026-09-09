@@ -32,7 +32,7 @@ const damParityTicks = 320
 type damGenerator struct{}
 
 // GenerateChunk 实现 Generator。
-func (damGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (damGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	chunk := world.NewChunk(position)
 	for x := range core.SectionSize {
 		for z := range core.SectionSize {
