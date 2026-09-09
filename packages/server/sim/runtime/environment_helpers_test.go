@@ -160,30 +160,6 @@ func readyMiningPlayers(
 	return engine, sessions, targets
 }
 
-type farmlandMoistureCandidateWatch struct {
-	phaseSeen     bool
-	candidateSeen bool
-}
-
-func watchFarmlandMoistureCandidateAtPhase(
-	engine *Engine,
-	dimension core.DimensionID,
-	position core.BlockPos,
-) *farmlandMoistureCandidateWatch {
-	watch := &farmlandMoistureCandidateWatch{}
-	// 方块更新相位收敛后观察点挂在相位入口：此刻本 tick 更早阶段（玩家命令、
-	// 物理）写入触发的入队已可见，湿度结算尚未发生——与旧湿度相位入口的观察
-	// 窗口语义一致。
-	engine.stepPhaseObserver = func(phase stepPhase) {
-		if phase != phaseBlockUpdates {
-			return
-		}
-		watch.phaseSeen = true
-		watch.candidateSeen = engine.realm.FarmlandQueued(dimension, position)
-	}
-	return watch
-}
-
 func loadFlatChunks(t *testing.T, dimension *Dimension, minX, maxX, minZ, maxZ int32) {
 	t.Helper()
 	for x := minX; x <= maxX; x++ {
