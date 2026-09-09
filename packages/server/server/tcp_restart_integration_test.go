@@ -887,3 +887,95 @@ func integrationRegionEntry(
 	}
 	return
 }
+
+// TestDualDimensionReloadAfterRestart 覆盖多维规约的按维存档与重启恢复：
+// 主世界弄脏脚下区块后传送到 depths 再弄脏新维脚下区块，重启后双维的
+// `dimensions/{0,1}/regions` 都必须能重载，且内容哈希一致、revision 单调
+// （只增不减）。两维的哈希都在玩家身处该维时记录，避开离维后区块卸载的
+// 不确定性；`TouchChunkForTest` 按维键递增 revision 并标脏，走正常关服
+// 刷盘路径落盘。
+func TestDualDimensionReloadAfterRestart(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
+	root := t.TempDir()
+	identity := integrationIdentity(0xA2, "DualDimReload")
+	warpAndWaitReady := func(host integrationHost, connected integrationClient, cmd string) {
+		t.Helper()
+		dimension, ok := parseWarpCommand(cmd)
+		if !ok {
+			t.Fatalf("非法传送命令 %q", cmd)
+		}
+		sendIntegration(t, connected.Endpoint, network.ChatCommand{Text: cmd})
+		waitIntegrationState(t, connected, func(message network.ServerMessage) bool {
+			state, ok := message.(network.PlayerState)
+			return ok && state.Dimension == dimension && state.Ready
+		})
+	}
+	footChunk := func(host integrationHost) core.ChunkKey {
+		t.Helper()
+		snapshot := host.PlayerSnapshot(t, identity.PlayerID)
+		return publicationFootChunk(snapshot.Current.Dimension, [3]float32(snapshot.Current.Position))
+	}
+	touchAndHash := func(host integrationHost, key core.ChunkKey) ([32]byte, uint64) {
+		t.Helper()
+		host.Host.world.TouchChunkForTest(key)
+		hash, revision, ok := host.Host.world.ChunkHash(key.Dimension, key.Pos)
+		if !ok {
+			t.Fatalf("维度 %d 区块 %+v 弄脏后不可读", key.Dimension, key.Pos)
+		}
+		return hash, revision
+	}
+
+	first := startDiskHost(t, root, "127.0.0.1:0", playerTestGenerator{})
+	connected := dialIntegrationClient(t, first.Addr, identity)
+	waitClientReadyFor(t, first, connected, identity.PlayerID)
+	overworldKey := footChunk(first)
+	if overworldKey.Dimension != core.Overworld {
+		t.Fatalf("出生脚下维度 = %d，想要主世界", overworldKey.Dimension)
+	}
+	wantOverworldHash, wantOverworldRevision := touchAndHash(first, overworldKey)
+	warpAndWaitReady(first, connected, "/warp depths")
+	depthsKey := footChunk(first)
+	if depthsKey.Dimension != core.Depths {
+		t.Fatalf("传送后脚下维度 = %d，想要 depths", depthsKey.Dimension)
+	}
+	wantDepthsHash, wantDepthsRevision := touchAndHash(first, depthsKey)
+	if err := connected.Close(); err != nil {
+		t.Fatal(err)
+	}
+	first.WaitPlayerSaved(t, identity.PlayerID)
+	first.Shutdown(t)
+
+	assertReloaded := func(host integrationHost, key core.ChunkKey, wantHash [32]byte, wantRevision uint64) {
+		t.Helper()
+		hash, revision, ok := host.Host.world.ChunkHash(key.Dimension, key.Pos)
+		if !ok {
+			t.Fatalf("重启后维度 %d 区块 %+v 未从 region 重载", key.Dimension, key.Pos)
+		}
+		if hash != wantHash {
+			t.Fatalf("重启后维度 %d 区块内容变化: %x，想要 %x", key.Dimension, hash, wantHash)
+		}
+		if revision < wantRevision {
+			t.Fatalf("重启后维度 %d revision 倒退: %d -> %d", key.Dimension, wantRevision, revision)
+		}
+	}
+	second := startDiskHost(t, root, "127.0.0.1:0", playerTestGenerator{})
+	reconnected := dialIntegrationClient(t, second.Addr, identity)
+	waitClientReadyFor(t, second, reconnected, identity.PlayerID)
+	// 玩家在 depths 下线，重启后必须恢复在 depths：这本身即证明 depths 维
+	// 的玩家存档与区块都走了重载路径。
+	if key := footChunk(second); key != depthsKey {
+		t.Fatalf("重启后脚下 = %+v，想要 depths 旧址 %+v", key, depthsKey)
+	}
+	assertReloaded(second, depthsKey, wantDepthsHash, wantDepthsRevision)
+	warpAndWaitReady(second, reconnected, "/warp overworld")
+	if key := footChunk(second); key != overworldKey {
+		t.Fatalf("返回后脚下 = %+v，想要主世界旧址 %+v", key, overworldKey)
+	}
+	assertReloaded(second, overworldKey, wantOverworldHash, wantOverworldRevision)
+	if err := reconnected.Close(); err != nil {
+		t.Fatal(err)
+	}
+	second.Shutdown(t)
+}

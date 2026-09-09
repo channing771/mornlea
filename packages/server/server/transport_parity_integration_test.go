@@ -1091,3 +1091,104 @@ func TestNaturalSeedFarmingMemoryTCPParity(t *testing.T) {
 		t.Fatal("比较结果里缺少「未翻地就种」的拒绝记录")
 	}
 }
+
+// TestWarpParityMemoryVsTCP 覆盖多维规约「单机 Memory 与远程 TCP 复用同一套
+// 传送路径」：同一串 `/warp` 往返命令在两种传输下必须产生相同的维度与
+// `Reset` 序列。两条序列 helper 的可比面是每步落点维度与途中是否见过
+// `Reset` 置位（`Reset` 只在传送 tick 置位，读最终态会漏掉它）。
+func TestWarpParityMemoryVsTCP(t *testing.T) {
+	memoryStates := runWarpSequenceOverMemory(t, 42, []string{"/warp depths", "/warp overworld"})
+	tcpStates := runWarpSequenceOverTCP(t, 42, []string{"/warp depths", "/warp overworld"})
+	if len(memoryStates) != len(tcpStates) {
+		t.Fatalf("memory=%d tcp=%d", len(memoryStates), len(tcpStates))
+	}
+	for i := range memoryStates {
+		if memoryStates[i].dimension != tcpStates[i].dimension || memoryStates[i].reset != tcpStates[i].reset {
+			t.Fatalf("step %d: memory=%+v tcp=%+v", i, memoryStates[i], tcpStates[i])
+		}
+	}
+	// 夹具自证：比较的确实是「往返传送且每次都下发 Reset」的非平凡序列，
+	// 而不是两边同空或同假的假一致。
+	for i, want := range []core.DimensionID{core.Depths, core.Overworld} {
+		if memoryStates[i].dimension != want || !memoryStates[i].reset {
+			t.Fatalf("step %d = %+v，想要维度 %d 且 Reset 置位", i, memoryStates[i], want)
+		}
+	}
+}
+
+// warpStepOutcome 是单步传送的可比结果：落点维度与该步途中是否见过
+// `Reset` 置位。权威 `Reset` 只在传送 tick 置位，随后 tick 即清零，两侧
+// 都按「途中扫描」而非「读最终态」记录，否则 Memory 与 TCP 的采样时序差
+// 会把同一行为记成不同结果。
+type warpStepOutcome struct {
+	dimension core.DimensionID
+	reset     bool
+}
+
+// runWarpSequenceOverMemory 在内存世界里按序执行传送命令并记录每步结果：
+// 复用 `newWarpTestHost` 的双维夹具，每步都推进到目标维就绪。
+func runWarpSequenceOverMemory(t *testing.T, seed int64, cmds []string) []warpStepOutcome {
+	t.Helper()
+	host := newWarpTestHost(t, seed)
+	player := host.SpawnPlayer(t, core.Overworld)
+	out := make([]warpStepOutcome, 0, len(cmds))
+	for _, cmd := range cmds {
+		dimension, ok := parseWarpCommand(cmd)
+		if !ok {
+			t.Fatalf("非法传送命令 %q", cmd)
+		}
+		host.SendChat(t, player, cmd)
+		sawReset := host.StepUntilDimension(t, player, dimension)
+		state := host.PlayerState(t, player)
+		out = append(out, warpStepOutcome{dimension: state.Dimension, reset: sawReset})
+	}
+	return out
+}
+
+// runWarpSequenceOverTCP 与 `runWarpSequenceOverMemory` 同形，只是 host 改走
+// 真实 TCP 链路：复用磁盘重启 harness 的 dial + login helper，命令经客户端
+// endpoint 发送，结果从服务端的 wire `PlayerState` 流里扫描（`sawReset` 与
+// 落点就绪可能不在同一 tick，必须全程扫描，与内存侧的 `StepUntilDimension`
+// 语义对齐）。磁盘 harness 的世界种子固定为 42，与调用点一致。
+func runWarpSequenceOverTCP(t *testing.T, seed int64, cmds []string) []warpStepOutcome {
+	t.Helper()
+	if seed != 42 {
+		t.Fatalf("TCP 传送 parity harness 种子固定为 42，得到 %d", seed)
+	}
+	host := startDiskHost(t, t.TempDir(), "127.0.0.1:0", playerTestGenerator{})
+	identity := integrationIdentity(0xA1, "WarpParity")
+	connected := dialIntegrationClient(t, host.Addr, identity)
+	waitClientReadyFor(t, host, connected, identity.PlayerID)
+	out := make([]warpStepOutcome, 0, len(cmds))
+	for _, cmd := range cmds {
+		dimension, ok := parseWarpCommand(cmd)
+		if !ok {
+			t.Fatalf("非法传送命令 %q", cmd)
+		}
+		sendIntegration(t, connected.Endpoint, network.ChatCommand{Text: cmd})
+		var (
+			sawReset bool
+			landed   network.PlayerState
+		)
+		waitIntegrationState(t, connected, func(message network.ServerMessage) bool {
+			state, ok := message.(network.PlayerState)
+			if !ok {
+				return false
+			}
+			if state.Dimension == dimension && state.Reset {
+				sawReset = true
+			}
+			if state.Dimension == dimension && state.Ready {
+				landed = state
+				return true
+			}
+			return false
+		})
+		out = append(out, warpStepOutcome{dimension: landed.Dimension, reset: sawReset})
+	}
+	if err := connected.Close(); err != nil {
+		t.Fatal(err)
+	}
+	host.Shutdown(t)
+	return out
+}

@@ -76,13 +76,13 @@ func TestMirrorMissingChunkDeltaRequestsOneResync(t *testing.T) {
 	mirror := client.NewMirror()
 	chunk := core.ChunkPos{X: 8, Z: -3}
 	position := core.BlockPos{X: chunk.X << core.SectionShift, Y: core.MinY, Z: chunk.Z << core.SectionShift}
-	delta := blockChanges(core.DimensionID(2), chunk, 1, position, core.StoneID)
+	delta := blockChanges(core.Depths, chunk, 1, position, core.StoneID)
 
 	first, err := mirror.Apply(delta)
 	if err != nil {
 		t.Fatalf("处理缺失区块增量: %v", err)
 	}
-	want := &network.RequestChunkResync{Dimension: 2, Chunk: chunk, HaveRevision: 0}
+	want := &network.RequestChunkResync{Dimension: core.Depths, Chunk: chunk, HaveRevision: 0}
 	if !reflect.DeepEqual(first.Resync, want) {
 		t.Fatalf("Resync = %+v，想要 %+v", first.Resync, want)
 	}
