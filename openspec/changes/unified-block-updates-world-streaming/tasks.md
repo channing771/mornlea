@@ -21,4 +21,4 @@
 
 ## 4. 收尾门禁
 
-- [ ] 4.1 全量收尾：`gofmt -l` 空输出；六模块 `go vet`（或 `make dev-check`）；`make rust`；`make test-race`；`go test ./packages/audit -count=1`；`openspec validate --all --strict --no-interactive`；benchmark record-only 记录并按流程在 `docs/notes/perf-baseline.md` 取证（数值只记录）；`make visual-check` 预期零差异（默认视距不变）
+- [x] 4.1 全量收尾：`gofmt -l` 空输出；六模块 `go vet`（或 `make dev-check`）；`make rust`；`make test-race`；`go test ./packages/audit -count=1`；`openspec validate --all --strict --no-interactive`；benchmark record-only 记录并按流程在 `docs/notes/perf-baseline.md` 取证（数值只记录）；`make visual-check` 预期零差异（默认视距不变）
