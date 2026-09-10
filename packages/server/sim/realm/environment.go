@@ -196,8 +196,8 @@ func (state *State) EnqueueFarmlandMoistureAroundFluid(dimension core.DimensionI
 
 // EnqueueBlockWrite 是权威方块写入后的统一入队门面：写入方（entity 侧经
 // recordChange、环境事务经 EnvironmentMutation.SetBlock）在写块成功后以写前
-// 旧值 old 与新值 block 调用它，全部定时面反activate入队由 (old, block) 的
-// 方块类别派生，策略只有一个真源：
+// 旧值 old 与新值 block 调用它，全部定时面的响应式激活入队由 (old, block)
+// 的方块类别派生，策略只有一个真源：
 //   - 流体域：恒入队目标格及其 6 面邻域，邻接流体获得重估机会；
 //   - 湿度域：流体成员变化（IsFluid(old) != IsFluid(block)）按湿窗口入队；
 //   - 湿度域：新造耕地（IsFarmland(block) 且非 IsFarmland(old)）单格入队，
