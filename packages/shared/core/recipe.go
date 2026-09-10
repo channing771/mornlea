@@ -111,10 +111,10 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 			Output: ItemStack{Item: ItemStoneBrick, Count: 4},
 		}, true
 	// 熔炉与石剑以石料而非圆石为原料：配方原料必须具有自然来源，而
-	// `CobblestoneID` 不参与世界生成（材料表无圆石、无岩浆、无结构生成），
-	// 圆石只能来自一次性的初始发放——空背包起家的世界里以圆石为原料的
-	// 配方会连带熔炼链与铁制工具一起永久不可达。石料是徒手采掘即可采收的
-	// 规范石材，石砖、石镐与石锄早已以它作原料。
+	// `CobblestoneID` 不参与世界生成（材料表无圆石、无岩浆、无结构生成）；
+	// 圆石过去只来自一次性初始发放，该发放取消后已无任何来源，空背包起家
+	// 的世界里以圆石为原料的配方会连带熔炼链与铁制工具一起永久不可达。
+	// 石料是徒手采掘即可采收的规范石材，石砖、石镐与石锄早已以它作原料。
 	case RecipeFurnace:
 		return RecipePattern{
 			Width: 3, Height: 3, Mirror: true,
