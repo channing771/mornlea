@@ -148,14 +148,14 @@ func TestMatchCraftingGridNormalizesPlacementPosition(t *testing.T) {
 }
 
 // TestMatchCraftingGridPreservesInteriorHole 锁定「内部空洞保留」：熔炉配方是
-// 3×3 圆石圆环、中格为空；把中格放上任何物品（同为圆石或无关的铁锭）都必须
+// 3×3 石料圆环、中格为空；把中格放上任何物品（同为石料或无关的铁锭）都必须
 // 失去匹配——裁边只裁外围空行列，不吞掉形状内部的空洞。
 func TestMatchCraftingGridPreservesInteriorHole(t *testing.T) {
 	ring := []uint8{0, 1, 2, 3, 5, 6, 7, 8}
 	build := func(center core.ItemID) [core.CraftingGridSlots]core.ItemStack {
 		cells := make([]gridCell, 0, 9)
 		for _, slot := range ring {
-			cells = append(cells, gridCell{slot: slot, item: core.ItemCobblestone})
+			cells = append(cells, gridCell{slot: slot, item: core.ItemStone})
 		}
 		if center != core.ItemNone {
 			cells = append(cells, gridCell{slot: 4, item: center})
@@ -167,7 +167,7 @@ func TestMatchCraftingGridPreservesInteriorHole(t *testing.T) {
 	if !ok || id != core.RecipeFurnace {
 		t.Fatalf("中空圆环匹配 = (%d, %v)，想要熔炉配方 %d", id, ok, core.RecipeFurnace)
 	}
-	for _, center := range []core.ItemID{core.ItemCobblestone, core.ItemIronIngot} {
+	for _, center := range []core.ItemID{core.ItemStone, core.ItemIronIngot} {
 		if _, _, ok := core.MatchCraftingGrid(3, build(center)); ok {
 			t.Fatalf("中心被 %d 填充后仍匹配：内部空洞必须保留", center)
 		}
@@ -346,9 +346,9 @@ func TestRecipeShapeTableOneToThirteenIsFrozen(t *testing.T) {
 			Output: core.ItemStack{Item: core.ItemStoneBrick, Count: 4}}},
 		{2, core.RecipePattern{Width: 3, Height: 3, Mirror: true,
 			Cells: [core.CraftingGridSlots]core.ItemID{
-				core.ItemCobblestone, core.ItemCobblestone, core.ItemCobblestone,
-				core.ItemCobblestone, core.ItemNone, core.ItemCobblestone,
-				core.ItemCobblestone, core.ItemCobblestone, core.ItemCobblestone,
+				core.ItemStone, core.ItemStone, core.ItemStone,
+				core.ItemStone, core.ItemNone, core.ItemStone,
+				core.ItemStone, core.ItemStone, core.ItemStone,
 			},
 			Output: core.ItemStack{Item: core.ItemFurnace, Count: 1}}},
 		{3, core.RecipePattern{Width: 3, Height: 3, Mirror: true,
@@ -521,7 +521,7 @@ func TestSwordRecipesMatchAllColumns(t *testing.T) {
 		output   core.ItemStack
 	}{
 		{"木剑", core.ItemOakPlanks, core.RecipeWoodenSword, core.ItemStack{Item: core.ItemWoodenSword, Count: 1, Durability: 59}},
-		{"石剑", core.ItemCobblestone, core.RecipeStoneSword, core.ItemStack{Item: core.ItemStoneSword, Count: 1, Durability: 131}},
+		{"石剑", core.ItemStone, core.RecipeStoneSword, core.ItemStack{Item: core.ItemStoneSword, Count: 1, Durability: 131}},
 		{"铁剑", core.ItemIronIngot, core.RecipeIronSword, core.ItemStack{Item: core.ItemIronSword, Count: 1, Durability: 250}},
 	}
 	for _, test := range tests {
@@ -548,7 +548,7 @@ func TestSwordRecipesRejectInvalidShapes(t *testing.T) {
 		material core.ItemID
 	}{
 		{"木剑", core.ItemOakPlanks},
-		{"石剑", core.ItemCobblestone},
+		{"石剑", core.ItemStone},
 		{"铁剑", core.ItemIronIngot},
 	}
 	for _, test := range tests {

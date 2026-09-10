@@ -43,8 +43,8 @@ func TestSwordRecipePatternsAreStable(t *testing.T) {
 		{RecipeStoneSword, 18, RecipePattern{
 			Width: 1, Height: 3, Mirror: true,
 			Cells: [CraftingGridSlots]ItemID{
-				ItemCobblestone, ItemNone, ItemNone,
-				ItemCobblestone, ItemNone, ItemNone,
+				ItemStone, ItemNone, ItemNone,
+				ItemStone, ItemNone, ItemNone,
 				ItemStick, ItemNone, ItemNone,
 			},
 			Output: ItemStack{Item: ItemStoneSword, Count: 1, Durability: 131},

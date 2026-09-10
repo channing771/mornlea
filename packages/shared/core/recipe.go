@@ -6,7 +6,7 @@ type RecipeID uint8
 const (
 	// RecipeStoneBricks 用 2×2 石头合成 4 个石砖。
 	RecipeStoneBricks RecipeID = iota + 1
-	// RecipeFurnace 用 3×3 圆石圆环（中格为空）合成 1 个熔炉。
+	// RecipeFurnace 用 3×3 石料圆环（中格为空）合成 1 个熔炉。
 	RecipeFurnace
 	// RecipeIronBlock 用 3×3 铁锭合成 1 个铁块。
 	RecipeIronBlock
@@ -59,7 +59,7 @@ const (
 	RecipeBed
 	// RecipeWoodenSword 用两块橡木木板纵列加一根木棍合成满耐久木剑。
 	RecipeWoodenSword
-	// RecipeStoneSword 用两块圆石纵列加一根木棍合成满耐久石剑。
+	// RecipeStoneSword 用两块石料纵列加一根木棍合成满耐久石剑。
 	RecipeStoneSword
 	// RecipeIronSword 用两块铁锭纵列加一根木棍合成满耐久铁剑。
 	RecipeIronSword
@@ -110,13 +110,18 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 			},
 			Output: ItemStack{Item: ItemStoneBrick, Count: 4},
 		}, true
+	// 熔炉与石剑以石料而非圆石为原料：配方原料必须具有自然来源，而
+	// `CobblestoneID` 不参与世界生成（材料表无圆石、无岩浆、无结构生成），
+	// 圆石只能来自一次性的初始发放——空背包起家的世界里以圆石为原料的
+	// 配方会连带熔炼链与铁制工具一起永久不可达。石料是徒手采掘即可采收的
+	// 规范石材，石砖、石镐与石锄早已以它作原料。
 	case RecipeFurnace:
 		return RecipePattern{
 			Width: 3, Height: 3, Mirror: true,
 			Cells: [CraftingGridSlots]ItemID{
-				ItemCobblestone, ItemCobblestone, ItemCobblestone,
-				ItemCobblestone, ItemNone, ItemCobblestone,
-				ItemCobblestone, ItemCobblestone, ItemCobblestone,
+				ItemStone, ItemStone, ItemStone,
+				ItemStone, ItemNone, ItemStone,
+				ItemStone, ItemStone, ItemStone,
 			},
 			Output: ItemStack{Item: ItemFurnace, Count: 1},
 		}, true
@@ -269,12 +274,13 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 			},
 			Output: ItemStack{Item: ItemWoodenSword, Count: 1, Durability: 59},
 		}, true
+	// 石剑的原料约束与熔炉相同：石料徒手可采，圆石不参与世界生成。
 	case RecipeStoneSword:
 		return RecipePattern{
 			Width: 1, Height: 3, Mirror: true,
 			Cells: [CraftingGridSlots]ItemID{
-				ItemCobblestone, ItemNone, ItemNone,
-				ItemCobblestone, ItemNone, ItemNone,
+				ItemStone, ItemNone, ItemNone,
+				ItemStone, ItemNone, ItemNone,
 				ItemStick, ItemNone, ItemNone,
 			},
 			Output: ItemStack{Item: ItemStoneSword, Count: 1, Durability: 131},
