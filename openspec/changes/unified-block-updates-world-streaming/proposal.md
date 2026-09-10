@@ -18,7 +18,7 @@
 实现期全部裁决与验证证据见 `ledger.md`；以下为终审时仍开放的记档项（不阻塞本 change）：
 
 1. **存档 job 单 FIFO 的加载优先级**：generate job 排在全部 load job 之后、探针 Workers=1 ~3 job/tick——大世界冷启动/传送暖起的首个改进候选（3.4 实测记档，也是 scenario v23 视距梯度收敛 2/4/6/8 的根因）。
-2. **拆锁的既定代价**（3.3 评审 M-2/M-3/M-4，代码注释已声明）：`Sync` 全量 pin 扰动 LRU 且是唯一超限窗口；Backup 与 Close 语义从「互斥快照」变「入口检查后尽力复制」；`ChunkKeys` 快照粒度从全局一致弱化为逐 region 合法提交点。
+2. **拆锁的既定代价**（3.3 评审 M-2/M-3/M-4，代码注释已声明；Backup 部分经终审 I-1 修复收敛）：`Sync` 全量 pin 扰动 LRU 且是唯一超限窗口；Backup 语义从「互斥快照」弱化为「region 文件复制经缓存句柄读锁与同 region 保存/Compact 提交串行（双 bank 撕裂窗口已关），非 region 聚合文件入口检查后尽力复制，与 Close 并发时在排空边界以 `os.ErrClosed` 中止」；`ChunkKeys` 快照粒度从全局一致弱化为逐 region 合法提交点。
 3. **streaming 门禁的 race 覆盖**（3.4 评审 M-1）：端到端探针测试在 -race 下被既有 skip 跳过，streaming 完整性门禁只在非 race 构建生效（既有测试设计取舍）。
 4. **perf 记录项**（均已入 `docs/notes/perf-baseline.md` v23 段，record-only）：`BenchmarkAdvanceEval` 微基准 +~10%（统一调度器跨域扫描+间接回调）；本机首测 tick p99 11.2ms、flying p99 17.9ms 达到记录性阈值（跨硬件 M2 vs 历史 M5 只作定性对照）。
 5. **环境项**：`make build` 尾部可选资产包 `pixel_perfection` 的 ATTRIBUTION 拷贝在本机失败（该包未 provision，预存在条件，非本 change 缺陷）。

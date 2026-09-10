@@ -536,10 +536,12 @@ func TestDiskStoreInFlightRegionReferenceDefersEviction(t *testing.T) {
 	}
 }
 
-// TestDiskStoreChunkKeysAndBackupRunWhileChunkSaveParked 钉住全量枚举的只读
-// 快照形态：区块保存停靠期间 ChunkKeys 与 Backup 都能完成，不长时间持任何
-// 会阻塞区块 I/O 的全局锁。
-func TestDiskStoreChunkKeysAndBackupRunWhileChunkSaveParked(t *testing.T) {
+// TestDiskStoreChunkKeysRunsWhileChunkSaveParkedAndBackupSerializes 钉住全量
+// 枚举与备份复制在并行边界上的分工：区块保存停靠（持容器写锁）期间
+// ChunkKeys 照常完成（独立临时打开，不经缓存句柄、不持 region 锁）；Backup
+// 的 region 文件复制经缓存句柄读锁与停靠保存串行——停靠期间不可能完成，
+// 保存提交后完成的备份与在线文件逐位一致（复制总是完整提交点）。
+func TestDiskStoreChunkKeysRunsWhileChunkSaveParkedAndBackupSerializes(t *testing.T) {
 	root := t.TempDir()
 	store, err := OpenDisk(context.Background(), root, OpenOptions{
 		Create: Metadata{FormatVersion: currentMetadataVersion, Seed: 42},
@@ -552,14 +554,15 @@ func TestDiskStoreChunkKeysAndBackupRunWhileChunkSaveParked(t *testing.T) {
 	if _, err := store.SaveBatch(context.Background(), diskSavesFor([]core.ChunkKey{parked, other}, 1)); err != nil {
 		t.Fatal(err)
 	}
-	regionKey, _ := RegionFor(parked)
+	parkedRegion, _ := RegionFor(parked)
+	otherRegion, _ := RegionFor(other)
 	started := make(chan struct{})
 	release := make(chan struct{})
 	var releaseOnce sync.Once
 	// defer 逆序保证失败路径先放行门闩再 Close，避免 Close 排空时卡死。
 	defer store.Close()
 	defer releaseOnce.Do(func() { close(release) })
-	handle := store.regions[regionKey]
+	handle := store.regions[parkedRegion]
 	handle.ReplaceFile(&gatedSyncRegionFile{
 		File: handle.File(), started: started, release: release,
 	})
@@ -580,18 +583,32 @@ func TestDiskStoreChunkKeysAndBackupRunWhileChunkSaveParked(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	destination := filepath.Join(t.TempDir(), "backup")
 	backupDone := make(chan error, 1)
 	go func() {
-		backupDone <- store.Backup(context.Background(), filepath.Join(t.TempDir(), "backup"))
+		backupDone <- store.Backup(context.Background(), destination)
 	}()
-	if err := waitForTestError(t, backupDone, "Backup 被停靠的区块保存阻塞"); err != nil {
-		t.Fatal(err)
-	}
+	// 停靠保存持写锁：备份对停靠 region 的复制被读锁串行化，不可能完成。
+	assertNotCompletedWithin(t, backupDone, 150*time.Millisecond, "停靠的区块保存持写锁期间 Backup 已完成")
 
 	releaseOnce.Do(func() { close(release) })
 	if err := waitForTestError(t, saveDone, "停靠的区块保存未完成"); err != nil {
 		t.Fatal(err)
 	}
+	if err := waitForTestError(t, backupDone, "串行后的 Backup 未完成"); err != nil {
+		t.Fatal(err)
+	}
+	// 备份内的 region 文件分别在各自提交点之后复制，与在线文件逐位一致。
+	assertSameFileContents(
+		t,
+		filepath.Join(root, dimensionRegionPath(parkedRegion)),
+		filepath.Join(destination, dimensionRegionPath(parkedRegion)),
+	)
+	assertSameFileContents(
+		t,
+		filepath.Join(root, dimensionRegionPath(otherRegion)),
+		filepath.Join(destination, dimensionRegionPath(otherRegion)),
+	)
 	stored, err := store.LoadChunk(context.Background(), parked)
 	if err != nil || stored.Revision != 2 {
 		t.Fatalf("停靠后区块 revision = %d（err %v），想要 2", stored.Revision, err)

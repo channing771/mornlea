@@ -9,7 +9,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 const (
@@ -29,9 +32,12 @@ type backupDirectory struct {
 	mode fs.FileMode
 }
 
-// Backup 在当前世界锁内创建可验证的完整目录备份。复制不长时间持有任何全局
-// 锁：region 文件的双 bank 提交与各聚合文件的原子替换保证并发写入下复制的
-// 仍是某个完整合法的提交点，备份因此可与并行保存同时进行。
+// Backup 在当前世界锁内创建可验证的完整目录备份。region 文件的复制经与
+// 保存方相同的缓存句柄在 per-region 读锁下与同 region 的 Save/Compact 写
+// 提交串行：复制的 header 与数据区同属一个已提交代，双 bank 修复语义在
+// 备份副本内保持成立。非 region 文件（world.meta、players 等原子替换聚合）
+// 为尽力复制；复制全程不长时间持有 regionMu 或任何类别锁，不同 region 与
+// 不同类别的并行保存不受阻塞。
 func (store *DiskStore) Backup(ctx context.Context, destination string) error {
 	return store.backup(ctx, destination, os.Rename, syncDirectory)
 }
@@ -106,7 +112,7 @@ func (store *DiskStore) backup(
 		}
 	}()
 
-	directories, err := copyWorldBackup(ctx, source, temporary)
+	directories, err := store.copyWorldBackup(ctx, source, temporary)
 	if err != nil {
 		return err
 	}
@@ -200,7 +206,11 @@ func matchingBackup(destination string, want backupIdentity) (bool, error) {
 	return true, nil
 }
 
-func copyWorldBackup(ctx context.Context, source, destination string) ([]backupDirectory, error) {
+// copyWorldBackup 遍历 source 世界目录把全部正式条目复制到 destination 下
+// 的新树：region 布局文件经缓存句柄读锁复制（与保存提交串行），其余文件
+// 直读复制；全部临时命名家族与 world.lock 被跳过。返回已创建目录清单供
+// 调用方收尾同步。
+func (store *DiskStore) copyWorldBackup(ctx context.Context, source, destination string) ([]backupDirectory, error) {
 	directories := make([]backupDirectory, 0, 8)
 	err := filepath.WalkDir(source, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -261,6 +271,12 @@ func copyWorldBackup(ctx context.Context, source, destination string) ([]backupD
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("world entry %q is not a regular file or directory", path)
 		}
+		if regionKey, ok := regionKeyForBackupPath(relative); ok {
+			if err := store.copyRegionBackup(ctx, regionKey, path, target, info.Mode()); err != nil {
+				return err
+			}
+			return nil
+		}
 		if err := copyBackupFile(ctx, path, target, info.Mode()); err != nil {
 			return err
 		}
@@ -277,17 +293,93 @@ func copyBackupFile(ctx context.Context, source, destination string, mode fs.Fil
 	if err != nil {
 		return fmt.Errorf("open source file %q: %w", source, err)
 	}
+	copyErr := copyBackupIntoNewFile(source, destination, mode, func(writer io.Writer) error {
+		_, err := io.Copy(writer, contextReader{ctx: ctx, reader: input})
+		return err
+	})
+	return errors.Join(copyErr, input.Close())
+}
+
+// regionKeyForBackupPath 判定世界根内的相对路径是否为 DiskStore 布局的
+// region 文件 `dimensions/<dim>/regions/r.<X>.<Z>.region` 并解析出缓存键；
+// 数字分量一律要求规范十进制形式，`+0`、`08` 之类旁路命名不进缓存路径，
+// 按普通文件尽力复制。
+func regionKeyForBackupPath(relative string) (RegionKey, bool) {
+	parts := strings.Split(relative, string(filepath.Separator))
+	if len(parts) != 4 || parts[0] != "dimensions" || parts[2] != "regions" {
+		return RegionKey{}, false
+	}
+	dimension, err := strconv.ParseInt(parts[1], 10, 32)
+	if err != nil || parts[1] != strconv.FormatInt(dimension, 10) {
+		return RegionKey{}, false
+	}
+	name, ok := strings.CutPrefix(parts[3], "r.")
+	if !ok {
+		return RegionKey{}, false
+	}
+	name, ok = strings.CutSuffix(name, ".region")
+	if !ok {
+		return RegionKey{}, false
+	}
+	coordinates := strings.Split(name, ".")
+	if len(coordinates) != 2 {
+		return RegionKey{}, false
+	}
+	regionX, errX := strconv.ParseInt(coordinates[0], 10, 32)
+	regionZ, errZ := strconv.ParseInt(coordinates[1], 10, 32)
+	if errX != nil || errZ != nil ||
+		coordinates[0] != strconv.FormatInt(regionX, 10) ||
+		coordinates[1] != strconv.FormatInt(regionZ, 10) {
+		return RegionKey{}, false
+	}
+	return RegionKey{
+		Dimension: core.DimensionID(dimension),
+		X:         int32(regionX),
+		Z:         int32(regionZ),
+	}, true
+}
+
+// copyRegionBackup 经与保存方相同的缓存路径复制单个 region 文件：句柄在
+// regionMu 内取用并登记在途引用（LRU 淘汰与 Close 排空都不会关闭复制中的
+// 句柄），复制本体在容器读锁内进行，与同 region 的 Save/Compact 写提交
+// 互斥，备份字节因此总对应某个完整提交点。store 已进入排空（Close）时新
+// 的句柄取用失败，备份以 os.ErrClosed 中止；在途复制先行排空后 Close 才
+// 关闭句柄，两者不交叠。
+func (store *DiskStore) copyRegionBackup(
+	ctx context.Context,
+	key RegionKey,
+	source, destination string,
+	mode fs.FileMode,
+) error {
+	handle, err := store.acquireRegion(ctx, key, false)
+	if err != nil {
+		return fmt.Errorf("acquire region %+v for backup: %w", key, err)
+	}
+	defer store.releaseRegion(handle)
+	return copyBackupIntoNewFile(source, destination, mode, func(writer io.Writer) error {
+		_, err := handle.CopyTo(ctx, writer)
+		return err
+	})
+}
+
+// copyBackupIntoNewFile 以排他方式创建 destination，把 copy 回调写入的内容
+// 落盘并完成 fsync、关闭与权限对齐；source 仅用于错误定位。直读文件与
+// 读锁内经缓存句柄读取两条备份路径共用此落盘骨架。
+func copyBackupIntoNewFile(
+	source, destination string,
+	mode fs.FileMode,
+	copy func(io.Writer) error,
+) error {
 	output, err := os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode.Perm())
 	if err != nil {
-		_ = input.Close()
 		return fmt.Errorf("create backup file %q: %w", destination, err)
 	}
-	_, copyErr := io.Copy(output, contextReader{ctx: ctx, reader: input})
+	copyErr := copy(output)
 	var syncErr error
 	if copyErr == nil {
 		syncErr = output.Sync()
 	}
-	closeErr := errors.Join(output.Close(), input.Close())
+	closeErr := output.Close()
 	if err := errors.Join(copyErr, syncErr, closeErr); err != nil {
 		return fmt.Errorf("copy %q to %q: %w", source, destination, err)
 	}

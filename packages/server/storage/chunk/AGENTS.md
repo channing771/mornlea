@@ -53,6 +53,12 @@ region 包：`Region.Save`/`Region.Load` 直接调用本包信封编解码并经
   回退资格、revision 溢出与未来载荷拒绝由 `TestRegionRecovers*` 族钉死；
   取消传播由 `TestRegionSyncHonorsCancellation`、
   `TestRegionCanceledSaveDoesNotSwitchBank` 钉死。
+- 整文件只读复制：`Region.CopyTo` 在容器读锁内流式复制整个 region 文件，
+  与并行的 Save/Compact 写提交互斥，供根包 Backup 走与保存方相同的
+  串行化路径（复制总是完整提交点）；阻塞语义由根包
+  `TestWorldBackupRegionCopyBlocksConcurrentSaveOnSameRegion`、成品可解码
+  性由 `TestWorldBackupWithConcurrentSavesDuringCopyYieldsCommittedRevision`
+  钉死。
 - 压缩策略消费本包侧 `region.SpacePolicy`/`region.CompactionHooks`：
   触发判定的容器行为由 `TestRegionSaveReusesInactiveOnlyExtentWithoutGrowing`
   与 `TestRegionCompactReplacesFragmentedFileWithoutChangingChunks` 钉死。
