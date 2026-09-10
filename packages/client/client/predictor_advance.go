@@ -59,8 +59,13 @@ func (p *Predictor) Advance(
 		}
 		// 疾跑饥饿门控与服务端同阈值：镜像饥饿<6 时不触发加速，客户端预测与
 		// 服务端权威因此同向，避免“客户端以为在跑、服务端按走”的持续纠偏。
+		// 潜行优先于疾跑：潜行置位即压住疾跑（潜行减速本身不受饥饿影响）。
 		sprinting := control.Sprinting
+		sneaking := control.Sneaking
 		if p.hunger < 6 {
+			sprinting = false
+		}
+		if sneaking {
 			sprinting = false
 		}
 		message := network.PlayerInput{
@@ -73,6 +78,7 @@ func (p *Predictor) Advance(
 			Mining:    control.Mining,
 			Eating:    control.Eating,
 			Sprinting: sprinting,
+			Sneaking:  sneaking,
 		}
 		if err := send(message); err != nil {
 			return err
@@ -86,6 +92,7 @@ func (p *Predictor) Advance(
 				Jump:      message.Jump,
 				Yaw:       message.Yaw,
 				Sprinting: sprinting,
+				Sneaking:  sneaking,
 			},
 		})
 		p.previous = p.current

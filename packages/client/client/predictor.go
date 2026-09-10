@@ -31,6 +31,9 @@ type Control struct {
 	// Sprinting 是本帧是否请求疾跑。门控见 sprint spec：地面+前移+非浸没+饥饿≥6 时
 	// 才在物理侧提升目标速度，客户端只上行意图，服务端与预测侧各自按权威/镜像饥饿门控。
 	Sprinting bool
+	// Sneaking 是本帧是否请求潜行。门控见 sneak spec：站立非浸没时才在物理侧
+	// 降速且钳制崖边，客户端只上行意图，服务端与预测侧各自按权威/镜像状态门控。
+	Sneaking bool
 }
 
 // ReconcileResult 描述权威状态和解对视角的影响。
