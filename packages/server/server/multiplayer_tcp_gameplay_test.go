@@ -410,7 +410,7 @@ func connectMultiplayerTCPClient(
 	if err != nil {
 		return nil, fmt.Errorf("DialTCP %s: %w", identity.DisplayName, err)
 	}
-	endpoint, err := network.LoginClient(ctx, stream, identity)
+	endpoint, err := network.LoginClient(ctx, stream, identity, 32)
 	if err != nil {
 		_ = stream.Close()
 		return nil, fmt.Errorf("LoginClient %s: %w", identity.DisplayName, err)

@@ -16,8 +16,8 @@ var cropSampleKey = core.ChunkKey{
 // TestSampleCellsIsPureAndDeterministic 锁定 spec「相同输入重放结果一致」的
 // 最内层前提：抽样是纯函数，同一组输入任意次调用都给出逐元素相同的结果。
 func TestSampleCellsIsPureAndDeterministic(t *testing.T) {
-	first := sampleCells(0x5eed, 1234, cropSampleKey, 5, 8, nil)
-	second := sampleCells(0x5eed, 1234, cropSampleKey, 5, 8, nil)
+	first := sampler.SampleCells(0x5eed, 1234, cropSampleKey, 5, 8, nil)
+	second := sampler.SampleCells(0x5eed, 1234, cropSampleKey, 5, 8, nil)
 	if len(first) != 8 || len(second) != 8 {
 		t.Fatalf("抽样条数 first=%d second=%d，想要 8", len(first), len(second))
 	}
@@ -28,7 +28,7 @@ func TestSampleCellsIsPureAndDeterministic(t *testing.T) {
 	}
 	// 复用调用方缓冲不得改变结果——生产路径正是靠复用 scratch 避免每 tick 分配。
 	buffer := make([]int, 0, 8)
-	buffer = sampleCells(0x5eed, 1234, cropSampleKey, 5, 8, buffer)
+	buffer = sampler.SampleCells(0x5eed, 1234, cropSampleKey, 5, 8, buffer)
 	for index := range first {
 		if buffer[index] != first[index] {
 			t.Fatalf("复用缓冲改变了第 %d 条抽样：%d 与 %d", index, buffer[index], first[index])
@@ -48,7 +48,7 @@ func TestSampleCellsVariesWithEveryInput(t *testing.T) {
 		sectionY = 5
 		count    = 8
 	)
-	base := sampleCells(seed, tick, cropSampleKey, sectionY, count, nil)
+	base := sampler.SampleCells(seed, tick, cropSampleKey, sectionY, count, nil)
 	otherDimension := cropSampleKey
 	otherDimension.Dimension++
 	otherX := cropSampleKey
@@ -59,12 +59,12 @@ func TestSampleCellsVariesWithEveryInput(t *testing.T) {
 		name   string
 		sample []int
 	}{
-		{"不同世界种子", sampleCells(seed+1, tick, cropSampleKey, sectionY, count, nil)},
-		{"不同 tick", sampleCells(seed, tick+1, cropSampleKey, sectionY, count, nil)},
-		{"不同维度", sampleCells(seed, tick, otherDimension, sectionY, count, nil)},
-		{"不同区块 X", sampleCells(seed, tick, otherX, sectionY, count, nil)},
-		{"不同区块 Z", sampleCells(seed, tick, otherZ, sectionY, count, nil)},
-		{"不同区段索引", sampleCells(seed, tick, cropSampleKey, sectionY+1, count, nil)},
+		{"不同世界种子", sampler.SampleCells(seed+1, tick, cropSampleKey, sectionY, count, nil)},
+		{"不同 tick", sampler.SampleCells(seed, tick+1, cropSampleKey, sectionY, count, nil)},
+		{"不同维度", sampler.SampleCells(seed, tick, otherDimension, sectionY, count, nil)},
+		{"不同区块 X", sampler.SampleCells(seed, tick, otherX, sectionY, count, nil)},
+		{"不同区块 Z", sampler.SampleCells(seed, tick, otherZ, sectionY, count, nil)},
+		{"不同区段索引", sampler.SampleCells(seed, tick, cropSampleKey, sectionY+1, count, nil)},
 	} {
 		if equalInts(base, tc.sample) {
 			t.Errorf("%s 抽出了与基准完全相同的 %v，该输入没有被折进哈希", tc.name, base)
@@ -88,7 +88,7 @@ func TestSampleCellsCoversSectionWithoutBias(t *testing.T) {
 	distinct := make(map[int]struct{}, ticks)
 	var buffer []int
 	for tick := range uint64(ticks) {
-		buffer = sampleCells(0, tick, cropSampleKey, 0, 1, buffer)
+		buffer = sampler.SampleCells(0, tick, cropSampleKey, 0, 1, buffer)
 		cell := buffer[0]
 		if cell < 0 || cell >= core.BlocksPerSection {
 			t.Fatalf("tick %d 抽到越界下标 %d", tick, cell)
@@ -135,10 +135,10 @@ var cropRollPositions = []core.BlockPos{
 func TestCropGrowthRollHonoursEndpoints(t *testing.T) {
 	for _, position := range cropRollPositions {
 		for tick := range uint64(64) {
-			if cropGrowthRoll(0x5eed, tick, core.Overworld, position, 0) {
+			if sampler.CropGrowthRoll(0x5eed, tick, core.Overworld, position, 0) {
 				t.Fatalf("概率 0 在 tick %d、%+v 上通过了判定", tick, position)
 			}
-			if !cropGrowthRoll(0x5eed, tick, core.Overworld, position, 100) {
+			if !sampler.CropGrowthRoll(0x5eed, tick, core.Overworld, position, 100) {
 				t.Fatalf("概率 100 在 tick %d、%+v 上未通过判定", tick, position)
 			}
 		}
@@ -152,7 +152,7 @@ func cropRollStream(
 ) []bool {
 	stream := make([]bool, ticks)
 	for tick := range ticks {
-		stream[tick] = cropGrowthRoll(seed, uint64(tick), dimension, position, percent)
+		stream[tick] = sampler.CropGrowthRoll(seed, uint64(tick), dimension, position, percent)
 	}
 	return stream
 }
@@ -181,7 +181,8 @@ func equalBools(a, b []bool) bool {
 //     tick 上翻转的实现都会红，而只断言"有 true 也有 false"不会；
 //  3. **维度被折进哈希**——两个维度的判定序列必须不同。core.BlockPos 不带维度，
 //     不折的话两个世界里同坐标的作物每 tick 拿到逐位相同的判定；
-//  4. **与抽样不是同一条哈希流**——这是 cropGrowthRollSalt 存在的理由。它守的
+//  4. **与抽样不是同一条哈希流**——这是独立盐值（`updates.CropGrowthRollSalt`）
+//     存在的理由。它守的
 //     是"概率判定直接复用抽样哈希"这种同源实现，不是 salt 常量本身的取值。
 func TestCropGrowthRollAtFiftyIsDeterministicAndIndependent(t *testing.T) {
 	const (
@@ -215,7 +216,7 @@ func TestCropGrowthRollAtFiftyIsDeterministicAndIndependent(t *testing.T) {
 	sampling := make([]bool, ticks)
 	key := core.ChunkKey{Dimension: core.Overworld, Pos: position.Chunk()}
 	for tick := range ticks {
-		buffer = sampleCells(seed, uint64(tick), key, position.SectionIndex(), 1, buffer)
+		buffer = sampler.SampleCells(seed, uint64(tick), key, position.SectionIndex(), 1, buffer)
 		sampling[tick] = buffer[0]%100 < 50
 	}
 	if equalBools(stream, sampling) {

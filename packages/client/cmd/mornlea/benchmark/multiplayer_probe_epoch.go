@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/packages/client/client"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 const (
@@ -16,6 +17,10 @@ const (
 	benchmarkServerMeasuredTicks   = 200
 	benchmarkServerInterestSamples = 8 * benchmarkServerMeasuredTicks
 	benchmarkServerSignalCapacity  = benchmarkServerWarmupTicks + benchmarkServerMeasuredTicks + 16
+	// benchmarkStreamingLatencyCapacity 是区块加载时延环形缓冲容量：视距
+	// 梯度最大会话（视距 8 → 半径 9）的订阅方形 361 区块，容量取 8192 为
+	// 重载（失败重试等）留出充裕余量；溢出时保留最新样本，报告仍完整。
+	benchmarkStreamingLatencyCapacity = 8192
 )
 
 type benchmarkServerEpochPhase uint32
@@ -48,13 +53,28 @@ type benchmarkServerEpoch struct {
 	signals       chan benchmarkServerTickSignal
 	ticks         *client.LatencyRecorder
 	interest      *client.LatencyRecorder
+	// streaming 三件套只经 `StreamingObserver` 在服务端 step goroutine 上
+	// 串行触达；探针侧读取唯一发生在服务端 run 结束（cleanup join）之后，
+	// 因此无锁。与 `ticks`/`interest` 的串行纪律一致。
+	//
+	// streaming 与它们有一处刻意不同：不在 `beginMeasurement` 里 Reset——
+	// 区块装载从会话登录即开始，多数发生在 warm-up 之前，指标族覆盖探针
+	// 整个生命周期而非仅 measured 窗口。
+	streaming    *client.LatencyRecorder
+	loadBegins   map[core.ChunkKey]time.Time
+	readyKeys    map[core.ChunkKey]struct{}
+	streamingNow func() time.Time
 }
 
 func newBenchmarkServerEpoch() *benchmarkServerEpoch {
 	return &benchmarkServerEpoch{
-		signals:  make(chan benchmarkServerTickSignal, benchmarkServerSignalCapacity),
-		ticks:    client.NewLatencyRecorder(512),
-		interest: client.NewLatencyRecorder(4096),
+		signals:      make(chan benchmarkServerTickSignal, benchmarkServerSignalCapacity),
+		ticks:        client.NewLatencyRecorder(512),
+		interest:     client.NewLatencyRecorder(4096),
+		streaming:    client.NewLatencyRecorder(benchmarkStreamingLatencyCapacity),
+		loadBegins:   make(map[core.ChunkKey]time.Time),
+		readyKeys:    make(map[core.ChunkKey]struct{}),
+		streamingNow: time.Now,
 	}
 }
 
@@ -126,6 +146,35 @@ func (epoch *benchmarkServerEpoch) measuring() bool {
 func (epoch *benchmarkServerEpoch) observeInterest(duration time.Duration) {
 	if epoch.measuring() {
 		epoch.interest.Add(duration)
+	}
+}
+
+// observeChunkStreaming 消费服务端 `StreamingObserver` 的当 tick 装载/就绪
+// 键：装载请求记为 BeginLoading 起点，就绪事件与起点配对产出加载时延样本
+// （CancelUnload 直达就绪的区块没有起点，只计入加载计数）。就绪键按区块
+// 去重，稳态下即订阅并集实际驻留的区块数。
+func (epoch *benchmarkServerEpoch) observeChunkStreaming(
+	acquired []core.ChunkKey,
+	ready []core.ChunkKey,
+) {
+	now := epoch.streamingNow()
+	for _, key := range acquired {
+		epoch.loadBegins[key] = now
+	}
+	for _, key := range ready {
+		if begin, pending := epoch.loadBegins[key]; pending {
+			delete(epoch.loadBegins, key)
+			epoch.streaming.Add(now.Sub(begin))
+		}
+		epoch.readyKeys[key] = struct{}{}
+	}
+}
+
+// streamingSummary 只能在服务端 run 结束后调用（见结构体注释的串行纪律）。
+func (epoch *benchmarkServerEpoch) streamingSummary() client.StreamingSummary {
+	return client.StreamingSummary{
+		LoadedChunks: len(epoch.readyKeys),
+		LoadLatency:  epoch.streaming.Summary(),
 	}
 }
 

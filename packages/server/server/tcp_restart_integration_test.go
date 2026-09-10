@@ -451,7 +451,7 @@ func TestTCPPlayerAndWorldFailureMatrixProtocolVersionAndUnknownPacket(t *testin
 		}
 		if err == nil {
 			packetID, payload, err = codec.EncodeClient(network.StateLogin, network.LoginStart{
-				PlayerID: violator.PlayerID, DisplayName: violator.DisplayName,
+				PlayerID: violator.PlayerID, DisplayName: violator.DisplayName, ViewDistance: 32,
 			})
 		}
 		if err == nil {
@@ -667,7 +667,7 @@ func loginIntegrationClient(address string, identity network.Identity) (network.
 	if err != nil {
 		return nil, err
 	}
-	return network.LoginClient(ctx, stream, identity)
+	return network.LoginClient(ctx, stream, identity, 32)
 }
 
 func assertRemoteCode(t *testing.T, err error, state network.State, code uint8) {

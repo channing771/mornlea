@@ -41,16 +41,6 @@ func hostileSpawnColumn(base uint64, anchorX, anchorZ int32) (x, z int32, radius
 	return anchorX + deltaX*int32(radius), anchorZ + deltaZ*int32(radius), radius, axis
 }
 
-// hostileCandidateHash 把候选坐标折进哈希链：基准哈希（seed^tick 过
-// `splitmix64`）先混入 X/Z 的零扩展 uint32，再按同样的传播混入 Y。该哈希的
-// 低 8 位是生成门槛，其非零值本身即候选 ID——ID 与门槛同源，重放必然逐位
-// 一致。
-func hostileCandidateHash(seed int64, tick uint64, x, y, z int32) uint64 {
-	hash := splitmix64(uint64(seed) ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(x)) ^ uint64(uint32(z)))
-	return splitmix64(hash ^ uint64(uint32(y)))
-}
-
 // advanceHostileSpawn 是权威 tick 的夜间生成判定：每 tick 恰好推导一个候选
 // （锚点玩家、候选列、落点 Y 依次确定），全部必要条件按「廉价前置、昂贵后
 // 置」的顺序校验，任一不成立即放弃且本 tick 不再考察其它候选。生成发生在
@@ -84,7 +74,7 @@ func (engine *engineContext) advanceHostileSpawn() {
 		return
 	}
 	anchor := blockPosOf(anchorSession.player.state.Position)
-	x, z, _, _ := hostileSpawnColumn(splitmix64(uint64(engine.seed)^now), anchor.X, anchor.Z)
+	x, z, _, _ := hostileSpawnColumn(sampler.SplitMix64(uint64(engine.seed)^now), anchor.X, anchor.Z)
 	if info, ok := dimension.Info(core.BlockPos{X: x, Z: z}.Chunk()); !ok || info.State != realm.ChunkReady {
 		return
 	}
@@ -92,7 +82,7 @@ func (engine *engineContext) advanceHostileSpawn() {
 	if !ok {
 		return
 	}
-	hash := hostileCandidateHash(engine.seed, now, x, y, z)
+	hash := sampler.HostileCandidateHash(engine.seed, now, x, y, z)
 	if hash&0xFF >= hostileSpawnGateThreshold {
 		return
 	}
@@ -118,7 +108,7 @@ func (engine *engineContext) advanceHostileSpawn() {
 			})
 			return
 		}
-		id = splitmix64(id)
+		id = sampler.SplitMix64(id)
 	}
 }
 

@@ -220,6 +220,19 @@ func percentile(sorted []float64, p float64) float64 {
 	return sorted[index]
 }
 
+// StreamingSummary 汇总服务端多会话流式探针的区块加载吞吐与内存。数值只
+// 记录：除报告完整性与分位单调性校验外，不参与任何阈值判定（scenario v23
+// 起随世界流式收尾进入报告）。
+type StreamingSummary struct {
+	// LoadedChunks 是订阅收敛后 engine 侧已就绪（加载或生成完成）的去重
+	// 区块数，即服务端为全部会话订阅并集实际驻留的区块规模。
+	LoadedChunks int `json:"loaded_chunks"`
+	// LoadLatency 是区块加载时延（订阅装载请求 BeginLoading → 就绪 Ready
+	// 的观测点间隔）的分位摘要。
+	LoadLatency  LatencySummary `json:"load_latency"`
+	PeakRSSBytes uint64         `json:"peak_rss_bytes"`
+}
+
 // PerfReport 是 packages/client/cmd/mornlea 与 packages/tools/perfcheck 共用的稳定 JSON 格式。
 type PerfReport struct {
 	ScenarioVersion int     `json:"scenario_version"`
@@ -239,4 +252,7 @@ type PerfReport struct {
 	Protocol          ProtocolSummary         `json:"protocol,omitempty"`
 	PlayerPersistence PersistenceSummary      `json:"player_persistence,omitempty"`
 	Multiplayer       MultiplayerSummary      `json:"multiplayer"`
+	// Streaming 是 v23 起追加的世界流式记录性指标族；scenario ≤22 的历史
+	// 报告没有该族，解码为零值，校验按场景版本放行。
+	Streaming StreamingSummary `json:"streaming"`
 }

@@ -19,15 +19,14 @@ func TestRuntimeStepPhaseOrder(t *testing.T) {
 	engine.stepPhaseObserver = nil
 	want := []stepPhase{
 		phasePlayerCommands, phaseCompanionActions, phasePhysicsAdvance,
-		phaseHostileAdvance, phaseFluidAdvance, phaseFarmlandMoistureAdvance,
-		phaseCropAdvance,
+		phaseHostileAdvance, phaseBlockUpdates,
 	}
 	if !reflect.DeepEqual(phases, want) {
 		t.Fatalf("阶段顺序=%v，想要 %v", phases, want)
 	}
 }
 
-func TestStepRunsHostilePhasesBetweenPhysicsAndFluid(t *testing.T) {
+func TestStepRunsHostilePhasesBetweenPhysicsAndBlockUpdates(t *testing.T) {
 	engine := NewEngine(0, 0, 0)
 	var phases []stepPhase
 	engine.stepPhaseObserver = func(phase stepPhase) { phases = append(phases, phase) }
@@ -36,8 +35,7 @@ func TestStepRunsHostilePhasesBetweenPhysicsAndFluid(t *testing.T) {
 
 	want := []stepPhase{
 		phasePlayerCommands, phaseCompanionActions, phasePhysicsAdvance,
-		phaseHostileAdvance, phaseFluidAdvance, phaseFarmlandMoistureAdvance,
-		phaseCropAdvance,
+		phaseHostileAdvance, phaseBlockUpdates,
 	}
 	if !reflect.DeepEqual(phases, want) {
 		t.Fatalf("阶段顺序=%v，想要 %v", phases, want)

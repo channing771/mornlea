@@ -19,22 +19,21 @@ const (
 	// benchmarkMessageDrainMax 是每帧服务端消息 drain 预算，单一取值住在
 	// app 包（`MessageDrainMax`），与 capture 共用同一无头帧节奏契约。
 	benchmarkMessageDrainMax = application.MessageDrainMax
-	// scenarioVersion 是 benchmark producer 的场景身份。v21 → v22 的判定与
-	// v20 → v21、v19 → v20 同源：benchmark 的固定输入（七名远端玩家、零伙伴、
-	// 不注入聊天）与被测世界（不注水、同一 seed、不含农业方块）不变，但自然短
-	// 草又一次改变了**被测进程与被测世界本身**——稳定方块与 mesh registry 追加
-	// `ShortGrassID`（实际烘焙条目 84 → 85，仍低于冻结上限 96），Go/Rust 植物
-	// 材质判定集合从 `[31..54]` 扩为 `[31..54] ∪ {68}`（`55..67` 不移动），
-	// worldgen `MGW1` 请求扩为 layout 3 且 engine ABI 升为 v10，固定世界在合
-	// 格草地上方空气格确定性新增短草，每个短草格经既有 plant 路径发射 4 条交
-	// 叉斜面实例。
+	// scenarioVersion 是 benchmark producer 的场景身份。v22 → v23 的判定与
+	// 历代同源：benchmark 的固定输入（七名远端玩家、零伙伴、不注入聊天）与
+	// 被测世界（不注水、同一 seed、不含农业方块、固定世界方块与 v22 逐格
+	// 一致）不变，但统一方块更新调度器与世界流式收尾又一次改变了**被测进程
+	// 与被测服务端行为本身**——耕地湿度积压消费从 FIFO 改为统一调度器确定
+	// 性全序，流体定时队列与随机抽样哈希链迁入统一调度器，多玩家服务端探
+	// 针按会话视距（v40 登录协商的 2/4/6/8 梯度）启用真实区块订阅与流式
+	// 加载，存档 I/O 按类别与 region 并行化并新增 region 句柄有界治理，报
+	// 告随之新增 `streaming` 记录性指标族（只记录，不设阈值）。
 	//
-	// 本代叠加在 v21（常显 HUD 层整体迁出 GPU 保留面）基线之上：权威侧模拟
-	// 与无头观察路径保持 v21 形态（零 WebView 参与，桥状态不下行），分辨率、
-	// 阶段时长、运动、样本、指标、绝对阈值与 `20%` 相对阈值全部不动；v21 与
-	// v22 的每帧上传字节数虽未随 HUD 迁移移动，被测 workload 已随短草改变，
-	// 跨 workload 报告只能经比较器显式 `21:22` 迁移并跳过相对回归判定。
-	scenarioVersion = 22
+	// 本代叠加在 v22（自然短草）基线之上：分辨率、阶段时长、运动、样本、
+	// 指标、绝对阈值与 `20%` 相对阈值全部不动；still/flying 主场景输入与阈
+	// 值不受探针流式化的影响，跨 workload 报告只能经比较器显式 `22:23` 迁移
+	// 并跳过相对回归判定。
+	scenarioVersion = 23
 )
 
 var (
@@ -189,10 +188,17 @@ func RunBenchmark(app *application.Application, outputPath string) error {
 	printMemoryBreakdown("GPU 采样后")
 	// GPU 采样同样是满载阶段，其后也要冷却并回收，才轮到服务端探针。
 	runBenchmarkCooldown(app, benchmarkCooldown)
-	serverMultiplayer, ticks, err := measureMultiplayerServerProbe(10 * time.Second)
+	serverMultiplayer, ticks, streaming, err := measureMultiplayerServerProbe(10 * time.Second)
 	if err != nil {
 		return fmt.Errorf("测量八会话服务端: %w", err)
 	}
+	fmt.Printf(
+		"streaming: loaded=%d load p50=%.3fms p95=%.3fms p99=%.3fms max=%.3fms RSS=%.1fMiB\n",
+		streaming.LoadedChunks,
+		streaming.LoadLatency.P50MS, streaming.LoadLatency.P95MS,
+		streaming.LoadLatency.P99MS, streaming.LoadLatency.MaxMS,
+		float64(streaming.PeakRSSBytes)/(1<<20),
+	)
 	multiplayer := multiplayerProbe.Summary()
 	multiplayer.InterestDiff = serverMultiplayer.InterestDiff
 	multiplayer.ServerOutboundBytes = serverMultiplayer.ServerOutboundBytes
@@ -230,6 +236,7 @@ func RunBenchmark(app *application.Application, outputPath string) error {
 		Protocol:          protocol,
 		PlayerPersistence: playerPersistence,
 		Multiplayer:       multiplayer,
+		Streaming:         streaming,
 	}
 	if err := writeBenchmarkReport(outputPath, report); err != nil {
 		return err

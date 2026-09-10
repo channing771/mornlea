@@ -3,6 +3,7 @@ package entity
 import (
 	"testing"
 
+	"github.com/channing771/mornlea/packages/server/updates"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/world"
 )
@@ -219,19 +220,19 @@ func TestMiningSaplingExemptionKeepsOtherBlockToolRules(t *testing.T) {
 // 马铃薯/胡萝卜产量、毒土豆、短草种子掉落）的 salt 互不相同——同源会让「这格
 // 额外掉树苗」与其他判定出现结构性相关。
 func TestLeavesSaplingDropSaltIsFrozenAndIndependent(t *testing.T) {
-	if leavesSaplingDropSalt != 0x5341_504C_494E_4753 {
-		t.Fatalf("leavesSaplingDropSalt = %#x，规格冻结为 0x5341_504C_494E_4753",
-			leavesSaplingDropSalt)
+	if updates.LeavesSaplingDropSalt != 0x5341_504C_494E_4753 {
+		t.Fatalf("LeavesSaplingDropSalt = %#x，规格冻结为 0x5341_504C_494E_4753",
+			updates.LeavesSaplingDropSalt)
 	}
 	for name, salt := range map[string]uint64{
-		"cropGrowthRollSalt":     cropGrowthRollSalt,
-		"cropYieldRollSalt":      cropYieldRollSalt,
-		"cropYieldPotatoSalt":    cropYieldPotatoSalt,
-		"cropYieldCarrotSalt":    cropYieldCarrotSalt,
-		"poisonPotatoSalt":       poisonPotatoSalt,
-		"shortGrassSeedDropSalt": shortGrassSeedDropSalt,
+		"cropGrowthRollSalt":     updates.CropGrowthRollSalt,
+		"cropYieldRollSalt":      updates.CropYieldRollSalt,
+		"cropYieldPotatoSalt":    updates.CropYieldPotatoSalt,
+		"cropYieldCarrotSalt":    updates.CropYieldCarrotSalt,
+		"poisonPotatoSalt":       updates.PoisonPotatoSalt,
+		"shortGrassSeedDropSalt": updates.ShortGrassSeedDropSalt,
 	} {
-		if salt == leavesSaplingDropSalt {
+		if salt == updates.LeavesSaplingDropSalt {
 			t.Fatalf("树苗掉落 salt 与 %s 相同，两条哈希流必须互相独立", name)
 		}
 	}
@@ -244,26 +245,26 @@ func TestLeavesSaplingDropSaltIsFrozenAndIndependent(t *testing.T) {
 func TestLeavesSaplingDropRollMatchesFrozenVerdicts(t *testing.T) {
 	for _, pos := range leavesSaplingHitPositions {
 		for replay := 0; replay < 2; replay++ {
-			if !leavesSaplingDropRoll(0, core.Overworld, pos) {
-				t.Fatalf("leavesSaplingDropRoll(0, Overworld, %v) = false，固定命中坐标必须恒命中", pos)
+			if !sampler.LeavesSaplingDropRoll(0, core.Overworld, pos) {
+				t.Fatalf("LeavesSaplingDropRoll(0, Overworld, %v) = false，固定命中坐标必须恒命中", pos)
 			}
 		}
 	}
 	for _, pos := range leavesSaplingMissPositions {
-		if leavesSaplingDropRoll(0, core.Overworld, pos) {
-			t.Fatalf("leavesSaplingDropRoll(0, Overworld, %v) = true，固定未命中坐标必须恒未命中", pos)
+		if sampler.LeavesSaplingDropRoll(0, core.Overworld, pos) {
+			t.Fatalf("LeavesSaplingDropRoll(0, Overworld, %v) = true，固定未命中坐标必须恒未命中", pos)
 		}
 	}
 	// 维度折入：同一坐标在另一维度判定翻转。core 当前只注册 Overworld，这里只
 	// 验证纯整数链确实折叠了维度——漏折会让两个维度的同坐标树叶永远同判定。
-	if leavesSaplingDropRoll(0, core.DimensionID(1), leavesSaplingHitPositions[0]) {
+	if sampler.LeavesSaplingDropRoll(0, core.DimensionID(1), leavesSaplingHitPositions[0]) {
 		t.Fatal("维度未折入哈希链：另一维度的同坐标不应复用 Overworld 的命中判定")
 	}
 	// 分布 sanity：连续 4096 个坐标的命中率接近 1/8（理论 512），两侧都必须出现，
 	// 防 `& 7` 退化成恒真/恒假。
 	hits := 0
 	for x := int32(0); x < 4096; x++ {
-		if leavesSaplingDropRoll(0, core.Overworld, core.BlockPos{X: x, Y: 1, Z: 5}) {
+		if sampler.LeavesSaplingDropRoll(0, core.Overworld, core.BlockPos{X: x, Y: 1, Z: 5}) {
 			hits++
 		}
 	}
@@ -526,7 +527,7 @@ func TestCompanionMiningLeavesNeverRollsSapling(t *testing.T) {
 	// 默认 InteractionReach 内、射线无遮挡），采掘意图按直写路径补齐。
 	fixture := newCompanionMiningScene(t, core.AirID, core.ItemNone)
 	target := leavesSaplingHitPositions[1]
-	if !leavesSaplingDropRoll(fixture.engine.seed, core.Overworld, target) {
+	if !sampler.LeavesSaplingDropRoll(fixture.engine.seed, core.Overworld, target) {
 		t.Fatalf("夹具前提失效：%v 不再命中玩家树叶→树苗判定", target)
 	}
 	fixture.engine.SetBlockForTest(target, core.LeavesID)

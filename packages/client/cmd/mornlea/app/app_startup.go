@@ -165,7 +165,7 @@ func NewWithDependencies(
 		if err != nil {
 			return nil, fmt.Errorf("连接远程服务器: %w", err)
 		}
-		clientEndpoint, worldSeed, err = dependencies.LoginClient(ctx, stream, *options.Identity)
+		clientEndpoint, worldSeed, err = dependencies.LoginClient(ctx, stream, *options.Identity, uint8(options.Render.ViewDistance))
 		if err != nil {
 			return nil, errors.Join(fmt.Errorf("远程登录: %w", err), stream.Close())
 		}
@@ -204,6 +204,7 @@ func NewWithDependencies(
 			worldgen.New(store.Metadata().Seed, options.FluidEnabled),
 			store,
 			*options.Identity,
+			uint8(options.Render.ViewDistance),
 			dependencies,
 		)
 		if err != nil {
@@ -423,6 +424,7 @@ func (a *Application) startWorld() error {
 		worldgen.New(store.Metadata().Seed, options.FluidEnabled),
 		store,
 		*options.Identity,
+		uint8(options.Render.ViewDistance),
 		dependencies,
 	)
 	if err != nil {
@@ -567,7 +569,9 @@ func assembleBenchmarkObserverConnection(
 		PlayerID:    core.PlayerID{0x2c, 0xad, 0xe1, 0x90, 0x9d, 0xb6, 0x43, 0x82, 0x8d, 0x31, 0xcb, 0x40, 0xe5, 0xbb, 0x52, 0x29},
 		DisplayName: "Benchmark",
 	}
-	endpoint, loginErr := network.LoginClient(ctx, stream, identity)
+	// 观察者不携带用户渲染配置，视距按编译默认配置声明（域内合法值），
+	// 与 trusted observer 沿用服务端上界的口径一致。
+	endpoint, loginErr := network.LoginClient(ctx, stream, identity, uint8(config.Defaults().Render.ViewDistance))
 	serverErr := <-serverDone
 	if err := errors.Join(loginErr, serverErr); err != nil {
 		_ = stream.Close()
@@ -583,14 +587,16 @@ type applicationLoginResult struct {
 }
 
 // assembleLocalApplicationConnection 建立单机模式的全套连接:内嵌 Host、
-// 内存流对与登录状态机。返回值含登录成功应答的 WorldSeed(远环 LOD 的
-// 播种输入),与 TCP 远程路径同一来源。
+// 内存流对与登录状态机。viewDistance 随 v40 `LoginStart` 声明（来自用户
+// 渲染配置，与服务端 `config.ViewRadius` 同源）。返回值含登录成功应答的
+// WorldSeed(远环 LOD 的播种输入),与 TCP 远程路径同一来源。
 func assembleLocalApplicationConnection(
 	ctx context.Context,
 	config server.Config,
 	generator server.Generator,
 	store storage.WorldStore,
 	identity network.Identity,
+	viewDistance uint8,
 	dependencies Dependencies,
 ) (
 	network.ClientEndpoint,
@@ -619,7 +625,7 @@ func assembleLocalApplicationConnection(
 	go func() { acceptDone <- host.AcceptStream(hostContext, serverStream) }()
 	loginDone := make(chan applicationLoginResult, 1)
 	go func() {
-		endpoint, worldSeed, loginErr := dependencies.LoginClient(hostContext, clientStream, identity)
+		endpoint, worldSeed, loginErr := dependencies.LoginClient(hostContext, clientStream, identity, viewDistance)
 		loginDone <- applicationLoginResult{endpoint: endpoint, worldSeed: worldSeed, err: loginErr}
 	}()
 

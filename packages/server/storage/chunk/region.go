@@ -196,8 +196,11 @@ func (r *Region) SetCompactionHooks(hooks region.CompactionHooks) {
 }
 
 // Bank 返回当前生效 bank 的副本，供根包 `ChunkKeys` 编排枚举已落盘槽位，
-// 不暴露容器内部状态的可变引用。
+// 不暴露容器内部状态的可变引用。读取经容器互斥串行，与并行的 Save/Compact
+// 不产生数据竞争。
 func (r *Region) Bank() region.Bank {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.bank
 }
 
@@ -220,6 +223,52 @@ func (r *Region) Load(ctx context.Context, key core.ChunkKey) (StoredChunk, erro
 	}
 	stored.Chunk = stored.Chunk.Clone()
 	return stored, nil
+}
+
+// CopyTo 在容器读锁内把整个 region 文件的当前内容流式复制到 writer：读取
+// 与并行的 Save/Compact 写提交经容器互斥串行，调用方拿到的总是某个完整提交
+// 点的文件字节（header 双 bank 与数据区同属一代），不会被中途提交撕开。根包
+// Backup 经它与保存方共享同一串行化路径；ctx 在每次底层读取前检查以及时
+// 中止长复制，已关闭容器返回 os.ErrClosed。
+func (r *Region) CopyTo(ctx context.Context, writer io.Writer) (int64, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	if r.file == nil {
+		return 0, os.ErrClosed
+	}
+	info, err := r.file.Stat()
+	if err != nil {
+		return 0, fmt.Errorf("stat region %q: %w", r.path, err)
+	}
+	written, err := io.Copy(writer, regionCtxReader{
+		ctx:    ctx,
+		reader: io.NewSectionReader(r.file, 0, info.Size()),
+	})
+	if err != nil {
+		return written, fmt.Errorf("copy region %q: %w", r.path, err)
+	}
+	return written, nil
+}
+
+// regionCtxReader 在每次读取前检查 ctx 取消并立即中止底层读取。与根包
+// backup.go 的 contextReader 同型：本包不得反向依赖根包，持有一份最小副本
+// （取舍同文件尾部的 syncDirectory）。
+type regionCtxReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (reader regionCtxReader) Read(data []byte) (int, error) {
+	if err := reader.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return reader.reader.Read(data)
 }
 
 func (r *Region) Save(ctx context.Context, saves []ChunkSave) (SaveResult, error) {

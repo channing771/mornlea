@@ -16,18 +16,11 @@ import (
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-// ChunkKeys 返回磁盘上已有区块键的稳定只读快照。
+// ChunkKeys 返回磁盘上已有区块键的稳定只读快照。枚举不持有任何全局锁，也不
+// 经缓存打开常驻句柄：每个 region 文件用独立的临时打开读取生效 bank，配合
+// 双 bank 提交格式，读到的总是某个合法提交点，不与并行保存/压缩互相阻塞。
 func (store *DiskStore) ChunkKeys(ctx context.Context) ([]core.ChunkKey, error) {
 	if store.closing.Load() {
-		return nil, os.ErrClosed
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if store.closing.Load() || store.closed {
 		return nil, os.ErrClosed
 	}
 	if err := ctx.Err(); err != nil {

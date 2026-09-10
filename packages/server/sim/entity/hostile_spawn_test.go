@@ -10,7 +10,7 @@ import (
 )
 
 // 本文件锁定夜行者的确定性夜间生成：锚点玩家按已排序 active session 与
-// `WorldTimeTicks % 会话数` 选取、splitmix64 整数派生半径与轴向（水平距离
+// `WorldTimeTicks % 会话数` 选取、`sampler.SplitMix64` 整数派生半径与轴向（水平距离
 // 24..48）、候选哈希低 8 位 <13 才尝试、双格空气/下方 solid/非流体/完整
 // loaded/局部区块光 ≤7/夜间窗口全部必要、全服 ≤64 与每玩家 48 格内 ≤8、
 // 每 tick 至多验证一个候选、相同输入重放逐位一致，以及 ID 冲突重散列。
@@ -120,7 +120,7 @@ func TestHostileSpawnColumnDerivationStaysInContractWindow(t *testing.T) {
 	// 派生函数的窗口契约：半径恒在 24..48（含）、轴向是四个水平轴之一、
 	// 候选列 = 锚点 + 轴向量 × 半径，且全部输入为整数。
 	for tick := uint64(0); tick < 2000; tick++ {
-		base := splitmix64(uint64(0) ^ tick)
+		base := sampler.SplitMix64(uint64(0) ^ tick)
 		x, z, radius, axis := hostileSpawnColumn(base, 100, -40)
 		if radius < 24 || radius > 48 {
 			t.Fatalf("tick %d 派生半径 %d 越出 24..48", tick, radius)

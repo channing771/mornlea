@@ -23,8 +23,10 @@ type Dependencies struct {
 	OpenStore   func(context.Context, Options) (storage.WorldStore, error)
 	DialTCP     func(context.Context, string) (network.ClientPacketStream, error)
 	// LoginClient 执行客户端登录并额外返回 LoginSuccess.WorldSeed——远环
-	// LOD 的播种种子经它在装配点流入(单机与 TCP 远程共用同一登录路径)。
-	LoginClient          func(context.Context, network.ClientPacketStream, network.Identity) (network.ClientEndpoint, uint64, error)
+	// LOD 的播种种子经它在装配点流入(单机与 TCP 远程共用同一登录路径)；
+	// 尾参 viewDistance 随 v40 `LoginStart` 尾部字节声明(调用方传用户渲染
+	// 视距或编译默认)。
+	LoginClient          func(context.Context, network.ClientPacketStream, network.Identity, uint8) (network.ClientEndpoint, uint64, error)
 	NewHost              func(context.Context, server.Config, server.Generator, storage.WorldStore) (Host, error)
 	NewMemoryStreamPair  func(int) (network.ClientPacketStream, network.ServerPacketStream, error)
 	NewWindow            func(int, int, string) (Window, error)

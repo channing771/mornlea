@@ -33,17 +33,21 @@ func (err *RemoteError) Error() string {
 }
 
 type PendingLogin struct {
-	stream    ServerPacketStream
-	identity  Identity
-	worldSeed uint64
-	decided   atomic.Bool
-	login     context.Context
-	cancel    context.CancelFunc
-	stop      func() bool
-	phaseMu   sync.Mutex
-	handedOff bool
-	phaseErr  error
-	phaseDone chan struct{}
+	stream   ServerPacketStream
+	identity Identity
+	// viewDistance 是客户端在 `LoginStart` 中声明并通过域校验的期望视距；
+	// 接纳点经 `ViewDistance()` 读取后自行决定钳制与订阅半径，登录驱动
+	// 只搬运不消费。
+	viewDistance uint8
+	worldSeed    uint64
+	decided      atomic.Bool
+	login        context.Context
+	cancel       context.CancelFunc
+	stop         func() bool
+	phaseMu      sync.Mutex
+	handedOff    bool
+	phaseErr     error
+	phaseDone    chan struct{}
 }
 
 // BeginServerLogin 在 stream 上执行服务端握手与登录接收。worldSeed 是
@@ -101,13 +105,26 @@ func BeginServerLogin(ctx context.Context, stream ServerPacketStream, worldSeed 
 		})
 		return nil, errors.New("network: invalid login identity")
 	}
+	// v40 视距域校验：域外值必须显式拒绝登录（复用 `LoginProtocolViolation`
+	// 冻结码——载荷携带协议声明域外的 wire 值即违反登录协议），绝不以
+	// 默认视距静默建立会话；对域内值的钳制属于接纳点，不在此处。域判定
+	// 经协议包的 `ValidLoginViewDistance` 谓词，与发送侧校验共用一处定义。
+	if !protocol.ValidLoginViewDistance(start.ViewDistance) {
+		_ = stream.Send(login, protocol.StateLogin, protocol.LoginReject{
+			Code:    protocol.LoginProtocolViolation,
+			Message: "视距非法",
+		})
+		return nil, fmt.Errorf("network: login view distance %d outside range %d..%d",
+			start.ViewDistance, protocol.LoginViewDistanceMin, protocol.LoginViewDistanceMax)
+	}
 	pending := &PendingLogin{
-		stream:    stream,
-		identity:  Identity{PlayerID: start.PlayerID, DisplayName: canonicalName},
-		worldSeed: worldSeed,
-		login:     login,
-		cancel:    cancelLogin,
-		phaseDone: make(chan struct{}),
+		stream:       stream,
+		identity:     Identity{PlayerID: start.PlayerID, DisplayName: canonicalName},
+		viewDistance: start.ViewDistance,
+		worldSeed:    worldSeed,
+		login:        login,
+		cancel:       cancelLogin,
+		phaseDone:    make(chan struct{}),
 	}
 	pending.stop = context.AfterFunc(login, pending.expire)
 	return pending, nil
@@ -115,6 +132,12 @@ func BeginServerLogin(ctx context.Context, stream ServerPacketStream, worldSeed 
 
 func (pending *PendingLogin) Identity() Identity {
 	return pending.identity
+}
+
+// ViewDistance 返回客户端在 `LoginStart` 中声明的期望视距（已通过 v40
+// 域校验）。接纳点读取后自行决定对服务端上界的钳制；本包不解码订阅语义。
+func (pending *PendingLogin) ViewDistance() uint8 {
+	return pending.viewDistance
 }
 
 // Context owns the Login phase deadline and is canceled when that phase ends.
@@ -256,20 +279,23 @@ func (pending *PendingLogin) close() {
 }
 
 // LoginClient 在 stream 上执行客户端登录状态机并返回进入 Play 阶段的
-// 端点。登录应答携带的权威世界种子(protocol.LoginSuccess.WorldSeed)在这里被
+// 端点。viewDistance 是随 `LoginStart` 声明的期望视距（域内值，见
+// `protocol.LoginViewDistanceMin`/`Max`，域外值会被发送侧校验拒绝）。
+// 登录应答携带的权威世界种子(protocol.LoginSuccess.WorldSeed)在这里被
 // 丢弃；需要种子的调用方(远环壳播种)改用 LoginClientWithSeed。
-func LoginClient(ctx context.Context, stream ClientPacketStream, identity Identity) (ClientEndpoint, error) {
-	endpoint, _, err := LoginClientWithSeed(ctx, stream, identity)
+func LoginClient(ctx context.Context, stream ClientPacketStream, identity Identity, viewDistance uint8) (ClientEndpoint, error) {
+	endpoint, _, err := LoginClientWithSeed(ctx, stream, identity, viewDistance)
 	return endpoint, err
 }
 
 // LoginClientWithSeed 执行与 LoginClient 完全相同的客户端登录状态机，并
 // 额外把 protocol.LoginSuccess.WorldSeed 返回给调用方：单机与 TCP 远程共用同一条
 // 登录路径，cmd/mornlea 在登录成功的装配点持有种子并构造 worldgen perm
-// 输入，播种确定性的远环壳(internal/lod)。种子是 uint64 全值域无损搬运
-// (int64 按 two's complement 下发，0 是合法种子)，登录失败时返回 0 与
-// 错误、不返回端点。
-func LoginClientWithSeed(ctx context.Context, stream ClientPacketStream, identity Identity) (_ ClientEndpoint, worldSeed uint64, err error) {
+// 输入，播种确定性的远环壳(internal/lod)。viewDistance 随 `LoginStart` 尾部
+// 字节声明（v40），调用方传编译默认或用户配置的渲染视距。种子是 uint64
+// 全值域无损搬运(int64 按 two's complement 下发，0 是合法种子)，登录失败时
+// 返回 0 与错误、不返回端点。
+func LoginClientWithSeed(ctx context.Context, stream ClientPacketStream, identity Identity, viewDistance uint8) (_ ClientEndpoint, worldSeed uint64, err error) {
 	if stream == nil {
 		return nil, 0, errors.New("network: nil client packet stream")
 	}
@@ -301,7 +327,11 @@ func LoginClientWithSeed(ctx context.Context, stream ClientPacketStream, identit
 
 	login, cancelLogin := context.WithTimeout(ctx, LoginTimeout)
 	defer cancelLogin()
-	if err = stream.Send(login, protocol.StateLogin, protocol.LoginStart{PlayerID: identity.PlayerID, DisplayName: identity.DisplayName}); err != nil {
+	if err = stream.Send(login, protocol.StateLogin, protocol.LoginStart{
+		PlayerID:     identity.PlayerID,
+		DisplayName:  identity.DisplayName,
+		ViewDistance: viewDistance,
+	}); err != nil {
 		return nil, 0, err
 	}
 	packet, err = stream.Recv(login, protocol.StateLogin)

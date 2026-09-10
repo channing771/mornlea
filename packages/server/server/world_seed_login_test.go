@@ -128,7 +128,7 @@ func driveManualLogin(t *testing.T, client network.ClientPacketStream) network.L
 	if packet, err := client.Recv(ctx, network.StateHandshake); err != nil || packet != (network.ServerHello{ProtocolVersion: network.ProtocolVersion}) {
 		t.Fatalf("server hello = (%+v, %v)", packet, err)
 	}
-	if err := client.Send(ctx, network.StateLogin, network.LoginStart{PlayerID: identity.PlayerID, DisplayName: identity.DisplayName}); err != nil {
+	if err := client.Send(ctx, network.StateLogin, network.LoginStart{PlayerID: identity.PlayerID, DisplayName: identity.DisplayName, ViewDistance: 32}); err != nil {
 		t.Fatal(err)
 	}
 	packet, err := client.Recv(ctx, network.StateLogin)

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/channing771/mornlea/packages/client/client"
 	"github.com/channing771/mornlea/packages/server/server"
 	"github.com/channing771/mornlea/packages/shared/network"
 )
@@ -316,7 +317,7 @@ func TestScenarioV7EightSessionServerProbeIsRealAndBounded(t *testing.T) {
 	// 放宽它对那一形态无效。真正的成因见
 	// docs/superpowers/specs/2026-08-07-ci-stability-merge-gate-design.md §4，
 	// 需要单独处理。
-	multiplayer, ticks, err := measureMultiplayerServerProbe(30 * time.Second)
+	multiplayer, ticks, streaming, err := measureMultiplayerServerProbe(30 * time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -325,6 +326,12 @@ func TestScenarioV7EightSessionServerProbeIsRealAndBounded(t *testing.T) {
 		ticks.Frames != benchmarkServerMeasuredTicks ||
 		multiplayer.PeakRSSBytes == 0 {
 		t.Fatalf("incomplete bounded server probe: multiplayer=%+v ticks=%+v", multiplayer, ticks)
+	}
+	if !validBenchmarkServerStreaming(streaming) {
+		t.Fatalf("incomplete streaming probe: %+v", streaming)
+	}
+	if streaming.LoadedChunks < benchmarkStreamingMinLoadedChunks {
+		t.Fatalf("loaded chunks=%d want >= %d", streaming.LoadedChunks, benchmarkStreamingMinLoadedChunks)
 	}
 }
 
@@ -345,6 +352,34 @@ func TestBenchmarkServerProbeValidityIgnoresHighWaterButRejectsOverflow(t *testi
 	report.Multiplayer.ServerOutboundBytes = 0
 	if err := validateBenchmarkReport(report); err == nil {
 		t.Fatal("真实探针数据缺失未被拒绝")
+	}
+}
+
+func TestBenchmarkServerStreamingValidityRequiresRealSubscriptionLoading(t *testing.T) {
+	complete := client.StreamingSummary{
+		LoadedChunks: 49,
+		LoadLatency:  client.LatencySummary{Samples: 49, P50MS: 5, P95MS: 20, P99MS: 40, MaxMS: 60},
+		PeakRSSBytes: 1,
+	}
+	if !validBenchmarkServerStreaming(complete) {
+		t.Fatal("完整 streaming 指标族被拒绝")
+	}
+	// 已加载区块数低于最小会话订阅方形（视距 2 → 半径 3 → 7×7=49）说明按
+	// 会话视距的订阅没有真正加载区块（例如 ViewRadius 被回退为 0）。
+	zero := complete
+	zero.LoadedChunks = 0
+	if validBenchmarkServerStreaming(zero) {
+		t.Fatal("零加载区块的 streaming 指标族未被拒绝")
+	}
+	partial := complete
+	partial.LoadedChunks = 1
+	if validBenchmarkServerStreaming(partial) {
+		t.Fatal("低于最小会话方形的加载计数未被拒绝")
+	}
+	noSamples := complete
+	noSamples.LoadLatency = client.LatencySummary{}
+	if validBenchmarkServerStreaming(noSamples) {
+		t.Fatal("零时延样本的 streaming 指标族未被拒绝")
 	}
 }
 

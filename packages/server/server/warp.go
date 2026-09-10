@@ -106,8 +106,10 @@ func (server *Server) warpPlayer(session contract.SessionID, target core.Dimensi
 		return reject(network.RejectPlayerNotReady)
 	}
 	server.engine.RegisterPlayer(session, contract.PlayerRestore{
-		SpawnDimension:   target,
-		SpawnAnchor:      anchor,
+		SpawnDimension: target,
+		SpawnAnchor:    anchor,
+		// 声明视距是会话协商事实：重建订阅照常携带，传送不改变会话视距。
+		ViewDistance:     current.viewDistance,
 		Yaw:              snapshot.Yaw,
 		Pitch:            snapshot.Pitch,
 		Inventory:        snapshot.Inventory,

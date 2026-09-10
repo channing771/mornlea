@@ -4,9 +4,10 @@
 单格规则求值与区块重扫扫描的 native 包装。行为规格见
 `openspec/specs/authoritative-fluid/spec.md` 与
 `openspec/specs/fluid-survival/spec.md`，Go/Rust 分工纪律见
-`docs/notes/go-rust-division.md`。依赖方向：只允许 `packages/shared/core` 与
-`packages/shared/nativeabi`（`packages/audit` 的 `dependency_test.go` allowed 表
-强制）；tunable 一律由调用方传参，本包不定义、不读取任何隐藏默认值。
+`docs/notes/go-rust-division.md`。依赖方向：只允许 `packages/server/updates`、
+`packages/shared/core` 与 `packages/shared/nativeabi`（`packages/audit` 的
+`dependency_test.go` allowed 表强制）；tunable 一律由调用方传参，本包不定义、
+不读取任何隐藏默认值。
 
 ## 生产路径只经 native kernel (`fluid/eval_native.go`, `fluid/rescan_native.go`)
 
@@ -37,9 +38,11 @@
 
 ## 状态与编排留 Go (`fluid/queue.go`)
 
-- `Queue` 是索引最小堆：dueTick 全序、`strongerWrite` 同 tick 冲突合并、
-  `lessPos` 排序提交与变更再入队全部在本包 Go 侧；kernel 只做无状态纯函数
-  求值，队列 scratch 跨 tick 复用、按需增长。
+- `Queue` 的待办存储由统一调度器 `updates.Queue`（kind=`KindFluidFlow`，经
+  `Scheduler()` 暴露同实例供后续域挂载）承载：dueTick 全序、(pos, kind) 去重、
+  只提前不推迟与预算取批在 updates；`strongerWrite` 同 tick 冲突合并、
+  `lessPos` 排序提交与变更再入队仍是本包的两阶段 Advance 编排；kernel 只做
+  无状态纯函数求值，队列 scratch 跨 tick 复用、按需增长。
 - 批量求值链（编码 → 调用 → 解码）预热后零分配，以 `TestEvalNoAlloc` 锁定；
   队列调度不变量由性质测试钉死（`TestOrderIndependence_PerTickChangesMatch`、
   `TestBudgetEquivalence_DamBreakSameFinalState`、

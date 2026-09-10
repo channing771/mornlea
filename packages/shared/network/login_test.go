@@ -36,7 +36,7 @@ func TestMemoryLoginTransitionsToPlay(t *testing.T) {
 		}
 		serverDone <- err
 	}()
-	client, err := LoginClient(context.Background(), clientStream, Identity{PlayerID: id, DisplayName: "Chen"})
+	client, err := LoginClient(context.Background(), clientStream, Identity{PlayerID: id, DisplayName: "Chen"}, 32)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestLoginClientReportsHandshakeVersionMismatch(t *testing.T) {
 		})
 	}()
 
-	_, err := LoginClient(context.Background(), client, testIdentity(1))
+	_, err := LoginClient(context.Background(), client, testIdentity(1), 32)
 	assertRemoteError(t, err, StateHandshake, uint8(HandshakeVersionMismatch), "upgrade required")
 	if err := <-serverDone; err != nil {
 		t.Fatal(err)
@@ -128,7 +128,7 @@ func TestLoginClientReportsStableLoginRejectCodes(t *testing.T) {
 				serverDone <- server.Send(context.Background(), StateLogin, reject)
 			}()
 
-			_, err := LoginClient(context.Background(), client, testIdentity(2))
+			_, err := LoginClient(context.Background(), client, testIdentity(2), 32)
 			assertRemoteError(t, err, StateLogin, uint8(reject.Code), reject.Message)
 			if err := <-serverDone; err != nil {
 				t.Fatal(err)
@@ -150,6 +150,51 @@ func TestPendingLoginCanOnlyBeDecidedOnce(t *testing.T) {
 	}
 	if packet, err := client.Recv(context.Background(), StateLogin); err != nil || packet != (LoginReject{Code: LoginServerFull, Message: "server full"}) {
 		t.Fatalf("login reject = (%+v, %v)", packet, err)
+	}
+}
+
+// TestBeginServerLoginRejectsViewDistanceOutsideDomain 钉死 v40 视距域 2..64
+// 的服务端语义：域外值必须以 `LoginProtocolViolation` 冻结码回 `LoginReject`
+// 并使登录失败，绝不以任何默认视距静默建立会话。载荷经假 stream 直接注入
+// （绕过发送侧校验），对应恶意 TCP 客户端手写域外字节的信任边界。
+func TestBeginServerLoginRejectsViewDistanceOutsideDomain(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		viewDistance uint8
+	}{
+		{"zero", 0},
+		{"below minimum", 1},
+		{"above maximum", 65},
+		{"saturated byte", 255},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stream := &staticLoginStartStream{
+				start: LoginStart{PlayerID: testIdentity(25).PlayerID, DisplayName: "Chen", ViewDistance: tc.viewDistance},
+			}
+			if _, err := BeginServerLogin(context.Background(), stream, 0); err == nil {
+				t.Fatal("域外视距登录被接受")
+			}
+			reject, ok := stream.sent.(LoginReject)
+			if !ok || stream.sentState != StateLogin || reject.Code != LoginProtocolViolation {
+				t.Fatalf("拒绝应答 = %#v（state %d），想要 LoginProtocolViolation 的 LoginReject", stream.sent, stream.sentState)
+			}
+		})
+	}
+}
+
+// TestPendingLoginCarriesViewDistance 钉死服务端把客户端声明的域内视距经
+// `PendingLogin` 递给接纳点：订阅半径的消费属于 world-streaming 后续任务，
+// 本测试只保证登录驱动不解码不丢值。
+func TestPendingLoginCarriesViewDistance(t *testing.T) {
+	client, server := NewMemoryStreamPair(8)
+	t.Cleanup(func() { _ = client.Close() })
+
+	pending := beginMemoryLogin(t, client, server, testIdentity(26))
+	if got := pending.ViewDistance(); got != 32 {
+		t.Fatalf("pending 视距 = %d，想要登录时声明的 32", got)
+	}
+	if err := pending.Reject(context.Background(), LoginServerFull, "done"); err != nil {
+		t.Fatalf("Reject: %v", err)
 	}
 }
 
@@ -470,7 +515,7 @@ func TestLoginClientClosesOnMismatchedSuccessIdentity(t *testing.T) {
 		serverDone <- server.Send(context.Background(), StateLogin, LoginSuccess{PlayerID: testIdentity(5).PlayerID})
 	}()
 
-	_, err := LoginClient(context.Background(), client, testIdentity(4))
+	_, err := LoginClient(context.Background(), client, testIdentity(4), 32)
 	if err == nil || !strings.Contains(err.Error(), "player ID") {
 		t.Fatalf("LoginClient mismatch error = %v", err)
 	}
@@ -493,7 +538,7 @@ func TestLoginClientRejectsEarlyPlayPacket(t *testing.T) {
 		serverDone <- server.Send(context.Background(), StatePlay, PlayerState{})
 	}()
 
-	_, err := LoginClient(context.Background(), client, testIdentity(6))
+	_, err := LoginClient(context.Background(), client, testIdentity(6), 32)
 	if err == nil || !strings.Contains(err.Error(), "protocol violation") {
 		t.Fatalf("early play error = %v", err)
 	}
@@ -542,7 +587,7 @@ func TestLoginClientKeepsPlayControlPacketsOutOfMirror(t *testing.T) {
 		serverDone <- endpoint.Send(context.Background(), Disconnect{Code: DisconnectTimeout, Message: "idle"})
 	}()
 
-	endpoint, err := LoginClient(context.Background(), clientStream, testIdentity(7))
+	endpoint, err := LoginClient(context.Background(), clientStream, testIdentity(7), 32)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -580,7 +625,7 @@ func beginMemoryLoginWithContext(t *testing.T, ctx context.Context, client Clien
 	if packet, err := client.Recv(context.Background(), StateHandshake); err != nil || packet != (ServerHello{ProtocolVersion: ProtocolVersion}) {
 		t.Fatalf("server hello = (%+v, %v)", packet, err)
 	}
-	if err := client.Send(context.Background(), StateLogin, LoginStart{PlayerID: identity.PlayerID, DisplayName: identity.DisplayName}); err != nil {
+	if err := client.Send(context.Background(), StateLogin, LoginStart{PlayerID: identity.PlayerID, DisplayName: identity.DisplayName, ViewDistance: 32}); err != nil {
 		t.Fatal(err)
 	}
 	result := <-pendingDone
@@ -659,6 +704,31 @@ func (stream *staticClientHelloStream) Recv(context.Context, State) (ClientPacke
 
 func (*staticClientHelloStream) Peer() string { return "test" }
 func (*staticClientHelloStream) Close() error { return nil }
+
+// staticLoginStartStream 依次返回当前版本的握手 ClientHello 与构造时注入的
+// `LoginStart`，让驱动级测试能送达未通过发送侧校验的登录载荷（如域外
+// 视距），等价于恶意客户端手写的 wire 字节。
+type staticLoginStartStream struct {
+	start     LoginStart
+	sent      ServerPacket
+	sentState State
+}
+
+func (stream *staticLoginStartStream) Send(_ context.Context, state State, packet ServerPacket) error {
+	stream.sentState = state
+	stream.sent = packet
+	return nil
+}
+
+func (stream *staticLoginStartStream) Recv(_ context.Context, state State) (ClientPacket, error) {
+	if state == StateHandshake {
+		return ClientHello{ProtocolVersion: ProtocolVersion}, nil
+	}
+	return stream.start, nil
+}
+
+func (*staticLoginStartStream) Peer() string { return "test" }
+func (*staticLoginStartStream) Close() error { return nil }
 
 func TestProtocolV26RejectsPriorVersionsBeforePlay(t *testing.T) {
 	// v24 是上一版本（authoritative-hunger 交付的进食与饥饿字段），必须和

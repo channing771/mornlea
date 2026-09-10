@@ -13,6 +13,7 @@ package realm
 import (
 	"testing"
 
+	"github.com/channing771/mornlea/packages/server/updates"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/world"
 	"github.com/channing771/mornlea/packages/shared/worldgen"
@@ -54,7 +55,7 @@ func stepSaplingGrowth(
 }
 
 // saplingGrowthTick 返回最小的 tick：随机抽样在该 tick 命中 position 所在格，
-// 且 `saplingGrowthRoll` 的结果等于 hit。用例据此在确定步数内把一次真实的生长
+// 且 `sampler.SaplingGrowthRoll` 的结果等于 hit。用例据此在确定步数内把一次真实的生长
 // 尝试固定在「判定命中」或「判定未命中」两种状态上。
 func saplingGrowthTick(
 	t *testing.T,
@@ -70,13 +71,13 @@ func saplingGrowthTick(
 	cell := localX | localZ<<core.SectionShift | localY<<(core.SectionShift*2)
 	for tick := range uint64(1 << 20) {
 		sampled := false
-		for _, candidate := range sampleCells(seed, tick, key, position.SectionIndex(), samples, nil) {
+		for _, candidate := range sampler.SampleCells(seed, tick, key, position.SectionIndex(), samples, nil) {
 			if candidate == cell {
 				sampled = true
 				break
 			}
 		}
-		if sampled && saplingGrowthRoll(seed, tick, key.Dimension, position) == hit {
+		if sampled && sampler.SaplingGrowthRoll(seed, tick, key.Dimension, position) == hit {
 			return tick
 		}
 	}
@@ -516,15 +517,15 @@ func TestSaplingGrowthReadBudgetBoundedByExaminedCells(t *testing.T) {
 func TestSaplingGrowthRollIsIndependentAndDeterministic(t *testing.T) {
 	position := core.BlockPos{X: 8, Y: 1, Z: 8}
 	const seed = int64(0x5a911eaf)
-	first := saplingGrowthRoll(seed, 12345, core.Overworld, position)
-	if first != saplingGrowthRoll(seed, 12345, core.Overworld, position) {
+	first := sampler.SaplingGrowthRoll(seed, 12345, core.Overworld, position)
+	if first != sampler.SaplingGrowthRoll(seed, 12345, core.Overworld, position) {
 		t.Fatal("同输入两次的生长判定不同，判定不是纯函数")
 	}
 	for _, salt := range []uint64{
-		cropGrowthRollSalt, cropYieldRollSalt, cropYieldPotatoSalt,
-		cropYieldCarrotSalt, poisonPotatoSalt, farmlandRevertRollSalt,
+		updates.CropGrowthRollSalt, updates.CropYieldRollSalt, updates.CropYieldPotatoSalt,
+		updates.CropYieldCarrotSalt, updates.PoisonPotatoSalt, updates.FarmlandRevertRollSalt,
 	} {
-		if saplingGrowthRollSalt == salt {
+		if updates.SaplingGrowthRollSalt == salt {
 			t.Fatalf("生长判定 salt 与既有 salt %#x 相同", salt)
 		}
 	}
@@ -532,7 +533,7 @@ func TestSaplingGrowthRollIsIndependentAndDeterministic(t *testing.T) {
 	hits, total := 0, 0
 	for tick := range uint64(8192) {
 		for x := int32(0); x < 4; x++ {
-			if saplingGrowthRoll(seed, tick, core.Overworld, core.BlockPos{X: x, Y: 1, Z: 8}) {
+			if sampler.SaplingGrowthRoll(seed, tick, core.Overworld, core.BlockPos{X: x, Y: 1, Z: 8}) {
 				hits++
 			}
 			total++

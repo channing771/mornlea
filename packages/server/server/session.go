@@ -63,6 +63,9 @@ type session struct {
 	workers     *sync.WaitGroup
 	exit        chan SessionExit
 	detach      func(contract.SessionID, uint64, error) bool
+	// viewDistance 是该会话登录协商中声明的期望视距（0 表示未声明）：
+	// 跨维传送以注销重建实现，重建时必须携带它，订阅视距才不随传送回落。
+	viewDistance uint8
 
 	mu               sync.Mutex
 	isClosed         bool
@@ -122,6 +125,7 @@ func newSession(
 		workers:           workers,
 		exit:              make(chan SessionExit, 1),
 		detach:            detach,
+		viewDistance:      spec.Restore.ViewDistance,
 		heartbeatReply:    make(chan uint64, 1),
 		publications:      make(map[core.ChunkKey]*publication),
 		pendingSnapshots:  make(map[core.ChunkKey]snapshotRequest),

@@ -36,6 +36,20 @@ import (
 // NOT 反向依赖 sim/network/render/storage，否则它会退化成 sim 的内部实现，丧失
 // 独立测试的意义。
 //
+// packages/server/updates → packages/shared/core（变更 unified-block-updates-world-streaming）：
+// 统一确定性方块更新调度器（定时面 `Queue` 与随机面 `Sampler`）只消费位置与坐标类型，
+// 预算、到期 tick 与处理回调全部由调用方注册/传入，不持有世界、不读 tunable。
+// `packages/server/fluid` 与 `packages/server/sim/realm` 的允许列表在此预登记对它的
+// 依赖（同 change 的调度迁移任务将实际 import：流体队列与湿度 FIFO 换接统一定时面、
+// 随机抽样哈希链换用 `Sampler`），属该 change 明确批准的预登记例外；updates MUST NOT
+// 反向依赖 fluid/sim，否则统一调度器会重新耦合进单一域。
+//
+// packages/server/sim/entity → packages/server/updates（变更 unified-block-updates-world-streaming）：
+// entity 侧散布的 splitmix64 哈希链副本（采掘/踩踏产量与毒土豆、短草种子、树叶树苗
+// 掉落、吃草抽选、生成候选哈希、漫游朝向派生）收敛为随机面 `Sampler` 的唯一真相，
+// 消除与 sim/realm 各持一份、逐字复制且可能各自漂移的欠账。updates 只暴露纯函数判定，
+// 不反向依赖 entity，实体状态所有权仍在 entity。
+//
 // packages/server/sim/realm → packages/shared/worldgen（变更 oak-sapling-regrowth）：随机
 // tick 的树苗生长需要 engine 的树形几何，realm 经 worldgen 的既有 ABI 桥（与
 // `MGW1` 同包，只有 nativeabi 接触 C ABI）取回相对根坐标的方块偏移列表并逐格
@@ -51,7 +65,8 @@ var allowed = map[string][]string{
 	"packages/shared/core":                      {"packages/shared/nativeabi"},
 	"packages/shared/nativeabi":                 {},
 	"packages/shared/config":                    {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/tuning", "packages/shared/logging"},
-	"packages/server/fluid":                     {"packages/shared/core", "packages/shared/nativeabi"},
+	"packages/server/fluid":                     {"packages/server/updates", "packages/shared/core", "packages/shared/nativeabi"},
+	"packages/server/updates":                   {"packages/shared/core"},
 	"packages/shared/physics":                   {"packages/shared/core", "packages/shared/nativeabi"},
 	"packages/shared/pathfind":                  {"packages/shared/core"},
 	"packages/shared/logging":                   {},
@@ -61,8 +76,8 @@ var allowed = map[string][]string{
 	"packages/shared/network/tcp":               {"packages/shared/network"},
 	"packages/shared/profile":                   {"packages/shared/core"},
 	"packages/server/sim/contract":              {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world"},
-	"packages/server/sim/entity":                {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "packages/server/sim/contract", "packages/server/sim/realm", "packages/shared/tuning"},
-	"packages/server/sim/realm":                 {"packages/shared/core", "packages/server/fluid", "packages/shared/world", "packages/shared/worldgen"},
+	"packages/server/sim/entity":                {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "packages/server/sim/contract", "packages/server/sim/realm", "packages/server/updates", "packages/shared/tuning"},
+	"packages/server/sim/realm":                 {"packages/shared/core", "packages/server/fluid", "packages/server/updates", "packages/shared/world", "packages/shared/worldgen"},
 	"packages/server/sim/runtime":               {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "packages/server/sim/contract", "packages/server/sim/entity", "packages/server/sim/realm", "packages/shared/tuning"},
 	"packages/shared/tuning":                    {"packages/shared/core"},
 	"packages/server/storage": {
@@ -416,8 +431,8 @@ func TestClientCommandDependencyViolationsDetectDrift(t *testing.T) {
 // 与合成反向边。
 var simAllowedEdges = map[string][]string{
 	"packages/server/sim/contract": {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world"},
-	"packages/server/sim/realm":    {"packages/shared/core", "packages/server/fluid", "packages/shared/world", "packages/shared/worldgen"},
-	"packages/server/sim/entity":   {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "packages/server/sim/contract", "packages/server/sim/realm", "packages/shared/tuning"},
+	"packages/server/sim/realm":    {"packages/shared/core", "packages/server/fluid", "packages/server/updates", "packages/shared/world", "packages/shared/worldgen"},
+	"packages/server/sim/entity":   {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "packages/server/sim/contract", "packages/server/sim/realm", "packages/server/updates", "packages/shared/tuning"},
 	"packages/server/sim/runtime":  {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "packages/server/sim/contract", "packages/server/sim/entity", "packages/server/sim/realm", "packages/shared/tuning"},
 }
 

@@ -356,6 +356,9 @@ func (server *Server) step(scheduled time.Time) contract.TickResult {
 	// inbox 才能被同 tick 的夜行者阶段消费；派发绝不等待 A*。
 	server.advanceHostileChase()
 	result := server.engine.StepWithTunables(tickTunables)
+	if observer := server.config.StreamingObserver; observer != nil {
+		observer(result.Acquire, result.Ready)
+	}
 	if server.companionManager != nil {
 		// 采掘进度只在 TickResult.Companions 发布（CompanionBodies 不含采掘
 		// 域）：tick 末回填缓存，下一 tick 的 advanceRunners 与 bodies 缓存

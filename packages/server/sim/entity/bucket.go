@@ -79,17 +79,16 @@ func (engine *engineContext) ApplyBucketCollect(
 	}
 
 	// —— 以下是唯一的写入区：全部校验已过 ——
-	_, changed, setErr := dimension.SetBlock(hit.Block, core.AirID)
+	old, changed, setErr := dimension.SetBlock(hit.Block, core.AirID)
 	if setErr != nil {
 		return mapSetBlockError(setErr), true
 	}
 	if !changed {
 		return RejectNoTarget, true
 	}
-	engine.recordChange(session.dimension, hit.Block, core.AirID, pending)
-	// 源变空气恒为流体成员变化：`recordChange` 只入队流体，湿度重判在这里单独
-	// 入队；放水侧按成员是否变化条件入队（见 `ApplyBucketPlace`）。
-	engine.realm.EnqueueFarmlandMoistureAroundFluid(session.dimension, hit.Block)
+	// 写前校验保证旧值恒为水源：流体成员恒变化，湿窗口重判由统一入队门面按
+	// (old, block) 派生（放水侧按成员是否变化条件派生，见 `ApplyBucketPlace`）。
+	engine.recordChange(session.dimension, hit.Block, old, core.AirID, pending)
 	player.inventory.Hotbar.Slots[selected] = core.ItemStack{Item: core.ItemWaterBucket, Count: 1}
 	player.inventoryDirty = true
 	// 取水成功同样消耗本 tick 的交互：采掘只抑制这一个 tick（见 `advanceMining`）。
@@ -156,19 +155,16 @@ func (engine *engineContext) ApplyBucketPlace(
 	}
 
 	// —— 以下是唯一的写入区：全部校验已过 ——
-	_, changed, setErr := dimension.SetBlock(target, core.WaterSourceID)
+	old, changed, setErr := dimension.SetBlock(target, core.WaterSourceID)
 	if setErr != nil {
 		return mapSetBlockError(setErr), true
 	}
 	if !changed {
 		return RejectNoTarget, true
 	}
-	engine.recordChange(session.dimension, target, core.WaterSourceID, pending)
-	// 湿度只跟流体成员变化：空气变源入队重判；流动变源的等级变化不入队，与
-	// 放置覆盖流体的既有语义一致。
-	if core.IsFluid(block) != core.IsFluid(core.WaterSourceID) {
-		engine.realm.EnqueueFarmlandMoistureAroundFluid(session.dimension, target)
-	}
+	// 空气变源是流体成员变化、流动变源只是等级变化：湿窗口是否入队由统一
+	// 门面按 (old, block) 派生，与放置覆盖流体的既有语义一致。
+	engine.recordChange(session.dimension, target, old, core.WaterSourceID, pending)
 	player.inventory.Hotbar.Slots[selected] = core.ItemStack{Item: core.ItemEmptyBucket, Count: 1}
 	player.inventoryDirty = true
 	// 放水成功同样消耗本 tick 的交互：采掘只抑制这一个 tick（见 `advanceMining`）。

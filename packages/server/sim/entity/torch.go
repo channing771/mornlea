@@ -150,13 +150,13 @@ func (engine *engineContext) removeUnsupportedTorch(
 	if !capacityOK {
 		return
 	}
-	_, changed, err := dimension.SetBlock(position, core.AirID)
+	old, changed, err := dimension.SetBlock(position, core.AirID)
 	if err != nil || !changed {
 		// 同 tick 更早的复核已移除该火把（同一支撑格服务多枚火把时不会发生，
 		// 这里是防御分支）：放弃写入，预检的掉落槽不提交、无泄漏。
 		return
 	}
-	engine.recordChange(dimensionID, position, core.AirID, pending)
+	engine.recordChange(dimensionID, position, old, core.AirID, pending)
 	chunk.CommitDrop(
 		slot,
 		core.ItemStack{Item: core.ItemTorch, Count: 1},

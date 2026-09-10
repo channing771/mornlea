@@ -23,7 +23,7 @@ const wanderConvergeTicks = 16
 // wanderSegmentWantYaw 纯算出指定段的漫游目标朝向，与生产派生同式：以世界种
 // 子、段序号与牛 ID 哈希后取低 24 位映射到 [-π, π)。
 func wanderSegmentWantYaw(seed int64, segment, id uint64) float32 {
-	base := splitmix64(uint64(seed) ^ segment ^ id)
+	base := sampler.SplitMix64(uint64(seed) ^ segment ^ id)
 	return normalizeYaw(float32(base&0xFFFFFF) * (2 * math.Pi / 0x1000000))
 }
 

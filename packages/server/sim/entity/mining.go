@@ -492,14 +492,14 @@ func (engine *engineContext) completeCompanionMining(
 			return
 		}
 	}
-	_, changed, err := engine.dimension(entry.dimension).SetBlock(entry.mining.target, core.AirID)
+	old, changed, err := engine.dimension(entry.dimension).SetBlock(entry.mining.target, core.AirID)
 	if err != nil || !changed {
 		// 区块失效或方块已被同 tick 更早的 actor 移除：对齐玩家 RejectNoTarget
 		// 语义，清零进度且不结算。
 		entry.mining = miningState{}
 		return
 	}
-	engine.recordChange(entry.dimension, entry.mining.target, core.AirID, pending)
+	engine.recordChange(entry.dimension, entry.mining.target, old, core.AirID, pending)
 	if entry.mining.harvestable {
 		entry.inventory = staged
 		entry.inventoryDirty = true
@@ -568,12 +568,12 @@ func (engine *engineContext) completeCompanionContainerMining(
 		// 判定属于 Manager（Runner 侧用同一 `CompanionMineContainerStaging` 判定）。
 		return
 	}
-	_, changed, err := dimension.SetBlock(entry.mining.target, core.AirID)
+	old, changed, err := dimension.SetBlock(entry.mining.target, core.AirID)
 	if err != nil || !changed {
 		entry.mining = miningState{}
 		return
 	}
-	engine.recordChange(entry.dimension, entry.mining.target, core.AirID, pending)
+	engine.recordChange(entry.dimension, entry.mining.target, old, core.AirID, pending)
 	switch entry.mining.block {
 	case core.ChestID:
 		chunk.DeactivateChest(chestSlot)
@@ -734,7 +734,8 @@ func (engine *engineContext) completeMining(
 			nextDrops = next
 			hasNext = true
 		}
-		// 原子双清：任一半失败回滚已改的另一半
+		// 原子双清：任一半失败回滚已改的另一半。写前旧值即掉落语义外的
+		// 门/门上半编号，随 recordChange 交给统一入队门面判定方块类别。
 		oldLower, _ := dimension.BlockAt(lowerPos)
 		oldUpper, _ := dimension.BlockAt(upperPos)
 		_, _, errLower := dimension.SetBlock(lowerPos, core.AirID)
@@ -746,12 +747,11 @@ func (engine *engineContext) completeMining(
 			// 回滚 lower
 			_, _, _ = dimension.SetBlock(lowerPos, oldLower)
 			_, _ = dimension.BlockAt(lowerPos)
-			_ = oldUpper
 			_ = upperIndex
 			return mapSetBlockError(errUpper), true
 		}
-		engine.recordChange(dimensionID, lowerPos, core.AirID, pending)
-		engine.recordChange(dimensionID, upperPos, core.AirID, pending)
+		engine.recordChange(dimensionID, lowerPos, oldLower, core.AirID, pending)
+		engine.recordChange(dimensionID, upperPos, oldUpper, core.AirID, pending)
 		if hasNext {
 			lowerChunk.CommitDropBatch(nextDrops)
 		}
@@ -797,14 +797,14 @@ func (engine *engineContext) completeMining(
 		if !capacityOK {
 			return RejectDropCapacity, true
 		}
-		_, changed, err := dimension.SetBlock(target, core.AirID)
+		old, changed, err := dimension.SetBlock(target, core.AirID)
 		if err != nil {
 			return mapSetBlockError(err), true
 		}
 		if !changed {
 			return RejectNoTarget, true
 		}
-		engine.recordChange(dimensionID, target, core.AirID, pending)
+		engine.recordChange(dimensionID, target, old, core.AirID, pending)
 		chunk.DeactivateFurnace(furnaceSlot)
 		chunk.CommitDropBatch(next)
 		return 0, false
@@ -827,14 +827,14 @@ func (engine *engineContext) completeMining(
 		if !capacityOK {
 			return RejectDropCapacity, true
 		}
-		_, changed, err := dimension.SetBlock(target, core.AirID)
+		old, changed, err := dimension.SetBlock(target, core.AirID)
 		if err != nil {
 			return mapSetBlockError(err), true
 		}
 		if !changed {
 			return RejectNoTarget, true
 		}
-		engine.recordChange(dimensionID, target, core.AirID, pending)
+		engine.recordChange(dimensionID, target, old, core.AirID, pending)
 		chunk.DeactivateChest(chestSlot)
 		chunk.CommitDropBatch(next)
 		return 0, false
@@ -843,7 +843,8 @@ func (engine *engineContext) completeMining(
 	// 短草的专用概率掉落分支（change natural-grass-seeds design 决策 4）：位于
 	// 容器/结构特殊分支之后、通用 `BlockDrop` 查询之前，且不进入作物多产物分支
 	// ——短草不是作物，种子的掉落语义只存在于这里。掉落与否由
-	// `shortGrassSeedDropRoll` 的位置稳定判定给出，与完成 tick、玩家、手持无关。
+	// `updates.Sampler` 的 `ShortGrassSeedDropRoll` 位置稳定判定给出，与完成
+	// tick、玩家、手持无关。
 	//
 	// 三条常数路径：
 	//   - 未命中：不调用 `PrepareDrop`、不需要掉落容量，直接清块并记录 mutation
@@ -855,29 +856,29 @@ func (engine *engineContext) completeMining(
 	//     全部不变；判定只依赖 seed/维度/坐标，稍后重试必然得到同一命中，
 	//     不能借重掷绕过容量，也不存在「先移块再放 drop」的吞资源窗口。
 	if core.IsWildGrass(block) {
-		if !shortGrassSeedDropRoll(engine.seed, dimensionID, target) {
-			_, changed, err := dimension.SetBlock(target, core.AirID)
+		if !sampler.ShortGrassSeedDropRoll(engine.seed, dimensionID, target) {
+			old, changed, err := dimension.SetBlock(target, core.AirID)
 			if err != nil {
 				return mapSetBlockError(err), true
 			}
 			if !changed {
 				return RejectNoTarget, true
 			}
-			engine.recordChange(dimensionID, target, core.AirID, pending)
+			engine.recordChange(dimensionID, target, old, core.AirID, pending)
 			return 0, false
 		}
 		dropSlot, capacityOK := chunk.PrepareDrop(core.ItemWheatSeeds, blockIndex)
 		if !capacityOK {
 			return RejectDropCapacity, true
 		}
-		_, changed, err := dimension.SetBlock(target, core.AirID)
+		old, changed, err := dimension.SetBlock(target, core.AirID)
 		if err != nil {
 			return mapSetBlockError(err), true
 		}
 		if !changed {
 			return RejectNoTarget, true
 		}
-		engine.recordChange(dimensionID, target, core.AirID, pending)
+		engine.recordChange(dimensionID, target, old, core.AirID, pending)
 		chunk.CommitDrop(
 			dropSlot,
 			core.ItemStack{Item: core.ItemWheatSeeds, Count: 1},
@@ -891,14 +892,14 @@ func (engine *engineContext) completeMining(
 	// 没有对应物品与任何掉落，任何手持完成采掘都只清块——不调用
 	// `PrepareDrop`、不需要掉落容量，掉落容量满也必须成功。
 	if core.IsSnowLayer(block) {
-		_, changed, err := dimension.SetBlock(target, core.AirID)
+		old, changed, err := dimension.SetBlock(target, core.AirID)
 		if err != nil {
 			return mapSetBlockError(err), true
 		}
 		if !changed {
 			return RejectNoTarget, true
 		}
-		engine.recordChange(dimensionID, target, core.AirID, pending)
+		engine.recordChange(dimensionID, target, old, core.AirID, pending)
 		return 0, false
 	}
 
@@ -907,21 +908,21 @@ func (engine *engineContext) completeMining(
 	// 熔炉/箱子/小麦同形；harvestable 为假时仅移除方块不产生掉落。
 	if block == core.PotatoStage7ID {
 		if !harvestable {
-			_, changed, err := dimension.SetBlock(target, core.AirID)
+			old, changed, err := dimension.SetBlock(target, core.AirID)
 			if err != nil {
 				return mapSetBlockError(err), true
 			}
 			if !changed {
 				return RejectNoTarget, true
 			}
-			engine.recordChange(dimensionID, target, core.AirID, pending)
+			engine.recordChange(dimensionID, target, old, core.AirID, pending)
 			return 0, false
 		}
-		n := cropYieldRollsPotato(engine.seed, engine.tick.Load(), dimensionID, target)
+		n := sampler.CropYieldRollsPotato(engine.seed, engine.tick.Load(), dimensionID, target)
 		var stacks [2]core.ItemStack
 		stacks[0] = core.ItemStack{Item: core.ItemPotato, Count: n}
 		stackCount := 1
-		if poisonRoll(engine.seed, engine.tick.Load(), dimensionID, target) {
+		if sampler.PoisonRoll(engine.seed, engine.tick.Load(), dimensionID, target) {
 			stacks[1] = core.ItemStack{Item: core.ItemPoisonousPotato, Count: 1}
 			stackCount = 2
 		}
@@ -929,56 +930,56 @@ func (engine *engineContext) completeMining(
 		if !capacityOK {
 			return RejectDropCapacity, true
 		}
-		_, changed, err := dimension.SetBlock(target, core.AirID)
+		old, changed, err := dimension.SetBlock(target, core.AirID)
 		if err != nil {
 			return mapSetBlockError(err), true
 		}
 		if !changed {
 			return RejectNoTarget, true
 		}
-		engine.recordChange(dimensionID, target, core.AirID, pending)
+		engine.recordChange(dimensionID, target, old, core.AirID, pending)
 		chunk.CommitDropBatch(next)
 		return 0, false
 	}
 	if block == core.CarrotStage7ID {
 		if !harvestable {
-			_, changed, err := dimension.SetBlock(target, core.AirID)
+			old, changed, err := dimension.SetBlock(target, core.AirID)
 			if err != nil {
 				return mapSetBlockError(err), true
 			}
 			if !changed {
 				return RejectNoTarget, true
 			}
-			engine.recordChange(dimensionID, target, core.AirID, pending)
+			engine.recordChange(dimensionID, target, old, core.AirID, pending)
 			return 0, false
 		}
-		n := cropYieldRollsCarrot(engine.seed, engine.tick.Load(), dimensionID, target)
+		n := sampler.CropYieldRollsCarrot(engine.seed, engine.tick.Load(), dimensionID, target)
 		stacks := [1]core.ItemStack{{Item: core.ItemCarrot, Count: n}}
 		next, capacityOK := chunk.PrepareDropBatch(stacks[:], blockIndex, engine.tunables.DropPickupDelayTicks)
 		if !capacityOK {
 			return RejectDropCapacity, true
 		}
-		_, changed, err := dimension.SetBlock(target, core.AirID)
+		old, changed, err := dimension.SetBlock(target, core.AirID)
 		if err != nil {
 			return mapSetBlockError(err), true
 		}
 		if !changed {
 			return RejectNoTarget, true
 		}
-		engine.recordChange(dimensionID, target, core.AirID, pending)
+		engine.recordChange(dimensionID, target, old, core.AirID, pending)
 		chunk.CommitDropBatch(next)
 		return 0, false
 	}
 	if block >= core.PotatoStage0ID && block <= core.PotatoStage6ID {
 		if !harvestable {
-			_, changed, err := dimension.SetBlock(target, core.AirID)
+			old, changed, err := dimension.SetBlock(target, core.AirID)
 			if err != nil {
 				return mapSetBlockError(err), true
 			}
 			if !changed {
 				return RejectNoTarget, true
 			}
-			engine.recordChange(dimensionID, target, core.AirID, pending)
+			engine.recordChange(dimensionID, target, old, core.AirID, pending)
 			return 0, false
 		}
 		stacks := [1]core.ItemStack{{Item: core.ItemPotato, Count: 1}}
@@ -986,27 +987,27 @@ func (engine *engineContext) completeMining(
 		if !capacityOK {
 			return RejectDropCapacity, true
 		}
-		_, changed, err := dimension.SetBlock(target, core.AirID)
+		old, changed, err := dimension.SetBlock(target, core.AirID)
 		if err != nil {
 			return mapSetBlockError(err), true
 		}
 		if !changed {
 			return RejectNoTarget, true
 		}
-		engine.recordChange(dimensionID, target, core.AirID, pending)
+		engine.recordChange(dimensionID, target, old, core.AirID, pending)
 		chunk.CommitDropBatch(next)
 		return 0, false
 	}
 	if block >= core.CarrotStage0ID && block <= core.CarrotStage6ID {
 		if !harvestable {
-			_, changed, err := dimension.SetBlock(target, core.AirID)
+			old, changed, err := dimension.SetBlock(target, core.AirID)
 			if err != nil {
 				return mapSetBlockError(err), true
 			}
 			if !changed {
 				return RejectNoTarget, true
 			}
-			engine.recordChange(dimensionID, target, core.AirID, pending)
+			engine.recordChange(dimensionID, target, old, core.AirID, pending)
 			return 0, false
 		}
 		stacks := [1]core.ItemStack{{Item: core.ItemCarrot, Count: 1}}
@@ -1014,14 +1015,14 @@ func (engine *engineContext) completeMining(
 		if !capacityOK {
 			return RejectDropCapacity, true
 		}
-		_, changed, err := dimension.SetBlock(target, core.AirID)
+		old, changed, err := dimension.SetBlock(target, core.AirID)
 		if err != nil {
 			return mapSetBlockError(err), true
 		}
 		if !changed {
 			return RejectNoTarget, true
 		}
-		engine.recordChange(dimensionID, target, core.AirID, pending)
+		engine.recordChange(dimensionID, target, old, core.AirID, pending)
 		chunk.CommitDropBatch(next)
 		return 0, false
 	}
@@ -1032,7 +1033,7 @@ func (engine *engineContext) completeMining(
 	}
 
 	// 成熟小麦是全仓唯一的多产物方块：1–3 个小麦加 1–3 颗种子，具体数量由
-	// `cropYieldRolls` 对 (worldSeed, 完成本次采掘的权威 tick, 维度, 目标坐标)
+	// `updates.Sampler` 的 `CropYieldRolls` 对 (worldSeed, 完成本次采掘的权威 tick, 维度, 目标坐标)
 	// 的纯整数哈希给出。tick 取值点就是这一行 `engine.tick.Load()`：tick 在
 	// `Step` 内单调推进且单线程读写，`completeMining` 只在完成 tick 被调用一次，
 	// 因此同一株作物在同一权威 tick 上重新结算必然得到同一串数量，不依赖任何
@@ -1048,7 +1049,7 @@ func (engine *engineContext) completeMining(
 	// 批量预演复用破坏熔炉/箱子的 PrepareDropBatch：任一堆放不下就整体返回
 	// false，方块与掉落槽逐字节不变，绝不出现"小麦掉了、种子没掉"的半掉落。
 	if block == core.WheatStage7ID && harvestable {
-		wheatCount, seedCount := cropYieldRolls(engine.seed, engine.tick.Load(), dimensionID, target)
+		wheatCount, seedCount := sampler.CropYieldRolls(engine.seed, engine.tick.Load(), dimensionID, target)
 		stacks := [2]core.ItemStack{
 			{Item: item, Count: wheatCount},
 			{Item: core.ItemWheatSeeds, Count: seedCount},
@@ -1059,14 +1060,14 @@ func (engine *engineContext) completeMining(
 		if !capacityOK {
 			return RejectDropCapacity, true
 		}
-		_, changed, err := dimension.SetBlock(target, core.AirID)
+		old, changed, err := dimension.SetBlock(target, core.AirID)
 		if err != nil {
 			return mapSetBlockError(err), true
 		}
 		if !changed {
 			return RejectNoTarget, true
 		}
-		engine.recordChange(dimensionID, target, core.AirID, pending)
+		engine.recordChange(dimensionID, target, old, core.AirID, pending)
 		chunk.CommitDropBatch(next)
 		return 0, false
 	}
@@ -1084,7 +1085,7 @@ func (engine *engineContext) completeMining(
 	if block == core.LeavesID && harvestable {
 		stacks := [2]core.ItemStack{{Item: item, Count: 1}}
 		stackCount := 1
-		if leavesSaplingDropRoll(engine.seed, dimensionID, target) {
+		if sampler.LeavesSaplingDropRoll(engine.seed, dimensionID, target) {
 			stacks[1] = core.ItemStack{Item: core.ItemSapling, Count: 1}
 			stackCount = 2
 		}
@@ -1094,14 +1095,14 @@ func (engine *engineContext) completeMining(
 		if !capacityOK {
 			return RejectDropCapacity, true
 		}
-		_, changed, err := dimension.SetBlock(target, core.AirID)
+		old, changed, err := dimension.SetBlock(target, core.AirID)
 		if err != nil {
 			return mapSetBlockError(err), true
 		}
 		if !changed {
 			return RejectNoTarget, true
 		}
-		engine.recordChange(dimensionID, target, core.AirID, pending)
+		engine.recordChange(dimensionID, target, old, core.AirID, pending)
 		chunk.CommitDropBatch(next)
 		return 0, false
 	}
@@ -1114,14 +1115,14 @@ func (engine *engineContext) completeMining(
 			return RejectDropCapacity, true
 		}
 	}
-	_, changed, err := dimension.SetBlock(target, core.AirID)
+	old, changed, err := dimension.SetBlock(target, core.AirID)
 	if err != nil {
 		return mapSetBlockError(err), true
 	}
 	if !changed {
 		return RejectNoTarget, true
 	}
-	engine.recordChange(dimensionID, target, core.AirID, pending)
+	engine.recordChange(dimensionID, target, old, core.AirID, pending)
 	if harvestable {
 		chunk.CommitDrop(
 			dropSlot,

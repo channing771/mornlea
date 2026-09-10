@@ -64,7 +64,10 @@ var expectedRuntimeSubscriptionFields = map[string]string{
 	"hasView":                     "bool",
 	"dimension":                   "core.DimensionID",
 	"center":                      "core.ChunkPos",
-	"wanted":                      "map[core.ChunkKey]struct{}",
+	// radius 是每会话生效订阅半径（登录声明视距 +1 后按引擎视界钳制；
+	// trusted observer 与未声明路径即引擎视界）：纯标量镜像，不持有 owner。
+	"radius": "int",
+	"wanted": "map[core.ChunkKey]struct{}",
 }
 
 var requiredEntityStateFields = map[string]string{
@@ -125,6 +128,7 @@ type subscriptionState struct {
 	hasView bool
 	dimension core.DimensionID
 	center core.ChunkPos
+	radius int
 	wanted map[core.ChunkKey]struct{}
 }
 type Engine struct {

@@ -26,10 +26,14 @@ type pendingLoginStream struct {
 }
 
 type activeLogin struct {
-	PlayerID   core.PlayerID
-	Name       string
-	Session    contract.SessionID
-	Generation uint64
+	PlayerID core.PlayerID
+	Name     string
+	// ViewDistance 是该会话在 `LoginStart` 中声明并通过域校验的期望视距
+	// （v40 登录协商的会话侧存储）。接纳后由订阅半径换算消费；本结构只
+	// 承载登录事实，不做钳制。
+	ViewDistance uint8
+	Session      contract.SessionID
+	Generation   uint64
 }
 
 func (h *Host) acceptLoop(ctx context.Context, listener network.Listener) {
@@ -192,6 +196,7 @@ func (h *Host) acceptStream(
 	}
 	h.mu.Lock()
 	active.Name = identity.DisplayName
+	active.ViewDistance = pending.ViewDistance()
 	h.mu.Unlock()
 
 	restore, err := h.players.Prepare(
@@ -205,6 +210,9 @@ func (h *Host) acceptStream(
 		_ = pending.Reject(ctx, code, message)
 		return err
 	}
+	// 登录协商的会话侧声明随注册载荷进入引擎：订阅半径的换算与上界钳制在
+	// 引擎内单点完成（上界即引擎视界，与配置同源），host 不在此处解释。
+	restore.ViewDistance = active.ViewDistance
 
 	h.mu.Lock()
 	if h.nextSession == ^contract.SessionID(0) || h.nextGeneration == ^uint64(0) {

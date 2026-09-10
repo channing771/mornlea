@@ -23,9 +23,9 @@ import (
 	"github.com/channing771/mornlea/packages/shared/worldgen"
 )
 
-func TestScenarioV22ContainsSevenSortedUnicodeRemotePlayers(t *testing.T) {
-	if scenarioVersion != 22 {
-		t.Fatalf("scenarioVersion=%d, want 22", scenarioVersion)
+func TestScenarioV23ContainsSevenSortedUnicodeRemotePlayers(t *testing.T) {
+	if scenarioVersion != 23 {
+		t.Fatalf("scenarioVersion=%d, want 23", scenarioVersion)
 	}
 	if input := fixedBenchmarkPlayerInput(); input.Mining {
 		t.Fatalf("固定 benchmark PlayerInput.Mining=%t，想要 false", input.Mining)
@@ -66,9 +66,31 @@ func TestScenarioV22ContainsSevenSortedUnicodeRemotePlayers(t *testing.T) {
 	}
 }
 
+func TestBenchmarkScenarioV23DeclaresSessionViewDistanceGradient(t *testing.T) {
+	if scenarioVersion != 23 {
+		t.Fatalf("scenarioVersion=%d, want 23", scenarioVersion)
+	}
+	scenario := application.NewMultiplayerBenchmarkScenario()
+	// 梯度按会话登录顺序（本地玩家在前、七名远端依次在后）取 2/4/6/8
+	// 循环；取值与顺序是场景身份，单侧改动即改变订阅并集与被测 workload
+	//（上端 8 受探针存档 job FIFO 窗口预算约束，见场景定义注释）。
+	want := []uint8{2, 4, 6, 8, 2, 4, 6, 8}
+	if len(scenario.ViewDistances) != len(want) {
+		t.Fatalf("view distances len=%d, want %d", len(scenario.ViewDistances), len(want))
+	}
+	for index, distance := range scenario.ViewDistances {
+		if distance != want[index] {
+			t.Fatalf("view distance[%d]=%d, want %d", index, distance, want[index])
+		}
+		if distance < 2 || distance > 64 {
+			t.Fatalf("view distance[%d]=%d 超出 v40 登录域 2..64", index, distance)
+		}
+	}
+}
+
 func TestBenchmarkScenarioV22AccountsForCompanionRendererUploadLayout(t *testing.T) {
-	if scenarioVersion != 22 {
-		t.Fatalf("scenarioVersion=%d，想要 22", scenarioVersion)
+	if scenarioVersion != 23 {
+		t.Fatalf("scenarioVersion=%d，想要 23", scenarioVersion)
 	}
 	scenario := application.NewMultiplayerBenchmarkScenario()
 	if len(scenario.Spawns) != 7 || len(scenario.Tags) != 7 {

@@ -36,7 +36,7 @@ func TestPlayerPlacementRemovingLastIrrigationDriesFarmlandSameTick(t *testing.T
 		}
 		engine.Step()
 	}
-	if pending := engine.realm.FarmlandMoisturePendingLen() - engine.realm.FarmlandMoistureHead(); pending != 0 {
+	if pending := engine.realm.FarmlandMoisturePendingLen(); pending != 0 {
 		t.Fatalf("放置前仍有 %d 个旧湿度候选", pending)
 	}
 

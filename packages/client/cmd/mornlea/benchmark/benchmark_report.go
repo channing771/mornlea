@@ -234,6 +234,22 @@ func validateBenchmarkReport(report client.PerfReport) error {
 		if multiplayer.PeakRSSBytes == 0 {
 			failures = append(failures, "multiplayer 峰值 RSS=0")
 		}
+		// streaming 指标族自 scenario v23 进入报告（世界流式收尾）；历史
+		// 场景报告没有该族，解码为零值，按版本放行。数值只记录：这里只校验
+		// 完整性与分位单调，不设任何阈值。
+		if report.ScenarioVersion >= 23 {
+			streaming := report.Streaming
+			if streaming.LoadedChunks <= 0 || streaming.LoadLatency.Samples <= 0 ||
+				streaming.LoadLatency.P50MS <= 0 || streaming.LoadLatency.P95MS <= 0 ||
+				streaming.LoadLatency.P99MS <= 0 || streaming.LoadLatency.MaxMS <= 0 ||
+				streaming.PeakRSSBytes == 0 {
+				failures = append(failures, fmt.Sprintf("streaming 指标不完整: %+v", streaming))
+			} else if streaming.LoadLatency.P50MS > streaming.LoadLatency.P95MS ||
+				streaming.LoadLatency.P95MS > streaming.LoadLatency.P99MS ||
+				streaming.LoadLatency.P99MS > streaming.LoadLatency.MaxMS {
+				failures = append(failures, fmt.Sprintf("streaming 分位数非单调: %+v", streaming.LoadLatency))
+			}
+		}
 	}
 	if len(failures) > 0 {
 		return fmt.Errorf("%s", strings.Join(failures, "；"))

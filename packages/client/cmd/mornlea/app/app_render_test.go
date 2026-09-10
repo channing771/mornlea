@@ -416,7 +416,7 @@ func TestApplicationConstructionCreatesPanelWhenDevOn(t *testing.T) {
 		return stream, nil
 	}
 	dependencies.LoginClient = func(
-		context.Context, network.ClientPacketStream, network.Identity,
+		context.Context, network.ClientPacketStream, network.Identity, uint8,
 	) (network.ClientEndpoint, uint64, error) {
 		return endpoint, 0, nil
 	}

@@ -113,7 +113,7 @@ func TestBeginServerLoginSendsConfiguredWorldSeed(t *testing.T) {
 	if packet, err := client.Recv(context.Background(), StateHandshake); err != nil || packet != (ServerHello{ProtocolVersion: ProtocolVersion}) {
 		t.Fatalf("server hello = (%+v, %v)", packet, err)
 	}
-	if err := client.Send(context.Background(), StateLogin, LoginStart{PlayerID: identity.PlayerID, DisplayName: identity.DisplayName}); err != nil {
+	if err := client.Send(context.Background(), StateLogin, LoginStart{PlayerID: identity.PlayerID, DisplayName: identity.DisplayName, ViewDistance: 32}); err != nil {
 		t.Fatal(err)
 	}
 	packet, err := client.Recv(context.Background(), StateLogin)
@@ -148,7 +148,7 @@ func TestLoginClientWithSeedSurfacesWorldSeed(t *testing.T) {
 			}
 			serverDone <- pending.Accept(context.Background(), func(ServerEndpoint) error { return nil })
 		}()
-		endpoint, gotSeed, err := LoginClientWithSeed(context.Background(), clientStream, identity)
+		endpoint, gotSeed, err := LoginClientWithSeed(context.Background(), clientStream, identity, 32)
 		if err != nil {
 			t.Fatalf("种子 %#x: LoginClientWithSeed: %v", worldSeed, err)
 		}

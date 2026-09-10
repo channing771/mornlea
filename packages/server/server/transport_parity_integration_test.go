@@ -754,7 +754,7 @@ func openParityTransport(
 	acceptDone := make(chan error, 1)
 	go func() { acceptDone <- host.AcceptStream(context.Background(), serverStream) }()
 	ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
-	endpoint, err := network.LoginClient(ctx, clientStream, identity)
+	endpoint, err := network.LoginClient(ctx, clientStream, identity, 32)
 	cancel()
 	if err != nil {
 		closeTransport()

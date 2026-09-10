@@ -171,7 +171,7 @@ func TestFarmingLoopEndToEndMemory(t *testing.T) {
 
 		// —— 第 6 步：收获，哈希产量的两类产物经既有拾取路径入包 ——
 		//
-		// 成熟小麦掉多少由 `sim.cropYieldRolls` 对 (世界种子, 完成采掘的权威
+		// 成熟小麦掉多少由 `sampler.CropYieldRolls` 对 (世界种子, 完成采掘的权威
 		// tick, 维度, 坐标) 的哈希决定，小麦与种子各落在闭区间 [1,3]；两类
 		// 产物在同一完成 tick 入掉落区、共享同一拾取延迟。
 		tools.Send(func(sequence uint64) network.ClientMessage {
