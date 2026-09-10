@@ -128,6 +128,7 @@ func translateClientMessage(
 			Mining:    message.Mining,
 			Eating:    message.Eating,
 			Sprinting: message.Sprinting,
+			Sneaking:  message.Sneaking,
 		}, true
 	case network.PlaceBlock:
 		return contract.Command{

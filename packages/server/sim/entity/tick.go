@@ -95,6 +95,7 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 			}
 			player := session.player
 			player.lastInputSequence = command.Sequence
+			player.sneakingHeld = command.Sneaking
 			if !validPlayerInput(command) {
 				player.input = physics.Input{Yaw: player.yaw}
 				player.miningHeld = false

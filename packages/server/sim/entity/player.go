@@ -103,6 +103,13 @@ type playerState struct {
 	// 它同样留在 playerState 而不是上移 actorState：伙伴不进食。
 	eating eatingState
 
+	// sneakingHeld 是玩家本 tick 的持续潜行意图，来自 `Command.Sneaking`
+	// （协议 v41 的 `PlayerInput.Sneaking`），语义与 `miningHeld`/`eatingHeld`
+	// 对称：每 `CommandPlayerInput` 更新一次，供开容器/门床交互分流。
+	//
+	// 它留在 playerState 而不是上移到 actorState：伙伴不潜行。
+	sneakingHeld bool
+
 	// sleeping 是该玩家的入睡位（每玩家一个布尔位，跳夜结算与取消路径的唯一
 	// 权威状态）。置位只发生在夜间对床右键的命令路径；移动输入、受击与跳夜
 	// 完成都会清零。它不持久化：重连即清醒，且跳夜只看当期活跃玩家。
