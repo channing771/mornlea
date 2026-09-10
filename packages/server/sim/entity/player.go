@@ -543,6 +543,10 @@ func (engine *engineContext) advanceActivePlayers() {
 		if player.hunger < 6 {
 			input.Sprinting = false
 		}
+		// 潜行优先：潜行意图有效时疾跑加速与疲劳都不触发（疾跑互斥的 sim 侧一半）。
+		if input.Sneaking {
+			input.Sprinting = false
+		}
 		// 潜行边缘保护：输入侧钳制意图，sweep bounds 与 Rust 积分天然一致。
 		if input.Sneaking && !input.Jump && (input.MoveX != 0 || input.MoveZ != 0) &&
 			player.state.OnGround && !input.BodyInFluid &&
@@ -592,6 +596,7 @@ func (engine *engineContext) advanceActivePlayers() {
 			)
 		}
 		// 疾跑：仅当本 tick 实际按 1.3× 加速时（门控全过）按固定表计费，未加速不计费。
+		// 潜行压制点在上游（饥饿门控后的潜行清零），此处判据无需重复设防。
 		if input.Sprinting && input.MoveZ > 0 && wasOnGround && !input.BodyInFluid {
 			player.applyExhaustion(exhaustionSprintMilli, engine.tunables.ExhaustionThresholdMilli)
 		}
