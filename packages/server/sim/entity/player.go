@@ -543,6 +543,12 @@ func (engine *engineContext) advanceActivePlayers() {
 		if player.hunger < 6 {
 			input.Sprinting = false
 		}
+		// 潜行边缘保护：输入侧钳制意图，sweep bounds 与 Rust 积分天然一致。
+		if input.Sneaking && !input.Jump && (input.MoveX != 0 || input.MoveZ != 0) &&
+			player.state.OnGround && !input.BodyInFluid &&
+			!physics.SneakEdgeHolds(player.state, input.MoveX, input.MoveZ, input.Yaw, source) {
+			input.MoveX, input.MoveZ = 0, 0
+		}
 		// 氧气按「本 tick 开始时的眼睛浸没标志」结算，与传给物理步的是同一个值：
 		// 水下视觉、水中积分与溺水三处共用这一份判定，不存在第二套。
 		player.advanceOxygen(input.EyeInFluid, engine.tunables.DrownDamageIntervalTicks)

@@ -161,5 +161,12 @@ func (p *Predictor) stepWithSubmersion(
 ) physics.State {
 	input.BodyInFluid, input.EyeInFluid = physics.SubmersionFlags(state.Position, source)
 	p.eyeInFluid = input.EyeInFluid
+	// 潜行边缘保护：与服务端同序的输入侧钳制，复用本步已算出的浸没标志，
+	// 不另算一遍。`Advance` 与和解重放都经这里，钳制位置恒与积分位置同源。
+	if input.Sneaking && !input.Jump && (input.MoveX != 0 || input.MoveZ != 0) &&
+		state.OnGround && !input.BodyInFluid &&
+		!physics.SneakEdgeHolds(state, input.MoveX, input.MoveZ, input.Yaw, source) {
+		input.MoveX, input.MoveZ = 0, 0
+	}
 	return physics.Step(state, input, source).State
 }
