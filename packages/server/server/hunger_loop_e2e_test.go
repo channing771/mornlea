@@ -76,7 +76,7 @@ type hungerLoopStage struct {
 // 门控上是同一侧，spec 的 Scenario「饥饿值 17 不回血」在 sim 侧由组 1 的
 // 成对夹具直接覆盖；这里覆盖的是它在真实机制下的自然落点。
 var hungerLoopExpected = []hungerLoopStage{
-	{"登录：缺失玩家的一次性材料包 + 三层饥饿初值", hungerLoopReading{Health: core.MaxHealth, Hunger: core.MaxHunger}},
+	{"登录：缺失玩家的空初始背包 + 三层饥饿初值", hungerLoopReading{Health: core.MaxHealth, Hunger: core.MaxHunger}},
 	{"摔落 10 格：floor(10) − 3 = 7 点伤害", hungerLoopReading{Health: core.MaxHealth - hungerLoopFallDamage, Hunger: core.MaxHunger}},
 	{"回血 1：疲劳 6000，跨 1 阈值，饱和 5000 → 4000", hungerLoopReading{Health: 14, Hunger: 20}},
 	{"回血 2：累计 12000，跨 3 阈值，饱和 4000 → 2000", hungerLoopReading{Health: 15, Hunger: 20}},
@@ -116,9 +116,9 @@ var hungerLoopExpected = []hungerLoopStage{
 // 3 小麦由夹具 `SetPlayerInventoryForTest` 直给并写在这里：小麦可得已由
 // `TestFarmingLoopEndToEndMemory`（自然种子 → 种 → 长 → 收）证明，本脚本不重
 // 跑农业闭环——那条路径要跨上千个权威 tick，而且它验的是农业本身。
-// 一次性材料包不再发种子也不发小麦更不发面包：第一颗种子由采除自然短草取
-// 得（`TestNaturalSeedFarmingMemoryTCPParity`），脚本在第 1 步显式钉住「登录
-// 时没有任何种子与食物」。
+// 新玩家的初始背包本就是空的：既不发种子，也不发小麦与面包。第一颗种子由采除
+// 自然短草取得（`TestNaturalSeedFarmingMemoryTCPParity`），脚本在第 1 步显式
+// 钉住「登录时没有任何种子与食物」——那份断言在新契约下扫的正是同一份空背包。
 //
 // 全部断言都从 wire 读：生命值与饥饿值读 `network.PlayerState`，背包读已确认的
 // `network.InventoryState`。单机与远程共用同一套模拟这条架构约束，只有在
@@ -134,7 +134,7 @@ func TestHungerLoopEndToEndMemory(t *testing.T) {
 
 	identity := integrationIdentity(0x8f, "Hungry")
 	// 刻意**不**预存玩家：只有 LoadPlayer 返回 ErrPlayerNotFound 的路径才会
-	// 构造一次性材料包与三层饥饿初值，而这两者正是整条脚本的起点。
+	// 构造空初始背包与三层饥饿初值，而这两者正是整条脚本的起点。
 	store := storage.NewMemory(storage.Metadata{
 		FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld,
 		DepthsSpawnAnchor: core.ChunkPos{},
@@ -161,17 +161,19 @@ func TestHungerLoopEndToEndMemory(t *testing.T) {
 	var wireInventory core.Inventory
 	var readings []hungerLoopReading
 
-	// —— 第 1 步：登录即拿到材料包，且身上没有任何食物 ——
+	// —— 第 1 步：登录即拿到空背包，且身上没有任何食物 ——
 	//
-	// 等待条件刻意只看「发布过一份非空背包」，**不**看具体物品：条件里写物品的话，
-	// 材料包被改动时这个循环会一直空转到 go test 超时，而超时是一种读不出原因的红。
-	ready, inventoryReady := false, false
+	// 等待条件取「携带权威背包的 `network.InventoryState` 已到达」这一事实本身：
+	// 既不看具体物品，也不看背包是否非空。新玩家的初始背包为空是契约，以「非空」
+	// 为信号会让这个循环在空背包下一直空转到 go test 超时，而超时是一种读不出
+	// 原因的红。
+	ready, inventoryPublished := false, false
 	waitIntegrationLoginReady(
 		t,
 		"hunger loop",
-		func() bool { return ready && inventoryReady && parityViewLoaded(mirror) },
+		func() bool { return ready && inventoryPublished && parityViewLoaded(mirror) },
 		func() string {
-			return fmt.Sprintf("ready=%v 背包已发布=%v 视野已加载=%v", ready, inventoryReady, parityViewLoaded(mirror))
+			return fmt.Sprintf("ready=%v 背包已发布=%v 视野已加载=%v", ready, inventoryPublished, parityViewLoaded(mirror))
 		},
 		func() {
 			_, messages := parityStep(t, host, endpoint, mirror)
@@ -181,22 +183,22 @@ func TestHungerLoopEndToEndMemory(t *testing.T) {
 					ready = ready || message.Ready
 				case network.InventoryState:
 					wireInventory = message.Inventory
-					inventoryReady = inventoryReady || message.Inventory != core.Inventory{}
+					inventoryPublished = true
 				}
 			}
 		},
 	)
-	// 「没有种子与食物」必须扫全部 36 格：材料包若顺手补发种子或面包，后面
+	// 「没有种子与食物」必须扫全部 36 格：初始背包若被重新塞进种子或面包，后面
 	// 的「小麦由夹具直给」与「饿到门控之下」两步都会失去意义，而只看快捷栏
-	// 的断言抓不住那种材料包。
+	// 的断言抓不住落在其他栏位里的发放。
 	if got := countItem(wireInventory, core.ItemWheatSeeds); got != 0 {
-		t.Fatalf("登录时已持有小麦种子 %d 颗，材料包不再发种子", got)
+		t.Fatalf("登录时已持有小麦种子 %d 颗，新玩家的初始背包为空", got)
 	}
 	if got := countItem(wireInventory, core.ItemBread); got != 0 {
-		t.Fatalf("登录时已持有面包 %d 个，材料包不该发食物", got)
+		t.Fatalf("登录时已持有面包 %d 个，新玩家的初始背包为空", got)
 	}
 	if got := countItem(wireInventory, core.ItemWheat); got != 0 {
-		t.Fatalf("登录时已持有小麦 %d 个，材料包只发建筑材料", got)
+		t.Fatalf("登录时已持有小麦 %d 个，新玩家的初始背包为空", got)
 	}
 
 	host.mu.Lock()
