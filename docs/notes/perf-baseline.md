@@ -2,7 +2,9 @@
 
 ## 当前 producer 与迁移规则
 
-当前 benchmark producer 为 scenario v22：自然短草又一次改变了被测进程与被测世界本身（稳定方块与 mesh registry 追加 `ShortGrassID`——实际烘焙条目 84 → 85，仍低于冻结上限 96；Go/Rust 植物材质判定集合从 `[31..54]` 扩为 `[31..54] ∪ {68}`，`55..67` 不移动；worldgen `MGW1` 请求扩为 layout 3 且 engine ABI 升为 v10，固定世界在合格草地上方空气格确定性新增短草，每个短草格经既有 plant 路径发射 4 条交叉斜面实例），叠加在 v21（常显 HUD 迁出 GPU 保留面）基线之上；benchmark 仍把 `FluidEnabled` 钉死为 `false`，也不含任何农业方块；固定 benchmark 输入仍为七名远端玩家、零伙伴，无头观察路径零 WebView 参与保持。当前唯一显式跨 workload 迁移为 `21:22`，v6..v21 历史报告仍可同版本读取。历史的 `20:21`、`19:20`、`18:19`、`17:18`、`16:17` 与更早的 `15:16` 已退役，只作本文的归档证据，工具不再接受它们。
+当前 benchmark producer 为 scenario v23：统一方块更新调度器与世界流式收尾又一次改变了被测进程的运行方式（耕地湿度重判的积压消费从 FIFO 改为统一调度器确定性全序、流体定时队列与随机抽样哈希链迁入 `packages/server/updates`、服务端多玩家探针按会话视距 `2/4/6/8` 梯度启用区块订阅与流式、存档 I/O 按类别与 region 并行化并新增 region 句柄 LRU 治理、报告新增 `streaming` 记录性指标族），叠加在 v22（自然短草）基线之上；benchmark 固定世界内容与 v22 逐格一致（仍把 `FluidEnabled` 钉死为 `false`，也不含任何农业方块）；固定 benchmark 输入仍为七名远端玩家、零伙伴，无头观察路径零 WebView 参与保持。当前唯一显式跨 workload 迁移为 `22:23`，v6..v22 历史报告仍可同版本读取。历史的 `21:22`、`20:21`、`19:20`、`18:19`、`17:18`、`16:17` 与更早的 `15:16` 已退役，只作本文的归档证据，工具不再接受它们。
+
+上一代（scenario v22）的判定理由：自然短草又一次改变了被测进程与被测世界本身（稳定方块与 mesh registry 追加 `ShortGrassID`——实际烘焙条目 84 → 85，仍低于冻结上限 96；Go/Rust 植物材质判定集合从 `[31..54]` 扩为 `[31..54] ∪ {68}`，`55..67` 不移动；worldgen `MGW1` 请求扩为 layout 3 且 engine ABI 升为 v10，固定世界在合格草地上方空气格确定性新增短草，每个短草格经既有 plant 路径发射 4 条交叉斜面实例），叠加在 v21（常显 HUD 迁出 GPU 保留面）基线之上。
 
 上一代（scenario v21）的判定理由：常显 HUD 层迁出 GPU 改变了被测进程本身（GPU 保留面只保留容器浮动面板族与悬停 tooltip——关闭容器界面的帧从 v20 关闭态最坏 100 quad/548 glyph 预算降到 0 quad/0 glyph，打开任一容器界面的最坏从 264 quad/700 glyph 预算收缩到 218 quad/268 glyph 预算，tooltip 按 8 rune 截断上限封顶、注册表实测最长名见证 262；固定 quad 上限 320、glyph 上限 768、glyph offset 15616 bytes、总容量 52480 bytes、48-byte instance 与 256-byte 区间对齐全部保持不变，缩出的容量全部沉淀为分支最坏与每帧实例前缀的缩小，因此每帧写入字节数移动；HUD 图集按整张贴图上传的契约与列布局不变；权威 tick 语义不变；benchmark 无头观察路径零 WebView 参与保持），即便 benchmark 世界内容未变——它仍把 `FluidEnabled` 钉死为 `false`，也不含任何农业方块；固定 benchmark 输入仍为七名远端玩家、零伙伴。
 
