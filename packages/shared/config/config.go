@@ -1449,6 +1449,7 @@ func Fields() []Field {
 		{Group: "physics", Name: "fluidAscendSpeed", Min: 0, Max: 30, Step: 0.1},
 		{Group: "physics", Name: "fluidHorizontalDrag", Min: 0, Max: 1, Step: 0.05},
 		{Group: "physics", Name: "sprintSpeedMultiplier", Min: 1, Max: 3, Step: 0.05},
+		{Group: "physics", Name: "sneakSpeedMultiplier", Min: 0.05, Max: 1, Step: 0.05},
 
 		{Group: "sim", Name: "interactionReach", Min: 1, Max: 32, Step: 0.5},
 		{Group: "sim", Name: "regenDelayTicks", Min: 0, Max: 2000, Step: 1},

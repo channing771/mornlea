@@ -4,12 +4,13 @@
 //! 第 4 节为准：header（magic MGP1 + layout 版本）+ 每 cell 196 字节；header 现为 v2、160 字节。
 
 /// StepInput header 长度。v1 128，v2 160（浸没标志+水中 tunable），v3
-/// 复用保留区追加疾跑位与倍率（129 位 + 148..152 multiplier），总长保持 160
-/// （32 整数倍），仍是同一 engine ABI v5 内的 header 扩展。
+/// 复用保留区追加疾跑位与倍率（129 位 + 148..152 multiplier），v4 在 130 置
+/// 潜行位、152..156 置潜行倍率，总长保持 160（32 整数倍），仍是同一
+/// engine ABI v5 内的 header 扩展。
 pub(crate) const STEP_HEADER_BYTES: usize = 160;
 
-/// StepInput header 的布局版本。v2 → v3 追加疾跑位与倍率。
-const STEP_LAYOUT_VERSION: u32 = 3;
+/// StepInput header 的布局版本。v3 → v4 追加潜行位与潜行倍率。
+const STEP_LAYOUT_VERSION: u32 = 4;
 pub(crate) const STEP_OUTPUT_BYTES: usize = 32;
 pub(crate) const STEP_MAX_CELLS: usize = 4096;
 
@@ -57,8 +58,10 @@ pub(crate) struct StepInput<'a> {
     /// 身体浸没标志。流体没有碰撞盒，prism 里区分不出水与空气，因此由 Go
     /// 调用方从各自的方块镜像算好后随 header 传入（design D4）。
     pub(crate) body_in_fluid: bool,
-    /// 疾跑位（地面+前移+非浸没时提升目标速度）。
+    /// 疾跑位（地面+前移+非浸没时提升目标速度，潜行同置时让位）。
     pub(crate) sprinting: bool,
+    /// 潜行位（地面+非浸没时降低目标速度，优先于疾跑）。
+    pub(crate) sneaking: bool,
     /// 水中重力，替换 gravity。
     pub(crate) fluid_gravity: f32,
     /// 水中垂直终端下沉速度，替换 terminal_fall_speed。
@@ -69,6 +72,8 @@ pub(crate) struct StepInput<'a> {
     pub(crate) fluid_horizontal_drag: f32,
     /// 疾跑倍率（默认 1.3）。
     pub(crate) sprint_speed_multiplier: f32,
+    /// 潜行倍率（默认 0.3）。
+    pub(crate) sneak_speed_multiplier: f32,
     pub(crate) sweep_min: [f32; 3],
     pub(crate) sweep_max: [f32; 3],
     pub(crate) origin: [i32; 3],
@@ -118,11 +123,13 @@ impl<'a> StepInput<'a> {
             terminal_fall_speed: tunables[7],
             body_in_fluid: bytes[128] == 1,
             sprinting: bytes[129] == 1,
+            sneaking: bytes[130] == 1,
             fluid_gravity: read_f32(bytes, 132),
             fluid_sink_speed: read_f32(bytes, 136),
             fluid_ascend_speed: read_f32(bytes, 140),
             fluid_horizontal_drag: read_f32(bytes, 144),
             sprint_speed_multiplier: read_f32(bytes, 148),
+            sneak_speed_multiplier: read_f32(bytes, 152),
             sweep_min,
             sweep_max,
             origin,
@@ -139,20 +146,22 @@ pub(crate) fn step_input_is_valid(bytes: &[u8]) -> bool {
         || bytes[33] > 1
         || bytes[128] > 1
         || bytes[129] > 1
-        // v3 保留区：130..132 与 152..160 必须为 0，129 为疾跑位、148..152 为倍率已在别处校验。
-        || bytes[130..132].iter().any(|&byte| byte != 0)
-        || bytes[152..STEP_HEADER_BYTES].iter().any(|&byte| byte != 0)
+        || bytes[130] > 1
+        // v4 保留区：131 与 156..160 必须为 0，129/130 为疾跑/潜行位、
+        // 148..156 为两档倍率已在别处校验。
+        || bytes[131] != 0
+        || bytes[156..STEP_HEADER_BYTES].iter().any(|&byte| byte != 0)
         || !(-1..=1).contains(&(bytes[34] as i8))
         || !(-1..=1).contains(&(bytes[35] as i8))
     {
         return false;
     }
-    // position/velocity（8..32）、yaw_sin/yaw_cos/dt（36/40/44）、tunables 与 sweep bounds（48..104）与水中/疾跑倍率必须全部有限
+    // position/velocity（8..32）、yaw_sin/yaw_cos/dt（36/40/44）、tunables 与 sweep bounds（48..104）与水中/疾跑/潜行倍率必须全部有限
     for offset in (8..32)
         .step_by(4)
         .chain((36..=44).step_by(4))
         .chain((48..104).step_by(4))
-        .chain((132..152).step_by(4))
+        .chain((132..156).step_by(4))
     {
         if !read_f32(bytes, offset).is_finite() {
             return false;
@@ -262,12 +271,15 @@ fn movement_target(move_x: i8, move_z: i8, walk_speed: f32, yaw_sin: f32, yaw_co
 pub(crate) fn integrate(input: &StepInput<'_>) -> (Vector, Vector) {
     let dt = input.fixed_delta_seconds;
     let mut velocity = input.velocity;
-    let effective_walk_speed =
-        if input.sprinting && input.move_z > 0 && input.on_ground && !input.body_in_fluid {
-            input.walk_speed * input.sprint_speed_multiplier
-        } else {
-            input.walk_speed
-        };
+    // 潜行优先于疾跑：同置时只减速不加速，与 Go stepSweepBounds 同序。
+    let sneaking_effective = input.sneaking && input.on_ground && !input.body_in_fluid;
+    let effective_walk_speed = if sneaking_effective {
+        input.walk_speed * input.sneak_speed_multiplier
+    } else if input.sprinting && input.move_z > 0 && input.on_ground && !input.body_in_fluid {
+        input.walk_speed * input.sprint_speed_multiplier
+    } else {
+        input.walk_speed
+    };
     let target = movement_target(
         input.move_x,
         input.move_z,
@@ -623,6 +635,50 @@ mod tests {
         let (velocity, _) = integrate(&input);
         let horizontal = (velocity[0] * velocity[0] + velocity[2] * velocity[2]).sqrt();
         assert!((horizontal - 2.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn sneaking_slows_to_sneak_multiplier() {
+        // 站立纯前移 + 潜行位：目标速度恰为 walk*0.3 且单步可达，
+        // 积分后 z 速度与 -(4.3*0.3) 逐位一致。
+        let mut bytes = valid_step_bytes();
+        bytes[34] = 0; // move_x = 0，纯前移
+        bytes[35] = 1; // move_z = 1
+        bytes[130] = 1; // sneaking
+        write_f32(&mut bytes, 152, 0.3); // sneak_speed_multiplier
+        let input = StepInput::decode(Box::leak(bytes.into_boxed_slice()));
+        let (velocity, _) = integrate(&input);
+        assert_eq!(velocity[2].to_bits(), (-(4.3f32 * 0.3f32)).to_bits());
+    }
+
+    #[test]
+    fn sneaking_takes_priority_over_sprinting() {
+        // 潜行 + 疾跑同置：只减速不加速，结果与纯潜行逐位一致。
+        let mut bytes = valid_step_bytes();
+        bytes[34] = 0; // move_x = 0，纯前移
+        bytes[35] = 1; // move_z = 1
+        bytes[129] = 1; // sprinting
+        bytes[130] = 1; // sneaking
+        write_f32(&mut bytes, 148, 1.3); // sprint_speed_multiplier
+        write_f32(&mut bytes, 152, 0.3); // sneak_speed_multiplier
+        let input = StepInput::decode(Box::leak(bytes.into_boxed_slice()));
+        let (velocity, _) = integrate(&input);
+        assert_eq!(velocity[2].to_bits(), (-(4.3f32 * 0.3f32)).to_bits());
+    }
+
+    #[test]
+    fn accepts_sneak_bit_and_multiplier() {
+        let mut bytes = valid_step_bytes();
+        bytes[130] = 1; // sneaking
+        write_f32(&mut bytes, 152, 0.3); // sneak_speed_multiplier
+        assert!(step_input_is_valid(&bytes));
+    }
+
+    #[test]
+    fn rejects_nonzero_sneak_tail_reserved() {
+        let mut bytes = valid_step_bytes();
+        bytes[131] = 1; // v4 保留字节必须为 0
+        assert!(!step_input_is_valid(&bytes));
     }
 
     #[test]

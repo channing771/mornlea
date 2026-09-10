@@ -115,6 +115,7 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 				Jump:      command.Jump,
 				Yaw:       yaw,
 				Sprinting: command.Sprinting,
+				Sneaking:  command.Sneaking,
 			}
 			player.miningHeld = command.Mining
 			player.eatingHeld = command.Eating
