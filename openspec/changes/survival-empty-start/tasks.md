@@ -50,9 +50,9 @@
 
 ## Task 7: 收尾（规格、文档、版本矩阵与全量门禁）
 
-- [ ] 应用/核对三份 delta 与主规格一致：`common-block-materials`、`authoritative-crafting`、`oak-sapling-regrowth`（归档阶段执行 sync，本任务只核验 delta 与实现一致）
-- [ ] `docs/notes/gameplay.md`、`docs/notes/limitations.md`、`README.md`：材料包描述改为「新玩家初始背包为空」，并补记四条关键能力由自然路径取得；`gameplay.md` 中熔炉与石剑的原料描述同步为石料；`limitations.md` 显式记名五种装饰材料与骨粉/马铃薯类四项既有缺口
-- [ ] `docs/feature-backlog.md`：B-34 行状态与交付说明如实填写；为装饰材料自然获取路径登记后续行，并注明骨粉与马铃薯类的既有缺口行已存在（不重复登记）
-- [ ] `docs/notes/progress.md`：追加本 change 的实现编年史条目
-- [ ] 版本矩阵核验：确认协议 v40、玩家 schema v8、区块 schema v9、metadata v5、`companions.ai` v5、`hostile_mobs` v1、`passive_mobs` v1、engine ABI v11、client ABI v18、scenario v23 全部未变，并给出实际核验命令输出（`go test ./packages/audit -count=1`）
-- [ ] 六模块 `gofmt`、`go vet`、全量 race 与严格校验：`make dev-check`、`make test-race`、`openspec validate --all --strict --no-interactive`
+- [x] 应用/核对三份 delta 与主规格一致：`common-block-materials`、`authoritative-crafting`、`oak-sapling-regrowth`（归档阶段执行 sync，本任务只核验 delta 与实现一致）——逐项核验一致：`authoritative-crafting` 的 recipe ID `2`（3×3 石料圆环）与 ID `18`（纵向 2 石料 + 木棍）与 `recipe.go` 实现吻合且 ID/形状/产物未动；`common-block-materials` 的「36 格全空初始背包 + 已有玩家逐槽保留」与 `newMissingCachedPlayer`、persistence 测试吻合，「关键能力可达」需求与价值闭包守卫的正反断言吻合；`oak-sapling-regrowth` 的「新玩家初始背包」措辞与 `sapling_acquisition_test.go` 的第三条腿吻合。未改动任何 delta，未 sync 主规格，未归档
+- [x] `docs/notes/gameplay.md`、`docs/notes/limitations.md`、`README.md`：材料包描述改为「新玩家初始背包为空」，并补记四条关键能力由自然路径取得；`gameplay.md` 中熔炉与石剑的原料描述同步为石料；`limitations.md` 显式记名五种装饰材料与骨粉/马铃薯类四项既有缺口（提交 `c9d962bc`）
+- [x] `docs/feature-backlog.md`：B-34 行状态与交付说明如实填写（状态 `待集成`：实现与收尾完成、未合并、未开 PR、未归档）；为装饰材料自然获取路径登记 B-45 行，并注明骨粉缺口已由 B-39 行承载（不重复登记）；核验发现马铃薯/胡萝卜/毒马铃薯的既有缺口在 backlog 全表**没有**对应行（`tasks.md` 原记「既有缺口行已存在」不成立），故另登记 B-46 行，避免该缺口只存在于守卫清单里（提交 `4b37e5ac`）
+- [x] `docs/notes/progress.md`：追加本 change 的实现编年史条目（提交 `4b37e5ac`）
+- [x] 版本矩阵核验：确认协议 v40、玩家 schema v8、区块 schema v9、metadata v5、`companions.ai` v5、`hostile_mobs` v1、`passive_mobs` v1、engine ABI v11、client ABI v18、scenario v23 全部未变，并给出实际核验命令输出（`go test ./packages/audit -count=1`）
+- [x] 六模块 `gofmt`、`go vet`、全量 race 与严格校验：`make dev-check`、`make test-race`、`openspec validate --all --strict --no-interactive`——`gofmt` 干净；`make dev-check` 红在 `packages/server/server` 的 `TestWarpParityMemoryVsTCP`（`-short` 下唯一失败）致其后 Rust 步骤未执行，Rust 半部另以 `make rust-check` 补跑（fmt/clippy/test）全绿；`make test-race` 六模块 `EXIT=0`（`packages/server/server` `262.743s` ok）；`openspec validate --all --strict --no-interactive` 106/106。`TestWarpParityMemoryVsTCP` 与 `TestDualDimensionReloadAfterRestart` 在 base `5a90445f` 的 detached worktree 上以相同 `file:line` 与失败消息复现，归类为既有 flake、不由本 change 引入，未修复、未放宽任何门禁
