@@ -20,6 +20,8 @@ func wantEmptyStartingInventory() core.Inventory {
 }
 
 // 捕获：缺失玩家的初始背包（36 格全空）没有通过 Prepare 交给模拟注册流程。
+// 本用例锁定整体值契约（整体相等 + 合法性规则），逐格诊断见
+// `TestPlayerPersistencePrepareMissingKeepsEverySlotEmpty`。
 func TestPlayerPersistencePrepareMissingProvidesEmptyStartingInventory(t *testing.T) {
 	store := newControllablePlayerStore()
 	p := NewPlayers(store, playerPersistenceTestConfig())
@@ -34,6 +36,9 @@ func TestPlayerPersistencePrepareMissingProvidesEmptyStartingInventory(t *testin
 	}
 	if restored.Inventory != wantEmptyStartingInventory() {
 		t.Fatalf("missing restore inventory=%+v, want 36 empty slots", restored.Inventory)
+	}
+	if !restored.Inventory.Valid() {
+		t.Fatalf("缺失玩家初始背包 MUST 通过合法性规则：%+v", restored.Inventory)
 	}
 }
 
@@ -558,6 +563,8 @@ func TestPlayerPersistenceObserveCopiesCallerSnapshot(t *testing.T) {
 // 捕获：缺失玩家的初始背包里出现任何物品。历史上这里曾发放 14 叠材料与起步种子，
 // 现在是逐格核对的空槽契约——断言扫全部 36 格（快捷栏 9 格 + 背包 27 格）而不是
 // 只抽查历史格位，把物品挪到其它格、换物品或补上数量都会红并指出具体格位。
+// 本用例的职责是逐格诊断：与同样走 `Prepare(missing)` 路径的整体值用例不同，
+// 这里的失败信息直接指出出错的格位。
 func TestPlayerPersistencePrepareMissingKeepsEverySlotEmpty(t *testing.T) {
 	store := newControllablePlayerStore()
 	p := NewPlayers(store, playerPersistenceTestConfig())
@@ -576,9 +583,6 @@ func TestPlayerPersistencePrepareMissingKeepsEverySlotEmpty(t *testing.T) {
 		if stack != (core.ItemStack{}) {
 			t.Fatalf("缺失玩家背包第 %d 格=%+v，想要空", slot+1, stack)
 		}
-	}
-	if restored.Inventory != wantEmptyStartingInventory() {
-		t.Fatalf("缺失玩家初始背包=%+v，想要 36 格全空", restored.Inventory)
 	}
 }
 
