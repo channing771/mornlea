@@ -44,12 +44,40 @@ var naturalSourceBlocks = [...]core.BlockID{
 	core.ShortGrassID,  // 材料表第 15 项 + 短草装饰规则：小麦种子唯一的自然来源
 }
 
+// naturalSourceContributes 报告清单里的一项方块是否真的接入闭包：由
+// `core.BlockDrop` 给出确定掉落的方块算，走模型自己专用分支的方块也算——短草的
+// 小麦种子（`core.IsWildGrass`，规则一里的短草分支）与水源的取水链
+// （`core.IsFluid`，规则四）。基岩这类对任何手持都没有采掘规则的方块按设计放行：
+// 它们是清单上方说明里刻意保留的「与生成器对齐」项，本来就不产出物品。
+//
+// 反过来说，能被真实 `miningRule` 采掘、却既没有 `BlockDrop` 也不接任何专用分支
+// 的方块会返回 false：它看起来是个来源，实际一条路径都算不出来。这条判据让清单
+// 本身可以被证伪，而不是一份只能人工核对的名单。
+func naturalSourceContributes(block core.BlockID) bool {
+	if _, ok := core.BlockDrop(block); ok {
+		return true
+	}
+	if core.IsWildGrass(block) || core.IsFluid(block) {
+		return true
+	}
+	for held := core.ItemNone; held < core.ItemIDMax; held++ {
+		if required, _ := miningRule(block, held); required != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // matureCropHarvests 是成熟作物收获规则的显式表（`completeMining` 的三个成熟
 // 分支）：种植要求作物物品自身在闭包内（`core.ItemPlacement` 把种子/马铃薯/
 // 胡萝卜物品放置成对应作物方块的阶段 0），生长还要求耕地——耕地由锄头翻出，
-// 而锄头由木棍与石料合成，本身就在闭包内，因此永远不构成瓶颈，收获规则唯一的
-// 前置就是「该作物的物品已在闭包内」。未成熟阶段误挖掉回物品自身，与种植互为
-// 可逆，不产生新物品，因此不必单列。
+// 收获规则唯一的闭包内前置就是「该作物的物品已在闭包内」。未成熟阶段误挖掉回
+// 物品自身，与种植互为可逆，不产生新物品，因此不必单列。
+//
+// 锄头（`core.TillingTool`：石锄、铁锄）是本规则求值之外的**真实世界前置**，
+// 而闭包不会为它求值，因此它不是已知前提，而是被断言钉住的：两把锄头都列在
+// `TestReachabilityClosureOfSurvivalStart` 的正向能力清单里，任一把的配方消失，
+// 守卫立刻报红，而不是让「食物可达」继续建立在注释里的假定上。
 var matureCropHarvests = []struct {
 	seed  core.ItemID
 	drops []core.ItemID
@@ -106,9 +134,19 @@ var acceptedUnobtainableItems = []core.ItemID{
 // 判定就等于让守卫与权威规则有第二套实现，而工具门槛一旦漂移，闭包结论就不再
 // 描述真实世界。
 func TestReachabilityClosureOfSurvivalStart(t *testing.T) {
-	// 非空洞自证：守卫必须先证明自己真的算了东西，再谈断言结果。
-	if len(naturalSourceBlocks) == 0 {
-		t.Fatal("自然来源方块常量为空：闭包会从空集出发，本守卫会静默失效")
+	// 非空洞自证：守卫必须先证明起点清单本身可信，再谈断言结果。重复项不会增加
+	// 起点，只会掩盖漏写的方块；混进一个既不产出物品、又不接任何专用分支的方块，
+	// 则会让闭包起点凭空多出一项而不被察觉。
+	seen := make(map[core.BlockID]bool, len(naturalSourceBlocks))
+	for _, block := range naturalSourceBlocks {
+		if seen[block] {
+			t.Fatalf("自然来源方块清单重复列出方块 %d：重复项不增加起点，只会掩盖漏写的方块", block)
+		}
+		seen[block] = true
+		if !naturalSourceContributes(block) {
+			t.Fatalf("自然来源方块清单里的方块 %d 既无 `core.BlockDrop`、也不接入短草/流体分支，"+
+				"却仍被真实 `miningRule` 判为可采掘：它产出不了任何物品，闭包起点却把它算作来源", block)
+		}
 	}
 	recipes := 0
 	for id := core.RecipeStoneBricks; ; id++ {
@@ -145,6 +183,11 @@ func TestReachabilityClosureOfSurvivalStart(t *testing.T) {
 		{"照明（火把）", []core.ItemID{core.ItemTorch}},
 		{"采掘工具（石镐或铁镐）", []core.ItemID{core.ItemStonePickaxe, core.ItemIronPickaxe}},
 		{"食物（面包或熟牛肉）", []core.ItemID{core.ItemBread, core.ItemCookedBeef}},
+		// 耕作工具是食物路径的真实前置（见 `matureCropHarvests`）：没有锄头就翻不出
+		// 耕地，小麦只能停留在「有种子」这一步。石锄与铁锄逐项断言而不是任取其一，
+		// 石锄缺席意味着耕种要等到熔炉与铁锭之后才成立，「空背包起点」的保证随之作废。
+		{"耕作工具（石锄）", []core.ItemID{core.ItemStoneHoe}},
+		{"耕作工具（铁锄）", []core.ItemID{core.ItemIronHoe}},
 		{"熔炉", []core.ItemID{core.ItemFurnace}},
 		{"铁锭", []core.ItemID{core.ItemIronIngot}},
 		{"空桶", []core.ItemID{core.ItemEmptyBucket}},
@@ -259,8 +302,11 @@ func reachabilityClosure() map[core.ItemID]bool {
 		// 规则五：工具损坏映射（`core.ItemBrokenForm`）。完好工具在闭包内即意味着
 		// 损坏形态在闭包内：镐与锄在采掘与翻地的每次成功动作磨损 1 点
 		// （`mining.go` 的 `consumeToolDurabilityAt`、`farming.go` 的翻地），剑在
-		// 命中生物时磨损 1 点（`combat.go`），四类零磨损豁免只覆盖作物×完好锄头、
-		// 短草与树苗，不覆盖「用工具挖石头」「用剑砍怪」这类普通动作。
+		// 命中生物时磨损 1 点——战斗同样走 `consumeToolDurabilityAt`，绕过
+		// `consumeToolDurability` 里的完好剑豁免（`combat.go`）。四类零磨损豁免
+		// ——作物×完好锄头、短草、树苗（`consumeMiningToolDurability` 判定）与
+		// 完好剑（`consumeToolDurability` 判定）——只覆盖上述特定动作，不覆盖
+		// 「用镐挖石头」「用剑砍怪」这类普通动作，因此损坏形态都必然可达。
 		for item := core.ItemID(1); item < core.ItemIDMax; item++ {
 			if !reachable[item] {
 				continue
