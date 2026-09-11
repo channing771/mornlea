@@ -75,6 +75,9 @@ type Metadata struct {
 	// DepthsSeedSalt 是派生 `Depths` 维度地形种子的盐，metadata v5 起持久化；
 	// v4 及更早世界读入即迁移为世界生成侧的固定盐常量。
 	DepthsSeedSalt uint64
+	// Difficulty 是世界难度，metadata v6 起持久化；v5 及更早世界读入即迁移为
+	// `core.DifficultyNormal`。它是 core 领域值，storage 不定义第二套枚举。
+	Difficulty core.Difficulty
 }
 
 // RegionKey 是 region 文件键的别名再导出，定义在 region 格式原语包。

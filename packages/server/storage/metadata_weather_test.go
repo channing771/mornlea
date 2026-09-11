@@ -12,15 +12,15 @@ import (
 )
 
 // metadata_weather_test.go：天气的持久化契约——metadata v4 在 v3 载荷末尾追加
-// 天气种类 1 字节与剩余时长 u32（字节布局见 metadata_dayphase_test.go 的
+// 天气种类 1 字节与剩余时长 u32（字节布局见 metadata_difficulty_test.go 的
 // 当前版本 golden）；v1/v2/v3 世界读入即升级，天气迁移为晴天、剩余时长迁移
 // 为零（零表示旧档未记录，恢复时按新世界默认值掷骰）；天气跨重启延续。
 
-// TestMetadataV3MigratesToV5WithClearWeatherAndDepthsDefault 覆盖 Scenario
+// TestMetadataV3MigratesToCurrentWithClearWeatherAndDepthsDefault 覆盖 Scenario
 // 「v3 世界迁移默认晴天」：种子、出生信息、世界时间与偏移必须原值保留，天气迁移
 // 为晴天、剩余时长为零，`Depths` 出生锚点默认取主世界锚点、种子盐取固定盐，
 // 读入即规范为当前版本。
-func TestMetadataV3MigratesToV5WithClearWeatherAndDepthsDefault(t *testing.T) {
+func TestMetadataV3MigratesToCurrentWithClearWeatherAndDepthsDefault(t *testing.T) {
 	legacy := Metadata{
 		FormatVersion:  legacyMetadataV3Version,
 		Seed:           -42,

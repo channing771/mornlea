@@ -196,10 +196,10 @@ func encodeLegacyMetadataV4(metadata Metadata) []byte {
 	)
 }
 
-// TestMetadataV4MigratesToV5DepthsDefault 覆盖「v4 旧档默认迁移」：v4 文件缺失
-// 维度表尾部，读入即规范为当前版本，`Depths` 出生锚点默认取主世界锚点，种子盐
-// 取世界生成侧的固定盐。
-func TestMetadataV4MigratesToV5DepthsDefault(t *testing.T) {
+// TestMetadataV4MigratesToCurrentDepthsDefault 覆盖「v4 旧档默认迁移」：v4 文件
+// 缺失维度表尾部，读入即规范为当前版本，`Depths` 出生锚点默认取主世界锚点，
+// 种子盐取世界生成侧的固定盐。
+func TestMetadataV4MigratesToCurrentDepthsDefault(t *testing.T) {
 	v4 := Metadata{
 		FormatVersion:         4,
 		Seed:                  42,
@@ -214,8 +214,8 @@ func TestMetadataV4MigratesToV5DepthsDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.FormatVersion != 5 {
-		t.Fatalf("迁移后版本 = %d，想要 5", loaded.FormatVersion)
+	if loaded.FormatVersion != currentMetadataVersion {
+		t.Fatalf("迁移后版本 = %d，想要 %d", loaded.FormatVersion, currentMetadataVersion)
 	}
 	if loaded.DepthsSpawnAnchor != loaded.SpawnAnchor {
 		t.Fatalf(
