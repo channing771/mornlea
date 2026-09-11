@@ -1,9 +1,9 @@
 ## 1. Core and Metadata
 
-- [ ] 1.1 在 `packages/shared/core` 增加 `Difficulty` 的三个固定值、合法性、严格小写解析和格式化，并在同包测试覆盖完整值域与非法文本；验证：`go test ./packages/shared/core -race -count=1`
-- [ ] 1.2 在 `packages/server/storage` 给 `Metadata` 增加难度字段，将 metadata codec 的当前版本与 payload 升至 v6（62 字节，`DepthsSeedSalt` 后纯尾部追加 1 字节），在 `WorldStore` 创建和保存路径使用当前版本；验证：`go test ./packages/server/storage -race -count=1`
-- [ ] 1.3 为 metadata v6 增加 deterministic/golden、v1..v5 只读迁移（难度恒 normal）、非法难度、CRC/长度、未来版本和原子保存失败测试，并让现有 v1..v5 测试 fixture 继续覆盖旧字节；验证：`go test ./packages/server/storage -race -count=1`
-- [ ] 1.4 更新 `packages/audit` 基线版本钉值（`TestBaselineVersionsMatchCode`）与 `AGENTS.md`、`openspec/config.yaml` 版本矩阵文本为 metadata v6，不改变协议、玩家/区块 schema、ABI 或 benchmark 版本；验证：`go test ./packages/audit -count=1`
+- [x] 1.1 在 `packages/shared/core` 增加 `Difficulty` 的三个固定值、合法性、严格小写解析和格式化，并在同包测试覆盖完整值域与非法文本；验证：`go test ./packages/shared/core -race -count=1`
+- [x] 1.2 在 `packages/server/storage` 给 `Metadata` 增加难度字段，将 metadata codec 的当前版本与 payload 升至 v6（62 字节，`DepthsSeedSalt` 后纯尾部追加 1 字节），在 `WorldStore` 创建和保存路径使用当前版本；验证：`go test ./packages/server/storage -race -count=1`
+- [x] 1.3 为 metadata v6 增加 deterministic/golden、v1..v5 只读迁移（难度恒 normal）、非法难度、CRC/长度、未来版本和原子保存失败测试，并让现有 v1..v5 测试 fixture 继续覆盖旧字节；验证：`go test ./packages/server/storage -race -count=1`
+- [x] 1.4 更新 `packages/audit` 基线版本钉值（`TestBaselineVersionsMatchCode`）与 `AGENTS.md`、`openspec/config.yaml` 版本矩阵文本为 metadata v6，不改变协议、玩家/区块 schema、ABI 或 benchmark 版本；验证：`go test ./packages/audit -count=1`
 
 ## 2. Authoritative Simulation
 
