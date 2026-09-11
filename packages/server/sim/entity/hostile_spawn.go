@@ -47,11 +47,17 @@ func hostileSpawnColumn(base uint64, anchorX, anchorZ int32) (x, z int32, radius
 // tick 边界、先于物理阶段；新个体下一 tick 才参与积分（见
 // advanceHostileMovement 的 fresh 约定）。
 //
-// 条件清单（spec「夜间在暗处确定性生成」）：夜间窗口、active 锚点、全服
-// ≤64、候选 chunk 完整加载、双格空气 + 下方 solid + 非流体落点、门槛哈希、
-// 每玩家 48 格内 ≤8、局部区块光 ≤7、非零唯一 ID。整个判定只读世界，绝不
-// 为生成触发同步加载。
+// 条件清单（spec「夜间在暗处确定性生成」）：世界难度非 peaceful、夜间窗口、
+// active 锚点、全服 ≤64、候选 chunk 完整加载、双格空气 + 下方 solid + 非流体
+// 落点、门槛哈希、每玩家 48 格内 ≤8、局部区块光 ≤7、非零唯一 ID。整个判定只读
+// 世界，绝不为生成触发同步加载。
 func (engine *engineContext) advanceHostileSpawn() {
+	// 和平难度在入口短路，先于一切候选派生：不推导锚点与候选列，也不占用
+	// 「每 tick 至多验证一个候选」的预算语义。不实现加载后清除既有夜行者——
+	// 难度在创建世界时固定，peaceful 世界的持久化天然为空，门控只管生成。
+	if engine.difficulty == core.DifficultyPeaceful {
+		return
+	}
 	now := engine.worldTime.Load()
 	phase := core.EffectiveDayPhaseAt(now, engine.DayPhaseOffset(), engine.seasonOffset)
 	if phase < hostileSpawnPhaseStart || phase > hostileSpawnPhaseEnd {

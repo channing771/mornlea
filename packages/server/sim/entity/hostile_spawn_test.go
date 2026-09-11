@@ -13,12 +13,23 @@ import (
 // `WorldTimeTicks % 会话数` 选取、`sampler.SplitMix64` 整数派生半径与轴向（水平距离
 // 24..48）、候选哈希低 8 位 <13 才尝试、双格空气/下方 solid/非流体/完整
 // loaded/局部区块光 ≤7/夜间窗口全部必要、全服 ≤64 与每玩家 48 格内 ≤8、
-// 每 tick 至多验证一个候选、相同输入重放逐位一致，以及 ID 冲突重散列。
+// 每 tick 至多验证一个候选、和平难度入口门控（不派生候选、不消耗预算）、
+// 相同输入重放逐位一致，以及 ID 冲突重散列。
 
 // spawnTestEngine 构造带一名已激活锚点玩家的引擎（世界种子可指定）。
 func spawnTestEngine(t *testing.T, seed int64) (*Engine, SessionID) {
 	t.Helper()
-	engine := NewEngine(0, 0, seed)
+	return spawnTestEngineAtDifficulty(t, seed, core.DifficultyNormal)
+}
+
+// spawnTestEngineAtDifficulty 是 `spawnTestEngine` 的难度感知变体：夹具逐字
+// 相同，只把构造难度换成入参，供难度门控用例与 normal 基线共用同一套锚点
+// 夹具。
+func spawnTestEngineAtDifficulty(
+	t *testing.T, seed int64, difficulty core.Difficulty,
+) (*Engine, SessionID) {
+	t.Helper()
+	engine := NewEngine(0, 0, seed, difficulty)
 	session := SessionID(1)
 	engine.RegisterSession(session, core.Overworld, core.ChunkPos{})
 	loadMovementChunk(t, engine.dimension(core.Overworld), movementFlatChunk(core.ChunkPos{}))
@@ -465,5 +476,33 @@ func TestHostileSpawnWithoutActiveSessionsDoesNothing(t *testing.T) {
 	engine.advanceHostileSpawn()
 	if len(engine.hostiles.entries) != 0 {
 		t.Fatal("没有 active 会话仍生成了夜行者")
+	}
+}
+
+// TestHostileSpawnPeacefulGatesAtEntry 覆盖 Scenario「和平难度不生成…不消耗
+// 候选预算」：同 seed 同锚点下先用 normal 探针证明夜窗内确实存在可生成的
+// tick（夹具自证，防止「门控绿但夹具根本不生成」的假绿），再让 peaceful 与
+// hard 引擎跑同一段夜窗——peaceful 自入口短路，零生成；hard 与 normal 逐位
+// 一致，在同一 tick 首次生成。
+func TestHostileSpawnPeacefulGatesAtEntry(t *testing.T) {
+	normal, _ := spawnTestEngine(t, 0)
+	loadSpawnArena(t, normal, -48, 48, -48, 48)
+	firstTick := findSpawningTick(t, normal, 13000, 1, 400)
+
+	peaceful, _ := spawnTestEngineAtDifficulty(t, 0, core.DifficultyPeaceful)
+	loadSpawnArena(t, peaceful, -48, 48, -48, 48)
+	for offset := range 400 {
+		peaceful.worldTime.Store(13000 + uint64(offset))
+		peaceful.advanceHostileSpawn()
+		if len(peaceful.hostiles.entries) != 0 {
+			t.Fatalf("peaceful 在 tick %d 生成了夜行者，想要零生成", 13000+offset)
+		}
+	}
+
+	hard, _ := spawnTestEngineAtDifficulty(t, 0, core.DifficultyHard)
+	loadSpawnArena(t, hard, -48, 48, -48, 48)
+	hardTick := findSpawningTick(t, hard, 13000, 1, 400)
+	if hardTick != firstTick {
+		t.Fatalf("hard 首个生成 tick=%d，想要与 normal 一致 (%d)", hardTick, firstTick)
 	}
 }
