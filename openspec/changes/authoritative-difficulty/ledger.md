@@ -29,3 +29,4 @@
   - Ruling: 采纳评审建议，组 4 遗留的 `` `flag.Visit` `` 反引号失真按「标准库名属裸词」既定约定修正、不开 exemption 先例 — exemption 只登记实际出现的非 Go 域名字，为标准库开先例会让 fmt/slog 等系统性涌入并掩盖真失真 — 该教训记档：任务组验证命令应含 `go test ./packages/audit`，组 4 的验证矩阵漏了它。
   - Ruling: 守卫缺常驻坏样本自检记为顺延项（沿 `TestCommentIdentifierScannerCatchesKnownBadSamples` 先例抽纯函数内核 + 内嵌样本），不阻塞本 change — 当前断言逻辑简单恒真风险低 — 顺延项誊入 proposal「延期与放弃」由归档收口。
   - 任务组 6 评审：PASS（守卫鉴别力经静态评估+grep 交叉验证三条边界独立 fail-closed；无误伤面（client 整树禁难度是 spec 成文化）；抽查 #5/#8 诚实；1 minor 即坏样本自检顺延、2 nit 留档、INFO 勾选本条清偿）。
+- 2026-09-11 整分支终审：FINAL PASS（八项清单全过：范围冻结 102 文件全部可归因、契约六组锚点交叉复核、版本矩阵仅 metadata v6 一项且 network/engine/contracts 零 diff、架构边界单点装配、测试组织单主题同构、注释纪律零任务编号、ledger 完整、回退路径与实现一致）。1 MINOR（proposal Impact 枚举漏列 `packages/server/sim/runtime` 与 `packages/client`）由控制会话当场补齐；2 INFO 留档（候选预算半句结构保证、v5 golden 往返断言必要收窄）。全量门禁（gates.sh + make rust-check）由控制会话并行执行，结果并入本 ledger 后方可合入。

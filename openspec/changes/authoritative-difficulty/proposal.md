@@ -24,7 +24,7 @@ Mornlea 当前只有固定的普通生存规则，服务端无法为同一个世
 
 ## Impact
 
-- 受影响包：`packages/shared/core`、`packages/server/storage`、`packages/server/sim/entity`、`packages/server/server`、`packages/server/cmd/mornlea-server`、`packages/audit`（基线版本钉值）。
+- 受影响包：`packages/shared/core`、`packages/server/storage`、`packages/server/sim/entity`、`packages/server/sim/runtime`（构造尾参注入）、`packages/server/server`、`packages/server/cmd/mornlea-server`、`packages/client`（生产 Create 点随 v6 机械清扫与旗标拒绝测试）、`packages/audit`（基线版本钉值与难度域守卫）。
 - 版本矩阵：世界 metadata v5→v6；协议、玩家 schema、区块 schema、engine/client ABI、benchmark scenario 均不变。
 - 既有 v1..v5 世界只读迁移为普通难度；新保存写出 v6。新增字段只影响世界存档兼容性，不增加网络依赖。
 
