@@ -14,8 +14,8 @@
 
 ## 3. Server Wiring
 
-- [ ] 3.1 从 `store.Metadata()` 单次快照把难度显式传入 `sim.NewEngine`，保持 Memory 与磁盘 World 的同一装配路径；验证：`go test ./packages/server/server -race -count=1`
-- [ ] 3.2 增加重启和跨传输集成测试，证明保存的难度优先于构造默认值或客户端输入；验证：`go test ./packages/server/server -race -count=1`
+- [x] 3.1 从 `store.Metadata()` 单次快照把难度显式传入 `sim.NewEngine`，保持 Memory 与磁盘 World 的同一装配路径；验证：`go test ./packages/server/server -race -count=1`
+- [x] 3.2 增加重启和跨传输集成测试，证明保存的难度优先于构造默认值或客户端输入；验证：`go test ./packages/server/server -race -count=1`
 
 ## 4. Dedicated Server CLI
 
