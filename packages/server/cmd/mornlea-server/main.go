@@ -36,6 +36,10 @@ type options struct {
 	Backup           string
 	// Config 是调参配置文件路径；留空表示使用 config.DefaultPath()。
 	Config string
+	// DifficultySet 区分「显式 `--difficulty normal`」与省略：两路语义不同，
+	// 显式值要与已有世界 metadata 比对，省略时已有世界完全沿用存档难度。
+	DifficultySet bool
+	Difficulty    core.Difficulty
 }
 
 type mornleaServerHost interface {
@@ -60,6 +64,7 @@ func parseOptions(args []string) (options, error) {
 	configPath := flags.String("config", "", "配置文件路径，留空使用默认路径")
 	migrate := flags.Bool("migrate-materials", false, "离线迁移旧世界自然材料")
 	backup := flags.String("backup", "", "材料迁移完整备份目录")
+	difficulty := flags.String("difficulty", "", "世界难度 normal/peaceful/hard；省略时新世界为 normal，已有世界沿用存档难度")
 	if err := flags.Parse(args); err != nil {
 		return options{}, err
 	}
@@ -89,9 +94,28 @@ func parseOptions(args []string) (options, error) {
 	if backupPath != "" {
 		backupPath = filepath.Clean(backupPath)
 	}
+	// `flag.Visit` 只访问显式传入的旗标，是区分「显式 `--difficulty normal`」
+	// 与省略的唯一可靠手段：显式 normal 也要与已有世界 metadata 比对，而
+	// 省略时已有世界完全使用存档事实。取值统一经 `core.ParseDifficulty`
+	// 严格小写解析，非法值在解析阶段失败，不进入世界打开路径。
+	difficultySet := false
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == "difficulty" {
+			difficultySet = true
+		}
+	})
+	parsedDifficulty := core.DifficultyNormal
+	if difficultySet {
+		value, err := core.ParseDifficulty(*difficulty)
+		if err != nil {
+			return options{}, fmt.Errorf("无效 --difficulty %q: 只接受 normal/peaceful/hard 小写三档", *difficulty)
+		}
+		parsedDifficulty = value
+	}
 	return options{
 		Listen: listenAddress, World: filepath.Clean(*world), Seed: *seed, MaxPlayers: *maxPlayers,
 		Config: *configPath, MigrateMaterials: *migrate, Backup: backupPath,
+		DifficultySet: difficultySet, Difficulty: parsedDifficulty,
 	}, nil
 }
 
@@ -146,6 +170,12 @@ func run(ctx context.Context, args []string, injected dependencies) error {
 	// server.Config → OpenOptions 链路传入 DiskStore，种子在读取 metadata
 	// 后校正为磁盘权威值。
 	config := server.DefaultConfig(options.Seed)
+	// 新世界的 `Create` 难度：省略时落在 normal（零值），显式时取该值；
+	// 已有世界忽略 `Create`，完全以磁盘 metadata 为准。
+	createDifficulty := core.DifficultyNormal
+	if options.DifficultySet {
+		createDifficulty = options.Difficulty
+	}
 	store, err := dependencies.openDisk(ctx, options.World, storage.OpenOptions{
 		Create: storage.Metadata{
 			FormatVersion:     6,
@@ -153,11 +183,23 @@ func run(ctx context.Context, args []string, injected dependencies) error {
 			SpawnDimension:    core.Overworld,
 			DepthsSpawnAnchor: core.ChunkPos{},
 			DepthsSeedSalt:    core.DepthsSeedSalt,
+			Difficulty:        createDifficulty,
 		},
 		RegionHandleCacheCap: config.RegionHandleCacheCap,
 	})
 	if err != nil {
 		return fmt.Errorf("打开世界: %w", err)
+	}
+	// 显式难度与已有世界事实的一致性校验必须先于 listener 创建：监听成功后
+	// 再失败会短暂暴露错误难度的世界。新世界的 metadata 即上面的 `Create`，
+	// 显式值天然一致；已有世界以存档难度为准，不一致即拒绝启动。
+	if options.DifficultySet {
+		if stored := store.Metadata().Difficulty; stored != options.Difficulty {
+			return errors.Join(
+				fmt.Errorf("--difficulty %s 与世界存档难度 %s 不一致: 省略 --difficulty 可沿用存档难度，或核对 --world 目录", options.Difficulty, stored),
+				store.Close(),
+			)
+		}
 	}
 	listener, err := dependencies.listenTCP(options.Listen)
 	if err != nil {
