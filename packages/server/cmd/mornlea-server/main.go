@@ -94,7 +94,7 @@ func parseOptions(args []string) (options, error) {
 	if backupPath != "" {
 		backupPath = filepath.Clean(backupPath)
 	}
-	// `flag.Visit` 只访问显式传入的旗标，是区分「显式 `--difficulty normal`」
+	// 标准库 flag.Visit 只访问显式传入的旗标，是区分「显式 `--difficulty normal`」
 	// 与省略的唯一可靠手段：显式 normal 也要与已有世界 metadata 比对，而
 	// 省略时已有世界完全使用存档事实。取值统一经 `core.ParseDifficulty`
 	// 严格小写解析，非法值在解析阶段失败，不进入世界打开路径。
