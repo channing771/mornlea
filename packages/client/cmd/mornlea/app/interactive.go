@@ -482,7 +482,7 @@ func (a *Application) applyInteractiveInput(
 			a.selectHotbarSlot(actions.SelectSlot)
 		}
 		if actions.Place {
-			a.placeBlock(allowActions && movement.Sneaking)
+			a.placeBlock(movement.Sneaking)
 		}
 		if actions.Drop {
 			a.dropSelectedItem()

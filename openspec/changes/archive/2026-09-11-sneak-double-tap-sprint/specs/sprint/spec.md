@@ -1,4 +1,4 @@
-# sprint Delta
+# Spec: sprint (delta)
 
 ## Purpose
 疾跑触发方式由按住 `Ctrl/Shift` 改为双击 `W` 锁存；速度门控与疲劳语义不变。

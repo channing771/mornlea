@@ -155,3 +155,21 @@ func TestSneakHeldClearedOnInvalidInput(t *testing.T) {
 		t.Fatal("非法输入后 sneakingHeld 仍置位，想要与 miningHeld/eatingHeld 同形清零")
 	}
 }
+
+// TestSneakHeldClearedWhenNotReady 钉住未就绪路径的对称卫生：与非法输入路径
+// 同形，未就绪会话的输入同样清零潜行锁存。
+func TestSneakHeldClearedWhenNotReady(t *testing.T) {
+	engine, session := readyMovementPlayer(t)
+	applyPlayerCommandsTick(engine, []Command{sneakInput(session, 2, true, false)})
+	if !engine.sessions[session].player.sneakingHeld {
+		t.Fatal("夹具失效：潜行输入后 sneakingHeld 未置位")
+	}
+	engine.sessions[session].player.lifecycle = PlayerPendingSpawn
+	result := applyPlayerCommandsTick(engine, []Command{sneakInput(session, 3, true, false)})
+	if len(result.Rejected) != 1 || result.Rejected[0].Reason != RejectPlayerNotReady {
+		t.Fatalf("未就绪输入=%+v，想要恰好一次 RejectPlayerNotReady", result.Rejected)
+	}
+	if engine.sessions[session].player.sneakingHeld {
+		t.Fatal("未就绪后 sneakingHeld 仍置位，想要与 miningHeld/eatingHeld 同形清零")
+	}
+}

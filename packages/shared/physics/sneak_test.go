@@ -52,3 +52,30 @@ func TestSneakTakesPriorityOverSprint(t *testing.T) {
 	wantMin, wantMax := sneakWantEnvelope(t, tunables, yawSin, yawCos)
 	checkHorizontalEnvelope(t, [3]float32(bothMin), [3]float32(bothMax), wantMin, wantMax)
 }
+
+// TestSneakNoSlowdownWhenAirborne 钉住潜行减速只在站立时生效：空中同意图下
+// 潜行与非潜行的包络必须逐位一致（不断言绝对 1x：空中单步加速达不到目标速度）。
+func TestSneakNoSlowdownWhenAirborne(t *testing.T) {
+	tunables := DefaultTunables()
+	state := State{OnGround: false}
+	yawSin := float32(math.Sin(0))
+	yawCos := float32(math.Cos(0))
+	plainMin, plainMax := stepSweepBounds(state, Input{MoveZ: 1}, tunables, yawSin, yawCos)
+	sneakMin, sneakMax := stepSweepBounds(state, Input{MoveZ: 1, Sneaking: true}, tunables, yawSin, yawCos)
+	if sneakMin != plainMin || sneakMax != plainMax {
+		t.Fatalf("空中潜行包络=[%v,%v]，想要与非潜行一致 [%v,%v]", sneakMin, sneakMax, plainMin, plainMax)
+	}
+}
+
+// TestSneakNoSlowdownWhenImmersed 钉住浸没时潜行不减速：同为空中例的等价式。
+func TestSneakNoSlowdownWhenImmersed(t *testing.T) {
+	tunables := DefaultTunables()
+	state := State{OnGround: true}
+	yawSin := float32(math.Sin(0))
+	yawCos := float32(math.Cos(0))
+	plainMin, plainMax := stepSweepBounds(state, Input{MoveZ: 1, BodyInFluid: true}, tunables, yawSin, yawCos)
+	sneakMin, sneakMax := stepSweepBounds(state, Input{MoveZ: 1, BodyInFluid: true, Sneaking: true}, tunables, yawSin, yawCos)
+	if sneakMin != plainMin || sneakMax != plainMax {
+		t.Fatalf("浸没潜行包络=[%v,%v]，想要与非潜行一致 [%v,%v]", sneakMin, sneakMax, plainMin, plainMax)
+	}
+}

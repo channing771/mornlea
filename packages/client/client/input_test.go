@@ -203,4 +203,8 @@ func TestInputStateDoubleTapSprint(t *testing.T) {
 	if ui.UpdateSprint(true, false, true, t0.Add(250*time.Millisecond)) {
 		t.Fatal("界面打开时不应疾跑")
 	}
+	ui.UpdateSprint(false, false, true, t0.Add(300*time.Millisecond))
+	if ui.UpdateSprint(true, false, false, t0.Add(350*time.Millisecond)) {
+		t.Fatal("界面清除后 100ms 内再按 W 误触发疾跑")
+	}
 }
