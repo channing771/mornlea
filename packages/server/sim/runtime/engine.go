@@ -93,7 +93,7 @@ type Engine struct {
 // NewEngine 创建权威引擎。worldTime 是从 metadata 恢复的绝对世界时间，
 // seed 是世界种子（与 worldgen.New 同值，见 Engine.seed 的说明）。difficulty
 // 是可选尾参：缺省表达 normal 档（既有调用点与测试夹具零改动），生产装配
-// 显式传 `store.Metadata().Difficulty`；归一与非法值拒绝由 entity 构造边界
+// 显式传 `storage.Metadata.Difficulty`；归一与非法值拒绝由 entity 构造边界
 // 统一完成（见 `entity.NewState`），难度在生命周期内只读，权威 tick 不读
 // storage/config。
 func NewEngine(viewRadius int, worldTime uint64, seed int64, difficulty ...core.Difficulty) *Engine {
