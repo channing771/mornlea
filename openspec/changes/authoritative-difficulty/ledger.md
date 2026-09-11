@@ -25,3 +25,7 @@
   - 任务组 4 评审：PASS（SPEC 四格全直证、`flag.Visit` 区分省略与显式 normal、非法值解析期拒绝不进世界打开路径、图形客户端零改动；三条 INFO：旗标校验顺序无 spec 约束、CLI 一致侧断言止于 metadata（Engine 注入由组 3 钉住分工合理）、勾选留控制会话——均不整改）。
 - 2026-09-11 任务组 5 完成（基线 `19dd6e91` → `8d79437a`，单测试提交、生产零改动）。四条启动路径共用 `parseMainOptions`（`flag.ContinueOnError`，从未注册 `--difficulty`），未知旗标解析期即拒；测试两层断言（解析失败 + 错误含 `not defined`）钉住「无入口」，传合法值 `normal` 保鉴别力。评审独立复核：客户端子树唯一 flag 入口、生产零 difficulty 引用。验证证据（HEAD `8d79437a`）：`./packages/client/cmd/mornlea/... -count=1 -short` 五包 ok、race 定点 ok、gofmt 干净。
   - 任务组 5 评审：PASS（三条 INFO：`--motion-demo` 组合未列但结构上等同、勾选留控制会话、stdlib flag 错误文案依赖属公开可观察行为——均不整改）。
+- 2026-09-11 任务组 6 完成（基线 `08f27ce9` → `f0077b5c`，2 提交：`1242f25d` audit 域守卫 / `f0077b5c` stdlib 裸词修正）。契约复读十条对照全部一致或等价；新增 `packages/audit/difficulty_domain_test.go`（`TestDifficultyStaysASingleCoreDomain`）钉三条边界：blind 子树零难度标识符/字符串、`Difficulty` 类型声明仅限 `packages/shared/core`、三档文本字面量仅权威文件（实现者注入式验证三种违规形态）。验证证据（HEAD `f0077b5c`）：openspec strict 107/107、audit ok（修复前 FAIL 即门禁真实起效）、六模块 vet 零输出、gofmt/`git diff --check` 干净。
+  - Ruling: 采纳评审建议，组 4 遗留的 `` `flag.Visit` `` 反引号失真按「标准库名属裸词」既定约定修正、不开 exemption 先例 — exemption 只登记实际出现的非 Go 域名字，为标准库开先例会让 fmt/slog 等系统性涌入并掩盖真失真 — 该教训记档：任务组验证命令应含 `go test ./packages/audit`，组 4 的验证矩阵漏了它。
+  - Ruling: 守卫缺常驻坏样本自检记为顺延项（沿 `TestCommentIdentifierScannerCatchesKnownBadSamples` 先例抽纯函数内核 + 内嵌样本），不阻塞本 change — 当前断言逻辑简单恒真风险低 — 顺延项誊入 proposal「延期与放弃」由归档收口。
+  - 任务组 6 评审：PASS（守卫鉴别力经静态评估+grep 交叉验证三条边界独立 fail-closed；无误伤面（client 整树禁难度是 spec 成文化）；抽查 #5/#8 诚实；1 minor 即坏样本自检顺延、2 nit 留档、INFO 勾选本条清偿）。

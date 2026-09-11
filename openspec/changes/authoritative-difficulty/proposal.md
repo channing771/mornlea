@@ -27,3 +27,9 @@ Mornlea 当前只有固定的普通生存规则，服务端无法为同一个世
 - 受影响包：`packages/shared/core`、`packages/server/storage`、`packages/server/sim/entity`、`packages/server/server`、`packages/server/cmd/mornlea-server`、`packages/audit`（基线版本钉值）。
 - 版本矩阵：世界 metadata v5→v6；协议、玩家 schema、区块 schema、engine/client ABI、benchmark scenario 均不变。
 - 既有 v1..v5 世界只读迁移为普通难度；新保存写出 v6。新增字段只影响世界存档兼容性，不增加网络依赖。
+
+## 延期与放弃
+
+- 延期：`packages/audit/difficulty_domain_test.go` 的守卫缺常驻坏样本自检（沿 `TestCommentIdentifierScannerCatchesKnownBadSamples` 先例抽纯函数内核 + 内嵌样本），组 6 评审 minor；当前断言逻辑简单，留待该文件出现第二位消费者或判定规则演进时补齐。
+- 延期：和平档敌怪生成门控未覆盖「已持久化夜行者在加载后的清除」——经裁决这是不可能状态（难度建域固定、旧档迁移恒 normal），设计上显式不做，非遗漏。
+- 免责：`packages/server/server` 的 `TestDualDimensionReloadAfterRestart` 与 `TestWarpParityMemoryVsTCP` 在本分支基线 `d4cccb6c` 即失败（F-11 在案 flake 族），与本 change 无关，移交 F-11 行处置。

@@ -28,8 +28,8 @@
 
 ## 6. Integration and Contract Closure
 
-- [ ] 6.1 复读 proposal、delta specs、design 和 tasks，校正实现/测试与行为契约的偏差；验证：`openspec validate --all --strict --no-interactive`
-- [ ] 6.2 运行跨层 metadata v6 重启、CLI 一致性、peaceful 生成门控和难度结果集成测试，确认不存在第二套难度规则或每 tick 磁盘读取；验证：`go test ./packages/audit -count=1`、`go vet ./...`（六模块）
+- [x] 6.1 复读 proposal、delta specs、design 和 tasks，校正实现/测试与行为契约的偏差；验证：`openspec validate --all --strict --no-interactive`
+- [x] 6.2 运行跨层 metadata v6 重启、CLI 一致性、peaceful 生成门控和难度结果集成测试，确认不存在第二套难度规则或每 tick 磁盘读取；验证：`go test ./packages/audit -count=1`、`go vet ./...`（六模块）
 
 ## 7. Final Gates
 
