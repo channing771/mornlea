@@ -11,26 +11,18 @@ import (
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-// wantStarterMaterialInventory 是缺失玩家一次性材料包的期望值：前 14 格各一
-// 整叠材料、其余全部栏位为空。这里独立写死清单与数量，实现改动必须同步过来。
-// 材料包不再包含小麦种子（change natural-grass-seeds）：第一颗种子改由采除
-// 自然短草取得，第 15 格必须保持空。
-func wantStarterMaterialInventory() core.Inventory {
-	items := [...]core.ItemID{
-		core.ItemCobblestone, core.ItemSmoothStone, core.ItemSand, core.ItemGravel,
-		core.ItemOakLog, core.ItemOakPlanks, core.ItemLeaves, core.ItemGlass,
-		core.ItemBrick, core.ItemWhiteWool, core.ItemRoofTile, core.ItemClay,
-		core.ItemSnowBlock, core.ItemMossyCobblestone,
-	}
-	var inventory core.Inventory
-	for slot, item := range items {
-		inventory.Backpack[slot] = core.ItemStack{Item: item, Count: core.MaxStackCount}
-	}
-	return inventory
+// wantEmptyStartingInventory 是缺失玩家初始背包的期望值：快捷栏 9 格与背包 27 格
+// 全部为空槽，即 `core.Inventory` 零值。空背包是契约本身，不是尚未实现的缺省：
+// 新玩家不获得任何材料、种子或工具，首夜资源全部来自徒手采掘与合成；实现若重新
+// 引入任何形式的一次性发放，这里的整体相等就会报红。
+func wantEmptyStartingInventory() core.Inventory {
+	return core.Inventory{}
 }
 
-// 捕获：缺失玩家的初始材料包没有通过 Prepare 交给模拟注册流程。
-func TestPlayerPersistencePrepareMissingProvidesStarterMaterialInventory(t *testing.T) {
+// 捕获：缺失玩家的初始背包（36 格全空）没有通过 Prepare 交给模拟注册流程。
+// 本用例锁定整体值契约（整体相等 + 合法性规则），逐格诊断见
+// `TestPlayerPersistencePrepareMissingKeepsEverySlotEmpty`。
+func TestPlayerPersistencePrepareMissingProvidesEmptyStartingInventory(t *testing.T) {
 	store := newControllablePlayerStore()
 	p := NewPlayers(store, playerPersistenceTestConfig())
 	t.Cleanup(p.CloseWorker)
@@ -42,12 +34,15 @@ func TestPlayerPersistencePrepareMissingProvidesStarterMaterialInventory(t *test
 	if restored.Current != nil || restored.Safe != nil {
 		t.Fatalf("missing restore exposed position: %+v", restored)
 	}
-	if restored.Inventory != wantStarterMaterialInventory() || restored.Inventory.Hotbar != (core.Hotbar{}) {
-		t.Fatalf("missing restore inventory=%+v, want fixed starter materials and empty hotbar", restored.Inventory)
+	if restored.Inventory != wantEmptyStartingInventory() {
+		t.Fatalf("missing restore inventory=%+v, want 36 empty slots", restored.Inventory)
+	}
+	if !restored.Inventory.Valid() {
+		t.Fatalf("缺失玩家初始背包 MUST 通过合法性规则：%+v", restored.Inventory)
 	}
 }
 
-// 捕获：已有玩家在加载时被错误地替换为初始材料包。
+// 捕获：已有玩家在加载时被错误地替换为空初始背包。
 func TestPlayerPersistencePrepareExistingKeepsCustomInventory(t *testing.T) {
 	store := newControllablePlayerStore()
 	id := playerID(36)
@@ -69,8 +64,8 @@ func TestPlayerPersistencePrepareExistingKeepsCustomInventory(t *testing.T) {
 	}
 }
 
-// 捕获：未确认的缺失玩家在断开后保存材料包，或再次 Prepare 时重复累加材料。
-func TestPlayerPersistenceMissingStarterDoesNotPersistBeforeConfirm(t *testing.T) {
+// 捕获：未确认的缺失玩家在断开后把空背包落盘，或再次 Prepare 时凭空获得物品。
+func TestPlayerPersistenceMissingEmptyInventoryDoesNotPersistBeforeConfirm(t *testing.T) {
 	store := newControllablePlayerStore()
 	id := playerID(37)
 	p := NewPlayers(store, playerPersistenceTestConfig())
@@ -80,7 +75,7 @@ func TestPlayerPersistenceMissingStarterDoesNotPersistBeforeConfirm(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if restored.Inventory != wantStarterMaterialInventory() {
+	if restored.Inventory != wantEmptyStartingInventory() {
 		t.Fatalf("first missing inventory=%+v", restored.Inventory)
 	}
 	if err := p.Activate(id, "Candidate"); err != nil {
@@ -96,13 +91,13 @@ func TestPlayerPersistenceMissingStarterDoesNotPersistBeforeConfirm(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again.Inventory != wantStarterMaterialInventory() {
-		t.Fatalf("reprepared missing inventory=%+v, want one starter material set", again.Inventory)
+	if again.Inventory != wantEmptyStartingInventory() {
+		t.Fatalf("reprepared missing inventory=%+v, want 36 empty slots", again.Inventory)
 	}
 }
 
-// 捕获：确认后的初始材料包未保存，或重载时又被重新补发。
-func TestPlayerPersistenceConfirmPersistsStarterMaterialInventoryOnce(t *testing.T) {
+// 捕获：确认后的空背包未保存，或重载时被补发成材料包。
+func TestPlayerPersistenceConfirmPersistsEmptyStartingInventoryOnce(t *testing.T) {
 	store := newControllablePlayerStore()
 	id := playerID(38)
 	p := NewPlayers(store, playerPersistenceTestConfig())
@@ -118,7 +113,7 @@ func TestPlayerPersistenceConfirmPersistsStarterMaterialInventoryOnce(t *testing
 		t.Fatal(err)
 	}
 	save := receivePlayerSave(t, store)
-	if save.Inventory != wantStarterMaterialInventory() {
+	if save.Inventory != wantEmptyStartingInventory() {
 		t.Fatalf("confirmed save inventory=%+v", save.Inventory)
 	}
 	store.mu.Lock()
@@ -143,8 +138,8 @@ func TestPlayerPersistenceConfirmPersistsStarterMaterialInventoryOnce(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if restored.Inventory != wantStarterMaterialInventory() {
-		t.Fatalf("reloaded inventory=%+v, want unchanged starter material set", restored.Inventory)
+	if restored.Inventory != wantEmptyStartingInventory() {
+		t.Fatalf("reloaded inventory=%+v, want 36 unchanged empty slots", restored.Inventory)
 	}
 }
 
@@ -565,10 +560,12 @@ func TestPlayerPersistenceObserveCopiesCallerSnapshot(t *testing.T) {
 	pollPlayerPersistenceUntilIdle(t, p, 6001)
 }
 
-// 捕获：一次性材料包仍把小麦种子塞进第 15 格。第一颗种子改由采除自然短草取得，
-// 材料包里不得再出现任何种子——断言扫全部 36 格（快捷栏 + 背包），把种子挪到
-// 其他栏位或改数量都会红。
-func TestPlayerPersistencePrepareMissingGrantsNoStarterWheatSeeds(t *testing.T) {
+// 捕获：缺失玩家的初始背包里出现任何物品。历史上这里曾发放 14 叠材料与起步种子，
+// 现在是逐格核对的空槽契约——断言扫全部 36 格（快捷栏 9 格 + 背包 27 格）而不是
+// 只抽查历史格位，把物品挪到其它格、换物品或补上数量都会红并指出具体格位。
+// 本用例的职责是逐格诊断：与同样走 `Prepare(missing)` 路径的整体值用例不同，
+// 这里的失败信息直接指出出错的格位。
+func TestPlayerPersistencePrepareMissingKeepsEverySlotEmpty(t *testing.T) {
 	store := newControllablePlayerStore()
 	p := NewPlayers(store, playerPersistenceTestConfig())
 	t.Cleanup(p.CloseWorker)
@@ -577,37 +574,35 @@ func TestPlayerPersistencePrepareMissingGrantsNoStarterWheatSeeds(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for slot, stack := range restored.Inventory.Backpack {
-		if stack.Item == core.ItemWheatSeeds {
-			t.Fatalf("材料包背包第 %d 格=%+v，缺失玩家不该获得任何起步种子", slot, stack)
-		}
-	}
 	for slot, stack := range restored.Inventory.Hotbar.Slots {
-		if stack.Item == core.ItemWheatSeeds {
-			t.Fatalf("材料包快捷栏第 %d 格=%+v，缺失玩家不该获得任何起步种子", slot, stack)
+		if stack != (core.ItemStack{}) {
+			t.Fatalf("缺失玩家快捷栏第 %d 格=%+v，想要空", slot+1, stack)
 		}
 	}
-	// 最后一叠材料之后的格必须为空：种子被取消后不得以其他物品顶替这一格。
-	const afterMaterials = 14
-	if got := restored.Inventory.Backpack[afterMaterials]; got != (core.ItemStack{}) {
-		t.Fatalf("材料包第 %d 格=%+v，想要空", afterMaterials+1, got)
-	}
-	if restored.Inventory.Backpack[afterMaterials-1].Item != core.ItemMossyCobblestone {
-		t.Fatalf("第 %d 格=%+v，想要紧随其后仍是最后一种材料",
-			afterMaterials, restored.Inventory.Backpack[afterMaterials-1])
-	}
-	if restored.Inventory.Hotbar != (core.Hotbar{}) {
-		t.Fatalf("材料包快捷栏=%+v，想要空", restored.Inventory.Hotbar)
+	for slot, stack := range restored.Inventory.Backpack {
+		if stack != (core.ItemStack{}) {
+			t.Fatalf("缺失玩家背包第 %d 格=%+v，想要空", slot+1, stack)
+		}
 	}
 }
 
-// 捕获：已有玩家的旧 64 颗起步种子被删除、补发或重排。升级前的老玩家可能持有
-// 旧材料包含义下的「14 叠材料 + 第 15 格 64 颗种子」背包；这些栏位 MUST 逐槽
-// 保留，取消起步种子只影响「存档明确不存在」的构造路径。
+// 捕获：已有玩家的历史材料包被删除、补发或重排。升级前的老玩家可能持有旧材料包
+// 语义下的「14 叠材料 + 第 15 格 64 颗种子」背包，外加旧实现留在快捷栏的一叠种子；
+// 这些栏位 MUST 逐槽保留，空初始背包只影响「存档明确不存在」的构造路径。
+// 夹具就地写出历史清单，不从期望 helper 派生：与期望同源的夹具会在实现变空时
+// 静默失去覆盖（两边一起变空，永远不红）。
 func TestPlayerPersistenceExistingPlayerKeepsLegacyStarterSeeds(t *testing.T) {
 	store := newControllablePlayerStore()
 	id := playerID(40)
-	legacy := wantStarterMaterialInventory()
+	legacy := core.Inventory{}
+	for slot, item := range [...]core.ItemID{
+		core.ItemCobblestone, core.ItemSmoothStone, core.ItemSand, core.ItemGravel,
+		core.ItemOakLog, core.ItemOakPlanks, core.ItemLeaves, core.ItemGlass,
+		core.ItemBrick, core.ItemWhiteWool, core.ItemRoofTile, core.ItemClay,
+		core.ItemSnowBlock, core.ItemMossyCobblestone,
+	} {
+		legacy.Backpack[slot] = core.ItemStack{Item: item, Count: core.MaxStackCount}
+	}
 	// 还原升级前材料包：旧实现在第 15 格补了 64 颗种子。
 	legacy.Backpack[14] = core.ItemStack{Item: core.ItemWheatSeeds, Count: core.MaxStackCount}
 	legacy.Hotbar.Slots[3] = core.ItemStack{Item: core.ItemWheatSeeds, Count: 5}

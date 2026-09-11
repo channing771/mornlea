@@ -87,6 +87,11 @@ func newMissingCachedPlayer(
 	metadata storage.Metadata,
 ) *cachedPlayer {
 	anchor := metadata.SpawnAnchor
+	// 下面刻意不设置 `Inventory`：缺失玩家的初始背包恒为空（`core.Inventory`
+	// 零值即快捷栏九格与背包二十七格全部空槽）。空背包是契约本身，不是尚未实现
+	// 的缺省：新玩家不获得任何材料、种子或工具，首夜资源全部来自徒手采掘与合成，
+	// 服务端因此没有也不保留任何发放机制。既有玩家（包括历史材料包留下的物品）
+	// 逐槽恢复，不会被删除、补发或重排。
 	return &cachedPlayer{
 		id:          id,
 		pendingName: name,
@@ -97,7 +102,7 @@ func newMissingCachedPlayer(
 				core.MaxY + 1,
 				float32(anchor.Z)*core.SectionSize + 0.5,
 			},
-		}, Inventory: starterMaterialInventory(),
+		},
 			// 缺失玩家的首份快照可能先于 sim 的第一次 Observe 落盘（Confirm 会
 			// 直接标脏），因此这里就要写初值而不是零值：零饥饿是合法取值，
 			// 落盘后重登的新玩家会直接进入挨饿状态。ExhaustionMilli 显式写 0
@@ -110,29 +115,6 @@ func newMissingCachedPlayer(
 		hasSnapshot: true,
 		missing:     true,
 	}
-}
-
-// starterMaterialItems 是一次性材料包的稳定材料清单，顺序即背包格位顺序。
-var starterMaterialItems = [...]core.ItemID{
-	core.ItemCobblestone, core.ItemSmoothStone, core.ItemSand, core.ItemGravel,
-	core.ItemOakLog, core.ItemOakPlanks, core.ItemLeaves, core.ItemGlass,
-	core.ItemBrick, core.ItemWhiteWool, core.ItemRoofTile, core.ItemClay,
-	core.ItemSnowBlock, core.ItemMossyCobblestone,
-}
-
-func starterMaterialInventory() core.Inventory {
-	var inventory core.Inventory
-	for slot, item := range starterMaterialItems {
-		inventory.Backpack[slot] = core.ItemStack{Item: item, Count: core.MaxStackCount}
-	}
-	// 材料包不再包含起步种子（change natural-grass-seeds）：第一颗种子由玩家
-	// 采除自然生成的短草取得，清单之后的全部栏位保持为空。它只在
-	// ErrPlayerNotFound 路径构造，既有玩家（包括旧材料包留下的种子）逐槽
-	// 恢复，不会被删除、补发或重排。
-	if !inventory.Valid() {
-		panic("server: invalid starter material inventory")
-	}
-	return inventory
 }
 
 func (player *cachedPlayer) save(revision uint64) storage.PlayerSave {

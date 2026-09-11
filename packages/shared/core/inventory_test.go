@@ -513,11 +513,11 @@ func TestConsumeRecipeFailureReturnsOriginalGrid(t *testing.T) {
 		// 形状空洞被占：熔炉圆环的中格放着泥土（哪怕只占形状的空格、不撑大
 		// 包围盒），消费层也必须拒绝——空格上只允许零值空栈。
 		{"形状空洞被占", 3, buildConsumableGrid(
-			craftingCell{0, core.ItemCobblestone, 2}, craftingCell{1, core.ItemCobblestone, 2},
-			craftingCell{2, core.ItemCobblestone, 2}, craftingCell{3, core.ItemCobblestone, 2},
+			craftingCell{0, core.ItemStone, 2}, craftingCell{1, core.ItemStone, 2},
+			craftingCell{2, core.ItemStone, 2}, craftingCell{3, core.ItemStone, 2},
 			craftingCell{4, core.ItemDirt, 1},
-			craftingCell{5, core.ItemCobblestone, 2}, craftingCell{6, core.ItemCobblestone, 2},
-			craftingCell{7, core.ItemCobblestone, 2}, craftingCell{8, core.ItemCobblestone, 2},
+			craftingCell{5, core.ItemStone, 2}, craftingCell{6, core.ItemStone, 2},
+			craftingCell{7, core.ItemStone, 2}, craftingCell{8, core.ItemStone, 2},
 		), furnace},
 	}
 	for _, tc := range cases {
