@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/channing771/mornlea/packages/server/sim/contract"
@@ -18,6 +19,7 @@ import (
 // Options 是已由根配置校验后的世界存档运行参数。
 type Options struct {
 	SaveWorkers    int
+	LoadWorkers    int
 	SaveChunks     int
 	SaveBytes      int
 	AutosaveTicks  uint64
@@ -102,6 +104,16 @@ type World struct {
 	saveWorkers sync.WaitGroup
 	saveDone    chan struct{}
 
+	// 加载通道与存档队列互不干扰：独立有界队列与独立 worker 池，
+	// 加载满载也不饿死存档。worker 懒启动，首次 `SubmitLoad` 才建，
+	// 登录前不占 goroutine 配额。
+	loadJobs      chan LoadRequest
+	loadResults   chan LoadResult
+	loadWorkers   sync.WaitGroup
+	loadPending   atomic.Int32
+	loadOnce      sync.Once
+	loadWorkerNum int
+
 	mu              sync.Mutex
 	saveJobs        chan saveJob
 	saveCompletions chan saveCompletion
@@ -119,6 +131,10 @@ type World struct {
 // NewWorld 构造并启动固定数量的世界存档 worker。
 func NewWorld(store storage.Store, engine *runtime.Engine, options Options) *World {
 	saveCtx, cancelSaves := context.WithCancel(context.Background())
+	loadWorkers := options.LoadWorkers
+	if loadWorkers <= 0 {
+		loadWorkers = 2
+	}
 	world := &World{
 		store:           store,
 		engine:          engine,
@@ -128,6 +144,9 @@ func NewWorld(store storage.Store, engine *runtime.Engine, options Options) *Wor
 		saveDone:        make(chan struct{}),
 		saveJobs:        make(chan saveJob, options.SaveWorkers*2),
 		saveCompletions: make(chan saveCompletion, options.SaveWorkers*2),
+		loadJobs:        make(chan LoadRequest, loadWorkers*8),
+		loadResults:     make(chan LoadResult, loadWorkers*8),
+		loadWorkerNum:   loadWorkers,
 		retry:           make(map[storage.RegionKey][]retrySave),
 		retryInFlight:   make(map[uint64]retrySave),
 	}
@@ -183,6 +202,7 @@ func (world *World) Flush(ctx context.Context) error {
 // Close 停止存档 worker；调用方必须先完成或放弃 Flush。
 func (world *World) Close() {
 	world.cancelSaves()
+	world.loadWorkers.Wait()
 	<-world.saveDone
 	world.mu.Lock()
 	world.autosaveActive = false
