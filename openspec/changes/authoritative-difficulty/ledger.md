@@ -23,3 +23,5 @@
   - 任务组 3 评审：PASS（三条 INFO：探针 defer 次序与既有 runner 微异、首段失败路径 store 不关、defer 内 Fatalf 风格——均无害不整改，留档）。
 - 2026-09-11 任务组 4 完成（基线 `27655b60` → `93c132b4`，单提交：`--difficulty` 旗标 + 监听前一致性校验 + 8 测试）。语义矩阵四格：省略×新世界=normal、省略×已有世界=metadata 生效不比对、显式×新世界=显式值、显式×已有世界=监听前比对（不一致 `errors.Join(明确错误, store.Close())`，错误指名两值）。listener 未创建以 `listenTCP` 注入布尔钉住（run 内唯一创建点）。验证证据（HEAD `93c132b4`）：`go test ./packages/server/cmd/mornlea-server -race -count=1` ok（4.012s）、storage Metadata 定点 ok、vet/gofmt 干净。
   - 任务组 4 评审：PASS（SPEC 四格全直证、`flag.Visit` 区分省略与显式 normal、非法值解析期拒绝不进世界打开路径、图形客户端零改动；三条 INFO：旗标校验顺序无 spec 约束、CLI 一致侧断言止于 metadata（Engine 注入由组 3 钉住分工合理）、勾选留控制会话——均不整改）。
+- 2026-09-11 任务组 5 完成（基线 `19dd6e91` → `8d79437a`，单测试提交、生产零改动）。四条启动路径共用 `parseMainOptions`（`flag.ContinueOnError`，从未注册 `--difficulty`），未知旗标解析期即拒；测试两层断言（解析失败 + 错误含 `not defined`）钉住「无入口」，传合法值 `normal` 保鉴别力。评审独立复核：客户端子树唯一 flag 入口、生产零 difficulty 引用。验证证据（HEAD `8d79437a`）：`./packages/client/cmd/mornlea/... -count=1 -short` 五包 ok、race 定点 ok、gofmt 干净。
+  - 任务组 5 评审：PASS（三条 INFO：`--motion-demo` 组合未列但结构上等同、勾选留控制会话、stdlib flag 错误文案依赖属公开可观察行为——均不整改）。

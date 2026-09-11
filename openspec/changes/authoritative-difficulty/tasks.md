@@ -24,7 +24,7 @@
 
 ## 5. Graphical Client Guardrails
 
-- [ ] 5.1 保持图形客户端没有难度覆盖 flag，误传参数在解析阶段失败；覆盖 `--connect`、benchmark、capture 和普通本地路径，不修改 HUD、协议、capture 或 benchmark 数据；验证：`go test ./packages/client/... -count=1`（含 `cmd/mornlea` 相关选项解析测试）
+- [x] 5.1 保持图形客户端没有难度覆盖 flag，误传参数在解析阶段失败；覆盖 `--connect`、benchmark、capture 和普通本地路径，不修改 HUD、协议、capture 或 benchmark 数据；验证：`go test ./packages/client/... -count=1`（含 `cmd/mornlea` 相关选项解析测试）
 
 ## 6. Integration and Contract Closure
 
