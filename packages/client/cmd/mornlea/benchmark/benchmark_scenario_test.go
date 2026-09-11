@@ -129,7 +129,7 @@ func TestScenarioV8GPUCompletionStopsWhenTransportCloseFails(t *testing.T) {
 			running := server.NewWorld(
 				config,
 				worldgen.New(benchmarkSeed, false),
-				storage.NewMemory(storage.Metadata{FormatVersion: 5, Seed: benchmarkSeed, SpawnDimension: core.Overworld, DepthsSpawnAnchor: core.ChunkPos{}, DepthsSeedSalt: 0x9E3779B97F4A7C15}),
+				storage.NewMemory(storage.Metadata{FormatVersion: 6, Seed: benchmarkSeed, SpawnDimension: core.Overworld, DepthsSpawnAnchor: core.ChunkPos{}, DepthsSeedSalt: 0x9E3779B97F4A7C15}),
 			)
 			t.Cleanup(func() {
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -190,7 +190,7 @@ func TestScenarioV8GPUCompletionStartsAfterTransportTeardown(t *testing.T) {
 		config,
 		worldgen.New(benchmarkSeed, false),
 		storage.NewMemory(storage.Metadata{
-			FormatVersion:     5,
+			FormatVersion:     6,
 			Seed:              benchmarkSeed,
 			SpawnDimension:    core.Overworld,
 			DepthsSpawnAnchor: core.ChunkPos{},

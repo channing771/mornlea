@@ -160,7 +160,7 @@ func TestSurvivalBootstrapEmptyInventoryToStonePickaxe(t *testing.T) {
 	// 新玩家的空初始背包，脚本第一步要看的正是这份空背包。生成器用生产
 	// `worldgen.New`（流体开启 = 生产默认配置），不经任何测试生成旁路。
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion:     5,
+		FormatVersion:     6,
 		Seed:              survivalBootstrapSeed,
 		SpawnDimension:    core.Overworld,
 		SpawnAnchor:       survivalBootstrapAnchor,

@@ -214,7 +214,7 @@ func measureMultiplayerServerProbe(duration time.Duration) (
 	config.InterestObserver = epoch.observeInterest
 	config.StreamingObserver = epoch.observeChunkStreaming
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 5, Seed: benchmarkSeed,
+		FormatVersion: 6, Seed: benchmarkSeed,
 		SpawnDimension: core.Overworld, SpawnAnchor: core.ChunkPos{},
 		DepthsSpawnAnchor: core.ChunkPos{},
 		DepthsSeedSalt:    core.DepthsSeedSalt,

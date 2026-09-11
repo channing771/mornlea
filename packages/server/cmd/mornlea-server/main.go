@@ -148,7 +148,7 @@ func run(ctx context.Context, args []string, injected dependencies) error {
 	config := server.DefaultConfig(options.Seed)
 	store, err := dependencies.openDisk(ctx, options.World, storage.OpenOptions{
 		Create: storage.Metadata{
-			FormatVersion:     5,
+			FormatVersion:     6,
 			Seed:              options.Seed,
 			SpawnDimension:    core.Overworld,
 			DepthsSpawnAnchor: core.ChunkPos{},

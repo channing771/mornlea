@@ -241,7 +241,7 @@ func runMiningParityScript(t *testing.T, transport string) miningParityResult {
 	t.Helper()
 	identity := integrationIdentity(0x72, "MiningParity")
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 6, Seed: 42, SpawnDimension: core.Overworld,
 		DepthsSpawnAnchor: core.ChunkPos{},
 		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
@@ -520,7 +520,7 @@ func runParityTranscript(t *testing.T, transport string) parityResult {
 	t.Helper()
 	identity := integrationIdentity(0x71, "Parity")
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 6, Seed: 42, SpawnDimension: core.Overworld,
 		DepthsSpawnAnchor: core.ChunkPos{},
 		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
@@ -911,7 +911,7 @@ func runCraftingGridParityScript(t *testing.T, transport string) craftingGridPar
 	t.Helper()
 	identity := integrationIdentity(0x95, "GridCrafter")
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 6, Seed: 42, SpawnDimension: core.Overworld,
 		DepthsSpawnAnchor: core.ChunkPos{},
 		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})

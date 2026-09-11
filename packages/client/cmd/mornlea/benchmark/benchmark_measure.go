@@ -77,7 +77,7 @@ const steadyFrameMeshWorkMax = application.SteadyFrameMeshWorkMax
 
 func measurePlayerPersistenceSummary() (client.PersistenceSummary, error) {
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 5, Seed: benchmarkSeed, SpawnDimension: core.Overworld,
+		FormatVersion: 6, Seed: benchmarkSeed, SpawnDimension: core.Overworld,
 		DepthsSpawnAnchor: core.ChunkPos{},
 		DepthsSeedSalt:    core.DepthsSeedSalt,
 	})

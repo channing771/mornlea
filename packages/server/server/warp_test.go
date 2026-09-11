@@ -65,7 +65,7 @@ func newWarpTestHostConfigured(
 ) *warpTestHost {
 	t.Helper()
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion:     5,
+		FormatVersion:     6,
 		Seed:              seed,
 		SpawnDimension:    core.Overworld,
 		SpawnAnchor:       warpOverworldAnchor,

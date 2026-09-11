@@ -154,7 +154,7 @@ func TestNewApplicationReturnsRegistryErrorBeforeClientSideEffects(t *testing.T)
 			configure: func(dependencies *Dependencies, called func(string)) {
 				dependencies.OpenStore = func(context.Context, Options) (storage.WorldStore, error) {
 					called("OpenStore")
-					return storage.NewMemory(storage.Metadata{FormatVersion: 5, Seed: 42, DepthsSpawnAnchor: core.ChunkPos{}, DepthsSeedSalt: 0x9E3779B97F4A7C15}), nil
+					return storage.NewMemory(storage.Metadata{FormatVersion: 6, Seed: 42, DepthsSpawnAnchor: core.ChunkPos{}, DepthsSeedSalt: 0x9E3779B97F4A7C15}), nil
 				}
 			},
 		},
