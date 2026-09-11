@@ -33,6 +33,6 @@
 
 ## 7. Final Gates
 
-- [ ] 7.1 运行 `gofmt` 检查、六模块 `go vet`、`make test-race` 和 `openspec validate --all --strict --no-interactive`；验证：以上命令全部成功
-- [ ] 7.2 运行 `make dev-check`、`make test-race-changed`，记录性能结果但不放宽真实错误门禁；验证：以上命令全部成功
-- [ ] 7.3 完成整分支规格/质量评审，修复或按 SDD 规则记录所有 findings，并在 ledger 写入最终结果；验证：`git diff --check` 与整分支 review package 完成
+- [x] 7.1 运行 `gofmt` 检查、六模块 `go vet`、`make test-race` 和 `openspec validate --all --strict --no-interactive`；验证：以上命令全部成功
+- [x] 7.2 运行 `make dev-check`、`make test-race-changed`，记录性能结果但不放宽真实错误门禁；验证：以上命令全部成功
+- [x] 7.3 完成整分支规格/质量评审，修复或按 SDD 规则记录所有 findings，并在 ledger 写入最终结果；验证：`git diff --check` 与整分支 review package 完成
