@@ -74,6 +74,7 @@ type Command struct {
 	Mining       bool
 	Eating       bool
 	Sprinting    bool
+	Sneaking     bool
 }
 
 type GeneratedChunk struct {

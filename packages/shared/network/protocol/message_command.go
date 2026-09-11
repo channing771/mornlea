@@ -26,6 +26,9 @@ type PlayerInput struct {
 	// `Eating` 之后）。判定门控见 sprint spec：地面+前移+非浸没+饥饿≥6 时
 	// 才在物理侧提升目标速度，无门控时该位不产生效果。
 	Sprinting bool
+	// Sneaking 是持续潜行输入位，协议 v41 起随玩家输入上行（wire 上紧跟
+	// `Sprinting` 之后）。潜行减速只在站立非浸没时生效，潜行放置分流见 sneak spec。
+	Sneaking bool
 }
 
 func (PlayerInput) clientMessage() {}

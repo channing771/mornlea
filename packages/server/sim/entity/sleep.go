@@ -49,6 +49,10 @@ func (engine *engineContext) executeInteractBed(command Command) (RejectReason, 
 		// 非床目标与门交互同构：静默成功，客户端不等待任何结果。
 		return 0, false
 	}
+	// 潜行放置：潜行中不入睡，客户端应直发 PlaceBlock；服务端权威拒绝兜底。
+	if session.player.sneakingHeld {
+		return RejectInvalidInput, true
+	}
 	if !core.IsDisplayNightPhase(engine.effectiveDayPhase()) {
 		// 白天用床拒绝且零状态变化。拒绝原因沿用冻结枚举里「命中方块不接受
 		// 该交互」的既有语义（翻地/骨粉同款），不为时间窗新增 wire 值。

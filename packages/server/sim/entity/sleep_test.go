@@ -77,6 +77,25 @@ func TestBedInteractAtNightSleepsAndRecordsFootRespawn(t *testing.T) {
 	}
 }
 
+// TestBedSneakRefusesSleep 覆盖潜行放置分流的床半边：潜行中对床右键不入睡
+// 且零状态变化（handler 层直测；床尚无客户端上行触发，属预留路径）。
+func TestBedSneakRefusesSleep(t *testing.T) {
+	engine := twoPlayerWorld(t)
+	session, yaw, pitch := placeSleepBed(t, engine, sleepBedFoot, 3.5)
+	player := engine.sessions[session].player
+	player.sneakingHeld = true
+	result := interactBed(engine, session, 10, yaw, pitch)
+	if len(result.Rejected) != 1 || result.Rejected[0].Reason != RejectInvalidInput {
+		t.Fatalf("潜行床交互=%+v，想要恰好一次 RejectInvalidInput", result.Rejected)
+	}
+	if player.sleeping {
+		t.Fatal("潜行拒绝后玩家不应入睡")
+	}
+	if player.respawnPresent {
+		t.Fatal("潜行拒绝后不应记录重生点")
+	}
+}
+
 // TestBedInteractOutsideNightWindowRejected 覆盖 spec 场景「白天使用被拒绝」：
 // 季节化相位不在夜间窗时使用床必须被拒绝（沿用既有冻结拒绝枚举，不新增 wire
 // 值），入睡状态与重生点都保持原样。季节偏移钉在分点（探测 tick 的年相位恰为

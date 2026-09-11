@@ -89,7 +89,7 @@ func TestPlaceOpensLocalMirrorFurnaceWithoutPredictingUI(t *testing.T) {
 	app.camera = client.Camera{Pos: mgl32.Vec3{0.5, 10.5, 3.5}}
 	loadInteractiveBlock(t, app, core.BlockPos{X: 0, Y: 10, Z: 0}, core.FurnaceID)
 
-	app.placeBlock()
+	app.placeBlock(false)
 	message := receiveInteractiveClientMessage(t, serverEndpoint)
 	open, ok := message.(network.OpenContainer)
 	if !ok || open != (network.OpenContainer{Sequence: 1}) {
@@ -121,7 +121,7 @@ func TestPlaceKeepsBlockRequestForNonFurnaceHit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	app.placeBlock()
+	app.placeBlock(false)
 	message := receiveInteractiveClientMessage(t, serverEndpoint)
 	place, ok := message.(network.PlaceBlock)
 	if !ok || place != (network.PlaceBlock{Sequence: 1, Slot: 4}) {
@@ -156,7 +156,7 @@ func TestPlaceOpensLocalMirrorChestWithoutPredictingUI(t *testing.T) {
 	app.camera = client.Camera{Pos: mgl32.Vec3{0.5, 10.5, 3.5}}
 	loadInteractiveBlock(t, app, core.BlockPos{X: 0, Y: 10, Z: 0}, core.ChestID)
 
-	app.placeBlock()
+	app.placeBlock(false)
 	message := receiveInteractiveClientMessage(t, serverEndpoint)
 	open, ok := message.(network.OpenContainer)
 	if !ok || open != (network.OpenContainer{Sequence: 1}) {
@@ -167,6 +167,34 @@ func TestPlaceOpensLocalMirrorChestWithoutPredictingUI(t *testing.T) {
 	}
 	if _, opened := app.chest.State(); opened {
 		t.Fatal("打开请求本地改写了箱子镜像")
+	}
+	assertNoInteractiveClientMessage(t, serverEndpoint)
+}
+
+// TestPlaceSneakingSkipsContainerAndPlacesInstead 覆盖潜行放置分流：准星指向
+// 熔炉且手持可放置物时，潜行必须跳过开容器、只发放置；非潜行行为不变（上文用例）。
+func TestPlaceSneakingSkipsContainerAndPlacesInstead(t *testing.T) {
+	app, serverEndpoint := newInteractiveTestApplication(t)
+	if err := app.predictor.Begin(network.PlayerState{
+		ServerTick: 1, Dimension: core.Overworld,
+		Position: mgl32.Vec3{0.5, 10, 3.5}, OnGround: true, Ready: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	app.camera = client.Camera{Pos: mgl32.Vec3{0.5, 10.5, 3.5}}
+	loadInteractiveBlock(t, app, core.BlockPos{X: 0, Y: 10, Z: 0}, core.FurnaceID)
+	var inventory core.Inventory
+	inventory.Hotbar.Selected = 4
+	inventory.Hotbar.Slots[4] = core.ItemStack{Item: core.ItemDirt, Count: 1}
+	if err := app.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
+		t.Fatal(err)
+	}
+
+	app.placeBlock(true)
+	message := receiveInteractiveClientMessage(t, serverEndpoint)
+	place, ok := message.(network.PlaceBlock)
+	if !ok || place != (network.PlaceBlock{Sequence: 1, Slot: 4}) {
+		t.Fatalf("潜行右键熔炉 = %#v，想要只发放置已确认栏位 4", message)
 	}
 	assertNoInteractiveClientMessage(t, serverEndpoint)
 }

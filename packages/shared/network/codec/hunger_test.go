@@ -98,12 +98,13 @@ func TestProtocolV24PlayerInputCarriesEating(t *testing.T) {
 	}
 }
 
-// protocol.PlayerInput 的 wire 布局（v28 起，固定长度）：
+// protocol.PlayerInput 的 wire 布局（v41 起，固定长度）：
 //
-//	Sequence u64 | MoveX i8 | MoveZ i8 | Jump u8 | Yaw f32 | Pitch f32 | Mining u8 | Eating u8 | Sprinting u8
+//	Sequence u64 | MoveX i8 | MoveZ i8 | Jump u8 | Yaw f32 | Pitch f32 | Mining u8 | Eating u8 | Sprinting u8 | Sneaking u8
 const (
-	playerInputPayloadBytes    = 8 + 1 + 1 + 1 + 4 + 4 + 1 + 1 + 1
-	playerInputSprintingOffset = playerInputPayloadBytes - 1
+	playerInputPayloadBytes    = 8 + 1 + 1 + 1 + 4 + 4 + 1 + 1 + 1 + 1
+	playerInputSneakingOffset  = playerInputPayloadBytes - 1
+	playerInputSprintingOffset = playerInputSneakingOffset - 1
 	playerInputEatingOffset    = playerInputSprintingOffset - 1
 	playerInputMiningOffset    = playerInputEatingOffset - 1
 )
