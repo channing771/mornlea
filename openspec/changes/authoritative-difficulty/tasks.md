@@ -7,10 +7,10 @@
 
 ## 2. Authoritative Simulation
 
-- [ ] 2.1 让 `sim.Engine` 在构造时接收并保存不可变难度，缺省构造保持 normal，非法难度稳定失败；为三档构造行为写失败测试；验证：`go test ./packages/server/sim/entity -race -count=1`
-- [ ] 2.2 修改饥饿结算（先写失败测试）：normal 保持一点生命硬地板，hard 允许饥饿伤害进入既有死亡结算，peaceful 跳过饥饿伤害且不重置回血计时；覆盖间隔边界、回血计时重置和死亡反馈；验证：`go test ./packages/server/sim/entity -race -count=1`
-- [ ] 2.3 修改自然回血（先写失败测试）：normal/hard 继续使用权威回血门控（默认值 18），peaceful 取消该门控，并仅在实际回血后将饥饿与饱和度恢复到完整值；覆盖未回血和满血 no-op；验证：`go test ./packages/server/sim/entity -race -count=1`
-- [ ] 2.4 修改夜行者生成门控（先写失败测试）：peaceful 在 `advanceHostileSpawn` 入口短路，不派生候选、不消耗验证预算；normal/hard 生成行为逐位不变；验证：`go test ./packages/server/sim/entity -race -count=1`
+- [x] 2.1 让 `sim.Engine` 在构造时接收并保存不可变难度，缺省构造保持 normal，非法难度稳定失败；为三档构造行为写失败测试；验证：`go test ./packages/server/sim/entity -race -count=1`
+- [x] 2.2 修改饥饿结算（先写失败测试）：normal 保持一点生命硬地板，hard 允许饥饿伤害进入既有死亡结算，peaceful 跳过饥饿伤害且不重置回血计时；覆盖间隔边界、回血计时重置和死亡反馈；验证：`go test ./packages/server/sim/entity -race -count=1`
+- [x] 2.3 修改自然回血（先写失败测试）：normal/hard 继续使用权威回血门控（默认值 18），peaceful 取消该门控，并仅在实际回血后将饥饿与饱和度恢复到完整值；覆盖未回血和满血 no-op；验证：`go test ./packages/server/sim/entity -race -count=1`
+- [x] 2.4 修改夜行者生成门控（先写失败测试）：peaceful 在 `advanceHostileSpawn` 入口短路，不派生候选、不消耗验证预算；normal/hard 生成行为逐位不变；验证：`go test ./packages/server/sim/entity -race -count=1`
 
 ## 3. Server Wiring
 

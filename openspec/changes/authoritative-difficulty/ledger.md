@@ -13,3 +13,7 @@
   - Ruling: 接受 encode 侧难度校验与四个迁移测试改名 `ToV5`→`ToCurrent` — D1「非法值由编解码边界守住」双侧实现更稳；迁移目标随版本演进，原名误导。
   - 任务组 1 评审：PASS（SPEC 六项逐条通过、QUALITY 无 blocking/major；1 minor 为 ledger/勾选滞后已由本条清偿，1 nit CRC 锚点沿用 v5 惯例不改）。
   - 预存免责（非本组引入，基线 `d4cccb6c` 复现）：`packages/server/server` 的 `TestDualDimensionReloadAfterRestart`（cleanup 期 `flush passives: unsupported passive dimension 1`）与 `TestWarpParityMemoryVsTCP`（仅整包 `-short` 跑法）失败，属 F-11 在案 flake 族，移交 F-11 取证，本 change 不修。
+- 2026-09-11 任务组 2 完成（基线 `bf0a4386` → `b08a7e4c`，3 提交：`f28b8034` 构造注入 / `b42d3725` 饥饿回血分档 / `b08a7e4c` 和平生成门控）。构造签名：`entity.NewState(seed, ...core.Difficulty)` 与 `runtime.NewEngine(viewRadius, worldTime, seed, ...core.Difficulty)`，缺省尾参=normal，非法/多尾参 panic 于构造期。验证证据（HEAD `b08a7e4c`）：`go test ./packages/server/sim/entity -race -count=1` ok（5.575s）、`./packages/server/sim/... -count=1` 四包 ok、audit ok、vet/gofmt 干净、`./packages/server/server -count=1` 仅剩两条 F-11 预存失败。
+  - Ruling: 接受 peaceful 饥饿为零时 `starvationTicks` 冻结 — 该字段不进快照/恢复/哈希三条外露路径，包外不可观察，冻结与 normal 硬地板行为同构 — 规格只约束不扣血与不重置回血计时，无第三种可观察语义需要区分。
+  - Ruling: 接受两个只读访问器（`State.Difficulty()` / `Engine.DifficultyForTest()`）— 沿 `SeedForTest` 先例、无写入口，供组 3 断言装配接线 — 无 accessor 则组 3 只能靠行为差异间接验证注入，证据更弱。
+  - 任务组 2 评审：PASS（SPEC：normal 三处逐位一致有既有测试零改动+hard 首生成 tick 探针直证；QUALITY 无 blocking/major；1 minor 为 ledger/勾选滞后由本条清偿；1 nit `runtime/engine.go:96` doc 注释反引号内为含括号表达式 `store.Metadata().Difficulty`，audit 静默放行属绕过，并入组 3 一行搭车改为点路径写法）。
