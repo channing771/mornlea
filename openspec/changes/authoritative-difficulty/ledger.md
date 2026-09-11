@@ -21,3 +21,5 @@
   - Ruling: 接受组 3 实现 bonus「tick 不读磁盘」测试 — delta spec 需求 2 明列该 Scenario，装配层必要补全 — tasks 3.2 字面未列，spec 驱动优先于字面。
   - Ruling: 实现者首版探针泄漏（依赖无 cleanup 的 `mustNewHost`，毒害三个进程级泄漏判定测试）经 stash 基线对照归因后彻底修复，所有 host/store 生命周期显式收口 — 教训记档：parity runner 必须显式 `Shutdown`，与既有纪律一致。
   - 任务组 3 评审：PASS（三条 INFO：探针 defer 次序与既有 runner 微异、首段失败路径 store 不关、defer 内 Fatalf 风格——均无害不整改，留档）。
+- 2026-09-11 任务组 4 完成（基线 `27655b60` → `93c132b4`，单提交：`--difficulty` 旗标 + 监听前一致性校验 + 8 测试）。语义矩阵四格：省略×新世界=normal、省略×已有世界=metadata 生效不比对、显式×新世界=显式值、显式×已有世界=监听前比对（不一致 `errors.Join(明确错误, store.Close())`，错误指名两值）。listener 未创建以 `listenTCP` 注入布尔钉住（run 内唯一创建点）。验证证据（HEAD `93c132b4`）：`go test ./packages/server/cmd/mornlea-server -race -count=1` ok（4.012s）、storage Metadata 定点 ok、vet/gofmt 干净。
+  - 任务组 4 评审：PASS（SPEC 四格全直证、`flag.Visit` 区分省略与显式 normal、非法值解析期拒绝不进世界打开路径、图形客户端零改动；三条 INFO：旗标校验顺序无 spec 约束、CLI 一致侧断言止于 metadata（Engine 注入由组 3 钉住分工合理）、勾选留控制会话——均不整改）。

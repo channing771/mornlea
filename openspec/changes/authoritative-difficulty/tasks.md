@@ -19,8 +19,8 @@
 
 ## 4. Dedicated Server CLI
 
-- [ ] 4.1 在 `packages/server/cmd/mornlea-server` 增加可选 `--difficulty`，区分省略与显式 `normal`，仅接受三个小写值；新世界省略使用 normal，已有世界省略使用 metadata；验证：`go test ./packages/server/cmd/mornlea-server -race -count=1`
-- [ ] 4.2 在 listener 创建前校验已有世界的显式难度冲突；parse/open 失败不得产生后续副作用，store 打开后的冲突、listen 和 host 构造错误路径必须关闭已拥有资源；增加 listener 未创建和 close 计数测试；验证：`go test ./packages/server/cmd/mornlea-server -race -count=1`
+- [x] 4.1 在 `packages/server/cmd/mornlea-server` 增加可选 `--difficulty`，区分省略与显式 `normal`，仅接受三个小写值；新世界省略使用 normal，已有世界省略使用 metadata；验证：`go test ./packages/server/cmd/mornlea-server -race -count=1`
+- [x] 4.2 在 listener 创建前校验已有世界的显式难度冲突；parse/open 失败不得产生后续副作用，store 打开后的冲突、listen 和 host 构造错误路径必须关闭已拥有资源；增加 listener 未创建和 close 计数测试；验证：`go test ./packages/server/cmd/mornlea-server -race -count=1`
 
 ## 5. Graphical Client Guardrails
 
