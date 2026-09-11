@@ -2,6 +2,7 @@ package client_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/channing771/mornlea/packages/client/client"
 	"github.com/channing771/mornlea/packages/shared/core"
@@ -139,5 +140,67 @@ func TestInputStateReportsUseKeyHeldAlongsideRisingEdgePlace(t *testing.T) {
 	suppressed := state.Update(false, true, 0, false, false, true)
 	if suppressed.Use || suppressed.Mining {
 		t.Fatalf("界面打开时 = %+v，想要 Use 与 Mining 都被抑制", suppressed)
+	}
+}
+
+// TestInputStateDoubleTapSprint 覆盖双击 W 疾跑锁存：释放后 300ms 窗口内再次
+// 按下即锁存并在按住期间持续，慢按、松开、潜行与界面打开都不锁存；潜行或界面
+// 中断还必须同时清除释放记忆，否则紧随其后的按下会误触发。
+func TestInputStateDoubleTapSprint(t *testing.T) {
+	t0 := time.Now()
+	var state client.InputState
+
+	// 首按不锁存，只记录按下态；松开记录释放时刻。
+	if state.UpdateSprint(true, false, false, t0) {
+		t.Fatal("首按 W 不应锁存疾跑")
+	}
+	if state.UpdateSprint(false, false, false, t0) {
+		t.Fatal("松开 W 不应锁存疾跑")
+	}
+	// 200ms 内再按：窗口内，锁存且按住期间持续为真。
+	if !state.UpdateSprint(true, false, false, t0.Add(200*time.Millisecond)) {
+		t.Fatal("200ms 内双击 W 未锁存疾跑")
+	}
+	if !state.UpdateSprint(true, false, false, t0.Add(250*time.Millisecond)) {
+		t.Fatal("锁存后按住 W 未持续疾跑")
+	}
+	// 松开 W：锁存清零。
+	if state.UpdateSprint(false, false, false, t0.Add(300*time.Millisecond)) {
+		t.Fatal("松开 W 后锁存未清零")
+	}
+
+	// 慢按：释放后 400ms 才再按，不锁存。
+	var slow client.InputState
+	slow.UpdateSprint(true, false, false, t0)
+	slow.UpdateSprint(false, false, false, t0)
+	if slow.UpdateSprint(true, false, false, t0.Add(400*time.Millisecond)) {
+		t.Fatal("400ms 后再按 W 不应锁存疾跑")
+	}
+
+	// 锁存中按住潜行：当帧为假，且释放记忆被清除——随后 100ms 内再按 W
+	// 不得误触发。
+	var sneak client.InputState
+	sneak.UpdateSprint(true, false, false, t0)
+	sneak.UpdateSprint(false, false, false, t0)
+	if !sneak.UpdateSprint(true, false, false, t0.Add(200*time.Millisecond)) {
+		t.Fatal("双击 W 未锁存疾跑")
+	}
+	if sneak.UpdateSprint(true, true, false, t0.Add(250*time.Millisecond)) {
+		t.Fatal("潜行中不应疾跑")
+	}
+	sneak.UpdateSprint(false, true, false, t0.Add(300*time.Millisecond))
+	if sneak.UpdateSprint(true, false, false, t0.Add(350*time.Millisecond)) {
+		t.Fatal("潜行清除后 100ms 内再按 W 误触发疾跑")
+	}
+
+	// 界面打开：当帧为假并清零。
+	var ui client.InputState
+	ui.UpdateSprint(true, false, false, t0)
+	ui.UpdateSprint(false, false, false, t0)
+	if !ui.UpdateSprint(true, false, false, t0.Add(200*time.Millisecond)) {
+		t.Fatal("双击 W 未锁存疾跑")
+	}
+	if ui.UpdateSprint(true, false, true, t0.Add(250*time.Millisecond)) {
+		t.Fatal("界面打开时不应疾跑")
 	}
 }

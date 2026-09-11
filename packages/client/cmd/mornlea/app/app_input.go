@@ -23,7 +23,7 @@ func (a *Application) dropSelectedItem() {
 	}
 }
 
-func (a *Application) placeBlock() {
+func (a *Application) placeBlock(sneaking bool) {
 	if _, ready := a.predictor.State(); !ready {
 		return
 	}
@@ -43,7 +43,8 @@ func (a *Application) placeBlock() {
 		// 工作台与熔炉/箱子共用这条既有打开判定路径：服务端才是权威射线，
 		// 这里只按本地镜像的方块类型决定发哪种请求——工作台打开的是 3×3 合成
 		// 网格而不是容器槽位，具体语义由服务端重新判定，客户端不做任何预测。
-		if loaded && (block == core.FurnaceID || block == core.ChestID || block == core.WorkbenchID) {
+		// 潜行放置：潜行中跳过开容器，直发 PlaceBlock；服务端权威拒绝兜底。
+		if !sneaking && loaded && (block == core.FurnaceID || block == core.ChestID || block == core.WorkbenchID) {
 			if err := a.send(network.OpenContainer{
 				Sequence: a.nextSequence(), Yaw: a.camera.Yaw, Pitch: a.camera.Pitch,
 			}); err != nil {

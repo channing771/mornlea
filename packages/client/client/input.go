@@ -1,11 +1,20 @@
 package client
 
-import "github.com/channing771/mornlea/packages/shared/core"
+import (
+	"time"
+
+	"github.com/channing771/mornlea/packages/shared/core"
+)
 
 type Movement struct {
 	MoveX int8
 	MoveZ int8
 	Jump  bool
+	// Sneaking 是 Shift 潜行的本帧按住态，Sprinting 是双击 W 锁存的本帧疾跑
+	// 意图。两者都只是上行意图，真正的速度门控在服务端与预测侧；零值即不行
+	// 潜行不疾跑，既有只填方向的构造不受影响。
+	Sneaking  bool
+	Sprinting bool
 }
 
 func MovementFromKeys(w, a, s, d, jump bool) Movement {
@@ -52,6 +61,41 @@ type InputState struct {
 	numberDown    int
 	inventoryDown bool
 	dropDown      bool
+	// wWasHeld 是上一帧 W 的按住态，lastWRelease/wReleaseArmed 记录上次 W
+	// 释放时刻与双击窗口有效性，sprintLatched 是双击锁存。时钟由调用方注入，
+	// 窗口常量集中在 sprintDoubleTapWindow 一处。
+	wWasHeld      bool
+	lastWRelease  time.Time
+	wReleaseArmed bool
+	sprintLatched bool
+}
+
+// sprintDoubleTapWindow 是双击 W 判定为疾跑的最大释放→按下间隔。
+const sprintDoubleTapWindow = 300 * time.Millisecond
+
+// UpdateSprint 由交互层每帧调用。wHeld 为本帧 W 是否按住，sneakHeld 为 Shift
+// 是否按住，uiOpen 为任一界面/聊天/暂停/面板是否打开（打开即清零并清除 armed
+// 时刻）。返回本帧是否请求疾跑；真正的速度门控仍在服务端与预测侧。
+func (state *InputState) UpdateSprint(wHeld, sneakHeld, uiOpen bool, now time.Time) bool {
+	if uiOpen || sneakHeld {
+		state.sprintLatched = false
+		state.wReleaseArmed = false
+		state.wWasHeld = wHeld
+		return false
+	}
+	if wHeld && !state.wWasHeld {
+		if state.wReleaseArmed && now.Sub(state.lastWRelease) <= sprintDoubleTapWindow {
+			state.sprintLatched = true
+		}
+		state.wReleaseArmed = false
+	}
+	if !wHeld && state.wWasHeld {
+		state.lastWRelease = now
+		state.wReleaseArmed = true
+		state.sprintLatched = false
+	}
+	state.wWasHeld = wHeld
+	return state.sprintLatched && wHeld
 }
 
 // Update 把数字键 1..9 转换为一次快捷栏选择请求，把 E 与 Q 的上升沿分别转换为

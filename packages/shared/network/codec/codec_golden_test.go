@@ -20,17 +20,24 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		wantID  uint32
 		wantHex string
 	}{
-		{"hello", protocol.StateHandshake, protocol.ClientHello{ProtocolVersion: 40}, 0, "28"},
+		{"hello", protocol.StateHandshake, protocol.ClientHello{ProtocolVersion: 41}, 0, "29"},
 		// v40 新增：`LoginStart` 载荷尾部（`DisplayName` 之后）追加 1 字节
 		// `ViewDistance`（u8，合法域 2..64）。样本取 32（0x20）这个非零非满
 		// 值：取 0 会因域外值连编码都被拒绝，取 64 又与「恰好越界 +1」只差
 		// 一位，任何换位或漏写都会改变尾字节。
 		{"login start", protocol.StateLogin, protocol.LoginStart{PlayerID: id, DisplayName: "Chen", ViewDistance: 32}, 0, "00112233445546778899aabbccddeeff044368656e20"},
-		{"input", protocol.StatePlay, protocol.PlayerInput{Sequence: 1, MoveX: -1, MoveZ: 1, Jump: true, Yaw: 1.5, Pitch: -0.5, Mining: true}, 0, "0100000000000000ff01010000c03f000000bf" + "01" + "00" + "00"},
+		{"input", protocol.StatePlay, protocol.PlayerInput{Sequence: 1, MoveX: -1, MoveZ: 1, Jump: true, Yaw: 1.5, Pitch: -0.5, Mining: true}, 0, "0100000000000000ff01010000c03f000000bf" + "01" + "00" + "00" + "00"},
 		// v24 新增：进食位是载荷最末一字节。夹具刻意取 Mining=false、
 		// Eating=true——同真同假的样本无法分辨「两个布尔字节写反」的实现。
 		// v28 追加 Sprinting 位（最末字节），此处取 Sprinting=false 以锁死尾部追加语义。
-		{"input eating", protocol.StatePlay, protocol.PlayerInput{Sequence: 2, Eating: true}, 0, "0200000000000000" + "00" + "00" + "00" + "00000000" + "00000000" + "00" + "01" + "00"},
+		// v41 追加 Sneaking 位（最末字节），此处取 Sneaking=false 以锁死尾部追加语义。
+		{"input eating", protocol.StatePlay, protocol.PlayerInput{Sequence: 2, Eating: true}, 0, "0200000000000000" + "00" + "00" + "00" + "00000000" + "00000000" + "00" + "01" + "00" + "00"},
+		// v41 新增：潜行位是载荷最末一字节。两组夹具刻意取 (Sprinting,Sneaking)
+		// 为 (false,true) 与 (true,false)——同真同假的样本无法分辨「末尾两个
+		// 布尔字节写反」的实现。旧版 v40 的 22 字节流在新解码下是截断，必须
+		// 被拒（本表每组夹具的逐长度截断循环已覆盖该拒绝）。
+		{"input sneaking", protocol.StatePlay, protocol.PlayerInput{Sequence: 3, Sneaking: true}, 0, "0300000000000000" + "00" + "00" + "00" + "00000000" + "00000000" + "00" + "00" + "00" + "01"},
+		{"input sprinting", protocol.StatePlay, protocol.PlayerInput{Sequence: 4, Sprinting: true}, 0, "0400000000000000" + "00" + "00" + "00" + "00000000" + "00000000" + "00" + "00" + "01" + "00"},
 		{"place", protocol.StatePlay, protocol.PlaceBlock{Sequence: 3, Yaw: 2, Pitch: -1, Slot: 4}, 2, "030000000000000000000040000080bf04"},
 		{"resync", protocol.StatePlay, protocol.RequestChunkResync{Sequence: 4, Dimension: core.Overworld, Chunk: core.ChunkPos{X: -2, Z: 3}, HaveRevision: 5}, 3, "040000000000000000000000feffffff030000000500000000000000"},
 		{"keep alive reply", protocol.StatePlay, protocol.KeepAliveReply{Token: 6}, 4, "0600000000000000"},
@@ -74,8 +81,8 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		wantID  uint32
 		wantHex string
 	}{
-		{"server hello", protocol.StateHandshake, protocol.ServerHello{ProtocolVersion: 40}, 0, "28"},
-		{"handshake reject", protocol.StateHandshake, protocol.HandshakeReject{ServerProtocolVersion: 40, Code: protocol.HandshakeVersionMismatch, Message: "no"}, 1, "2801026e6f"},
+		{"server hello", protocol.StateHandshake, protocol.ServerHello{ProtocolVersion: 41}, 0, "29"},
+		{"handshake reject", protocol.StateHandshake, protocol.HandshakeReject{ServerProtocolVersion: 41, Code: protocol.HandshakeVersionMismatch, Message: "no"}, 1, "2901026e6f"},
 		{"login success", protocol.StateLogin, protocol.LoginSuccess{PlayerID: id, WorldSeed: 0x1122334455667788}, 0, "00112233445546778899aabbccddeeff8877665544332211"},
 		{"login reject", protocol.StateLogin, protocol.LoginReject{Code: protocol.LoginInvalidIdentity, Message: "no"}, 1, "02026e6f"},
 		{"block changes", protocol.StatePlay, protocol.BlockChanges{Dimension: core.Overworld, Chunk: core.ChunkPos{X: 1, Z: -1}, BaseRevision: 1, NewRevision: 2, Changes: []protocol.BlockChange{{Position: core.BlockPos{X: 16, Y: -64, Z: -1}, Block: core.StoneID}}}, 1, "0000000001000000ffffffff010000000000000002000000000000000110000000c0ffffffffffffff0200"},

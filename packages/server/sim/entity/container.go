@@ -102,6 +102,10 @@ func (engine *engineContext) openContainer(id SessionID, command Command) (Rejec
 	default:
 		return RejectNoTarget, true
 	}
+	// 潜行放置：潜行中不打开容器，客户端应直发 PlaceBlock；服务端权威拒绝兜底。
+	if session.player.sneakingHeld {
+		return RejectInvalidInput, true
+	}
 	key := core.ChunkKey{Dimension: session.dimension, Pos: hit.Block.Chunk()}
 	chunk, exists := dimension.ReadyChunk(key.Pos)
 	if !exists {

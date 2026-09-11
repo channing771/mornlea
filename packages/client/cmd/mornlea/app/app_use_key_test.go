@@ -121,7 +121,7 @@ func TestUseKeySendsTillSoilOnlyForHoeAgainstSoil(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			app.placeBlock()
+			app.placeBlock(false)
 			if tc.want != nil {
 				if message := receiveInteractiveClientMessage(t, serverEndpoint); message != tc.want {
 					t.Fatalf("请求 = %#v，想要 %#v", message, tc.want)
@@ -257,7 +257,7 @@ func TestUseKeyRisingEdgeSkipsPlaceForNonPlaceableItem(t *testing.T) {
 		if err := app.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
 			t.Fatal(err)
 		}
-		app.placeBlock()
+		app.placeBlock(false)
 		assertNoInteractiveClientMessage(t, serverEndpoint)
 		if app.sequence != 1 {
 			t.Fatalf("手持物品 %d 的使用键上升沿分配了序号：sequence=%d", held.Item, app.sequence)

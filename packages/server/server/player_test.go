@@ -204,6 +204,16 @@ func TestTranslatePlayerMessage(t *testing.T) {
 			},
 		},
 		{
+			name:    "input carries sneaking bit",
+			message: network.PlayerInput{Sequence: 7, Sneaking: true},
+			want: contract.Command{
+				Session:  testSessionID,
+				Sequence: 7,
+				Kind:     contract.CommandPlayerInput,
+				Sneaking: true,
+			},
+		},
+		{
 			name: "place block uses only player look",
 			message: network.PlaceBlock{
 				Sequence: 13,

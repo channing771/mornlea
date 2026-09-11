@@ -103,6 +103,13 @@ type playerState struct {
 	// 它同样留在 playerState 而不是上移 actorState：伙伴不进食。
 	eating eatingState
 
+	// sneakingHeld 是玩家本 tick 的持续潜行意图，来自 `Command.Sneaking`
+	// （协议 v41 的 `PlayerInput.Sneaking`），语义与 `miningHeld`/`eatingHeld`
+	// 对称：每 `CommandPlayerInput` 更新一次，供开容器/门床交互分流。
+	//
+	// 它留在 playerState 而不是上移到 actorState：伙伴不潜行。
+	sneakingHeld bool
+
 	// sleeping 是该玩家的入睡位（每玩家一个布尔位，跳夜结算与取消路径的唯一
 	// 权威状态）。置位只发生在夜间对床右键的命令路径；移动输入、受击与跳夜
 	// 完成都会清零。它不持久化：重连即清醒，且跳夜只看当期活跃玩家。
@@ -536,6 +543,16 @@ func (engine *engineContext) advanceActivePlayers() {
 		if player.hunger < 6 {
 			input.Sprinting = false
 		}
+		// 潜行优先：潜行意图有效时疾跑加速与疲劳都不触发（疾跑互斥的 sim 侧一半）。
+		if input.Sneaking {
+			input.Sprinting = false
+		}
+		// 潜行边缘保护：输入侧钳制意图，sweep bounds 与 Rust 积分天然一致。
+		if input.Sneaking && !input.Jump && (input.MoveX != 0 || input.MoveZ != 0) &&
+			player.state.OnGround && !input.BodyInFluid &&
+			!physics.SneakEdgeHolds(player.state, input.MoveX, input.MoveZ, input.Yaw, source) {
+			input.MoveX, input.MoveZ = 0, 0
+		}
 		// 氧气按「本 tick 开始时的眼睛浸没标志」结算，与传给物理步的是同一个值：
 		// 水下视觉、水中积分与溺水三处共用这一份判定，不存在第二套。
 		player.advanceOxygen(input.EyeInFluid, engine.tunables.DrownDamageIntervalTicks)
@@ -579,6 +596,7 @@ func (engine *engineContext) advanceActivePlayers() {
 			)
 		}
 		// 疾跑：仅当本 tick 实际按 1.3× 加速时（门控全过）按固定表计费，未加速不计费。
+		// 潜行压制点在上游（饥饿门控后的潜行清零），此处判据无需重复设防。
 		if input.Sprinting && input.MoveZ > 0 && wasOnGround && !input.BodyInFluid {
 			player.applyExhaustion(exhaustionSprintMilli, engine.tunables.ExhaustionThresholdMilli)
 		}

@@ -420,6 +420,14 @@ func runGamePhase(app *Application) error {
 			app.window.KeyDown(client.KeyD),
 			app.window.KeyDown(client.KeySpace),
 		)
+		// 双击 W 锁存疾跑，Shift 按住即潜行；真正的速度门控仍在服务端与预测侧。
+		// 光标未捕获同样清零锁存（sneak spec 双击清除契约），`captured` 在上文已取样。
+		wHeld := app.window.KeyDown(client.KeyW)
+		sneakHeld := app.window.KeyDown(client.KeyLeftShift)
+		sprinting := input.UpdateSprint(wHeld, sneakHeld,
+			app.inventoryOpen || chatBlockedThisFrame || pausedUI || app.panelVisible() || !captured, time.Now())
+		movement.Sneaking = sneakHeld
+		movement.Sprinting = sprinting
 		if app.inventoryOpen || app.gameCursorFree || chatBlockedThisFrame || pausedUI || app.panelVisible() {
 			// 界面打开时持续发送中性输入，避免服务端沿用上一帧移动；
 			// 面板可见时游戏键整体捕获（spec「游戏键 MUST NOT 产生上行」）。
@@ -474,7 +482,7 @@ func (a *Application) applyInteractiveInput(
 			a.selectHotbarSlot(actions.SelectSlot)
 		}
 		if actions.Place {
-			a.placeBlock()
+			a.placeBlock(allowActions && movement.Sneaking)
 		}
 		if actions.Drop {
 			a.dropSelectedItem()
@@ -494,8 +502,10 @@ func (a *Application) applyInteractiveInput(
 		// 手持食物时「使用」键按住即进食，这是进食位**唯一**的置位来源。
 		// 客户端只上行意图：不扣本地背包、不改本地饥饿值，服务端才是权威。
 		Eating: allowActions && actions.Use && a.holdingFood(),
-		// 疾跑键按住即上行意图，门控在服务端/预测侧（饥饿≥6/地面/前移/非浸没）统一判定。
-		Sprinting: allowActions && a.window != nil && (a.window.KeyDown(client.KeyLeftControl) || a.window.KeyDown(client.KeyLeftShift)),
+		// 潜行是 Shift 按住态的上行，疾跑是双击 W 锁存的上行（Ctrl 已退役）；
+		// 门控在服务端/预测侧（潜行站立非浸没减速、疾跑饥饿≥6/地面/前移/非浸没）统一判定。
+		Sneaking:  allowActions && movement.Sneaking,
+		Sprinting: allowActions && movement.Sprinting,
 	}
 	before, _ := a.predictor.State()
 	if err := a.predictor.Advance(

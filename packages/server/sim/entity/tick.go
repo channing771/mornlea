@@ -84,6 +84,7 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 				if session.player != nil {
 					session.player.miningHeld = false
 					session.player.eatingHeld = false
+					session.player.sneakingHeld = false
 					session.player.mining = miningState{}
 				}
 				result.Rejected = append(result.Rejected, Rejection{
@@ -95,10 +96,12 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 			}
 			player := session.player
 			player.lastInputSequence = command.Sequence
+			player.sneakingHeld = command.Sneaking
 			if !validPlayerInput(command) {
 				player.input = physics.Input{Yaw: player.yaw}
 				player.miningHeld = false
 				player.eatingHeld = false
+				player.sneakingHeld = false
 				player.mining = miningState{}
 				result.Rejected = append(result.Rejected, Rejection{
 					Session:  command.Session,
@@ -114,6 +117,7 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 				Jump:      command.Jump,
 				Yaw:       yaw,
 				Sprinting: command.Sprinting,
+				Sneaking:  command.Sneaking,
 			}
 			player.miningHeld = command.Mining
 			player.eatingHeld = command.Eating

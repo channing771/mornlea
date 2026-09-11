@@ -192,6 +192,10 @@ func (engine *engineContext) executeInteractDoor(command Command, pending *pendi
 	if !core.IsDoor(block) {
 		return 0, false
 	}
+	// 潜行放置：潜行中不切换门，客户端应直发 PlaceBlock；服务端权威拒绝兜底。
+	if session.player.sneakingHeld {
+		return RejectInvalidInput, true
+	}
 	if !handleInteractDoor(engine, dimensionID, hit.Block, pending) {
 		return RejectNoTarget, true
 	}
