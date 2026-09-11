@@ -42,6 +42,29 @@ func (player *playerState) advanceHealthRegen(
 	return true
 }
 
+// regenHungerThreshold 返回本 tick 自然回血的饥饿门控阈值：normal/hard 使用
+// 权威 `Tunables.RegenHungerThreshold`（默认 18）；peaceful 把阈值视为零——
+// 门控整体取消而不是冻结计时状态机，`advanceHealthRegen` 的计时与节律一行
+// 不动，饥饿一旦低于阈值也无须等待。
+func (engine *engineContext) regenHungerThreshold() uint8 {
+	if engine.difficulty == core.DifficultyPeaceful {
+		return 0
+	}
+	return engine.tunables.RegenHungerThreshold
+}
+
+// restoreFullHunger 把饥饿与饱和度恢复到上限对应的完整值，仅在 peaceful 难度
+// 实际回复生命**之后**由 `advanceActivePlayers` 调用（spec authoritative-hunger
+// 「自然回血按难度条件化门控并消耗疲劳」）：饥饿设为 `core.MaxHunger`，饱和度
+// 设为该上限对应的最大值。调用次序刻意排在 `applyExhaustion` 之后——回血疲劳
+// 照常按三档共用的表累积，本方法覆盖其饱和度/饥饿消耗效果，疲劳残值原样保留，
+// 因此不存在第二张疲劳表或第二个消耗规则。
+func (player *playerState) restoreFullHunger() {
+	player.hunger = core.MaxHunger
+	player.saturationMilli = uint16(core.MaxHunger) * core.SaturationMilliPerPoint
+	player.saturationZero = false
+}
+
 // resetRegenTimer 把受伤计时清零并中断正在进行的回复。任何伤害结算都必须调用它；
 // 第 5 组的死亡结算也会复用这个入口重置计时。
 func (player *playerState) resetRegenTimer() {

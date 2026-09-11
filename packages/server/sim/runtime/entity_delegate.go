@@ -131,6 +131,13 @@ func (engine *Engine) PlayerSnapshot(id SessionID) (PlayerSnapshot, bool) {
 	return engine.entities.PlayerSnapshot(id)
 }
 
+// DifficultyForTest 读出构造时注入的世界难度，仅供测试断言宿主装配是否把
+// `storage.Metadata.Difficulty` 原样传给了 `NewEngine`（与 `SeedForTest`
+// 同形）。难度是构造期快照、生命周期内只读，规则分档全部在 entity 侧完成。
+func (engine *Engine) DifficultyForTest() core.Difficulty {
+	return engine.entities.Difficulty()
+}
+
 func (engine *Engine) PlayerHash(id SessionID) ([32]byte, bool) {
 	return engine.entities.PlayerHash(id)
 }

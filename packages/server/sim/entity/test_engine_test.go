@@ -26,8 +26,10 @@ type fixtureTick struct {
 	result   TickResult
 }
 
-func NewEngine(_ int, worldTime uint64, seed int64) *Engine {
-	state := NewState(seed)
+// difficulty 是可选尾参并原样透传给 `NewState`：缺省表达 normal（既有夹具
+// 调用零改动），分档用例显式传三档之一。
+func NewEngine(_ int, worldTime uint64, seed int64, difficulty ...core.Difficulty) *Engine {
+	state := NewState(seed, difficulty...)
 	context := state.context(
 		realm.NewState(core.Overworld),
 		0,

@@ -216,7 +216,7 @@ func passiveOverlimitFixture(count int) []storage.StoredPassiveMob {
 func seedPassiveDiskWorld(t *testing.T, root string) []byte {
 	t.Helper()
 	store, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{
-		Create: storage.Metadata{FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld, DepthsSpawnAnchor: core.ChunkPos{}, DepthsSeedSalt: 0x9E3779B97F4A7C15},
+		Create: storage.Metadata{FormatVersion: 6, Seed: 42, SpawnDimension: core.Overworld, DepthsSpawnAnchor: core.ChunkPos{}, DepthsSeedSalt: 0x9E3779B97F4A7C15},
 	})
 	if err != nil {
 		t.Fatalf("OpenDisk 种子存档: %v", err)

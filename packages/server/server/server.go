@@ -113,12 +113,15 @@ func newWorld(
 	shutdownGate := make(chan struct{}, 1)
 	shutdownGate <- struct{}{}
 	queueCapacity := max(1, config.Workers*2)
+	// 难度与种子、世界时间同取自这份 metadata 单次快照并在此显式注入 Engine：
+	// 构造后生命周期内只读，权威 tick 不回读 storage 或 config；Memory 与磁盘
+	// store 都实现 `storage.Store.Metadata`，两种世界因此在同一装配点收口。
 	metadata := store.Metadata()
 	server := &Server{
 		config:         config,
 		generator:      generator,
 		store:          store,
-		engine:         runtime.NewEngine(config.ViewRadius, metadata.WorldTimeTicks, metadata.Seed),
+		engine:         runtime.NewEngine(config.ViewRadius, metadata.WorldTimeTicks, metadata.Seed, metadata.Difficulty),
 		sessions:       make(map[contract.SessionID]*session),
 		playerSessions: make(map[core.PlayerID]contract.SessionID),
 		ctx:            ctx,

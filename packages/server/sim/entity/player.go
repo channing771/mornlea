@@ -497,17 +497,26 @@ func (engine *engineContext) advanceActivePlayers() {
 		if player.advanceHealthRegen(
 			engine.tunables.RegenDelayTicks,
 			engine.tunables.RegenIntervalTicks,
-			engine.tunables.RegenHungerThreshold,
+			engine.regenHungerThreshold(),
 		) {
 			// 疲劳表：自然回血每回 1 点生命值累积固定疲劳（见 hunger.go）。
-			// 它是全表最大的一项，一次调用会跨过多个阈值。
+			// 它是全表最大的一项，一次调用会跨过多个阈值。三档难度共用同一次
+			// 累积，peaceful 的恢复排在它之后覆盖其消耗效果。
 			player.applyExhaustion(
 				exhaustionRegenPerHealthMilli, engine.tunables.ExhaustionThresholdMilli,
 			)
+			// peaceful 的整数恢复只在**实际回复之后**执行：满血或计时未到时
+			// `advanceHealthRegen` 返回 false，不会走到这里，饥饿状态原样保持。
+			if engine.difficulty == core.DifficultyPeaceful {
+				player.restoreFullHunger()
+			}
 		}
 		// 饥饿伤害与回血计时同处：它同样只在 Active 期间推进，也同样放在 reset
-		// 短路之前——reset 只是位置跳变的当 tick 标记，玩家仍在世界里挨饿。
-		player.advanceStarvation(engine.tunables.StarvationDamageIntervalTicks)
+		// 短路之前——reset 只是位置跳变的当 tick 标记，玩家仍在世界里挨饿。致死性
+		// 由难度分档（peaceful 跳过、normal 硬地板、hard 可致死），见 hunger.go。
+		player.advanceStarvation(
+			engine.difficulty, engine.tunables.StarvationDamageIntervalTicks,
+		)
 		// 进食推进排在饥饿伤害之后：饥饿伤害走 `applyDamage`，而 `applyDamage` 会
 		// 中断进食。反过来排的话，"饿到零的玩家在挨这一拳的同一 tick 吃完面包"
 		// 会先结算进食、再被同一 tick 的伤害打断一个已经不存在的进度——读起来

@@ -13,7 +13,7 @@ import (
 
 func TestPersistenceBackpressureQueuesAcquireUntilMemoryRecovers(t *testing.T) {
 	store := &blockingLoadStore{
-		metadata: storage.Metadata{FormatVersion: 5, Seed: 42, DepthsSpawnAnchor: core.ChunkPos{}, DepthsSeedSalt: 0x9E3779B97F4A7C15},
+		metadata: storage.Metadata{FormatVersion: 6, Seed: 42, DepthsSpawnAnchor: core.ChunkPos{}, DepthsSeedSalt: 0x9E3779B97F4A7C15},
 		started:  make(chan core.ChunkKey, 1),
 	}
 	_, endpoint := network.NewMemoryPair(64)

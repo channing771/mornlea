@@ -90,7 +90,7 @@ func TestSwordCombatParity(t *testing.T) {
 func runSwordCombatWireScript(t *testing.T, transport string) swordCombatTranscript {
 	t.Helper()
 	attacker := integrationIdentity(0x93, "SwordAttacker")
-	store := storage.NewMemory(storage.Metadata{FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld, DepthsSpawnAnchor: core.ChunkPos{}, DepthsSeedSalt: 0x9E3779B97F4A7C15})
+	store := storage.NewMemory(storage.Metadata{FormatVersion: 6, Seed: 42, SpawnDimension: core.Overworld, DepthsSpawnAnchor: core.ChunkPos{}, DepthsSeedSalt: 0x9E3779B97F4A7C15})
 	var attackerInv core.Inventory
 	attackerInv.Hotbar.Selected = 0
 	attackerInv.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemIronSword, Count: 1, Durability: 2}

@@ -25,6 +25,11 @@ type sessionState struct {
 // State 是玩家、伙伴、夜行者、被动牛及其玩法结算状态的唯一 owner。
 type State struct {
 	seed int64
+	// difficulty 是构造期注入的世界难度快照，此后只读：饥饿伤害的致死性、
+	// 自然回血的门控与夜行者的生成门控都消费这一份值，权威 tick 不读
+	// storage/config。它与 `seed` 同为世界身份的一部分（难度由 metadata
+	// 持久化、装配时单次注入），不存在运行时切换写者。
+	difficulty core.Difficulty
 	// seasonOffset 是季节起点偏移（0..core.YearTicks-1），装配期由
 	// `core.SeasonOffsetFromSeed(seed)` 一次写死、此后只读——与 runtime 侧的
 	// 同名纪律一致（seed 已持久化，偏移是派生量而非权威状态）。判相位消费点
@@ -134,10 +139,13 @@ func (views ViewSnapshot) sessionWantsChunk(id SessionID, key core.ChunkKey) boo
 	return false
 }
 
-// NewState 创建唯一的实体状态 owner。
-func NewState(seed int64) *State {
+// NewState 创建唯一的实体状态 owner。difficulty 是可选尾参：缺省表达
+// normal 档（既有测试夹具零改动），至多传一个；非法值 panic 于构造期——把
+// 未定义档位放进权威 tick，比在 tick 内出现未定义分支更难诊断。
+func NewState(seed int64, difficulty ...core.Difficulty) *State {
 	return &State{
 		seed:         seed,
+		difficulty:   resolveDifficulty(difficulty),
 		seasonOffset: core.SeasonOffsetFromSeed(seed),
 		sessions:     make(map[SessionID]*sessionState),
 		companions:   make(map[companion.ID]*companionState),
@@ -145,6 +153,22 @@ func NewState(seed int64) *State {
 		passives:     newPassiveSet(),
 		hostileLight: newBlockLightScratch(),
 	}
+}
+
+// resolveDifficulty 把可选难度尾参归一为唯一构造快照：缺省取零值档
+// normal（与旧档迁移、未显式指定难度的新世界同语义），多于一个是装配
+// 错误，非法值经 `core.Difficulty.Valid` 拒绝。合法性判定只有 core 这一份
+// 域值表，这里不定义第二套枚举。
+func resolveDifficulty(difficulty []core.Difficulty) core.Difficulty {
+	switch {
+	case len(difficulty) == 0:
+		return core.DifficultyNormal
+	case len(difficulty) > 1:
+		panic("sim: at most one difficulty may be provided")
+	case !difficulty[0].Valid():
+		panic("sim: invalid difficulty")
+	}
+	return difficulty[0]
 }
 
 func (state *State) context(

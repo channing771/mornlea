@@ -14,10 +14,14 @@ import (
 )
 
 const (
-	currentMetadataVersion uint32 = 5
-	// metadataPayloadLength 是 v5 载荷长度：v4 的 41 字节之后追加维度表
-	//（维度数 u32、`Depths` 出生锚点 X/Z 各 u32、种子盐 u64，共 20 字节）。
-	metadataPayloadLength uint32 = 61
+	currentMetadataVersion uint32 = 6
+	// metadataPayloadLength 是 v6 载荷长度：v5 的 61 字节之后追加 1 字节难度。
+	metadataPayloadLength uint32 = 62
+	// legacyMetadataV5Version 是仍可读取的 v5；v5 只被读取和迁移，不再写出。
+	// v5 载荷是 v4 的 41 字节之后追加维度表（维度数 u32、`Depths` 出生锚点
+	// X/Z 各 u32、种子盐 u64，共 20 字节）。
+	legacyMetadataV5Version       uint32 = 5
+	legacyMetadataV5PayloadLength uint32 = 61
 	// legacyMetadataV4Version 是仍可读取的 v4；v4 只被读取和迁移，不再写出。
 	legacyMetadataV4Version       uint32 = 4
 	legacyMetadataV4PayloadLength uint32 = 41
@@ -71,6 +75,9 @@ func encodeMetadata(metadata Metadata) ([]byte, error) {
 	if metadata.FormatVersion != currentMetadataVersion {
 		return nil, fmt.Errorf("%w: unsupported metadata version %d", ErrCorrupt, metadata.FormatVersion)
 	}
+	if !metadata.Difficulty.Valid() {
+		return nil, fmt.Errorf("%w: metadata difficulty %d", ErrCorrupt, uint8(metadata.Difficulty))
+	}
 
 	encoded := make([]byte, 0, metadataHeaderLength+metadataPayloadLength+metadataChecksumLength)
 	encoded = append(encoded, metadataMagic[:]...)
@@ -92,6 +99,9 @@ func encodeMetadata(metadata Metadata) ([]byte, error) {
 	encoded = binary.LittleEndian.AppendUint32(encoded, uint32(metadata.DepthsSpawnAnchor.X))
 	encoded = binary.LittleEndian.AppendUint32(encoded, uint32(metadata.DepthsSpawnAnchor.Z))
 	encoded = binary.LittleEndian.AppendUint64(encoded, metadata.DepthsSeedSalt)
+	// 难度是 v6 相对 v5 的纯尾部追加：v5 载荷的既有段布局一字不动，
+	// `core.Difficulty` 的 uint8 域值紧随种子盐之后。
+	encoded = append(encoded, byte(metadata.Difficulty))
 	encoded = binary.LittleEndian.AppendUint32(
 		encoded, crc32.Checksum(encoded, metadataCRCTable),
 	)
@@ -110,14 +120,17 @@ func decodeMetadata(encoded []byte) (Metadata, error) {
 	if version > currentMetadataVersion {
 		return Metadata{}, fmt.Errorf("%w: metadata version %d", ErrFutureVersion, version)
 	}
-	// v1、v2、v3、v4 与 v5 各自有固定 payload 长度；旧版本读取后在内存中规范为当前
-	// 版本：v1 世界时间与偏移均为零，v2 偏移为零，v1/v2/v3 天气均为晴天、
-	// 剩余时长均为零（零表示旧档未记录，恢复时按新世界默认值掷骰），v1..v4 的
-	// `Depths` 出生锚点默认取主世界锚点、种子盐取固定盐。
+	// v1、v2、v3、v4、v5 与 v6 各自有固定 payload 长度；旧版本读取后在内存中
+	// 规范为当前版本：v1 世界时间与偏移均为零，v2 偏移为零，v1/v2/v3 天气均为
+	// 晴天、剩余时长均为零（零表示旧档未记录，恢复时按新世界默认值掷骰），
+	// v1..v4 的 `Depths` 出生锚点默认取主世界锚点、种子盐取固定盐，v1..v5 的
+	// 难度补 normal（旧档无法表达难度，迁移不得猜测意图）。
 	var wantPayloadLength uint32
 	switch version {
 	case currentMetadataVersion:
 		wantPayloadLength = metadataPayloadLength
+	case legacyMetadataV5Version:
+		wantPayloadLength = legacyMetadataV5PayloadLength
 	case legacyMetadataV4Version:
 		wantPayloadLength = legacyMetadataV4PayloadLength
 	case legacyMetadataV3Version:
@@ -159,9 +172,9 @@ func decodeMetadata(encoded []byte) (Metadata, error) {
 		},
 	}
 	// 世界时间自 v2 起持久化，偏移自 v3 起持久化，天气自 v4 起持久化，
-	// 维度表自 v5 起持久化：旧版本读入即升级，缺失的尾部字段按零值迁移
-	// （天气为晴天、剩余时长为零，`Depths` 出生锚点默认取主世界锚点、种子盐
-	// 取固定盐），行为与升级前完全一致。
+	// 维度表自 v5 起持久化，难度自 v6 起持久化：旧版本读入即升级，缺失的尾部
+	// 字段按零值迁移（天气为晴天、剩余时长为零，`Depths` 出生锚点默认取主世界
+	// 锚点、种子盐取固定盐，难度取 normal），行为与升级前完全一致。
 	if version >= legacyMetadataV2Version {
 		metadata.WorldTimeTicks = binary.LittleEndian.Uint64(payload[20:28])
 	}
@@ -172,7 +185,7 @@ func decodeMetadata(encoded []byte) (Metadata, error) {
 		metadata.WeatherKind = core.WeatherKind(payload[36])
 		metadata.WeatherTicksRemaining = binary.LittleEndian.Uint32(payload[37:41])
 	}
-	if version == currentMetadataVersion {
+	if version >= legacyMetadataV5Version {
 		if dimCount := binary.LittleEndian.Uint32(payload[41:45]); dimCount != metadataDimensionCount {
 			return Metadata{}, fmt.Errorf("%w: metadata dimension count %d", ErrCorrupt, dimCount)
 		}
@@ -184,6 +197,15 @@ func decodeMetadata(encoded []byte) (Metadata, error) {
 	} else {
 		metadata.DepthsSpawnAnchor = metadata.SpawnAnchor
 		metadata.DepthsSeedSalt = depthsSeedSaltDefault
+	}
+	if version == currentMetadataVersion {
+		difficulty := core.Difficulty(payload[61])
+		if !difficulty.Valid() {
+			return Metadata{}, fmt.Errorf("%w: metadata difficulty %d", ErrCorrupt, uint8(difficulty))
+		}
+		metadata.Difficulty = difficulty
+	} else {
+		metadata.Difficulty = core.DifficultyNormal
 	}
 	return metadata, nil
 }

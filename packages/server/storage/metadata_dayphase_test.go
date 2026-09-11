@@ -36,12 +36,37 @@ func encodeLegacyMetadataV2(metadata Metadata) []byte {
 	)
 }
 
-// TestMetadataV5GoldenBytes 冻结当前版本的字节布局：v4 的全部既有字段原位不动
-// （纯尾部追加），维度数 u32（固定为 2）、`Depths` 出生锚点 X/Z 各 u32 与种子盐
-// u64 再其后，CRC32C 收尾。布局一旦漂移，这里逐字节比对会先红。
-func TestMetadataV5GoldenBytes(t *testing.T) {
-	metadata := Metadata{
-		FormatVersion:         currentMetadataVersion,
+// encodeLegacyMetadataV5 手工构造一份 CRC 有效的 metadata v5 字节。
+// 生产代码只写当前版本，v5 样本必须由测试自己保留。
+func encodeLegacyMetadataV5(metadata Metadata) []byte {
+	encoded := make([]byte, 0, metadataHeaderLength+legacyMetadataV5PayloadLength+metadataChecksumLength)
+	encoded = append(encoded, metadataMagic[:]...)
+	encoded = binary.LittleEndian.AppendUint32(encoded, legacyMetadataV5Version)
+	encoded = binary.LittleEndian.AppendUint32(encoded, legacyMetadataV5PayloadLength)
+	encoded = binary.LittleEndian.AppendUint64(encoded, uint64(metadata.Seed))
+	encoded = binary.LittleEndian.AppendUint32(encoded, uint32(metadata.SpawnDimension))
+	encoded = binary.LittleEndian.AppendUint32(encoded, uint32(metadata.SpawnAnchor.X))
+	encoded = binary.LittleEndian.AppendUint32(encoded, uint32(metadata.SpawnAnchor.Z))
+	encoded = binary.LittleEndian.AppendUint64(encoded, metadata.WorldTimeTicks)
+	encoded = binary.LittleEndian.AppendUint64(encoded, metadata.DayPhaseOffset)
+	encoded = append(encoded, byte(metadata.WeatherKind))
+	encoded = binary.LittleEndian.AppendUint32(encoded, metadata.WeatherTicksRemaining)
+	encoded = binary.LittleEndian.AppendUint32(encoded, metadataDimensionCount)
+	encoded = binary.LittleEndian.AppendUint32(encoded, uint32(metadata.DepthsSpawnAnchor.X))
+	encoded = binary.LittleEndian.AppendUint32(encoded, uint32(metadata.DepthsSpawnAnchor.Z))
+	encoded = binary.LittleEndian.AppendUint64(encoded, metadata.DepthsSeedSalt)
+	return binary.LittleEndian.AppendUint32(
+		encoded, crc32.Checksum(encoded, metadataCRCTable),
+	)
+}
+
+// TestMetadataV5LegacyGoldenBytes 冻结 v5 的字节布局（升版后一字不改）：它是
+// 「v5 旧档仍然可读」的字节级证据，与 `encodeLegacyMetadataV5` 的现场构造互相
+// 印证，防止 legacy 助手本身悄悄偏离历史格式。当前版本（v6）的 golden 见
+// metadata_difficulty_test.go 的 `TestMetadataV6GoldenBytes`。
+func TestMetadataV5LegacyGoldenBytes(t *testing.T) {
+	legacy := Metadata{
+		FormatVersion:         legacyMetadataV5Version,
 		Seed:                  -42,
 		SpawnDimension:        core.DimensionID(-3),
 		SpawnAnchor:           core.ChunkPos{X: 7, Z: -11},
@@ -53,10 +78,7 @@ func TestMetadataV5GoldenBytes(t *testing.T) {
 		DepthsSpawnAnchor: core.ChunkPos{X: -5, Z: 9},
 		DepthsSeedSalt:    0x0123456789ABCDEF,
 	}
-	encoded, err := encodeMetadata(metadata)
-	if err != nil {
-		t.Fatal(err)
-	}
+	encoded := encodeLegacyMetadataV5(legacy)
 
 	wantPrefix := []byte{
 		'M', 'C', 'G', 'M',
@@ -93,8 +115,8 @@ func TestMetadataV5GoldenBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if decoded != metadata {
-		t.Fatalf("往返 = %+v，想要 %+v", decoded, metadata)
+	if decoded.FormatVersion != currentMetadataVersion || decoded.Difficulty != core.DifficultyNormal {
+		t.Fatalf("v5 旧档读入后 = v%d 难度 %d，想要当前版本与 normal", decoded.FormatVersion, uint8(decoded.Difficulty))
 	}
 }
 
@@ -223,12 +245,12 @@ func TestMetadataV2LegacyGoldenBytes(t *testing.T) {
 	}
 }
 
-// TestMetadataV2MigratesToV5WithZeroOffsetClearWeatherAndDepthsDefault 覆盖 Scenario
-// 「v2 世界迁移偏移为零」与「v3 世界迁移默认晴天」的旧档一半，外加 v4 旧档的
-// `Depths` 默认：种子、出生信息与世界时间必须原值保留，偏移迁移为 0，天气迁移
-// 为晴天、剩余时长为零，`Depths` 出生锚点默认取主世界锚点、种子盐取固定盐，
-// 读入即规范为当前版本。
-func TestMetadataV2MigratesToV5WithZeroOffsetClearWeatherAndDepthsDefault(t *testing.T) {
+// TestMetadataV2MigratesToCurrentWithZeroOffsetClearWeatherAndDepthsDefault 覆盖
+// Scenario「v2 世界迁移偏移为零」与「v3 世界迁移默认晴天」的旧档一半，外加
+// v4 旧档的 `Depths` 默认：种子、出生信息与世界时间必须原值保留，偏移迁移为
+// 0，天气迁移为晴天、剩余时长为零，`Depths` 出生锚点默认取主世界锚点、种子盐
+// 取固定盐，读入即规范为当前版本。
+func TestMetadataV2MigratesToCurrentWithZeroOffsetClearWeatherAndDepthsDefault(t *testing.T) {
 	legacy := Metadata{
 		FormatVersion:  legacyMetadataV2Version,
 		Seed:           -42,
@@ -253,10 +275,10 @@ func TestMetadataV2MigratesToV5WithZeroOffsetClearWeatherAndDepthsDefault(t *tes
 	}
 }
 
-// TestMetadataV1MigratesToV5WithZeroTimeOffsetClearWeatherAndDepthsDefault 锁定 v1 的
-// 四步迁移链：世界时间与偏移双双为零，天气为晴天、剩余时长为零，`Depths` 出生
+// TestMetadataV1MigratesToCurrentWithZeroTimeOffsetClearWeatherAndDepthsDefault 锁定
+// v1 的迁移链：世界时间与偏移双双为零，天气为晴天、剩余时长为零，`Depths` 出生
 // 锚点默认取主世界锚点、种子盐取固定盐，种子与出生信息原值保留。
-func TestMetadataV1MigratesToV5WithZeroTimeOffsetClearWeatherAndDepthsDefault(t *testing.T) {
+func TestMetadataV1MigratesToCurrentWithZeroTimeOffsetClearWeatherAndDepthsDefault(t *testing.T) {
 	legacy := Metadata{
 		FormatVersion:  legacyMetadataVersion,
 		Seed:           -42,
@@ -281,9 +303,9 @@ func TestMetadataV1MigratesToV5WithZeroTimeOffsetClearWeatherAndDepthsDefault(t 
 	}
 }
 
-// TestMetadataVersionsRejectMalformedBytes 是五个版本的共同损坏拒绝矩阵：
+// TestMetadataVersionsRejectMalformedBytes 是六个版本的共同损坏拒绝矩阵：
 // 未来版本拒绝、零版本拒绝、每个版本截断拒绝、声明其他版本载荷长度拒绝、
-// 维度数损坏拒绝、CRC 损坏拒绝。矩阵覆盖全部五个版本的两两长度混淆，任何一段
+// 维度数损坏拒绝、CRC 损坏拒绝。矩阵覆盖全部六个版本的两两长度混淆，任何一段
 // 长度校验被删都会让这里变红。
 func TestMetadataVersionsRejectMalformedBytes(t *testing.T) {
 	current := Metadata{
@@ -298,7 +320,19 @@ func TestMetadataVersionsRejectMalformedBytes(t *testing.T) {
 		DepthsSpawnAnchor:     core.ChunkPos{X: -5, Z: 9},
 		DepthsSeedSalt:        depthsSeedSaltDefault,
 	}
-	v5 := mustEncodeMetadataForTest(t, current)
+	v6 := mustEncodeMetadataForTest(t, current)
+	v5 := encodeLegacyMetadataV5(Metadata{
+		FormatVersion:         legacyMetadataV5Version,
+		Seed:                  42,
+		SpawnDimension:        core.Overworld,
+		SpawnAnchor:           core.ChunkPos{X: 3, Z: -2},
+		WorldTimeTicks:        12345,
+		DayPhaseOffset:        678,
+		WeatherKind:           core.WeatherRain,
+		WeatherTicksRemaining: 5000,
+		DepthsSpawnAnchor:     core.ChunkPos{X: -5, Z: 9},
+		DepthsSeedSalt:        depthsSeedSaltDefault,
+	})
 	v4 := encodeLegacyMetadataV4(Metadata{
 		FormatVersion:         legacyMetadataV4Version,
 		Seed:                  42,
@@ -347,34 +381,38 @@ func TestMetadataVersionsRejectMalformedBytes(t *testing.T) {
 		wantErr error
 	}{
 		{"未来版本", func() []byte {
-			future := bytes.Clone(v5)
+			future := bytes.Clone(v6)
 			binary.LittleEndian.PutUint32(future[4:8], currentMetadataVersion+1)
 			return future
 		}, ErrFutureVersion},
 		{"零版本", func() []byte {
-			past := bytes.Clone(v5)
+			past := bytes.Clone(v6)
 			binary.LittleEndian.PutUint32(past[4:8], 0)
 			return past
 		}, ErrCorrupt},
+		{"v6 截断", func() []byte { return bytes.Clone(v6[:len(v6)-1]) }, ErrCorrupt},
 		{"v5 截断", func() []byte { return bytes.Clone(v5[:len(v5)-1]) }, ErrCorrupt},
 		{"v4 截断", func() []byte { return bytes.Clone(v4[:len(v4)-1]) }, ErrCorrupt},
 		{"v3 截断", func() []byte { return bytes.Clone(v3[:len(v3)-1]) }, ErrCorrupt},
 		{"v2 截断", func() []byte { return bytes.Clone(v2[:len(v2)-1]) }, ErrCorrupt},
 		{"v1 截断", func() []byte { return bytes.Clone(v1[:len(v1)-1]) }, ErrCorrupt},
-		{"v5 声明 v4 长度", func() []byte {
-			return setPayloadLength(v5, legacyMetadataV4PayloadLength)
+		{"v6 声明 v5 长度", func() []byte {
+			return setPayloadLength(v6, legacyMetadataV5PayloadLength)
 		}, ErrCorrupt},
-		{"v5 声明 v3 长度", func() []byte {
-			return setPayloadLength(v5, legacyMetadataV3PayloadLength)
+		{"v6 声明 v4 长度", func() []byte {
+			return setPayloadLength(v6, legacyMetadataV4PayloadLength)
 		}, ErrCorrupt},
-		{"v5 声明 v2 长度", func() []byte {
-			return setPayloadLength(v5, legacyMetadataV2PayloadLength)
+		{"v6 声明 v3 长度", func() []byte {
+			return setPayloadLength(v6, legacyMetadataV3PayloadLength)
 		}, ErrCorrupt},
-		{"v5 声明 v1 长度", func() []byte {
-			return setPayloadLength(v5, legacyMetadataPayloadLength)
+		{"v6 声明 v2 长度", func() []byte {
+			return setPayloadLength(v6, legacyMetadataV2PayloadLength)
 		}, ErrCorrupt},
-		{"v5 维度数损坏", func() []byte {
-			badDimCount := bytes.Clone(v5)
+		{"v6 声明 v1 长度", func() []byte {
+			return setPayloadLength(v6, legacyMetadataPayloadLength)
+		}, ErrCorrupt},
+		{"v6 维度数损坏", func() []byte {
+			badDimCount := bytes.Clone(v6)
 			binary.LittleEndian.PutUint32(badDimCount[metadataHeaderLength+41:], 3)
 			binary.LittleEndian.PutUint32(
 				badDimCount[len(badDimCount)-metadataChecksumLength:],
@@ -382,8 +420,14 @@ func TestMetadataVersionsRejectMalformedBytes(t *testing.T) {
 			)
 			return badDimCount
 		}, ErrCorrupt},
+		{"v5 声明 v6 长度", func() []byte {
+			return setPayloadLength(v5, metadataPayloadLength)
+		}, ErrCorrupt},
+		{"v5 声明 v4 长度", func() []byte {
+			return setPayloadLength(v5, legacyMetadataV4PayloadLength)
+		}, ErrCorrupt},
 		{"v4 声明 v5 长度", func() []byte {
-			return setPayloadLength(v4, metadataPayloadLength)
+			return setPayloadLength(v4, legacyMetadataV5PayloadLength)
 		}, ErrCorrupt},
 		{"v4 声明 v3 长度", func() []byte {
 			return setPayloadLength(v4, legacyMetadataV3PayloadLength)
@@ -394,14 +438,20 @@ func TestMetadataVersionsRejectMalformedBytes(t *testing.T) {
 		{"v4 声明 v1 长度", func() []byte {
 			return setPayloadLength(v4, legacyMetadataPayloadLength)
 		}, ErrCorrupt},
-		{"v3 声明 v5 长度", func() []byte {
+		{"v3 声明 v6 长度", func() []byte {
 			return setPayloadLength(v3, metadataPayloadLength)
+		}, ErrCorrupt},
+		{"v3 声明 v5 长度", func() []byte {
+			return setPayloadLength(v3, legacyMetadataV5PayloadLength)
 		}, ErrCorrupt},
 		{"v3 声明 v4 长度", func() []byte {
 			return setPayloadLength(v3, legacyMetadataV4PayloadLength)
 		}, ErrCorrupt},
-		{"v2 声明 v5 长度", func() []byte {
+		{"v2 声明 v6 长度", func() []byte {
 			return setPayloadLength(v2, metadataPayloadLength)
+		}, ErrCorrupt},
+		{"v2 声明 v5 长度", func() []byte {
+			return setPayloadLength(v2, legacyMetadataV5PayloadLength)
 		}, ErrCorrupt},
 		{"v2 声明 v4 长度", func() []byte {
 			return setPayloadLength(v2, legacyMetadataV4PayloadLength)
@@ -412,8 +462,11 @@ func TestMetadataVersionsRejectMalformedBytes(t *testing.T) {
 		{"v2 声明 v1 长度", func() []byte {
 			return setPayloadLength(v2, legacyMetadataPayloadLength)
 		}, ErrCorrupt},
-		{"v1 声明 v5 长度", func() []byte {
+		{"v1 声明 v6 长度", func() []byte {
 			return setPayloadLength(v1, metadataPayloadLength)
+		}, ErrCorrupt},
+		{"v1 声明 v5 长度", func() []byte {
+			return setPayloadLength(v1, legacyMetadataV5PayloadLength)
 		}, ErrCorrupt},
 		{"v1 声明 v4 长度", func() []byte {
 			return setPayloadLength(v1, legacyMetadataV4PayloadLength)
@@ -424,10 +477,12 @@ func TestMetadataVersionsRejectMalformedBytes(t *testing.T) {
 		{"v1 声明 v2 长度", func() []byte {
 			return setPayloadLength(v1, legacyMetadataV2PayloadLength)
 		}, ErrCorrupt},
+		{"v6 CRC 损坏", func() []byte { return corruptCRC(v6) }, ErrCorrupt},
 		{"v5 CRC 损坏", func() []byte { return corruptCRC(v5) }, ErrCorrupt},
 		{"v4 CRC 损坏", func() []byte { return corruptCRC(v4) }, ErrCorrupt},
 		{"v3 CRC 损坏", func() []byte { return corruptCRC(v3) }, ErrCorrupt},
 		{"v2 CRC 损坏", func() []byte { return corruptCRC(v2) }, ErrCorrupt},
+		{"v6 尾随字节", func() []byte { return append(bytes.Clone(v6), 0) }, ErrCorrupt},
 		{"v5 尾随字节", func() []byte { return append(bytes.Clone(v5), 0) }, ErrCorrupt},
 		{"v4 尾随字节", func() []byte { return append(bytes.Clone(v4), 0) }, ErrCorrupt},
 		{"v3 尾随字节", func() []byte { return append(bytes.Clone(v3), 0) }, ErrCorrupt},

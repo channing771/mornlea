@@ -29,7 +29,7 @@ func newAttachedWorldForTest(config Config, endpoint network.ServerEndpoint, gen
 }
 
 func newMemoryAttachedWorldForTest(config Config, endpoint network.ServerEndpoint, generator Generator) *Server {
-	return newAttachedWorldForTest(config, endpoint, generator, storage.NewMemory(storage.Metadata{FormatVersion: 5, Seed: config.Seed, SpawnDimension: config.SpawnDimension, SpawnAnchor: config.SpawnAnchor, DepthsSpawnAnchor: config.SpawnAnchor, DepthsSeedSalt: 0x9E3779B97F4A7C15}))
+	return newAttachedWorldForTest(config, endpoint, generator, storage.NewMemory(storage.Metadata{FormatVersion: 6, Seed: config.Seed, SpawnDimension: config.SpawnDimension, SpawnAnchor: config.SpawnAnchor, DepthsSpawnAnchor: config.SpawnAnchor, DepthsSeedSalt: 0x9E3779B97F4A7C15}))
 }
 
 func newEmbeddedAttachedWorldForTest(config Config, endpoint network.ServerEndpoint, store storage.Store) *Server {

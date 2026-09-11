@@ -199,7 +199,7 @@ func TestM5StageAcceptancePersonaDialogueEndToEnd(t *testing.T) {
 		// 不依赖出生扫描的随机结果），与交互测试共用同一出生位置。
 		seedStore, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{
 			Create: storage.Metadata{
-				FormatVersion: 5, Seed: 42, SpawnDimension: core.Overworld,
+				FormatVersion: 6, Seed: 42, SpawnDimension: core.Overworld,
 				DepthsSpawnAnchor: core.ChunkPos{},
 				DepthsSeedSalt:    0x9E3779B97F4A7C15,
 			},

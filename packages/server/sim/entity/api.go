@@ -51,6 +51,13 @@ func (state *State) PlayerSnapshot(id SessionID) (PlayerSnapshot, bool) {
 	return (&engineContext{State: state}).PlayerSnapshot(id)
 }
 
+// Difficulty 读出构造期注入的世界难度快照。它只读：供宿主装配断言接线是否
+// 把 metadata 的难度原样传进模拟，规则消费全部在包内分档点完成，不提供任何
+// 写入口。
+func (state *State) Difficulty() core.Difficulty {
+	return state.difficulty
+}
+
 func (state *State) PlayerHash(id SessionID) ([32]byte, bool) {
 	return (&engineContext{State: state}).PlayerHash(id)
 }

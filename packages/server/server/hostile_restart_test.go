@@ -55,7 +55,7 @@ func hostileRestartConfig() Config {
 
 func hostileRestartMetadata() storage.Metadata {
 	return storage.Metadata{
-		FormatVersion:     5,
+		FormatVersion:     6,
 		Seed:              42,
 		SpawnDimension:    core.Overworld,
 		WorldTimeTicks:    hostileRestartNightTicks,
