@@ -23,7 +23,7 @@
   - 验证：`go test ./packages/server/server -race -count=1`。
 
 - [ ] 6. 客户端镜像、桥与 HUD 组件
-  - 文件：`packages/client/client`（镜像 `ArmorPoints`、`EquipArmor` 上行命令构造）、桥状态组装与 client ABI v18→v19（armor 分节三端钉值：Go 组装、Rust 中继、`packages/client/frontend` TS 类型；Rust 侧零行为仅测试清单同步）、前端状态行组件族（护甲条：10 档、半档粒度、0 点零渲染）+ vitest 组件断言、`packages/client/cmd/mornlea`（使用键上升沿手持护甲 → 上行 `EquipArmor`，不发 `PlaceBlock`）及输入判定测试。
+  - 文件：`packages/client/client`（镜像 `ArmorPoints`、`EquipArmor` 上行命令构造）、桥状态组装与 client ABI v18→v19（armor 分节三端钉值：Go 组装、Rust 中继、`packages/client/frontend` TS 类型；Rust 侧零行为仅测试清单同步）、前端状态行组件族（护甲条：10 档、半档粒度、0 点零渲染）+ vitest 组件断言、护甲四件的程序化快捷栏 sprite（清偿任务组 1 遗留的 21 例缺图标红测）、`packages/client/cmd/mornlea`（使用键上升沿手持护甲 → 上行 `EquipArmor`，不发 `PlaceBlock`）及输入判定测试。
   - 验证：`go test ./packages/client/... -race -count=1`；`make frontend-check`。
 
 - [ ] 7. capture 场景、golden 与 audit 守卫
