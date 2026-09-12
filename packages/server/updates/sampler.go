@@ -1,6 +1,8 @@
 package updates
 
 import (
+	"math"
+
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
@@ -242,4 +244,31 @@ func (s Sampler) HostileCandidateHash(seed int64, tick uint64, x, y, z int32) ui
 	hash := s.SplitMix64(uint64(seed) ^ tick)
 	hash = s.SplitMix64(hash ^ uint64(uint32(x)) ^ uint64(uint32(z)))
 	return s.SplitMix64(hash ^ uint64(uint32(y)))
+}
+
+// ProjectileSpawnSalt 是投射物 ID 派生判定盐值：取 ASCII "PROJECTI" 的位模式。
+// 与全部既有盐值互异（见 sampler_test.go 的两两互异断言），保证投射物 ID 流
+// 不与任何随机面判定流同源。
+const ProjectileSpawnSalt = 0x5052_4F4A_4543_5449
+
+// ProjectileSpawnHash 把投射物的出生事实折进哈希链：seed 与 tick 先混入，再
+// 依次混入维度、弹种、发射者与出生位置三个分量的 IEEE-754 位型。位置取位型
+// 而非整数格：同一格内连续两次发射仍得到不同 ID，相同输入的重放则逐位一致。
+// 调用方对哈希冲突沿 `SplitMix64` 重散列（与敌怪 ID 链同形）。
+func (s Sampler) ProjectileSpawnHash(
+	seed int64,
+	tick uint64,
+	dimension core.DimensionID,
+	kind uint8,
+	owner uint64,
+	position [3]float32,
+) uint64 {
+	hash := s.SplitMix64(uint64(seed) ^ ProjectileSpawnSalt)
+	hash = s.SplitMix64(hash ^ tick)
+	hash = s.SplitMix64(hash ^ uint64(uint32(dimension)))
+	hash = s.SplitMix64(hash ^ uint64(kind))
+	hash = s.SplitMix64(hash ^ owner)
+	hash = s.SplitMix64(hash ^ uint64(math.Float32bits(position[0])))
+	hash = s.SplitMix64(hash ^ uint64(math.Float32bits(position[1])))
+	return s.SplitMix64(hash ^ uint64(math.Float32bits(position[2])))
 }

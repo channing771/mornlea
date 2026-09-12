@@ -40,6 +40,9 @@ type State struct {
 	companions   map[companion.ID]*companionState
 	hostiles     hostileSet
 	passives     passiveSet
+	// projectiles 是在飞投射物的权威集合：瞬态实体，不进快照或存档，重启后
+	// 集合为空。所有权沿 `hostiles` 先例登记进 audit 的显式所有权断言。
+	projectiles projectileSet
 	// passiveDeaths 是本 tick 死亡结算移除的被动牛 ID 集合（ID 升序、有界
 	// ≤32）：发布侧同 tick 取一次投影 despawn 原因位，下次结算先清空，不跨
 	// tick 累积。
@@ -85,6 +88,11 @@ func (counter *localCounter) Add(delta uint64) uint64 {
 type SessionView struct {
 	Ready  bool
 	Center core.ChunkPos
+	// Radius 是该会话的生效订阅半径（方形，中心为 `Center`）：runtime 侧
+	// 已按引擎视界钳制（未声明路径即引擎缺省视界），与 wanted 集合的构建
+	// 同源同值。0 表示仅中心 chunk；实体侧投射物的订阅区消失判定消费本值，
+	// 不另持第二份订阅事实。
+	Radius int
 }
 
 // TickSessionView 是 runtime 借给单个 tick 的会话视图值，不含可变订阅集合。
@@ -151,6 +159,7 @@ func NewState(seed int64, difficulty ...core.Difficulty) *State {
 		companions:   make(map[companion.ID]*companionState),
 		hostiles:     newHostileSet(),
 		passives:     newPassiveSet(),
+		projectiles:  newProjectileSet(),
 		hostileLight: newBlockLightScratch(),
 	}
 }

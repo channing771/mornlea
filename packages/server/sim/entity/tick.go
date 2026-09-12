@@ -416,7 +416,7 @@ func (tick *TickContext) SetViews(views ViewSnapshot) {
 	tick.engine.views = views
 }
 
-// AdvanceHostiles 推进夜行者、战斗、灼烧和死亡生命周期。
+// AdvanceHostiles 推进夜行者、战斗、灼烧、投射物和死亡生命周期。
 func (tick *TickContext) AdvanceHostiles(actions []HostileAction, result *TickResult) {
 	engine := &tick.engine
 	pending := tick.mutation
@@ -425,8 +425,14 @@ func (tick *TickContext) AdvanceHostiles(actions []HostileAction, result *TickRe
 	engine.advanceHostiles(actions)
 	engine.advanceCombat(result)
 	engine.advanceHostileBurn(engine.worldTime.Load())
-	engine.settleHostileDeaths(pending)
 	engine.advanceHostileDistant()
+	// 投射物阶段在远离消失之后、两个死亡结算之前推进：弹击致死必须与近战
+	// 致死同 tick 完成掉落与移除，任何 0 血实体不得存活到下一权威 tick。远离
+	// 消失与夜行者死亡结算的相对对调（distant 先于结算）不产生观察差异——
+	// distant 对 0 血个体整体跳过（见 advanceHostileDistant），仍只影响健康
+	// 成员的集合成员与计数，死亡个体的掉落统一归结算处理。
+	engine.advanceProjectiles(result)
+	engine.settleHostileDeaths(pending)
 	// 死亡产生的订阅脏位顺延到下一 tick，避免已经开始写区块后收缩订阅。
 	engine.settleDeaths(pending)
 }

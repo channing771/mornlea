@@ -311,13 +311,17 @@ func (engine *engineContext) playerCombatIntent(
 	}, true
 }
 
+// combatKnockbackSpeed 是近战与弹击共用的击退冲量（格/tick）：沿击退方向的
+// 水平单位向量施加的固定速度增量。
+const combatKnockbackSpeed = float32(0.35)
+
 func combatKnockback(from, to mgl32.Vec3, yaw float32) mgl32.Vec3 {
 	delta := mgl32.Vec3{to.X() - from.X(), 0, to.Z() - from.Z()}
 	if delta.LenSqr() == 0 {
 		look := LookDirection(yaw, 0)
 		delta = mgl32.Vec3{look.X(), 0, look.Z()}
 	}
-	return delta.Normalize().Mul(0.35)
+	return delta.Normalize().Mul(combatKnockbackSpeed)
 }
 
 // settleCombatIntent 在任何状态写入前解析全部 live 身份与冻结栏位；验证成功后

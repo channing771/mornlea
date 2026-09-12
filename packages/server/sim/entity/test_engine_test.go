@@ -102,6 +102,9 @@ func (engine *Engine) viewSnapshot() ViewSnapshot {
 			View: SessionView{
 				Ready:  true,
 				Center: subscription.Center,
+				// 夹具镜像 runtime 的生效半径派生：声明路径取声明+1，未声明
+				// 路径取缺省视界（`fixtureViewRadius`，与生产缺省同值）。
+				Radius: max(subscription.Radius, fixtureViewRadius),
 			},
 			Origin:       origin,
 			OriginWanted: true,

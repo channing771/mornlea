@@ -197,6 +197,7 @@ func TestSamplerSaltConstants(t *testing.T) {
 		{"PoisonPotatoSalt", PoisonPotatoSalt, 0xdeadbeefcafe1234},
 		{"FarmlandRevertRollSalt", FarmlandRevertRollSalt, 0xfa1abb1edeadc0de},
 		{"SaplingGrowthRollSalt", SaplingGrowthRollSalt, 0x5341_504C_4752_4F57},
+		{"ProjectileSpawnSalt", ProjectileSpawnSalt, 0x5052_4F4A_4543_5449},
 	} {
 		if v.got != v.want {
 			t.Fatalf("%s=%#x，want %#x", v.name, v.got, v.want)
@@ -207,8 +208,9 @@ func TestSamplerSaltConstants(t *testing.T) {
 	}
 }
 
-// TestSamplerSaltsPairwiseDistinct 钉住「全量盐值两两互异」：随机面当前共 10 个
-// 域盐值（realm 家族 7 个 + entity 家族 3 个，另有非盐值的分母/概率常量）。
+// TestSamplerSaltsPairwiseDistinct 钉住「全量盐值两两互异」：随机面当前共 11
+// 个域盐值（realm 家族 7 个 + entity 家族 3 个 + 投射物 ID 派生 1 个，另有非
+// 盐值的分母/概率常量）。
 // 各判定流只靠盐值区分身份，未来追加新盐值若与既有任何一个撞值，两条流会在
 // 相同 `(种子, tick, 维度, 位置)` 输入下系统性同源——这条两两互异断言让撞盐
 // 在新增当刻变红，无须等到分布级测试以统计方式偶然暴露。
@@ -227,9 +229,10 @@ func TestSamplerSaltsPairwiseDistinct(t *testing.T) {
 		{"ShortGrassSeedDropSalt", ShortGrassSeedDropSalt},
 		{"LeavesSaplingDropSalt", LeavesSaplingDropSalt},
 		{"PassiveGrazeRollSalt", PassiveGrazeRollSalt},
+		{"ProjectileSpawnSalt", ProjectileSpawnSalt},
 	}
-	if len(salts) != 10 {
-		t.Fatalf("盐值清单长度 %d，想要 10——新增盐值后必须把本断言的清单同步扩容", len(salts))
+	if len(salts) != 11 {
+		t.Fatalf("盐值清单长度 %d，想要 11——新增盐值后必须把本断言的清单同步扩容", len(salts))
 	}
 	for i := range salts {
 		for j := i + 1; j < len(salts); j++ {

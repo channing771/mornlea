@@ -385,6 +385,18 @@ type ChunkInfo struct {
 
 const HostileAttackRange = float32(1.8)
 
+// ProjectileSnapshot 是一条在飞投射物的权威投影：非零稳定 ID、弹种（0=骨刺、
+// 1=箭，与协议 v43 的 kind 字节同值）、所在维度、位置与速度。发布侧消费本投影
+// 组装按会话订阅的 spawn/state 批次（despawn 由「镜像有而截面无」的差异判据
+// 派生，与敌怪发布同形）。全部字段为值语义，跨 goroutine 发送成功后视为不可变。
+type ProjectileSnapshot struct {
+	ID        uint64
+	Kind      uint8
+	Dimension core.DimensionID
+	Position  mgl32.Vec3
+	Velocity  mgl32.Vec3
+}
+
 type HostileMob struct {
 	ID              uint64
 	Dimension       core.DimensionID

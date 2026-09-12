@@ -53,6 +53,7 @@ func (engine *Engine) EntitySessionView(id SessionID) entity.SessionView {
 	return entity.SessionView{
 		Ready:  session.hasView,
 		Center: session.center,
+		Radius: session.radius,
 	}
 }
 
@@ -67,7 +68,7 @@ func (engine *Engine) entityViewSnapshot() entity.ViewSnapshot {
 		entries = append(entries, entity.TickSessionView{
 			Session: id,
 			View: entity.SessionView{
-				Ready: session.hasView, Center: session.center,
+				Ready: session.hasView, Center: session.center, Radius: session.radius,
 			},
 			Origin: origin, OriginWanted: originWanted,
 		})

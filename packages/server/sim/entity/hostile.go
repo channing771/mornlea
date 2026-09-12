@@ -381,12 +381,19 @@ func (engine *engineContext) hostileSkyExposed(dimension *Dimension, position mg
 // advanceHostileDistant 推进远离消失：距全部 active 玩家（同维）水平距离
 // >64 格时逐 tick 累计 `DistantTicks`，累计满 600 即移除且不产生掉落；回到
 // 范围内（≤64）立即清零累计。没有 active 玩家时「距全部玩家 >64」按空集
-// 成立，累计照常推进。
+// 成立，累计照常推进。生命已归零的个体整体跳过——它们归属本 tick 稍后的
+// settleHostileDeaths 统一移除与掉落，远离消失不得抢先把死亡个体变成无掉落
+// 移除（投射物阶段插入后 distant 先于死亡结算运行，此跳条保证对调不改变
+// 「死亡同 tick 掉落」的既有可观察语义）。
 func (engine *engineContext) advanceHostileDistant() {
 	distantSq := float32(hostileDistantRadius) * float32(hostileDistantRadius)
 	sessions := engine.sortedActiveSessions()
 	for index := 0; index < len(engine.hostiles.entries); {
 		entry := &engine.hostiles.entries[index]
+		if entry.health == 0 {
+			index++
+			continue
+		}
 		within := false
 		for _, id := range sessions {
 			session := engine.sessions[id]
