@@ -10,12 +10,13 @@ import (
 )
 
 // hostileSpawnFixture 返回 3 条字段各异、ID 严格升序的合法 spawn 记录：
-// 生命取非零非满的中间值，保证「字段根本没搬运」与默认值不可分辨。
+// 生命取非零非满的中间值，kind 两值混排，保证「字段根本没搬运」与默认值
+// 不可分辨。
 func hostileSpawnFixture() []HostileSpawnRecord {
 	return []HostileSpawnRecord{
-		{ID: 7, Dimension: core.Overworld, Position: mgl32.Vec3{2.5, 1, -3.25}, Yaw: 1.25, Health: 14},
-		{ID: 9, Dimension: core.Overworld, Position: mgl32.Vec3{-8.5, 65.5, 12.75}, Yaw: -2.5, Health: core.MaxHealth},
-		{ID: 12, Dimension: core.Overworld, Position: mgl32.Vec3{30.5, 70, -3.25}, Yaw: 3, Health: 1},
+		{ID: 7, Dimension: core.Overworld, Position: mgl32.Vec3{2.5, 1, -3.25}, Yaw: 1.25, Health: 14, Kind: HostileKindBoneThrower},
+		{ID: 9, Dimension: core.Overworld, Position: mgl32.Vec3{-8.5, 65.5, 12.75}, Yaw: -2.5, Health: core.MaxHealth, Kind: HostileKindNightwalker},
+		{ID: 12, Dimension: core.Overworld, Position: mgl32.Vec3{30.5, 70, -3.25}, Yaw: 3, Health: 1, Kind: HostileKindBoneThrower},
 	}
 }
 
@@ -23,8 +24,8 @@ func hostileSpawnFixture() []HostileSpawnRecord {
 // 保证速度分量的搬运与丢弃可分辨。
 func hostileStateFixture() []HostileStateRecord {
 	return []HostileStateRecord{
-		{ID: 7, Position: mgl32.Vec3{2.5, 1, -3.25}, Velocity: mgl32.Vec3{0.5, -1.25, 0}, Yaw: 1.25, Health: 13},
-		{ID: 9, Position: mgl32.Vec3{-8.5, 65.5, 12.75}, Velocity: mgl32.Vec3{0, 0.25, 3}, Yaw: -2.5, Health: 7},
+		{ID: 7, Position: mgl32.Vec3{2.5, 1, -3.25}, Velocity: mgl32.Vec3{0.5, -1.25, 0}, Yaw: 1.25, Health: 13, Kind: HostileKindBoneThrower},
+		{ID: 9, Position: mgl32.Vec3{-8.5, 65.5, 12.75}, Velocity: mgl32.Vec3{0, 0.25, 3}, Yaw: -2.5, Health: 7, Kind: HostileKindNightwalker},
 	}
 }
 
@@ -53,13 +54,13 @@ func TestHostileMessageIDsAreFrozen(t *testing.T) {
 		{StatePlay, HostileState{}, 23},
 		{StatePlay, HostileDespawn{}, 24},
 	})
-	for _, id := range []uint32{22, 23, 24, 25, 26, 27, 28} {
+	for _, id := range []uint32{22, 23, 24, 25, 26, 27, 28, 29, 30, 31} {
 		if _, ok := ServerPacketForID(StatePlay, id); !ok {
 			t.Fatalf("Play server packet ID %d 未注册", id)
 		}
 	}
-	if _, ok := ServerPacketForID(StatePlay, 28+1); ok {
-		t.Fatal("Play server packet ID 29 必须保持未分配")
+	if _, ok := ServerPacketForID(StatePlay, 31+1); ok {
+		t.Fatal("Play server packet ID 32 必须保持未分配")
 	}
 }
 
@@ -96,6 +97,9 @@ func TestHostileMessagesValidateRejectsInvalidRecords(t *testing.T) {
 		{"spawn 非法维度", HostileSpawn{ServerTick: 1, Spawns: []HostileSpawnRecord{{
 			ID: 1, Dimension: core.DimensionID(5), Position: mgl32.Vec3{1, 1, 1}, Health: 10,
 		}}}},
+		{"spawn kind 2", HostileSpawn{ServerTick: 1, Spawns: []HostileSpawnRecord{{
+			ID: 1, Dimension: core.Overworld, Position: mgl32.Vec3{1, 1, 1}, Health: 10, Kind: 2,
+		}}}},
 		{"spawn count 0", HostileSpawn{ServerTick: 1}},
 		{"state 重复 ID", HostileState{ServerTick: 1, States: []HostileStateRecord{
 			hostileStateFixture()[0], hostileStateFixture()[0],
@@ -118,6 +122,9 @@ func TestHostileMessagesValidateRejectsInvalidRecords(t *testing.T) {
 		{"state health 超上限", HostileState{ServerTick: 1, States: []HostileStateRecord{{
 			ID: 1, Position: mgl32.Vec3{1, 1, 1}, Velocity: mgl32.Vec3{0, 0, 0}, Health: core.MaxHealth + 1,
 		}}}},
+		{"state kind 2", HostileState{ServerTick: 1, States: []HostileStateRecord{{
+			ID: 1, Position: mgl32.Vec3{1, 1, 1}, Velocity: mgl32.Vec3{0, 0, 0}, Health: 10, Kind: 2,
+		}}}},
 		{"state count 0", HostileState{ServerTick: 1}},
 		{"despawn 重复 ID", HostileDespawn{ServerTick: 1, IDs: []uint64{7, 7}}},
 		{"despawn 逆序 ID", HostileDespawn{ServerTick: 1, IDs: []uint64{9, 7}}},
@@ -132,7 +139,8 @@ func TestHostileMessagesValidateRejectsInvalidRecords(t *testing.T) {
 		})
 	}
 
-	// 边界内的合法形态必须继续通过：count 恰好 1 与上限、生命 1 与 20。
+	// 边界内的合法形态必须继续通过：count 恰好 1 与上限、生命 1 与 20、
+	// kind 两值（0/1 混排见夹具）。
 	validSpawns := make([]HostileSpawnRecord, MaxHostileRecords)
 	for index := range validSpawns {
 		validSpawns[index] = HostileSpawnRecord{

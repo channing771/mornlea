@@ -66,11 +66,11 @@ func TestGridCraftingPacketIDsAreFrozen(t *testing.T) {
 	if _, ok := ClientPacketForID(StatePlay, 18+1); ok {
 		t.Fatal("Play client packet ID 19 必须保持未分配")
 	}
-	if _, ok := ServerPacketForID(StatePlay, 28+1); ok {
-		t.Fatal("Play server packet ID 29 必须保持未分配")
+	if _, ok := ServerPacketForID(StatePlay, 31+1); ok {
+		t.Fatal("Play server packet ID 32 必须保持未分配")
 	}
-	if ProtocolVersion != 42 {
-		t.Fatalf("协议版本 = %d，想要 42——夜行者三类消息由 v30 承载、显示相位偏移由 v31 承载、私有战斗命中由 v32 承载、被动牛三类消息由 v33 承载、放牧位由 v34 承载、死亡原因位由 v35 承载、天气字节由 v36 承载、季节三字段由 v37 承载、水桶双命令由 v38 承载、双维值域放行由 v39 承载、登录视距字节由 v40 承载、潜行位由 v41 承载、护甲点数与装备互换命令由 v42 承载", ProtocolVersion)
+	if ProtocolVersion != 43 {
+		t.Fatalf("协议版本 = %d，想要 43——夜行者三类消息由 v30 承载、显示相位偏移由 v31 承载、私有战斗命中由 v32 承载、被动牛三类消息由 v33 承载、放牧位由 v34 承载、死亡原因位由 v35 承载、天气字节由 v36 承载、季节三字段由 v37 承载、水桶双命令由 v38 承载、双维值域放行由 v39 承载、登录视距字节由 v40 承载、潜行位由 v41 承载、护甲点数与装备互换命令由 v42 承载、投射物三类消息与敌怪 kind 字节由 v43 承载", ProtocolVersion)
 	}
 }
 
@@ -102,8 +102,8 @@ func TestProtocolV22TillSoilPacketIDIsFrozen(t *testing.T) {
 	} else if _, isTake := packet.(TakeCraftingOutput); !isTake {
 		t.Fatalf("Play client packet ID 15 = %T，想要 TakeCraftingOutput", packet)
 	}
-	if ProtocolVersion != 42 {
-		t.Fatalf("协议版本 = %d，想要 42", ProtocolVersion)
+	if ProtocolVersion != 43 {
+		t.Fatalf("协议版本 = %d，想要 43", ProtocolVersion)
 	}
 }
 
@@ -148,8 +148,8 @@ func TestProtocolV42EquipArmorPacketIDIsFrozen(t *testing.T) {
 	if _, ok := ClientPacketForID(StatePlay, 18+1); ok {
 		t.Fatal("Play client packet ID 19 必须保持未分配")
 	}
-	if ProtocolVersion != 42 {
-		t.Fatalf("协议版本 = %d，想要 42", ProtocolVersion)
+	if ProtocolVersion != 43 {
+		t.Fatalf("协议版本 = %d，想要 43", ProtocolVersion)
 	}
 }
 
@@ -193,7 +193,7 @@ func TestProtocolV1RegistryRejectsUnknownIDsAndStates(t *testing.T) {
 	if _, ok := ClientPacketForID(StateHandshake, 1); ok {
 		t.Fatal("unknown handshake client packet ID accepted")
 	}
-	if _, ok := ServerPacketForID(StatePlay, 29); ok {
+	if _, ok := ServerPacketForID(StatePlay, 32); ok {
 		t.Fatal("unknown play server packet ID accepted")
 	}
 	if _, ok := ClientPacketID(StateLogin, ClientHello{}); ok {
@@ -441,6 +441,15 @@ func sameServerPacketType(left, right ServerPacket) bool {
 		return ok
 	case PassiveDespawn:
 		_, ok := right.(PassiveDespawn)
+		return ok
+	case ProjectileSpawn:
+		_, ok := right.(ProjectileSpawn)
+		return ok
+	case ProjectileState:
+		_, ok := right.(ProjectileState)
+		return ok
+	case ProjectileDespawn:
+		_, ok := right.(ProjectileDespawn)
 		return ok
 	}
 	return false

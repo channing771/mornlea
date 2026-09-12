@@ -209,6 +209,12 @@ func encodeServerControlPayload(state protocol.State, packet protocol.ServerPack
 			encodePassiveState(&e, message)
 		case protocol.PassiveDespawn:
 			encodePassiveDespawn(&e, message)
+		case protocol.ProjectileSpawn:
+			encodeProjectileSpawn(&e, message)
+		case protocol.ProjectileState:
+			encodeProjectileState(&e, message)
+		case protocol.ProjectileDespawn:
+			encodeProjectileDespawn(&e, message)
 		case protocol.CombatHit:
 			e.u64(message.ServerTick)
 			e.u8(message.Damage)
@@ -249,6 +255,12 @@ func decodeServerControlPayload(state protocol.State, packetID uint32, payload [
 			max = protocol.PassiveStateMaxWireBytes
 		case 28:
 			max = protocol.PassiveDespawnMaxWireBytes
+		case 29:
+			max = protocol.ProjectileSpawnMaxWireBytes
+		case 30:
+			max = protocol.ProjectileStateMaxWireBytes
+		case 31:
+			max = protocol.ProjectileDespawnMaxWireBytes
 		case 25:
 			max = 10
 		}
@@ -558,6 +570,12 @@ func decodeServerControlPayload(state protocol.State, packetID uint32, payload [
 			packet, err = decodePassiveState(&d)
 		case 28:
 			packet, err = decodePassiveDespawn(&d)
+		case 29:
+			packet, err = decodeProjectileSpawn(&d)
+		case 30:
+			packet, err = decodeProjectileState(&d)
+		case 31:
+			packet, err = decodeProjectileDespawn(&d)
 		case 25:
 			if len(payload) != 10 {
 				err = errors.New("network: combat hit payload must be exactly 10 bytes")
