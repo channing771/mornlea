@@ -53,7 +53,7 @@ advanceHostiles（生成/意图/移动）
 
 ## D6 协议 v43 与存储 v2
 
-- S→C 29/30/31：`ProjectileSpawn{ID,Kind,Dimension,Pos×3,Vel×3}`、`ProjectileState{ID,Pos×3}`、`ProjectileDespawn{IDs}`。计数上限 128、spawn/state 严格 ID 升序、`Validate` 有限性/值域检查、按会话订阅发布（沿 `hostileCandidateVisible` 谓词与「despawn → spawn → state」每 tick 每类一包的发布序）。record 定长：spawn 42B、state 18B、despawn 8B（kind 1B + 维度 4B + 6×f32 + u64 id；实现期以 wire frozen 测试钉死，规格只钉「定长 + 上限 + 升序」）。
+- S→C 29/30/31：`ProjectileSpawn{ID,Kind,Dimension,Pos×3,Vel×3}`、`ProjectileState{ID,Pos×3}`、`ProjectileDespawn{IDs}`。计数上限 128、spawn/state 严格 ID 升序、`Validate` 有限性/值域检查、按会话订阅发布（沿 `hostileCandidateVisible` 谓词与「despawn → spawn → state」每 tick 每类一包的发布序）。record 定长：spawn 37B、state 20B、despawn 8B（u64 id + kind 1B + 维度 4B + 6×f32 = 37；u64 id + 3×f32 = 20；实现期以 wire frozen 测试钉死，规格只钉「定长 + 上限 + 升序」；2026-09-12 任务组 2 核实更正，初稿 42B/18B 为算术笔误）。
 - hostile `Spawn`/`State` record 尾部追加 `kind u8`（spawn 29→30B、state 37→38B，pure-append）。
 - `hostile_mobs` v2：record 72→73B（尾部 kind）；`CurrentSchema=2`；decode 白名单 {1,2}（v1 记录迁移恒 0=夜行者）；`MaxFileLength = 32+64×73 = 4704`；CRC、逐项校验、损坏整拒语义逐条不变；golden fixture 新增 v2、保留 v1 供迁移断言。
 
