@@ -10,13 +10,21 @@ import (
 )
 
 // armorTestWorn 构造一份「部分穿戴、含非满耐久」的装备区夹具：头部一件磨损
-// 完好铁头盔（160/165）、胸部一件完好铁胸甲，腿脚两槽为空。装备区快照的五处
-// 持久化接线（读取缓存、恢复、保存与两处脏检测）共用同一夹具，任何一处漏带
-// 装备都会让对应断言变红。
+// 完好铁头盔（上限减 5）、胸部一件完好铁胸甲，腿脚两槽为空。点数与耐久一律
+// 经 core 耐久表派生，不复制表值。装备区快照的五处持久化接线（读取缓存、
+// 恢复、保存与两处脏检测）共用同一夹具，任何一处漏带装备都会让对应断言变红。
 func armorTestWorn() [core.ArmorSlotCount]core.ItemStack {
 	var worn [core.ArmorSlotCount]core.ItemStack
-	worn[core.ArmorSlotHead] = core.ItemStack{Item: core.ItemIronHelmet, Count: 1, Durability: 160}
-	worn[core.ArmorSlotChest] = core.ItemStack{Item: core.ItemIronChestplate, Count: 1, Durability: 240}
+	helmetFull, ok := core.ItemMaxDurability(core.ItemIronHelmet)
+	if !ok {
+		panic("夹具失效：铁头盔缺少耐久上限登记")
+	}
+	worn[core.ArmorSlotHead] = core.ItemStack{Item: core.ItemIronHelmet, Count: 1, Durability: helmetFull - 5}
+	chestFull, ok := core.ItemMaxDurability(core.ItemIronChestplate)
+	if !ok {
+		panic("夹具失效：铁胸甲缺少耐久上限登记")
+	}
+	worn[core.ArmorSlotChest] = core.ItemStack{Item: core.ItemIronChestplate, Count: 1, Durability: chestFull}
 	return worn
 }
 
@@ -90,7 +98,11 @@ func TestPlayerPersistenceMatchesSaveDetectsArmorDelta(t *testing.T) {
 		t.Fatal("卸下胸甲后的保存被判匹配，脏检测会漏掉装备卸下")
 	}
 	save.Armor = armorTestWorn()
-	save.Armor[core.ArmorSlotLegs] = core.ItemStack{Item: core.ItemIronLeggings, Count: 1, Durability: 225}
+	legsFull, ok := core.ItemMaxDurability(core.ItemIronLeggings)
+	if !ok {
+		t.Fatal("夹具失效：铁护腿缺少耐久上限登记")
+	}
+	save.Armor[core.ArmorSlotLegs] = core.ItemStack{Item: core.ItemIronLeggings, Count: 1, Durability: legsFull}
 	if cached.matchesSave(save) {
 		t.Fatal("新穿护腿后的保存被判匹配，脏检测会漏掉装备穿上")
 	}

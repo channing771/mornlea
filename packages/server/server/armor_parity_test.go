@@ -239,6 +239,19 @@ func runArmorParityScript(t *testing.T, transport string) armorParityTranscript 
 
 	// 非护甲手持：木剑格发装备命令必须被 not_armor 拒绝且零状态变更。
 	send(strikerRecorder, network.EquipArmor{Sequence: 1})
+	host.mu.Lock()
+	strikerActive := *host.activeByPlayer[striker.PlayerID]
+	host.mu.Unlock()
+	strikerSnapshot, ok := host.world.PlayerSnapshotFor(strikerActive.Session)
+	if !ok {
+		t.Fatalf("%s 没有攻击者权威快照", transport)
+	}
+	if strikerSnapshot.Armor != ([core.ArmorSlotCount]core.ItemStack{}) {
+		t.Fatalf("%s 拒绝后装备区被改动: %+v", transport, strikerSnapshot.Armor)
+	}
+	if strikerSnapshot.Inventory != strikerInv {
+		t.Fatalf("%s 拒绝后背包被改动: %+v", transport, strikerSnapshot.Inventory)
+	}
 
 	// 四件全穿：每次先选中持有护甲的快捷栏格，再发装备命令经权威互换上台。
 	sequence := uint64(10)

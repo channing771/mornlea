@@ -10,6 +10,7 @@ import (
 	"github.com/channing771/mornlea/packages/server/storage"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // TestArmorSurvivesDiskRestart 覆盖装备跨重启保值：玩家经真实 ingress 上行
@@ -48,8 +49,8 @@ func TestArmorSurvivesDiskRestart(t *testing.T) {
 		t.Fatal("夹具失效：木剑缺少耐久上限登记")
 	}
 	strikerInv.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemWoodenSword, Count: 1, Durability: strikerFull}
-	seedArmorRestartPlayer(t, root, wearer, wearerInv, [3]float32{0.5, 1.001, 2.5})
-	seedArmorRestartPlayer(t, root, striker, strikerInv, [3]float32{0.5, 1.001, 4.5})
+	seedArmorRestartPlayer(t, root, wearer, wearerInv, [3]float32{0.5, 1.001, 2.5}, [core.ArmorSlotCount]core.ItemStack{})
+	seedArmorRestartPlayer(t, root, striker, strikerInv, [3]float32{0.5, 1.001, 4.5}, [core.ArmorSlotCount]core.ItemStack{})
 
 	first := startDiskHost(t, root, "127.0.0.1:0", flatGenerator{})
 	wearerClient := dialArmorRestartClient(t, first, wearer)
@@ -135,6 +136,132 @@ func TestArmorSurvivesDiskRestart(t *testing.T) {
 
 	closeArmorRestartClient(t, reconnected)
 	second.Shutdown(t)
+}
+
+// armorWarpWorn 构造跨维传送夹具的四槽装备区：四件全穿、其中头盔与护腿为
+// 磨损件（各耗 5/9 点），点数与耐久一律经 core 护甲域现读。
+func armorWarpWorn(t *testing.T) [core.ArmorSlotCount]core.ItemStack {
+	t.Helper()
+	worn := [core.ArmorSlotCount]core.ItemStack{}
+	pieces := [core.ArmorSlotCount]struct {
+		item  core.ItemID
+		wears uint16
+	}{
+		core.ArmorSlotHead:  {core.ItemIronHelmet, 5},
+		core.ArmorSlotChest: {core.ItemIronChestplate, 0},
+		core.ArmorSlotLegs:  {core.ItemIronLeggings, 9},
+		core.ArmorSlotFeet:  {core.ItemIronBoots, 0},
+	}
+	for slot, piece := range pieces {
+		full, ok := core.ItemMaxDurability(piece.item)
+		if !ok {
+			t.Fatalf("夹具失效：物品 %d 缺少耐久上限登记", piece.item)
+		}
+		worn[slot] = core.ItemStack{Item: piece.item, Count: 1, Durability: full - piece.wears}
+	}
+	return worn
+}
+
+// armorWarpGenerator 是跨维传送夹具的生成器：主世界与深渊都提供可站立地表，
+// 但深渊顶层用泥土而非草方块——被动牛只在草方块上生成，而被动牛的线上发布
+// 与存档尚不支持深渊维（在案缺陷），深渊长草会让传送测试随机踩进这颗既有
+// 地雷；本测试只关心装备保值，不为无关缺陷背锅。
+type armorWarpGenerator struct{}
+
+func (armorWarpGenerator) GenerateChunk(dimension core.DimensionID, position core.ChunkPos) *world.Chunk {
+	surface := core.GrassID
+	if dimension == core.Depths {
+		surface = core.DirtID
+	}
+	chunk := world.NewChunk(position)
+	for z := 0; z < core.SectionSize; z++ {
+		for x := 0; x < core.SectionSize; x++ {
+			chunk.SetBlock(x, core.MinY, z, core.BedrockID)
+			for y := int32(core.MinY + 1); y < 0; y++ {
+				chunk.SetBlock(x, y, z, core.StoneID)
+			}
+			chunk.SetBlock(x, 0, z, surface)
+		}
+	}
+	chunk.Compact()
+	return chunk
+}
+
+// TestArmorSurvivesDimensionWarp 覆盖跨维传送的装备保值：已装备护甲（含非满
+// 耐久磨损件）的玩家经 /warp 在主世界与深渊之间往返后，四槽内容、逐件耐久、
+// 权威背包与线上点数逐位不变；断线落盘后磁盘上的装备区仍是原值。
+//
+// 传送以「快照注销 + 恢复载荷重建」实现：重建漏带装备区的话，玩家落地的
+// 瞬间装备清空、点数归零，随后的持久化还会用空装备覆写存档——三段断言
+// （传送后权威、返程后权威、落盘字节）共同压住这条链路。
+func TestArmorSurvivesDimensionWarp(t *testing.T) {
+	root := t.TempDir()
+	wearer := integrationIdentity(0xa5, "ArmorWarper")
+
+	// 播种：装备区直接随存档就位（穿戴动作已由其余两条测试经 ingress 覆盖），
+	// 快捷栏全空，任何装备区丢失都会立刻显形。
+	worn := armorWarpWorn(t)
+	seedArmorRestartPlayer(t, root, wearer, core.Inventory{}, [3]float32{0.5, 1.001, 0.5}, worn)
+	wantPoints := core.ArmorPoints(worn)
+
+	first := startDiskHost(t, root, "127.0.0.1:0", armorWarpGenerator{})
+	wearerClient := dialArmorRestartClient(t, first, wearer)
+	clients := []*armorRestartClient{wearerClient}
+	waitArmorRestart(t, "wearer ready", clients, func() bool {
+		return wearerClient.ready()
+	})
+	waitArmorRestart(t, "armor restored on authority", clients, func() bool {
+		snapshot, ok := first.PlayerSnapshotFor(t, wearer.PlayerID)
+		return ok && snapshot.Armor == worn
+	})
+
+	// 每次传送都断言四件事：权威落到了目标维、装备区与逐件耐久原值、背包
+	// 未被动过、线上点数与目标维都随新一份权威状态下发。
+	warpTo := func(target core.DimensionID, name string) {
+		t.Helper()
+		sendArmorRestart(t, wearerClient, network.ChatCommand{Text: "/warp " + name})
+		waitArmorRestart(t, "warp to "+name, clients, func() bool {
+			snapshot, ok := first.PlayerSnapshotFor(t, wearer.PlayerID)
+			return ok && snapshot.Current.Dimension == target
+		})
+		snapshot := first.PlayerSnapshot(t, wearer.PlayerID)
+		if snapshot.Armor != worn {
+			t.Fatalf("传送到 %s 后装备区 = %+v，想要原值 %v", name, snapshot.Armor, worn)
+		}
+		if snapshot.Inventory != (core.Inventory{}) {
+			t.Fatalf("传送到 %s 后背包 = %+v，想要原值空背包", name, snapshot.Inventory)
+		}
+		if !wearerClient.hasState || wearerClient.state.ArmorPoints != wantPoints {
+			t.Fatalf("传送到 %s 后线上点数 = %+v，想要 %d", name, wearerClient.state, wantPoints)
+		}
+		if wearerClient.state.Dimension != target {
+			t.Fatalf("传送到 %s 后线上维度 = %d", name, wearerClient.state.Dimension)
+		}
+	}
+	warpTo(core.Depths, "depths")
+	warpTo(core.Overworld, "overworld")
+
+	// 断线落盘后直接读盘：存档装备区必须仍是原值——传送若漏带装备，强制
+	// 落盘会用空装备覆写存档，这一步就是把覆写钉在字节上。
+	closeArmorRestartClient(t, wearerClient)
+	first.WaitPlayerSaved(t, wearer.PlayerID)
+	first.Shutdown(t)
+	store, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("关闭检视用磁盘存档: %v", err)
+		}
+	}()
+	stored, err := store.LoadPlayer(context.Background(), wearer.PlayerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Armor != worn {
+		t.Fatalf("落盘装备区 = %+v，想要原值 %v（被空装备覆写）", stored.Armor, worn)
+	}
 }
 
 // armorRestartClient 是异步推进世界里一个客户端的泵：后台读取线程持续应答
@@ -234,13 +361,15 @@ func closeArmorRestartClient(t *testing.T, connected *armorRestartClient) {
 	}
 }
 
-// seedArmorRestartPlayer 在磁盘世界为一名玩家播种指定背包与出生位置的存档。
+// seedArmorRestartPlayer 在磁盘世界为一名玩家播种指定背包、出生位置与已装备
+// 护甲区的存档。
 func seedArmorRestartPlayer(
 	t *testing.T,
 	root string,
 	identity network.Identity,
 	inventory core.Inventory,
 	position [3]float32,
+	armor [core.ArmorSlotCount]core.ItemStack,
 ) {
 	t.Helper()
 	store, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
@@ -259,7 +388,7 @@ func seedArmorRestartPlayer(
 	location := storage.PlayerLocation{Dimension: core.Overworld, Position: position}
 	if _, err := store.SavePlayer(context.Background(), wellFedPlayerSave(storage.PlayerSave{
 		PlayerID: identity.PlayerID, Revision: 1, DisplayName: identity.DisplayName,
-		Current: location, Safe: &location, Inventory: inventory,
+		Current: location, Safe: &location, Inventory: inventory, Armor: armor,
 	})); err != nil {
 		t.Fatal(err)
 	}

@@ -59,9 +59,10 @@ func (server *Server) handleWarpChat(chat incomingChat) {
 //   - 目标锚点区块尚未加载（缺席/加载中/生成中）不拒绝：重建后的待出生保留
 //     经既有 `spawnWanted` 把目标维区块暖起来，与登录冷启动同语义；登录从
 //     不因冷区块拒绝，传送亦然。
-//   - 重建只携带背包、生命、三层饥饿、朝向与个人重生点，不携带旧维当前位置
-//     与安全点：旧维候选若被复用会把玩家拉回旧维，传送必须做全新按维扫描。
-//     输入状态随重建清零（与登录一致），同 tick 在途输入不再跨维生效。
+//   - 重建只携带背包、装备四槽、生命、三层饥饿、朝向与个人重生点，不携带
+//     旧维当前位置与安全点：旧维候选若被复用会把玩家拉回旧维，传送必须做
+//     全新按维扫描。输入状态随重建清零（与登录一致），同 tick 在途输入不再
+//     跨维生效。
 //   - 伙伴与敌怪不跟随：它们仍锚定旧维，旧维的 `CompanionDespawn` 与
 //     `HostileDespawn`、新维不自动镜像都由既有订阅差分自然完成；跟随任务
 //     的跨维保持见伙伴编排。
@@ -109,10 +110,14 @@ func (server *Server) warpPlayer(session contract.SessionID, target core.Dimensi
 		SpawnDimension: target,
 		SpawnAnchor:    anchor,
 		// 声明视距是会话协商事实：重建订阅照常携带，传送不改变会话视距。
-		ViewDistance:     current.viewDistance,
-		Yaw:              snapshot.Yaw,
-		Pitch:            snapshot.Pitch,
-		Inventory:        snapshot.Inventory,
+		ViewDistance: current.viewDistance,
+		Yaw:          snapshot.Yaw,
+		Pitch:        snapshot.Pitch,
+		Inventory:    snapshot.Inventory,
+		// 装备四槽与背包同属必须跨维保真的玩家物品状态：传送的重建只换维度
+		// 与落点，漏带装备区会让穿甲玩家落地即裸奔，随后的持久化还会用空
+		// 装备覆写存档。
+		Armor:            snapshot.Armor,
 		Health:           snapshot.Health,
 		Hunger:           snapshot.Hunger,
 		SaturationMilli:  snapshot.SaturationMilli,
