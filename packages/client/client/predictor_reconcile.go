@@ -60,6 +60,7 @@ func (p *Predictor) ApplyPlayerState(
 	p.season = message.Season
 	p.seasonProgress = message.SeasonProgress
 	p.temperature = message.Temperature
+	p.armor = message.ArmorPoints
 	if p.suspended {
 		p.history = p.history[:0]
 		p.accumulator = 0
@@ -125,6 +126,9 @@ func (p *Predictor) clearForNotReady(message network.PlayerState) {
 	p.season = core.SeasonSpring
 	p.seasonProgress = 0
 	p.temperature = 0
+	// 护甲点数与饥饿值同法清零：会话之间不共享穿戴状态，旧点数不得漏进
+	// 下一会话就绪前的呈现。
+	p.armor = 0
 }
 
 func validatePlayerState(message network.PlayerState, maxSentInput uint64) (physics.State, error) {
@@ -159,6 +163,11 @@ func validatePlayerState(message network.PlayerState, maxSentInput uint64) (phys
 	// 全域合法，不设子域拒绝。
 	if message.Season > core.SeasonWinter {
 		return physics.State{}, errors.New("client: player state has out-of-range season")
+	}
+	// 护甲点数合法域是 0..`core.MaxArmorPoints`：协议编解码层已拒一遍，这里
+	// 照天气形态做镜像侧的纵深拒绝，越界值不进镜像。
+	if message.ArmorPoints > core.MaxArmorPoints {
+		return physics.State{}, errors.New("client: player state has out-of-range armor points")
 	}
 	const maxPitch = float32(math.Pi/2 - 0.01)
 	if message.Pitch < -maxPitch || message.Pitch > maxPitch {

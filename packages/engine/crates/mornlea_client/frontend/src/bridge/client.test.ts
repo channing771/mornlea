@@ -237,6 +237,7 @@ const hudState = {
   viewport: { width: 1280, height: 720 },
   hotbar: { slots: hudSlots, selectedIndex: 2 },
   health: { value: 17 },
+  armor: { points: 7 },
   hunger: { value: 18, saturationZero: true },
   oxygen: { value: 210 },
   eating: { active: false, progress: 0 },
@@ -268,6 +269,7 @@ describe("parseState 的 hud 分节", () => {
     expect(state.hud?.eating).toEqual(hudState.eating);
     expect(state.hud?.hotbar).toBeUndefined();
     expect(state.hud?.health).toBeUndefined();
+    expect(state.hud?.armor).toBeUndefined();
     expect(state.hud?.hunger).toBeUndefined();
     expect(state.hud?.oxygen).toBeUndefined();
     expect(state.hud?.popup).toBeUndefined();
@@ -349,11 +351,26 @@ describe("parseState 的 hud 分节", () => {
     expect(() => parseState({ phase: "game", hud: { ...hudState, health: { value: 21 } } })).toThrow(
       BridgeProtocolError,
     );
+    expect(() => parseState({ phase: "game", hud: { ...hudState, armor: { points: 21 } } })).toThrow(
+      BridgeProtocolError,
+    );
+    expect(() => parseState({ phase: "game", hud: { ...hudState, armor: { points: 0.5 } } })).toThrow(
+      BridgeProtocolError,
+    );
     expect(() => parseState({ phase: "game", hud: { ...hudState, hunger: { value: -1 } } })).toThrow(
       BridgeProtocolError,
     );
     expect(() =>
       parseState({ phase: "game", hud: { ...hudState, oxygen: { value: 301 } } }),
+    ).toThrow(BridgeProtocolError);
+  });
+
+  it("armor 分节缺 points 或携带未知属性抛 BridgeProtocolError", () => {
+    expect(() =>
+      parseState({ phase: "game", hud: { ...hudState, armor: {} } }),
+    ).toThrow(BridgeProtocolError);
+    expect(() =>
+      parseState({ phase: "game", hud: { ...hudState, armor: { points: 7, cheat: true } } }),
     ).toThrow(BridgeProtocolError);
   });
 

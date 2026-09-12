@@ -114,7 +114,7 @@ func TestSnowLayerLayersAppendAfterHumanLayers(t *testing.T) {
 		t.Fatalf("雪层两层必须追加在人物层 %d 之后，实际 top=%d",
 			assets.LayerHumanClayLeg, assets.LayerSnowLayerTop)
 	}
-	if got, want := registry.LayerCount(), int(assets.LayerSapling)+1; got != want {
+	if got, want := registry.LayerCount(), int(assets.LayerItemIronBoots)+1; got != want {
 		t.Fatalf("LayerCount = %d，想要覆盖雪层与后续追加层后的 %d", got, want)
 	}
 	if mesh.PlantMaterial(assets.LayerSnowLayerTop) || mesh.PlantMaterial(assets.LayerSnowLayerSide) {

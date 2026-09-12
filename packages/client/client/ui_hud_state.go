@@ -176,6 +176,20 @@ func NewUIHudHunger(hunger uint8, saturationZero bool) *UIHudHunger {
 	return &UIHudHunger{Value: min(hunger, core.MaxHunger), SaturationZero: saturationZero}
 }
 
+// UIHudArmor 是已确认权威护甲点数（协议 v42 起随玩家状态同步）。前端按
+// `MaxArmorPoints` 为满档基准解析十档、半档收尾；点数为 0 时前端不渲染任何
+// 护甲条像素——空档不是「零格刻度」，与生命/饥饿的常驻空槽刻度不同形。
+type UIHudArmor struct {
+	Points uint8 `json:"points"`
+}
+
+// NewUIHudArmor 组装护甲分节；钳制口径同 `NewUIHudHealth`——下行值永远落在
+// schema 区间 0..`core.MaxArmorPoints` 内，越界镜像值在此收敛而不是交给前端
+// 守卫拒绝。
+func NewUIHudArmor(points uint8) *UIHudArmor {
+	return &UIHudArmor{Points: min(points, core.MaxArmorPoints)}
+}
+
 // UIHudOxygen 是已确认且耗损的权威氧气。满氧与未确认值都不产生本分节——氧气是
 // 异常态，只在耗损时占用界面；前端因此无需知晓权威上限，按十格等分解析气泡数。
 type UIHudOxygen struct {
@@ -257,11 +271,14 @@ type UIHudState struct {
 	Viewport UIHudViewport `json:"viewport"`
 	Hotbar   *UIHudHotbar  `json:"hotbar,omitempty"`
 	Health   *UIHudHealth  `json:"health,omitempty"`
-	Hunger   *UIHudHunger  `json:"hunger,omitempty"`
-	Oxygen   *UIHudOxygen  `json:"oxygen,omitempty"`
-	Eating   UIHudEating   `json:"eating"`
-	Popup    *UIHudPopup   `json:"popup,omitempty"`
-	Chat     *UIHudChat    `json:"chat,omitempty"`
+	// Armor 是护甲点数分节：键序紧随 health 之后（护甲条在心形行上方呈现，
+	// 与下行键序同构），nil 即镜像未确认或不可呈现。
+	Armor  *UIHudArmor  `json:"armor,omitempty"`
+	Hunger *UIHudHunger `json:"hunger,omitempty"`
+	Oxygen *UIHudOxygen `json:"oxygen,omitempty"`
+	Eating UIHudEating  `json:"eating"`
+	Popup  *UIHudPopup  `json:"popup,omitempty"`
+	Chat   *UIHudChat   `json:"chat,omitempty"`
 	// Marker/Crosshair/ContainerOpen 是结果布尔：缺席即不呈现，与「权威命中标记
 	// 的窗口计时留在 Go 侧」同一语义。容器布局位只驱动前端行栈避让——面板本体
 	// 与命中仍由 GPU 保留面呈现。

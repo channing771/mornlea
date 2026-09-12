@@ -203,7 +203,17 @@ const (
 	// 四条交叉斜面。层号位于 `LayerItemCoal` 之后的原创内部区，不开放材质包
 	// 文件覆盖（与雪层、人物层同口径）。
 	LayerSapling = LayerHumanSageHead + 50
-	layerCount   = LayerSapling + 1
+	// LayerItemIronHelmet..LayerItemIronBoots 是铁质护甲四件的原创图标层
+	// （头盔/胸甲/护腿/靴子各一层，透明背景镂空图标）。它们与铁质装备的
+	// 掉落薄片和 UI 图标共用同一层，只能追加在树苗层之后保持全部冻结层号
+	// 不变；位于 `LayerItemCoal` 起的原创内部区，不开放材质包文件覆盖。
+	// 显式偏移写法与雪层/树苗同形：省略赋值表达式会隐式重复上一行，
+	// 四层会全部塌到同一个层号上。
+	LayerItemIronHelmet     = LayerSapling + 1
+	LayerItemIronChestplate = LayerSapling + 2
+	LayerItemIronLeggings   = LayerSapling + 3
+	LayerItemIronBoots      = LayerSapling + 4
+	layerCount              = LayerItemIronBoots + 1
 )
 
 type textureBinding struct {
@@ -746,7 +756,8 @@ func isCutoutLayer(layer int) bool {
 		layer == int(LayerShortGrass) || layer == int(LayerSapling) ||
 		(layer >= int(LayerCrack0) && layer <= int(LayerCrack9)) ||
 		layer == int(LayerRawBeef) || layer == int(LayerCookedBeef) ||
-		(layer >= int(LayerItemCoal) && layer <= int(LayerItemWaterBucket))
+		(layer >= int(LayerItemCoal) && layer <= int(LayerItemWaterBucket)) ||
+		(layer >= int(LayerItemIronHelmet) && layer <= int(LayerItemIronBoots))
 }
 
 func (r *Registry) LayerCount() int { return int(layerCount) }

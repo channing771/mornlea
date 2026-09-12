@@ -325,7 +325,7 @@
     },
     "hudState": {
       "type": "object",
-      "description": "游戏相位常显 HUD 分节：全部字段都是语义值（数值/比例/标志），不下发任何坐标矩形——布局由 CSS 组件按 design 基准与 viewport 推导。仅在有已装配世界的相位出现（game/paused），菜单相位缺席。三类字段的呈现规则：权威镜像（hotbar/health/hunger/oxygen）可选，缺席即该镜像尚未确认，组件据此隐藏、不另设布尔确认位；进食进度条（eating）恒携带，以 active 表达是否呈现（采掘进度不再占用屏幕进度条，其反馈由世界空间方块裂纹承载）；窗口结果（popup/chat/marker/crosshair/containerOpen）可选，缺席即不在呈现窗口内。viewport 必填，零尺寸或非法尺寸视口由前端安全降级为不呈现。",
+      "description": "游戏相位常显 HUD 分节：全部字段都是语义值（数值/比例/标志），不下发任何坐标矩形——布局由 CSS 组件按 design 基准与 viewport 推导。仅在有已装配世界的相位出现（game/paused），菜单相位缺席。三类字段的呈现规则：权威镜像（hotbar/health/armor/hunger/oxygen）可选，缺席即该镜像尚未确认，组件据此隐藏、不另设布尔确认位；进食进度条（eating）恒携带，以 active 表达是否呈现（采掘进度不再占用屏幕进度条，其反馈由世界空间方块裂纹承载）；窗口结果（popup/chat/marker/crosshair/containerOpen）可选，缺席即不在呈现窗口内。viewport 必填，零尺寸或非法尺寸视口由前端安全降级为不呈现。",
       "additionalProperties": false,
       "required": [
         "viewport",
@@ -340,6 +340,9 @@
         },
         "health": {
           "$ref": "#/$defs/hudHealth"
+        },
+        "armor": {
+          "$ref": "#/$defs/hudArmor"
         },
         "hunger": {
           "$ref": "#/$defs/hudHunger"
@@ -459,6 +462,21 @@
       ],
       "properties": {
         "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20
+        }
+      }
+    },
+    "hudArmor": {
+      "type": "object",
+      "description": "已确认权威护甲点数，上界与 core.MaxArmorPoints 同值（20）。前端按钳制值解析空/半/满档：每档两点、恰十档、半档收尾；点数为 0 时 MUST NOT 渲染任何护甲条像素（与护甲分节缺席同一呈现），既有零穿戴场景逐像素零漂移。",
+      "additionalProperties": false,
+      "required": [
+        "points"
+      ],
+      "properties": {
+        "points": {
           "type": "integer",
           "minimum": 0,
           "maximum": 20

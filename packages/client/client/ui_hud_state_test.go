@@ -53,6 +53,7 @@ func TestUIHudStateMarshalsPinnedShape(t *testing.T) {
 		Viewport:      NewUIHudViewport(1280, 720),
 		Hotbar:        NewUIHudHotbar(hotbar),
 		Health:        NewUIHudHealth(17),
+		Armor:         NewUIHudArmor(7),
 		Hunger:        NewUIHudHunger(18, true),
 		Oxygen:        NewUIHudOxygen(210),
 		Eating:        NewUIHudEating(true, 0.5),
@@ -72,6 +73,7 @@ func TestUIHudStateMarshalsPinnedShape(t *testing.T) {
 		`{"item":0,"count":0},{"item":0,"count":0}],` +
 		`"selectedIndex":2},` +
 		`"health":{"value":17},` +
+		`"armor":{"points":7},` +
 		`"hunger":{"value":18,"saturationZero":true},` +
 		`"oxygen":{"value":210},` +
 		`"eating":{"active":true,"progress":0.5},` +
@@ -136,6 +138,12 @@ func TestUIHudHotbarMapsMirrorAndRejectsInvalid(t *testing.T) {
 func TestUIHudSurvivalMirrorsClampAndHideUnpresentable(t *testing.T) {
 	if health := NewUIHudHealth(200); health.Value != core.MaxHealth {
 		t.Fatalf("生命钳制 = %d, want %d", health.Value, core.MaxHealth)
+	}
+	if armor := NewUIHudArmor(200); armor.Points != core.MaxArmorPoints {
+		t.Fatalf("护甲点数钳制 = %d, want %d", armor.Points, core.MaxArmorPoints)
+	}
+	if armor := NewUIHudArmor(7); armor.Points != 7 {
+		t.Fatalf("护甲点数原样携带 = %d, want 7", armor.Points)
 	}
 	if hunger := NewUIHudHunger(200, true); hunger.Value != core.MaxHunger || !hunger.SaturationZero {
 		t.Fatalf("饥饿钳制不符: %+v", hunger)
@@ -297,6 +305,7 @@ func TestUIHudConstantsPinnedToSchemaFile(t *testing.T) {
 		fallback string
 	}{
 		{"hudHealth", "value", uint64(core.MaxHealth), "core.MaxHealth"},
+		{"hudArmor", "points", uint64(core.MaxArmorPoints), "core.MaxArmorPoints"},
 		{"hudHunger", "value", uint64(core.MaxHunger), "core.MaxHunger"},
 		{"hudOxygen", "value", uint64(core.MaxOxygenTicks), "core.MaxOxygenTicks"},
 	} {
@@ -345,7 +354,7 @@ func TestUIHudConstantsPinnedToSchemaFile(t *testing.T) {
 		t.Fatal("schema 不得再保留已退役的 hudMining 定义")
 	}
 	// 可选分节缺席即「未确认」或「不在窗口内」：不得改为必填。
-	for _, key := range []string{"hotbar", "health", "hunger", "oxygen", "popup", "chat"} {
+	for _, key := range []string{"hotbar", "health", "armor", "hunger", "oxygen", "popup", "chat"} {
 		if slicesContains(hud.Required, key) {
 			t.Fatalf("schema hudState 的 %s 应保持可选", key)
 		}

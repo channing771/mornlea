@@ -58,7 +58,11 @@ use crate::window::ClientWindow;
 /// v18:帧新增天气状态段(tag 12,4 字节灰度 f32)与降水实例段(tag 13,定长
 /// 降水实例流,与 avatar 同 96 字节/实例布局);空段不编码,晴天帧与 v17 逐字
 /// 节一致;v18 surface 完整保留 v17 的全部 versioned exports 与语义。
-pub const CLIENT_ABI_VERSION: u32 = 18;
+/// v19:桥下行 uiState 的 hud 分节新增 armor 子分节(护甲点数)。Rust 中继对该
+/// 分节零行为:下行状态仍只做相位浅校验,不反序列化 hud 字段;版本槽位随桥
+/// schema 演进同步推进。v19 surface 完整保留 v18 的全部 versioned exports
+/// 与语义。
+pub const CLIENT_ABI_VERSION: u32 = 19;
 
 /// 调用成功。
 pub const MORNLEA_CLIENT_STATUS_OK: u32 = 0;
@@ -486,13 +490,14 @@ mod tests {
     // 校验拒绝路径:ABI 版本、参数校验与无效句柄。
 
     #[test]
-    fn abi_version_is_eighteen() {
+    fn abi_version_is_nineteen() {
         // v15 在 v14 render world update 表面上叠加 avatar 贴图实例布局与
         // 相机可见性两段式出口；v16 与 v15 同表面，仅版本号提升；v17 在 v16
         // 表面上叠加帧 viewmodel TLV 段(tag 11)；v18 在 v17 表面上叠加帧天气
-        // 状态段(tag 12)与降水实例段(tag 13)；
+        // 状态段(tag 12)与降水实例段(tag 13)；v19 在 v18 表面上叠加桥下行
+        // hud 分节的 armor 子分节(Rust 中继零行为，版本槽位随桥 schema 演进)；
         // identity 必须与完整 31 个 versioned exports 同步切换。
-        assert_eq!(mornlea_client_abi_version(), 18);
+        assert_eq!(mornlea_client_abi_version(), 19);
     }
 
     #[test]
@@ -1253,8 +1258,8 @@ mod render_ffi_tests {
                 assert_eq!($call, MORNLEA_CLIENT_STATUS_ABI_VERSION)
             }};
         }
-        let bad = 17;
-        assert_eq!(CLIENT_ABI_VERSION, bad + 1, "被测版本必须是 v18 的直接前代");
+        let bad = 18;
+        assert_eq!(CLIENT_ABI_VERSION, bad + 1, "被测版本必须是 v19 的直接前代");
 
         assert_bad_abi!(unsafe {
             mornlea_client_window_create(bad, 0, 0, std::ptr::null(), 0, std::ptr::null_mut())
@@ -2267,7 +2272,7 @@ mod weather_ffi_tests {
         // 错误 ABI 优先于天气内容检查:版本错即回 ABI_VERSION,不读天气输入、
         // 不改变渲染器状态(此处负载长度非法也须先报版本错)。
         let old = CLIENT_ABI_VERSION - 1;
-        assert_eq!(old, 17, "被测旧版本必须是 v18 的直接前代");
+        assert_eq!(old, 18, "被测旧版本必须是 v19 的直接前代");
         let frame = weather_v2_frame(&weather_tlv(FRAME_TAG_WEATHER, &[0u8; 6]));
         // SAFETY: 指针来自有效切片;ABI 校验先于一切解析。
         let status =
@@ -2367,12 +2372,12 @@ mod viewmodel_ffi_tests {
     fn viewmodel_wrong_abi_wins_over_bad_content() {
         // 错误 ABI 优先于 viewmodel 内容检查:版本错即回 ABI_VERSION,不读
         // viewmodel 输入、不改变渲染器状态(此处负载长度非法也须先报版本错)。
-        let v17 = CLIENT_ABI_VERSION - 1;
-        assert_eq!(v17, 17, "被测旧版本必须是 v18 的直接前代");
+        let v18 = CLIENT_ABI_VERSION - 1;
+        assert_eq!(v18, 18, "被测旧版本必须是 v19 的直接前代");
         let frame = viewmodel_v2_frame(&viewmodel_tlv(FRAME_TAG_VIEWMODEL, &[0u8; 6]));
         // SAFETY: 指针来自有效切片;ABI 校验先于一切解析。
         let status =
-            unsafe { mornlea_client_render_frame(v17, 0xF00D, frame.as_ptr(), frame.len()) };
+            unsafe { mornlea_client_render_frame(v18, 0xF00D, frame.as_ptr(), frame.len()) };
         assert_eq!(status, MORNLEA_CLIENT_STATUS_ABI_VERSION);
     }
 }

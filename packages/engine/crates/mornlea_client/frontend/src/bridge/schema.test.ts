@@ -287,7 +287,7 @@ describe("schema：下行 uiState 非法用例一律拒绝", () => {
 });
 
 // 游戏相位 hud 分节夹具：字段取值与 Go 侧镜像域同源（九格快捷栏、生命 0..20、
-// 氧气 0..300、聊天至多 6 行且每行至多 32 rune）。
+// 护甲 0..20、氧气 0..300、聊天至多 6 行且每行至多 32 rune）。
 const hudSlot = (item: number, count: number, durability?: number) =>
   durability === undefined ? { item, count } : { item, count, durability };
 
@@ -302,6 +302,7 @@ const hudState = {
   viewport: { width: 1280, height: 720 },
   hotbar: { slots: hudSlots, selectedIndex: 2 },
   health: { value: 17 },
+  armor: { points: 7 },
   hunger: { value: 18, saturationZero: true },
   oxygen: { value: 210 },
   eating: { active: false, progress: 0 },
@@ -431,6 +432,19 @@ describe("schema：下行 hud 分节非法用例一律拒绝", () => {
     expect(validateUiState({ phase: "game", hud: { ...hudState, oxygen: { value: 301 } } })).toBe(
       false,
     );
+  });
+
+  it("armor 越界或缺 points 拒绝", () => {
+    expect(validateUiState({ phase: "game", hud: { ...hudState, armor: { points: 21 } } })).toBe(
+      false,
+    );
+    expect(validateUiState({ phase: "game", hud: { ...hudState, armor: { points: -1 } } })).toBe(
+      false,
+    );
+    expect(validateUiState({ phase: "game", hud: { ...hudState, armor: {} } })).toBe(false);
+    expect(
+      validateUiState({ phase: "game", hud: { ...hudState, armor: { points: 7, full: true } } }),
+    ).toBe(false);
   });
 
   it("hunger 缺 saturationZero 拒绝", () => {

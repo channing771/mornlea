@@ -95,6 +95,31 @@ function drumstickMask(x: number, y: number): boolean {
   return drumstickBonePixel(x, y) || drumstickMeatPixel(x, y);
 }
 
+// 胸甲剪影：与快捷栏铁胸甲 sprite（assets 包 `originalItemTexture` 的行表）
+// 逐行同形——双肩甲夹颈口缺口、收腰下摆，项目原创像素资产。
+const ARMOR_ROWS: readonly string[] = [
+  "..#####..#####..",
+  ".######..######.",
+  ".######..######.",
+  "..############..",
+  "..############..",
+  "...##########...",
+  "...##########...",
+  "...##########...",
+  "....########....",
+  "....########....",
+  ".....######.....",
+  "......####......",
+];
+
+function armorMask(x: number, y: number): boolean {
+  if (y < 2 || y >= 2 + ARMOR_ROWS.length) {
+    return false;
+  }
+  const row = ARMOR_ROWS[y - 2];
+  return row !== undefined && row[x] === "#";
+}
+
 /** 4 邻域侵蚀：与 painter 的 border 判定互补，得到轮廓内一圈以内的体色区。 */
 function interiorOf(mask: PixelMask): PixelMask {
   return (x, y) =>
@@ -127,6 +152,7 @@ const rightHalf: PixelMask = (x) => x >= GRID / 2;
 const heartInterior = interiorOf(heartMask);
 const bubbleInterior = interiorOf(bubbleMask);
 const drumstickInterior = interiorOf(drumstickMask);
+const armorInterior = interiorOf(armorMask);
 
 /** 单层着色：一条 path 配一个令牌引用的填充色（icons.tsx 不出现裸色值）。 */
 interface PaintedPath {
@@ -233,6 +259,35 @@ const OXYGEN_LAYERS: Record<CellFill, readonly PaintedPath[]> = {
   half: BUBBLE_EMPTY,
 };
 
+// ---- 护甲：空档深剪影 + 满档钢灰甲体 + 左肩高光，半档只露左半 ----
+const ARMOR_EMPTY: readonly PaintedPath[] = [
+  { data: pathFromMask(armorMask), fill: "var(--hud-armor-empty-edge)" },
+  { data: pathFromMask(armorInterior), fill: "var(--hud-armor-empty-face)" },
+];
+const ARMOR_SHINE: readonly PaintedPath[] = [
+  {
+    data: pathFromMask(armorInterior, (x, y) => x <= 5 && y >= 2 && y <= 4),
+    fill: "var(--hud-armor-shine)",
+  },
+];
+const ARMOR_FULL: readonly PaintedPath[] = [
+  { data: pathFromMask(armorMask), fill: "var(--hud-armor-edge)" },
+  { data: pathFromMask(armorInterior), fill: "var(--hud-armor-face)" },
+  ...ARMOR_SHINE,
+];
+const ARMOR_LAYERS: Record<CellFill, readonly PaintedPath[]> = {
+  empty: ARMOR_EMPTY,
+  full: ARMOR_FULL,
+  // 半档甲：整圈轮廓都是满档描边色，只有体色按中线分成右暗左亮，高光落
+  // 在左肩——与半心的分层方式逐项一致。
+  half: [
+    { data: pathFromMask(armorMask), fill: "var(--hud-armor-edge)" },
+    { data: pathFromMask(armorInterior, rightHalf), fill: "var(--hud-armor-empty-face)" },
+    { data: pathFromMask(armorInterior, leftHalf), fill: "var(--hud-armor-face)" },
+    ...ARMOR_SHINE,
+  ],
+};
+
 function PixelIcon({ layers }: { layers: readonly PaintedPath[] }) {
   return (
     <svg
@@ -262,4 +317,10 @@ export function HungerIcon({ fill }: { fill: CellFill }) {
 /** 气泡状态格：empty/full 由 `resolveBubbleFill` 按权威氧气值解析。 */
 export function OxygenIcon({ fill }: { fill: CellFill }) {
   return <PixelIcon layers={OXYGEN_LAYERS[fill]} />;
+}
+
+/** 护甲状态格：empty/half/full 由 `resolveArmorFill` 按权威护甲点数解析；
+ * 点数为 0 时整行不渲染，空档只在部分填充时作为补齐刻度出现。 */
+export function ArmorIcon({ fill }: { fill: CellFill }) {
+  return <PixelIcon layers={ARMOR_LAYERS[fill]} />;
 }

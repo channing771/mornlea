@@ -7,8 +7,9 @@ import (
 
 func TestOriginalHumanFaceLayers(t *testing.T) {
 	r := NewRegistry()
-	// 人物分面层之后只允许追加雪层两层与树苗层：layerCount 恰为末个人物层 + 9。
-	if r.LayerCount() != int(LayerHumanClayLeg)+9 {
+	// 人物分面层之后只允许追加雪层两层、树苗层与护甲图标四层：layerCount
+	// 恰为末个人物层 + 13。
+	if r.LayerCount() != int(LayerHumanClayLeg)+13 {
 		t.Fatalf("人物分面层缺失或追加层数漂移: %d", r.LayerCount())
 	}
 	for _, base := range []int{int(LayerHumanSageHead), int(LayerHumanClayHead)} {

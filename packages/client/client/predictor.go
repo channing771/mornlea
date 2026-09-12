@@ -81,6 +81,11 @@ type Predictor struct {
 	// （int8 摄氏度）。呈现层需要任意高度/粒子位置的局部温度时经共享公式
 	// 对镜像输入另行求值，而不是改写这个单点观察值。
 	temperature int8
+	// armor 是最近确认的权威护甲点数（协议 v42 起随玩家状态同步）。它与
+	// 生命值、饥饿值同为纯镜像值：只由服务端确认写入，客户端不据本地装备
+	// 槽推算——四槽穿戴的求和与损坏判定都在服务端权威侧，本地另算一套
+	// 必然与权威漂移。呈现层经 `Armor` 查询，供 HUD 护甲条消费。
+	armor uint8
 	// eyeInFluid 是最近一次浸没判定给出的眼睛浸没标志。它由 stepWithSubmersion
 	// 与权威状态和解共同写入，是水下视觉唯一的判定来源。见 EyeInFluid。
 	eyeInFluid bool
@@ -124,6 +129,11 @@ func (p *Predictor) Begin(message network.PlayerState) error {
 	if message.Season > core.SeasonWinter {
 		return errors.New("client: cannot begin prediction from invalid season")
 	}
+	// 护甲点数合法域是 0..`core.MaxArmorPoints`，越界值与天气同形在首帧处
+	// 拒绝，不进镜像。
+	if message.ArmorPoints > core.MaxArmorPoints {
+		return errors.New("client: cannot begin prediction from invalid armor points")
+	}
 
 	p.ready = true
 	p.dimension = message.Dimension
@@ -146,6 +156,7 @@ func (p *Predictor) Begin(message network.PlayerState) error {
 	p.season = message.Season
 	p.seasonProgress = message.SeasonProgress
 	p.temperature = message.Temperature
+	p.armor = message.ArmorPoints
 	// Begin 只有权威位置、没有方块视图，浸没标志留待第一次固定步或和解算出。
 	p.eyeInFluid = false
 	return nil
@@ -207,6 +218,13 @@ func (p *Predictor) SeasonProgress() (uint8, bool) {
 // 温度另经共享公式求值，本镜像只承载服务端对玩家单点的权威观察。
 func (p *Predictor) Temperature() (int8, bool) {
 	return p.temperature, p.ready
+}
+
+// Armor 返回只读镜像持有的权威护甲点数以及预测器是否已就绪。同生命值与
+// 饥饿值：护甲点数只接受服务端确认值，客户端不据本地装备槽推算；旧或重复
+// `ServerTick` 的状态由和解入口的去重门挡掉，不会回退已确认值。
+func (p *Predictor) Armor() (uint8, bool) {
+	return p.armor, p.ready
 }
 
 // EyeInFluid 报告最近一次浸没判定认为相机所在格是不是流体。
