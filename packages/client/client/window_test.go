@@ -36,7 +36,7 @@ func TestClientABIVersionMatchesHeader(t *testing.T) {
 }
 
 func TestClientABIV17RejectedBeforeOtherValidation(t *testing.T) {
-	// client ABI v18 的全部 versioned exports 必须先于其他校验拒绝 v17；
+	// client ABI v19 的全部 versioned exports 必须先于其他校验拒绝 v17；
 	// 无状态相机出口无需窗口与 GPU，可在无头环境锁定“版本错优先、失败不写
 	// 输出”的顺序。指针合法但版本错：报版本错且输出保持哨兵；指针非法叠加
 	// 版本错：同样先报版本错。

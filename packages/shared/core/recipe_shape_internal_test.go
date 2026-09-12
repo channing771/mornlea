@@ -2,7 +2,7 @@ package core
 
 import "testing"
 
-// 本文件是形状匹配器的白盒单元层：注册表 recipe 1..19 里不存在「左右不对称
+// 本文件是形状匹配器的白盒单元层：注册表 recipe 1..24 里不存在「左右不对称
 // 且开 `Mirror` 位」的形状（唯一不对称的石锄/铁锄按 design.md D3 刻意关闭
 // 镜像位），「水平镜像允许、垂直翻转与旋转永不允许」只能在合成形状上对私有
 // `matchesPattern` 直接证明。注册表级的匹配行为由 recipe_test.go 的
