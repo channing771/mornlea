@@ -148,6 +148,9 @@ type (
 	CollectWater = protocol.CollectWater
 	// PlaceWater 是客户端放置流体源命令。
 	PlaceWater = protocol.PlaceWater
+	// EquipArmor 是客户端装备互换命令：请求把权威选中快捷栏格中的护甲件
+	// 穿到对应槽位，载荷仅序号，目标槽位由件类映射唯一确定。
+	EquipArmor = protocol.EquipArmor
 	// PlayerState 是服务端发给玩家本人的完整权威状态。
 	PlayerState = protocol.PlayerState
 	// RemotePlayerSpawn 是其他玩家进入同步范围的出生通知。
@@ -194,6 +197,8 @@ const (
 	RejectNotFluidSource = protocol.RejectNotFluidSource
 	// RejectBucketMismatch 表示手持桶态与命令不匹配。
 	RejectBucketMismatch = protocol.RejectBucketMismatch
+	// RejectNotArmor 表示装备互换命令的权威选中快捷栏格未持有可穿戴的护甲件。
+	RejectNotArmor = protocol.RejectNotArmor
 )
 
 // 物品栏与容器消息 DTO 定义在 protocol 包；再导出保持既有 network.X 引用。

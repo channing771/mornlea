@@ -56,8 +56,10 @@ const (
 	RejectNotFluidSource    RejectReason = 12
 	RejectBucketMismatch    RejectReason = 13
 	// RejectNotArmor 表示装备互换命令的权威选中快捷栏格未持有可穿戴的护甲件
-	//（空格、非护甲物品或多件栈），权威状态零变化。
-	RejectNotArmor
+	//（空格、非护甲物品或多件栈），权威状态零变化。显式取 14：按前值的
+	// iota 重复语义会拿到与 `RejectBucketMismatch` 相同的字面量 13，让两个
+	// 拒绝原因在 server 的映射 switch 里坍缩成同一个 case。
+	RejectNotArmor RejectReason = 14
 )
 
 type Command struct {
