@@ -138,3 +138,31 @@ func TestPlayerV4MigrationFillsFullHealth(t *testing.T) {
 		t.Fatalf("v4 迁移生命值 = %d，想要满血 %d", migrated.Health, core.MaxHealth)
 	}
 }
+
+// TestPlayerV8MigrationFillsEmptyArmor 覆盖 v8→v9 的确定性迁移：v8 没有装备
+// 字段，迁移必须是「四空槽」——任何装备残值不得存活，其余字段原样通过。
+// 行为上等价于升级前「不存在已装备护甲」的语义。
+func TestPlayerV8MigrationFillsEmptyArmor(t *testing.T) {
+	dto := playerDTO{
+		PlayerID: fixturePlayerID(), Revision: 9, DisplayName: "Chen",
+		Current: PlayerLocation{Dimension: core.Overworld, Position: [3]float32{1, 2, 3}},
+		Health:  13, Hunger: 12, SaturationMilli: 2500, ExhaustionMilli: 1750,
+		// 残值哨兵：迁移不得「顺手保留」任何装备痕迹。
+		Armor: [core.ArmorSlotCount]core.ItemStack{
+			{Item: core.ItemIronHelmet, Count: 1, Durability: 165},
+		},
+	}
+	migrated, changed, err := migratePlayer(8, dto)
+	if err != nil || !changed {
+		t.Fatalf("migratePlayer(8) changed=%v err=%v", changed, err)
+	}
+	if migrated.Armor != ([core.ArmorSlotCount]core.ItemStack{}) {
+		t.Fatalf("v8 迁移装备区 = %+v，想要四空槽", migrated.Armor)
+	}
+	// 其余字段逐字节不变：迁移只补缺失的语义，不改既有状态。
+	want := dto
+	want.Armor = [core.ArmorSlotCount]core.ItemStack{}
+	if !reflect.DeepEqual(migrated, want) {
+		t.Fatalf("v8 迁移改动了既有状态\n got=%+v\nwant=%+v", migrated, want)
+	}
+}

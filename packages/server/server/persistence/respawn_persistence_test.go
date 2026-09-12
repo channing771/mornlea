@@ -26,8 +26,8 @@ func respawnTestSnapshot() contract.PlayerSnapshot {
 }
 
 // TestRespawnPointSurvivesDiskRestart 覆盖重生点跨重启保留的服务端全程：
-// 权威快照经 save() → 玩家 schema v8 字节 → 真实磁盘 → LoadPlayer → restore()
-// 之后，重生点必须逐字段原值返回。
+// 权威快照经 save() → 当前玩家 schema 存档字节 → 真实磁盘 → LoadPlayer →
+// restore() 之后，重生点必须逐字段原值返回。
 func TestRespawnPointSurvivesDiskRestart(t *testing.T) {
 	root := t.TempDir()
 	id := playerID(0x74)
@@ -132,7 +132,7 @@ func TestPlayerPersistenceDirtyDetectionIncludesRespawn(t *testing.T) {
 }
 
 // TestRespawnOnlyChangeGetsPersisted 锁定真实调度行为：玩家原地入睡（只有重生点
-// 变化）后的快照必须被判脏并真正写盘，磁盘上的 schema v8 记录带重生点。
+// 变化）后的快照必须被判脏并真正写盘，磁盘上的当前 schema 记录带重生点。
 func TestRespawnOnlyChangeGetsPersisted(t *testing.T) {
 	root := t.TempDir()
 	id := playerID(0x75)

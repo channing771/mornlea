@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	// CurrentSchema 为 v8：追加定长重生点三字段。它同时是根包读取 player
+	// CurrentSchema 为 v9：追加定长四槽装备区。它同时是根包读取 player
 	// 文件时构造「未来 schema」故障注入的基准，故导出。
-	CurrentSchema uint32 = 8
+	CurrentSchema uint32 = 9
 	// EnvelopeLength 是 MCPL 信封的固定头部长度；根包用它推出 player 文件的
 	// 物理字节上界，故导出。
 	EnvelopeLength = 44
@@ -36,14 +36,19 @@ const (
 	// 饥饿值 1 字节 + 饱和度 2 字节 + 疲劳值 2 字节（后两者小端 uint16）。
 	//
 	// 三字段追加在 Health **之后**而不是插进负载中段，是既有的追加纪律：解码按
-	// "从末尾切走固定长度"逐层剥离（decodePlayerV8 → V7 → V5 → V4 → V1），只有
-	// 末尾追加才能让旧层的切分点保持不变，冻结的旧 fixture 因此仍可解码。
+	// "从末尾切走固定长度"逐层剥离（decodePlayerV9 → V8 → V7 → V5 → V4 → V1），
+	// 只有末尾追加才能让旧层的切分点保持不变，冻结的旧 fixture 因此仍可解码。
 	playerHungerBytes = 1 + 2 + 2
 	// playerRespawnBytes 是 schema v8 起追加在饥饿状态之后的重生点长度：
 	// present 1 字节 + 床尾格坐标 3×4 字节 + 维度 u32 4 字节，定长 17 字节。
 	// 与 Safe 的「标志位 + 可选负载」变长编码不同：重生点恒占满 17 字节，
 	// present=0 时位置与维度字节规范为零，解码无需二次定位。
 	playerRespawnBytes = 1 + 12 + 4
+	// playerArmorBytes 是 schema v9 起追加在重生点之后的四槽装备区长度：
+	// 每槽沿用背包格（v4 起的快捷栏/背包格）同一 5 字节栈编码（item u16 小端 +
+	// count 1 字节 + durability u16 小端），槽序即 core.ArmorSlot 枚举序
+	// （头/胸/腿/脚），定长 20 字节。
+	playerArmorBytes = int(core.ArmorSlotCount) * 5
 )
 
 var (
@@ -56,7 +61,7 @@ func Encode(save PlayerSave) ([]byte, error) {
 	if err := validatePlayerSave(save); err != nil {
 		return nil, err
 	}
-	payload, err := encodePlayerV8(save)
+	payload, err := encodePlayerV9(save)
 	if err != nil {
 		return nil, err
 	}
@@ -171,6 +176,7 @@ func Decode(wantID core.PlayerID, data []byte) (StoredPlayer, error) {
 		RespawnPresent:   dto.RespawnPresent,
 		RespawnPosition:  dto.RespawnPosition,
 		RespawnDimension: dto.RespawnDimension,
+		Armor:            dto.Armor,
 		NeedsRewrite:     migrated,
 	}
 	if dto.Safe != nil {
@@ -178,6 +184,23 @@ func Decode(wantID core.PlayerID, data []byte) (StoredPlayer, error) {
 		stored.Safe = &safe
 	}
 	return stored, nil
+}
+
+// encodePlayerV9 在 v8 负载末尾追加定长四槽装备区。
+//
+// 每槽沿用背包格同一 5 字节栈编码（item u16 小端 + count 1 字节 + durability
+// u16 小端），槽序即 `core.ArmorSlot` 枚举序（头/胸/腿/脚）。装备区是纯保真
+// 字段：编码不校验栈的语义形态（数量、耐久与物品注册均不查，语义校验属
+// sim 层），同一份逻辑状态因此得到逐字节稳定的编码，golden fixture 可冻结。
+func encodePlayerV9(save PlayerSave) ([]byte, error) {
+	payload, err := encodePlayerV8(save)
+	if err != nil {
+		return nil, err
+	}
+	for _, stack := range save.Armor {
+		payload = appendPlayerStack(payload, stack)
+	}
+	return payload, nil
 }
 
 // encodePlayerV8 在 v7 负载末尾追加定长的重生点三字段（present + 床尾格 + 维度）。
@@ -311,9 +334,38 @@ func decodePlayerPayload(
 		return decodePlayerV7(playerID, revision, data)
 	case 8:
 		return decodePlayerV8(playerID, revision, data)
+	case 9:
+		return decodePlayerV9(playerID, revision, data)
 	default:
 		return playerDTO{}, fmt.Errorf("%w: unsupported player schema %d", storagedef.ErrCorrupt, schema)
 	}
+}
+
+// decodePlayerV9 在 v8 解析结果之上剥离定长的四槽装备区尾巴。
+//
+// 装备区与重生点同属定长尾部，但**不做任何语义校验**：每槽 5 字节按栈编码
+// 原样读入，未知物品、零数量带耐久等形态都保真返回——穿戴合法性由 sim 层
+// fail closed 判定（`core.ArmorPoints` 对非法形态记 0 点），codec 层校验反而
+// 会让携带这类字节的合法历史存档不可读。
+func decodePlayerV9(playerID core.PlayerID, revision uint64, data []byte) (playerDTO, error) {
+	if len(data) < playerArmorBytes {
+		return playerDTO{}, fmt.Errorf("%w: player payload is shorter than the armor slots", storagedef.ErrCorrupt)
+	}
+	split := len(data) - playerArmorBytes
+	dto, err := decodePlayerV8(playerID, revision, data[:split])
+	if err != nil {
+		return playerDTO{}, err
+	}
+	// 长度已在上面校验，这里直接按固定偏移读；越界不可能发生。
+	decoder := byteDecoder{data: data[split:]}
+	for index := range dto.Armor {
+		stack, err := decodePlayerStack(&decoder)
+		if err != nil {
+			return playerDTO{}, corrupt("player armor slot", err)
+		}
+		dto.Armor[index] = stack
+	}
+	return dto, nil
 }
 
 // decodePlayerV8 在 v7 解析结果之上剥离定长的重生点尾巴（present + 床尾格 + 维度）。
@@ -603,6 +655,9 @@ func validatePlayerDTO(dto playerDTO) error {
 			return err
 		}
 	}
+	// 装备区刻意不参与校验：它是 schema v9 的纯保真字段，数量、耐久与物品
+	// 注册的语义合法性由 sim 层 fail closed 判定，codec 层校验反而会让携带
+	// 语义非法字节的合法历史存档不可读（见 decodePlayerV9 的取舍说明）。
 	return nil
 }
 

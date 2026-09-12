@@ -11,7 +11,7 @@
   - 验证：`go test ./packages/shared/network -race -count=1`。
 
 - [ ] 3. 玩家 schema v9
-  - 文件：`packages/server/storage/player/player_types.go`（`StoredPlayer`/`PlayerSave` 装备字段）、`player_codec.go`（尾部 4×3 字节装备区编码/解码、版本常量 v8→v9、写侧只出 v9）、`player_migration.go`（v1..v8 只读迁移：装备空）、`testdata`（新增 v9 fixture；保留 v8 fixture 供迁移断言）、迁移与 round-trip 测试（v8 加载装备空→再保存 v9 且原字节段保留；v9 往返逐位；未来版本拒绝）。
+  - 文件：`packages/server/storage/player/player_types.go`（`StoredPlayer`/`PlayerSave` 装备字段）、`player_codec.go`（尾部 4×5 字节装备区编码/解码，每槽沿用背包格同一 5 字节栈编码、版本常量 v8→v9、写侧只出 v9）、`player_migration.go`（v1..v8 只读迁移：装备空）、`testdata`（新增 v9 fixture；保留 v8 fixture 供迁移断言）、迁移与 round-trip 测试（v8 加载装备空→再保存 v9 且原字节段保留；v9 往返逐位；未来版本拒绝）。
   - 验证：`go test ./packages/server/storage/... -race -count=1`。
 
 - [ ] 4. sim 装备、减免、耐久与死亡

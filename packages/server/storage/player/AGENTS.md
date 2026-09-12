@@ -34,7 +34,7 @@
   只有末尾追加才能保持旧层切分点不变、冻结的旧 fixture 仍可解码。每级
   迁移语义由 `TestPlayerV1FixtureMigratesToEmptyHotbar` 等
   `TestPlayerV*Fixture*`/`TestPlayerV*Migration*` 族以冻结 golden 钉死，
-  当前 schema 字节由 `TestPlayerV8Fixture` 冻结。
+  当前 schema 字节由 `TestPlayerV9Fixture` 冻结。
 
 ## 值类型与 fixture 单一来源 (`player/player_types.go`, `player/testdata/`)
 

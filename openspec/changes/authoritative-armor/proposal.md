@@ -11,7 +11,7 @@
 - `packages/shared/core` 新建护甲域单一真源：4 个槽位、每件护甲的护甲点数与耐久上限、`MaxArmorPoints = 20`、整数确定性减免公式；物品注册表追加铁质头盔/胸甲/护腿/靴子四件（编号 58..61，哨兵 `ItemIDMax` 58→62），配方注册表追加四条工作台配方。
 - `packages/shared/network` 协议 v41→v42：`PlayerState` 载荷尾部（`Temperature` 之后）追加 `ArmorPoints uint8`；新 C→S 命令 `EquipArmor`（Play C→S ID 18，载荷仅 `Sequence`）；`RejectReason` 追加 `not_armor`。
 - `packages/server/sim/entity`：`playerState` 增加独立 `armor [4]ItemStack` 装备状态（不进 `core.Inventory` 的 36 槽索引空间）；装备动作在权威侧与所选快捷栏格原子互换；近战结算点对玩家目标按冻结护甲点数减免有效伤害（覆盖敌怪→玩家与玩家→玩家）；受击产生减免时每件参与点数的完好护甲件消耗 1 点耐久；死亡掉落包含已装备护甲；`PlayerHash` 追加装备区。
-- `packages/server/storage/player` 玩家 schema v8→v9：装备四格随快照持久化（每格沿用 3 字节栈编码），v8 旧档只读迁移为空装备。
+- `packages/server/storage/player` 玩家 schema v8→v9：装备四格随快照持久化（每格沿用背包格同一 5 字节栈编码），v8 旧档只读迁移为空装备。
 - `packages/client`：镜像 `ArmorPoints`、桥 `uiState` 追加 armor 分节（client ABI v18→v19，Go/Rust/TS 三端钉值）、WebView 状态行组件族新增护甲条（10 档图标、半档粒度、点数为 0 时零像素差异）、使用键手持护甲时上行 `EquipArmor`（沿 F-03 判定先例）。
 - `packages/server/server`：命令接线与 Memory/TCP parity；重启保值集成测试。
 - 新 capture 场景（穿甲 HUD）与 golden 追加；audit 增加护甲域单一真源守卫。
@@ -19,7 +19,7 @@
 ## 契约与版本影响
 
 - 协议 v41→v42（`PlayerState` 尾部 1 字节 + 新命令 ID 18 + 新拒绝原因）；旧版登录拒绝语义不变。
-- 玩家 schema v8→v9（尾部追加 12 字节装备区；v1..v8 只读迁移，v8 迁移后装备为空）。
+- 玩家 schema v8→v9（尾部追加 20 字节装备区；v1..v8 只读迁移，v8 迁移后装备为空）。
 - client ABI v18→v19（桥 `uiState` 追加 armor 分节，三端钉值同步）。
 - engine ABI、区块 schema、世界 metadata、`companions.ai`/`hostile_mobs`/`passive_mobs` schema、benchmark scenario 均不变。
 - golden：点数为 0 时 HUD 零像素差异，既有场景不重生成；新增 1 张穿甲场景 golden。
@@ -49,3 +49,5 @@
 （实现期登记，暂空）
 
 > 修订（2026-09-12，控制会话）：原将护甲四件的快捷栏 sprite 顺延 D-11；实现任务组 1 时实测客户端存在「所有注册物品必须有图标」守护测试（顺延将带红 21 例），改判**任务组 6 交付四件程序化 sprite**，不等 D-11。
+
+> 修订（2026-09-12，任务组 3 实现）：装备区字节布局由「每槽 3 字节、共 12 字节」更正为「每槽沿用背包格同一 5 字节栈编码（item u16 小端 + count 1 字节 + durability u16 小端）、共 20 字节」。原前提「背包格每格 3 字节」与 codec 现实不符——3 字节只是 v2/v3 legacy 无耐久布局；耐久 0/165 形态必须逐位保值的 MUST 也只有 5 字节编码可满足。

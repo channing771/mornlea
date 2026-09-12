@@ -5,7 +5,7 @@
 - **core（`packages/shared/core`）**：护甲域唯一真源——新文件 `armor.go` 定义槽位枚举、护甲件→槽位映射、每件点数与耐久上限表、`MaxArmorPoints`、`ArmorPoints(worn)` 求和（损坏件计 0）与 `ReducedDamage(damage, points)`；`item.go` 追加四物品与哨兵推进；`recipe.go` 追加四配方。所有其他包只读消费，禁止复制表值。
 - **sim（`packages/server/sim/entity`）**：装备状态的唯一写者。`playerState` 增加私有 `armor [4]core.ItemStack`；新文件 `armor.go` 承载装备互换结算与减免钩子；`combat.go` 的快照结构增加 `armorPoints` 冻结字段并在 `settleCombatIntent` 目标为玩家时调用 `core.ReducedDamage`；`player.go` 快照/恢复、`PlayerHash` 与死亡掉落扩展；耐久消耗复用 `consumeToolDurabilityAt` 同族机制新增护甲变体。世界状态仍是单 goroutine 顺序推进，无新并发边界。
 - **network（`packages/shared/network`）**：`protocol/packet.go` 版本 42；`message_player.go` 尾部追加 `ArmorPoints`；`message_command.go` 新 `EquipArmor{Sequence}` 与 `not_armor` 拒绝原因；`registry.go` 登记命令 ID 18 与拒绝原因 ID。纯追加，无既有字段重排。
-- **storage（`packages/server/storage/player`）**：schema v9 在既有载荷尾部追加 4×3 字节装备区；`player_types.go` 的 `StoredPlayer`/`PlayerSave` 增加装备字段；`player_migration.go` 增加 v8→v9 只读迁移；testdata 增加 v9 fixture 并保留 v8 fixture 作迁移输入。
+- **storage（`packages/server/storage/player`）**：schema v9 在既有载荷尾部追加 4×5 字节装备区（每槽沿用背包格同一 5 字节栈编码：item u16 小端 + count 1 字节 + durability u16 小端）；`player_types.go` 的 `StoredPlayer`/`PlayerSave` 增加装备字段；`player_migration.go` 增加 v8→v9 只读迁移；testdata 增加 v9 fixture 并保留 v8 fixture 作迁移输入。
 - **server（`packages/server/server`）**：`session_ingress.go` 接线 `EquipArmor`；parity 与重启保值集成测试。
 - **client（`packages/client`）**：镜像 `ArmorPoints`；桥 `uiState` armor 分节（client ABI v18→v19，Go 组装、Rust 中继零行为、TS 类型三端钉值）；前端状态行组件族新增护甲条；`cmd/mornlea` 输入路径在使用键上升沿且手持护甲时上行 `EquipArmor`（不发 `PlaceBlock`）；capture 新场景。
 

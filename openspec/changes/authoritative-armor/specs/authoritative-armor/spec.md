@@ -104,7 +104,7 @@
 
 ### Requirement: 装备随玩家 schema v9 持久化
 
-玩家存档 schema SHALL 由 v8 升至 v9：在既有载荷尾部按槽位顺序追加四个护甲槽，每槽沿用 3 字节栈编码（共 12 字节）。v1..v8 旧档 MUST 按只读迁移加载（装备为空），首次保存 MUST 写出 schema v9，未来版本 MUST 被拒绝。重启后装备与点数 MUST 保值；`PlayerHash` MUST 追加装备区使 Memory 与 TCP 两条传输的 parity 断言覆盖装备状态。玩家死亡时 MUST 按既有死亡掉落纪律把已装备护甲与背包一并掉落。
+玩家存档 schema SHALL 由 v8 升至 v9：在既有载荷尾部按槽位顺序追加四个护甲槽，每槽沿用背包格同一 5 字节栈编码（item u16 小端 + count 1 字节 + durability u16 小端，共 20 字节）。v1..v8 旧档 MUST 按只读迁移加载（装备为空），首次保存 MUST 写出 schema v9，未来版本 MUST 被拒绝。重启后装备与点数 MUST 保值；`PlayerHash` MUST 追加装备区使 Memory 与 TCP 两条传输的 parity 断言覆盖装备状态。玩家死亡时 MUST 按既有死亡掉落纪律把已装备护甲与背包一并掉落。
 
 #### Scenario: v8 旧档迁移
 
