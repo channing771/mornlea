@@ -30,7 +30,7 @@ func TestSaplingUsesAppendedProceduralCutoutLayer(t *testing.T) {
 	if LayerSapling != LayerSnowLayerSide+1 {
 		t.Fatalf("树苗层 %d 必须紧随雪层侧层 %d 之后追加", LayerSapling, LayerSnowLayerSide)
 	}
-	if got, want := registry.LayerCount(), int(expectedSaplingLayer)+1; got != want {
+	if got, want := registry.LayerCount(), int(LayerItemIronBoots)+1; got != want {
 		t.Fatalf("LayerCount = %d，想要 %d", got, want)
 	}
 	// 只追加：既有冻结层号一个都不能动。植物区间、门、火把、床、短草、裂纹、

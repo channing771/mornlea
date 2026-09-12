@@ -249,6 +249,12 @@ func TestPlayerHashCoversEveryAuthoritativeField(t *testing.T) {
 		{name: "input jump", mutate: func(_ *sessionState, p *playerState) { p.input.Jump = true }},
 		{name: "input yaw", mutate: func(_ *sessionState, p *playerState) { p.input.Yaw = 1 }},
 		{name: "last input sequence", mutate: func(_ *sessionState, p *playerState) { p.lastInputSequence = 1 }},
+		{name: "armor item", mutate: func(_ *sessionState, p *playerState) {
+			p.armor[core.ArmorSlotHead] = core.ItemStack{Item: core.ItemIronHelmet, Count: 1, Durability: 165}
+		}},
+		{name: "armor durability", mutate: func(_ *sessionState, p *playerState) {
+			p.armor[core.ArmorSlotFeet] = core.ItemStack{Item: core.ItemIronBoots, Count: 1, Durability: 1}
+		}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -298,13 +304,16 @@ func TestPlayerHashGoldenLittleEndianLayout(t *testing.T) {
 	}
 	// schema v3：27 格空背包直接追加在快捷栏之后。
 	fixture = append(fixture, make([]byte, core.BackpackSlots*3)...)
+	// 装备区：4 个护甲槽位各 5 字节（物品 u16 + 数量 1 字节 + 耐久 u16），
+	// 本夹具四槽全空，即 20 个零字节。
+	fixture = append(fixture, make([]byte, core.ArmorSlotCount*5)...)
 	want := [32]byte{
-		0x3c, 0xd7, 0xf2, 0xa1, 0xce, 0x58, 0x6b, 0x07,
-		0x0a, 0x7d, 0x18, 0x99, 0x7f, 0xa3, 0xee, 0x19,
-		0xd1, 0x76, 0x96, 0x8d, 0x4d, 0xaa, 0x87, 0x3b,
-		0x34, 0xab, 0xdd, 0x4a, 0x32, 0x15, 0x36, 0xb7,
+		0xff, 0x86, 0xb4, 0x43, 0x7f, 0x49, 0x14, 0xe4,
+		0x05, 0x26, 0xc0, 0x92, 0x2f, 0xbf, 0xd6, 0xd6,
+		0x7e, 0xb3, 0xab, 0x9c, 0x3e, 0x21, 0x1d, 0x40,
+		0xcd, 0xe5, 0x3e, 0xb0, 0x96, 0x3b, 0x63, 0xb7,
 	}
-	if want := 82 + core.BackpackSlots*3; len(fixture) != want {
+	if want := 82 + core.BackpackSlots*3 + int(core.ArmorSlotCount)*5; len(fixture) != want {
 		t.Fatalf("fixture 长度=%d，想要 %d", len(fixture), want)
 	}
 	if digest := sha256.Sum256(fixture); digest != want {

@@ -63,10 +63,17 @@ type PlayerState struct {
 	// 越界拒绝。
 	SeasonProgress uint8
 	// Temperature 是玩家所在位置按共享温度公式（`core.TemperatureAt`）求得
-	// 的权威观察值（摄氏度，协议 v37 起随玩家状态同步，wire 上是载荷最末
-	// 1 字节 i8）。域由 `core.TemperatureMin`/`core.TemperatureMax` 在源头
-	// clamp 到 [-40,45]，落在 int8 容量内，wire 层不再做二次裁剪或越界拒绝。
+	// 的权威观察值（摄氏度，协议 v37 起随玩家状态同步，wire 上紧跟
+	// `SeasonProgress` 之后，v42 起其后还有 1 字节护甲点数）。域由
+	// `core.TemperatureMin`/`core.TemperatureMax` 在源头 clamp 到 [-40,45]，
+	// 落在 int8 容量内，wire 层不再做二次裁剪或越界拒绝。
 	Temperature int8
+	// ArmorPoints 是四槽穿戴护甲按 `core.ArmorPoints` 求和的权威点数，协议
+	// v42 起随玩家状态同步（wire 上紧跟 `Temperature` 之后，是载荷最末
+	// 1 字节 u8）；合法区间是 0..`core.MaxArmorPoints`，越界值在 Validate、
+	// 编码与解码三处都被拒绝，模式与 v36 的 `WeatherKind` 相同。它与
+	// `Health`、`Hunger` 一样只发给玩家本人，装备本体经玩家存档持久化。
+	ArmorPoints uint8
 }
 
 type RemotePlayerSpawn struct {
@@ -188,6 +195,12 @@ func (state PlayerState) Validate() error {
 	if state.Season > core.SeasonWinter {
 		return errors.New("network: player state has out-of-range season")
 	}
+	// 护甲点数是服务端权威派生量（wire 上 `Temperature` 之后 1 字节 u8）：
+	// 合法值域是 0..`core.MaxArmorPoints`，越界值在 Validate、编码与解码
+	// 三处都被拒绝，不得静默截断——与天气/季节同为从严拒绝的 wire 单值。
+	if state.ArmorPoints > core.MaxArmorPoints {
+		return errors.New("network: player state has out-of-range armor points")
+	}
 	if !state.MiningActive {
 		if state.MiningTarget != (core.BlockPos{}) || state.MiningProgressTicks != 0 ||
 			state.MiningRequiredTicks != 0 || state.MiningHarvestable {
@@ -218,6 +231,9 @@ const (
 	RejectContainerCapacity RejectReason = "container_capacity"
 	RejectNotFluidSource    RejectReason = "not_fluid_source"
 	RejectBucketMismatch    RejectReason = "bucket_mismatch"
+	// RejectNotArmor 表示 `EquipArmor` 的权威选中快捷栏格未持有护甲件，
+	// 装备互换未发生，快捷栏与护甲槽位逐位不变。
+	RejectNotArmor RejectReason = "not_armor"
 )
 
 type CommandRejected struct {

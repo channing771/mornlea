@@ -167,6 +167,9 @@ func sameClientPacket(got, want protocol.ClientPacket) bool {
 	case protocol.PlaceWater:
 		other, ok := want.(protocol.PlaceWater)
 		return ok && got == other
+	case protocol.EquipArmor:
+		other, ok := want.(protocol.EquipArmor)
+		return ok && got == other
 	default:
 		return false
 	}

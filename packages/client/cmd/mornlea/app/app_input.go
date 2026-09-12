@@ -84,6 +84,17 @@ func (a *Application) placeBlock(sneaking bool) {
 	if !confirmed {
 		return
 	}
+	// 手持护甲时「使用」键上行装备互换命令而不是放置：判定与权威装备互换共用
+	// `core.ArmorSlotOf` 这同一份件→槽事实源，目标槽位由服务端按护甲件类映射
+	// 确定，客户端不携带槽位、也不预测互换结果——快捷栏与穿戴要等权威
+	// `InventoryUpdate` 广播回来才变化。护甲不可放置（`core.ItemPlacement` 为
+	// 空），不发这条的话服务端只会沉默，护甲就永远穿不上。
+	if _, isArmor := core.ArmorSlotOf(hotbar.Slots[hotbar.Selected].Item); isArmor {
+		if err := a.send(network.EquipArmor{Sequence: a.nextSequence()}); err != nil {
+			slog.Warn("发送装备护甲命令失败", "error", err)
+		}
+		return
+	}
 	// 放置判定与服务端权威放置共用 `core.ItemPlacement` 这同一份事实源：不可
 	// 放置的物品（食物、小麦这类原料、各种工具）一律不发 `PlaceBlock`——服务端
 	// 必然拒绝这些命令，客户端不发只是为了不刷无谓的拒绝。手持食物时「使用」键

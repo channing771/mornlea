@@ -59,15 +59,45 @@ func fixturePlayerInventory() core.Inventory {
 // 都会落在零值/缺失上，与这里的取值不同，往返用例因此承重。
 var respawnFixturePosition = [3]float32{7, 65, -9}
 
+// armorFixtureStacks 是装备区往返用例的四槽取值，刻意覆盖编码边界：头盔取
+// 满耐久 165（完好上界），胸甲取耐久 0（损坏形态），腿部放数量为 0 但携带
+// 耐久的残值栈（sim 侧不持有护甲的形态），脚部留空。装备区是纯保真字段，
+// 这些形态必须逐位往返，任何一层把它们规范化或抹平都会让断言落空。
+var armorFixtureStacks = [core.ArmorSlotCount]core.ItemStack{
+	{Item: core.ItemIronHelmet, Count: 1, Durability: 165},
+	{Item: core.ItemIronChestplate, Count: 1},
+	{Item: core.ItemIronLeggings, Count: 0, Durability: 165},
+	{},
+}
+
+// storedPlayerToSave 把解码结果逐字段搬回保存类型。装备字段在两型之间必须
+// 完整传递：漏掉任何一侧，「读回再保存」都会悄悄丢状态。根包持久化层有同形
+// 转换，本副本只服务本包测试。
+func storedPlayerToSave(stored StoredPlayer) PlayerSave {
+	return PlayerSave{
+		PlayerID: stored.PlayerID, Revision: stored.Revision, DisplayName: stored.DisplayName,
+		Current: stored.Current, Yaw: stored.Yaw, Pitch: stored.Pitch, Safe: stored.Safe,
+		Inventory: stored.Inventory, Health: stored.Health,
+		Hunger:           stored.Hunger,
+		SaturationMilli:  stored.SaturationMilli,
+		ExhaustionMilli:  stored.ExhaustionMilli,
+		RespawnPresent:   stored.RespawnPresent,
+		RespawnPosition:  stored.RespawnPosition,
+		RespawnDimension: stored.RespawnDimension,
+		Armor:            stored.Armor,
+	}
+}
+
 func TestPlayerCodecRoundTrip(t *testing.T) {
-	if CurrentSchema != 8 {
-		t.Fatalf("玩家 schema=%d，想要 8", CurrentSchema)
+	if CurrentSchema != 9 {
+		t.Fatalf("玩家 schema=%d，想要 9", CurrentSchema)
 	}
 	id := fixturePlayerID()
 	want := fixturePlayerSave(id, 7)
 	want.RespawnPresent = true
 	want.RespawnPosition = respawnFixturePosition
 	want.RespawnDimension = core.Overworld
+	want.Armor = armorFixtureStacks
 	encoded, err := Encode(want)
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +108,8 @@ func TestPlayerCodecRoundTrip(t *testing.T) {
 		got.Yaw != want.Yaw || got.Pitch != want.Pitch || got.Safe == nil || *got.Safe != *want.Safe ||
 		got.Inventory != want.Inventory || got.Health != want.Health ||
 		got.Hunger != want.Hunger || got.SaturationMilli != want.SaturationMilli ||
-		got.ExhaustionMilli != want.ExhaustionMilli {
+		got.ExhaustionMilli != want.ExhaustionMilli ||
+		got.Armor != want.Armor {
 		t.Fatalf("got=%+v err=%v", got, err)
 	}
 	if !got.RespawnPresent {
@@ -180,6 +211,100 @@ func TestPlayerCodecRoundTripWithoutRespawn(t *testing.T) {
 	}
 	if !bytes.Equal(encoded, residueEncoded) {
 		t.Fatal("present=0 的编码依赖了 RespawnPosition 残值，不再是确定性的")
+	}
+}
+
+// TestPlayerCodecRoundTripsEquippedArmor 覆盖装备区的逐位无损往返：四槽按
+// core.ArmorSlot 顺序（头/胸/腿/脚）编码为 4×5 字节定长尾部，每槽沿用背包格
+// 同一 5 字节栈编码（item u16 小端 + count 1 字节 + durability u16 小端）。
+// codec 两端都不做语义校验（数量、耐久与物品注册均不查），损坏形态与残值
+// 形态必须原样往返；当前 schema 记录读回不需要重写。
+func TestPlayerCodecRoundTripsEquippedArmor(t *testing.T) {
+	want := fixturePlayerSave(fixturePlayerID(), 9)
+	want.RespawnPresent = true
+	want.RespawnPosition = respawnFixturePosition
+	want.RespawnDimension = core.Overworld
+	want.Armor = armorFixtureStacks
+	encoded, err := Encode(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 写侧 MUST 只出当前 schema：首次保存的 wire schema 字段就是 CurrentSchema。
+	if schema := binary.LittleEndian.Uint32(encoded[8:12]); schema != CurrentSchema {
+		t.Fatalf("首次保存 schema = %d，想要 %d", schema, CurrentSchema)
+	}
+	// 装备区是负载末尾的定长 20 字节：清空装备只改这 20 字节，负载其余部分与
+	// 总长都不变——与重生点同理，空槽写零、恒占满，不携带「缺失」语义。
+	unequipped, err := Encode(func() PlayerSave {
+		withoutArmor := want
+		withoutArmor.Armor = [core.ArmorSlotCount]core.ItemStack{}
+		return withoutArmor
+	}())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(encoded) != len(unequipped) {
+		t.Fatalf("装备区取值改变了记录总长 %d != %d", len(encoded), len(unequipped))
+	}
+	// 只比负载段：信封 CRC 随负载内容合法地变化，不在本断言范围内。
+	if !bytes.Equal(
+		encoded[EnvelopeLength:len(encoded)-playerArmorBytes],
+		unequipped[EnvelopeLength:len(unequipped)-playerArmorBytes],
+	) {
+		t.Fatal("装备区不位于负载末尾的定长装备段")
+	}
+	if bytes.Equal(encoded[len(encoded)-playerArmorBytes:], unequipped[len(unequipped)-playerArmorBytes:]) {
+		t.Fatal("夹具失效：装备区取值全为零，末段定位断言没有承重")
+	}
+	got, err := Decode(want.PlayerID, encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Armor != want.Armor {
+		t.Fatalf("装备区往返 = %+v，想要 %+v", got.Armor, want.Armor)
+	}
+	if got.NeedsRewrite {
+		t.Fatal("当前 schema 玩家意外需要重写")
+	}
+	// 逐位无损：读回结果经两型传递再编码，必须与原字节完全一致——任何一端
+	// 把损坏/残值形态规范化都会在这里现形。
+	reencoded, err := Encode(storedPlayerToSave(got))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(encoded, reencoded) {
+		t.Fatal("装备区往返不是逐位无损")
+	}
+}
+
+// TestPlayerCodecKeepsArmorRegionUnvalidated 钉死「装备区纯保真」的边界：
+// 未知物品、数量越界、耐久超上限等语义非法形态在编解码两端都不被拒绝——
+// 穿戴合法性由 sim 层 fail closed 判定（`core.ArmorPoints` 对非法形态记 0 点），
+// codec 若顺手校验，反而会让携带这类字节的合法历史存档不可读。负载其余区域
+// 的校验语义不受影响（快捷栏/背包的注册表校验在既有用例里）。
+func TestPlayerCodecKeepsArmorRegionUnvalidated(t *testing.T) {
+	id := fixturePlayerID()
+	save := fixturePlayerSave(id, 3)
+	save.Armor = [core.ArmorSlotCount]core.ItemStack{{Item: core.ItemIronBoots, Count: 1}}
+	encoded, err := Encode(save)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 装备区在负载末尾：从头盔槽写入未知物品、越界数量与越界耐久，再修 CRC。
+	offset := len(encoded) - playerArmorBytes
+	binary.LittleEndian.PutUint16(encoded[offset:], uint16(core.ItemID(4242)))
+	encoded[offset+2] = core.MaxStackCount + 1
+	binary.LittleEndian.PutUint16(encoded[offset+3:], 999)
+	repairPlayerCRC(encoded)
+	got, err := Decode(id, encoded)
+	if err != nil {
+		t.Fatalf("装备区语义非法形态被拒绝: %v", err)
+	}
+	want := [core.ArmorSlotCount]core.ItemStack{
+		{Item: core.ItemID(4242), Count: core.MaxStackCount + 1, Durability: 999},
+	}
+	if got.Armor != want {
+		t.Fatalf("装备区保真 = %+v，想要 %+v", got.Armor, want)
 	}
 }
 
@@ -326,20 +451,27 @@ func TestPlayerV6FixtureMigratesToInitialHunger(t *testing.T) {
 	}
 }
 
-// TestPlayerV8Fixture 冻结当前 schema 的编码结果，防止字节布局无声漂移。
+// TestPlayerV9Fixture 冻结当前 schema 的编码结果，防止字节布局无声漂移。
+// 装备区取非平凡取值：头盔完好（满耐久 165）、胸甲损坏（耐久 0）、腿脚为空，
+// 让 20 字节装备区的前 10 字节（头盔 + 胸甲）承重、后 10 字节（腿脚）钉死
+// 「空槽写零」。
 //
-// 冻结的 v7 golden（testdata/player-v7.bin）刻意保留在原处不再生成：它是
-// "旧存档仍然可读"的唯一真实证据，见 TestPlayerV7FixtureMigratesToNoRespawn。
-func TestPlayerV8Fixture(t *testing.T) {
+// 冻结的 v8 golden（testdata/player-v8.bin）刻意保留在原处不再生成：它是
+// "旧存档仍然可读"的唯一真实证据，见 TestPlayerV8FixtureMigratesToEmptyArmor。
+func TestPlayerV9Fixture(t *testing.T) {
 	want1 := fixturePlayerSave(fixturePlayerID(), 19)
 	want1.RespawnPresent = true
 	want1.RespawnPosition = respawnFixturePosition
 	want1.RespawnDimension = core.Overworld
+	want1.Armor = [core.ArmorSlotCount]core.ItemStack{
+		{Item: core.ItemIronHelmet, Count: 1, Durability: 165},
+		{Item: core.ItemIronChestplate, Count: 1},
+	}
 	encoded, err := Encode(want1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join("testdata", "player-v8.bin")
+	path := filepath.Join("testdata", "player-v9.bin")
 	if *updateStorageFixtures {
 		if err := os.WriteFile(path, encoded, 0o644); err != nil {
 			t.Fatal(err)
@@ -350,7 +482,7 @@ func TestPlayerV8Fixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(stored, encoded) {
-		t.Fatal("v8 fixture drift; change schema version")
+		t.Fatal("v9 fixture drift; change schema version")
 	}
 }
 
@@ -409,6 +541,65 @@ func TestPlayerV7FixtureMigratesToNoRespawn(t *testing.T) {
 	}
 	if !got.NeedsRewrite {
 		t.Fatal("v7 玩家必须标记为需要重写")
+	}
+}
+
+// TestPlayerV8FixtureMigratesToEmptyArmor 覆盖 Scenario「升级前的 v8 存档加载
+// 成功且四槽为空，保存写出 schema v9 且原 v8 字节段逐位保留」。
+//
+// 输入是**冻结的 v8 字节**（testdata/player-v8.bin，本变更一字不改），不是当前
+// 编码器现场生成的负载：当前编码器已经写 v9，用它"生成 v8"只会得到一份带装备
+// 区的 v9 记录，迁移分支根本不会被执行，用例会全绿而什么都没测。
+//
+// 「原字节段保留」按段断言：装备区是尾部追加，v8 负载必须逐位成为 v9 负载的
+// 前缀、随后跟 20 字节空装备区；信封里只有 schema 号（恰推进一格）与随负载
+// 变化的 payload 长度/CRC 两处不同，身份段（magic、信封版本、PlayerID、修订号）
+// 逐位不变。
+func TestPlayerV8FixtureMigratesToEmptyArmor(t *testing.T) {
+	encoded, err := os.ReadFile(filepath.Join("testdata", "player-v8.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := fixturePlayerSave(fixturePlayerID(), 19)
+	want.RespawnPresent = true
+	want.RespawnPosition = respawnFixturePosition
+	want.RespawnDimension = core.Overworld
+	got, err := Decode(want.PlayerID, encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Armor != ([core.ArmorSlotCount]core.ItemStack{}) {
+		t.Fatalf("v8 迁移装备区 = %+v，想要四空槽", got.Armor)
+	}
+	if got.PlayerID != want.PlayerID || got.Revision != want.Revision ||
+		got.DisplayName != want.DisplayName || got.Current != want.Current ||
+		got.Yaw != want.Yaw || got.Pitch != want.Pitch || got.Safe == nil || *got.Safe != *want.Safe ||
+		got.Inventory != want.Inventory || got.Health != want.Health ||
+		got.Hunger != want.Hunger || got.SaturationMilli != want.SaturationMilli ||
+		got.ExhaustionMilli != want.ExhaustionMilli ||
+		!got.RespawnPresent || got.RespawnPosition != want.RespawnPosition ||
+		got.RespawnDimension != want.RespawnDimension {
+		t.Fatalf("v8 迁移改动了既有字段: %+v", got)
+	}
+	if !got.NeedsRewrite {
+		t.Fatal("v8 玩家必须标记为需要重写")
+	}
+	rewritten, err := Encode(storedPlayerToSave(got))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if schema := binary.LittleEndian.Uint32(rewritten[8:12]); schema != CurrentSchema {
+		t.Fatalf("重写 schema = %d，想要 %d", schema, CurrentSchema)
+	}
+	v8Payload := encoded[EnvelopeLength:]
+	if !bytes.Equal(rewritten[:8], encoded[:8]) || !bytes.Equal(rewritten[12:36], encoded[12:36]) {
+		t.Fatal("v8 存档重写改动了信封身份段")
+	}
+	if !bytes.Equal(rewritten[EnvelopeLength:EnvelopeLength+len(v8Payload)], v8Payload) {
+		t.Fatal("v8 负载字节未逐位保留为 v9 负载前缀")
+	}
+	if tail := rewritten[EnvelopeLength+len(v8Payload):]; !bytes.Equal(tail, make([]byte, playerArmorBytes)) {
+		t.Fatalf("v9 负载追加的装备区 = %x，想要 %d 字节全零空槽", tail, playerArmorBytes)
 	}
 }
 
@@ -507,11 +698,11 @@ func playerWireWithHotbar(t *testing.T, id core.PlayerID, hotbar core.Hotbar) []
 	}
 	wire := bytes.Clone(encoded)
 	// v5 起负载在快捷栏/背包之后追加了 1 字节生命值，v7 起再追加三层饥饿状态，
-	// v8 起再追加重生点三字段，从末尾定位快捷栏的偏移量必须按倒序跳过这三段
-	// 尾巴。这里写成具名常量而不是字面数字：往尾部追加字段时就有一条断言静默
-	// 改指了新字段，而不是悄悄破坏快捷栏。
-	offset := len(wire) - playerRespawnBytes - playerHungerBytes - playerHealthBytes -
-		playerBackpackBytes - playerHotbarBytes
+	// v8 起再追加重生点三字段，v9 起再追加四槽装备区，从末尾定位快捷栏的偏移量
+	// 必须按倒序跳过这四段尾巴。这里写成具名常量而不是字面数字：往尾部追加字段
+	// 时就有一条断言静默改指了新字段，而不是悄悄破坏快捷栏。
+	offset := len(wire) - playerArmorBytes - playerRespawnBytes - playerHungerBytes -
+		playerHealthBytes - playerBackpackBytes - playerHotbarBytes
 	wire[offset] = hotbar.Selected
 	offset++
 	for _, stack := range hotbar.Slots {
@@ -635,24 +826,24 @@ func TestPlayerCodecRejectsCorruptEnvelope(t *testing.T) {
 		{"safe z", func() []byte { return badFloat(89) }, storagedef.ErrCorrupt},
 		{"invalid health", func() []byte {
 			p := bytes.Clone(encoded)
-			// 生命值不再是末字节：v7 在它之后追加了三层饥饿状态，v8 再追加重生点。
-			// 写成 len(p)-playerRespawnBytes-playerHungerBytes-playerHealthBytes 而
-			// 不是 len(p)-1，否则这条断言会静默改指重生点字段，"生命值越界被拒"
-			// 就不再被任何用例覆盖。
-			p[len(p)-playerRespawnBytes-playerHungerBytes-playerHealthBytes] = core.MaxHealth + 1
+			// 生命值不再是末字节：v7 在它之后追加了三层饥饿状态，v8 再追加重生点，
+			// v9 再追加装备区。写成 len(p)-playerArmorBytes-playerRespawnBytes-
+			// playerHungerBytes-playerHealthBytes 而不是 len(p)-1，否则这条断言会
+			// 静默改指装备区字段，"生命值越界被拒"就不再被任何用例覆盖。
+			p[len(p)-playerArmorBytes-playerRespawnBytes-playerHungerBytes-playerHealthBytes] = core.MaxHealth + 1
 			repairPlayerCRC(p)
 			return p
 		}, storagedef.ErrCorrupt},
 		{"invalid hunger", func() []byte {
 			p := bytes.Clone(encoded)
-			p[len(p)-playerRespawnBytes-playerHungerBytes] = core.MaxHunger + 1
+			p[len(p)-playerArmorBytes-playerRespawnBytes-playerHungerBytes] = core.MaxHunger + 1
 			repairPlayerCRC(p)
 			return p
 		}, storagedef.ErrCorrupt},
 		{"saturation above hunger", func() []byte {
 			p := bytes.Clone(encoded)
 			// 饱和度紧随饥饿值，取 hunger×1000 + 1 恰好越过上界一个千分位。
-			hungerOffset := len(p) - playerRespawnBytes - playerHungerBytes
+			hungerOffset := len(p) - playerArmorBytes - playerRespawnBytes - playerHungerBytes
 			binary.LittleEndian.PutUint16(
 				p[hungerOffset+1:],
 				uint16(p[hungerOffset])*core.SaturationMilliPerPoint+1,
@@ -662,7 +853,7 @@ func TestPlayerCodecRejectsCorruptEnvelope(t *testing.T) {
 		}, storagedef.ErrCorrupt},
 		{"respawn flag", func() []byte {
 			p := bytes.Clone(encoded)
-			p[len(p)-playerRespawnBytes] = 2
+			p[len(p)-playerArmorBytes-playerRespawnBytes] = 2
 			repairPlayerCRC(p)
 			return p
 		}, storagedef.ErrCorrupt},
@@ -670,23 +861,23 @@ func TestPlayerCodecRejectsCorruptEnvelope(t *testing.T) {
 		// 因此这几条先置位 flag 再投毒，保证变异真正抵达校验层。
 		{"respawn x", func() []byte {
 			p := bytes.Clone(encoded)
-			p[len(p)-playerRespawnBytes] = 1
-			return badFloatAt(p, len(p)-playerRespawnBytes+1)
+			p[len(p)-playerArmorBytes-playerRespawnBytes] = 1
+			return badFloatAt(p, len(p)-playerArmorBytes-playerRespawnBytes+1)
 		}, storagedef.ErrCorrupt},
 		{"respawn y", func() []byte {
 			p := bytes.Clone(encoded)
-			p[len(p)-playerRespawnBytes] = 1
-			return badFloatAt(p, len(p)-playerRespawnBytes+5)
+			p[len(p)-playerArmorBytes-playerRespawnBytes] = 1
+			return badFloatAt(p, len(p)-playerArmorBytes-playerRespawnBytes+5)
 		}, storagedef.ErrCorrupt},
 		{"respawn z", func() []byte {
 			p := bytes.Clone(encoded)
-			p[len(p)-playerRespawnBytes] = 1
-			return badFloatAt(p, len(p)-playerRespawnBytes+9)
+			p[len(p)-playerArmorBytes-playerRespawnBytes] = 1
+			return badFloatAt(p, len(p)-playerArmorBytes-playerRespawnBytes+9)
 		}, storagedef.ErrCorrupt},
 		{"respawn dimension", func() []byte {
 			p := bytes.Clone(encoded)
-			p[len(p)-playerRespawnBytes] = 1
-			binary.LittleEndian.PutUint32(p[len(p)-playerRespawnBytes+13:], 2)
+			p[len(p)-playerArmorBytes-playerRespawnBytes] = 1
+			binary.LittleEndian.PutUint32(p[len(p)-playerArmorBytes-playerRespawnBytes+13:], 2)
 			repairPlayerCRC(p)
 			return p
 		}, storagedef.ErrCorrupt},
@@ -731,11 +922,11 @@ func badFloatAt(payload []byte, offset int) []byte {
 	return payload
 }
 
-// TestPlayerSchemaV8KeepsM4EItems 原先位于 chunk 域的 chunk_furnace_test.go：
+// TestPlayerSchemaV9KeepsM4EItems 原先位于 chunk 域的 chunk_furnace_test.go：
 // 拆分按「跟随被测主体」落位，其被测主体是 player codec，随 player 域入包。
-func TestPlayerSchemaV8KeepsM4EItems(t *testing.T) {
-	if CurrentSchema != 8 {
-		t.Fatalf("玩家 schema = %d，想要 8", CurrentSchema)
+func TestPlayerSchemaV9KeepsM4EItems(t *testing.T) {
+	if CurrentSchema != 9 {
+		t.Fatalf("玩家 schema = %d，想要 9", CurrentSchema)
 	}
 	var inventory core.Inventory
 	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemCoal, Count: 12}

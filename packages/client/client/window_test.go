@@ -21,21 +21,22 @@ func buildSnapshot(mutate func([]byte)) []byte {
 }
 
 func TestClientABIVersionMatchesHeader(t *testing.T) {
-	// v18 在 v17 表面上叠加帧天气状态 TLV 段（tag 12）与降水实例段（tag 13）；
-	// v17 在 v16 表面上叠加帧 viewmodel TLV 段（tag 11）；v16 在 v15 表面上
-	// 新增无状态相机视图投影查询出口 mornlea_client_camera_viewproj；
-	// v15 在 v14 render world update 表面上叠加 avatar 贴图实例布局；
-	// 动态库 identity 与编译期 header 必须同步切换。
-	if got := ClientABIVersion(); got != 18 {
-		t.Fatalf("client ABI version=%d,想要 18", got)
+	// v19 在 v18 表面上叠加桥下行 hud 分节的 armor 子分节（JSON 字段级演进，
+	// 出口签名与字节面不变）；v18 在 v17 表面上叠加帧天气状态 TLV 段（tag 12）
+	// 与降水实例段（tag 13）；v17 在 v16 表面上叠加帧 viewmodel TLV 段
+	// （tag 11）；v16 在 v15 表面上新增无状态相机视图投影查询出口
+	// mornlea_client_camera_viewproj；v15 在 v14 render world update 表面上
+	// 叠加 avatar 贴图实例布局；动态库 identity 与编译期 header 必须同步切换。
+	if got := ClientABIVersion(); got != 19 {
+		t.Fatalf("client ABI version=%d,想要 19", got)
 	}
-	if got := clientABIHeaderVersion(); got != 18 {
-		t.Fatalf("client header ABI version=%d,想要 18", got)
+	if got := clientABIHeaderVersion(); got != 19 {
+		t.Fatalf("client header ABI version=%d,想要 19", got)
 	}
 }
 
 func TestClientABIV17RejectedBeforeOtherValidation(t *testing.T) {
-	// client ABI v18 的全部 versioned exports 必须先于其他校验拒绝 v17；
+	// client ABI v19 的全部 versioned exports 必须先于其他校验拒绝 v17；
 	// 无状态相机出口无需窗口与 GPU，可在无头环境锁定“版本错优先、失败不写
 	// 输出”的顺序。指针合法但版本错：报版本错且输出保持哨兵；指针非法叠加
 	// 版本错：同样先报版本错。

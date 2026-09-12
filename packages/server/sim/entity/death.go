@@ -29,8 +29,9 @@ func (engine *engineContext) settleDeaths(pending *pendingChunkChanges) {
 	}
 }
 
-// settleDeath 在同一 tick 内完成一名玩家的死亡结算：先把背包逐格掉进世界，
-// 再回满生命值、清受伤计时，最后复用既有的位置跳变入口把玩家送回出生锚点。
+// settleDeath 在同一 tick 内完成一名玩家的死亡结算：先把背包与装备四槽逐格
+// 掉进世界，再回满生命值、清受伤计时，最后复用既有的位置跳变入口把玩家送回
+// 出生锚点。
 func (engine *engineContext) settleDeath(
 	session *sessionState,
 	pending *pendingChunkChanges,
@@ -67,10 +68,11 @@ func (engine *engineContext) settleDeath(
 	engine.subscriptionsDirty = true
 }
 
-// dropInventoryOnDeath 把玩家的 36 个物品栏格掉进世界。它按环形外扩依次尝试各个
-// 已加载区块，逐格放置且放置成功后才清空该格，因此任何时刻每件物品要么在背包里、
-// 要么在地上。扫完全部已加载区块仍放不下的格保留在背包里跟随重生：
-// 死亡不被阻止，物品也不被销毁。
+// dropInventoryOnDeath 把玩家的 36 个物品栏格与 4 个装备槽掉进世界。它按环形
+// 外扩依次尝试各个已加载区块，逐格放置且放置成功后才清空该格，因此任何时刻
+// 每件物品要么在背包/装备槽里、要么在地上。扫完全部已加载区块仍放不下的格
+// 保留在原地跟随重生：死亡不被阻止，物品也不被销毁。装备槽按槽位顺序排在
+// 背包之后，掉落物携带原耐久形态（含损坏形态）。
 func (engine *engineContext) dropInventoryOnDeath(
 	session *sessionState,
 	pending *pendingChunkChanges,
@@ -150,12 +152,14 @@ func clampBlockToChunk(block core.BlockPos, pos core.ChunkPos) core.BlockPos {
 	return block
 }
 
-// placeDeathDrops 在一个区块上逐格放置玩家仍持有的物品堆。单格用批量路径预演，
-// 成功才提交并清空该格，因此一格的拆分与合并保持原子。
-// 返回该区块是否被写入，以及仍留在背包里的非空格数。
+// placeDeathDrops 在一个区块上逐格放置玩家仍持有的物品堆（先 36 格背包、后
+// 4 个装备槽）。单格用批量路径预演，成功才提交并清空该格，因此一格的拆分与
+// 合并保持原子。
+// 返回该区块是否被写入，以及仍留在背包与装备槽里的非空格数。
 //
-// 它改写 player.inventory 但不置 inventoryDirty：死亡结算的调用方 settleDeath
-// 随后一定会调用 beginReset，由后者统一置脏。这条隐式依赖不要在别处复用。
+// 它改写 player.inventory 与 player.armor 但不置 inventoryDirty：死亡结算的
+// 调用方 settleDeath 随后一定会调用 beginReset，由后者统一置脏。这条隐式依赖
+// 不要在别处复用。
 //
 // pickupDelayTicks 由调用方传入本 tick 的快照值，这个自由函数本身绝不读取
 // ActiveTunables。
@@ -187,6 +191,22 @@ func placeDeathDrops(
 			panic("sim: 清空物品栏格必须成功")
 		}
 		player.inventory = cleared
+		changed = true
+	}
+	// 装备四槽走同一预演/提交纪律：放置成功才清槽，放不下保留在槽内跟随重生。
+	for slot := range player.armor {
+		stack := player.armor[slot]
+		if stack.Item == core.ItemNone {
+			continue
+		}
+		batch := [1]core.ItemStack{stack}
+		next, ok := chunk.PrepareDropBatch(batch[:], blockIndex, pickupDelayTicks)
+		if !ok {
+			remaining++
+			continue
+		}
+		chunk.CommitDropBatch(next)
+		player.armor[slot] = core.ItemStack{}
 		changed = true
 	}
 	return changed, remaining

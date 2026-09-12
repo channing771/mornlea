@@ -34,7 +34,7 @@ export const HOTBAR_ROW_WIDTH = HOTBAR_SLOTS * HOTBAR_SLOT_SIZE + (HOTBAR_SLOTS 
 // ---- 状态栈（layout.go / health.go） ----
 export const STATUS_HOTBAR_GAP = 10; // statusHotbarGap（主行底与贴条外沿净空）
 export const STATUS_BAR_GAP = 4; // statusBarGap（行堆叠行距）
-export const STATUS_ICON_SIZE = 16; // healthHeartSize（心/鸡腿/气泡格尺寸）
+export const STATUS_ICON_SIZE = 16; // healthHeartSize（心/鸡腿/气泡/护甲格尺寸）
 export const STATUS_ICON_GAP = 1; // healthHeartGap（状态格间隙）
 export const STATUS_SEGMENTS = 10; // healthSegmentCount / oxygenSegmentCount
 export const EDGE_MARGIN = 8; // hudEdgeMargin（视口安全边距）
@@ -66,16 +66,18 @@ export const MARKER_OFFSET = 4 + MARKER_LENGTH / 2;
 export const MAX_HEALTH = 20; // core.MaxHealth
 export const MAX_HUNGER = 20; // core.MaxHunger
 export const MAX_OXYGEN_TICKS = 300; // core.MaxOxygenTicks
+export const MAX_ARMOR = 20; // core.MaxArmorPoints（护甲条满档基准）
 
 /** 缩放宽度分母：Go `hudScale` 的 `hotbarContentWidth`（贴条含两侧内边距）。 */
 export const DESIGN_WIDTH = HOTBAR_ROW_WIDTH + 2 * HOTBAR_PANEL_PADDING;
-/** 缩放高度分母：Go `closedHUDHeight`（关闭态联合高度，弹条行纳入防裁剪）。 */
+/** 缩放高度分母：Go `closedHUDHeight`（关闭态联合高度，弹条行纳入防裁剪；
+ * 护甲行随状态行族纳入同一记账，点数为 0 时该行不渲染、仅余设计余量）。 */
 export const DESIGN_HEIGHT =
   HOTBAR_BOTTOM_MARGIN +
   HOTBAR_SLOT_SIZE +
   HOTBAR_PANEL_PADDING +
   STATUS_HOTBAR_GAP +
-  2 * (STATUS_BAR_GAP + STATUS_ICON_SIZE) +
+  3 * (STATUS_BAR_GAP + STATUS_ICON_SIZE) +
   PROGRESS_TRACK_GAP +
   PROGRESS_TRACK_HEIGHT +
   POPUP_TRACK_GAP +
@@ -128,6 +130,23 @@ export function resolveHungerFill(segment: number, value: number): CellFill {
     return "half";
   }
   return "full";
+}
+
+/**
+ * resolveArmorFill 镜像护甲条的逐档判定：每档两点，`points/2` 向下取整为
+ * 满档数，奇数余量落在下一档的半档（与生命条同形、方向同为自左向右）。
+ * 调用方已保证 `points` 落在 `0..MAX_ARMOR`，且点数为 0 时整行不渲染——
+ * 空档不是常驻刻度，`empty` 只在部分填充时补齐十档中出现。
+ */
+export function resolveArmorFill(segment: number, points: number): CellFill {
+  const full = Math.floor(points / 2);
+  if (segment < full) {
+    return "full";
+  }
+  if (segment === full && points % 2 !== 0) {
+    return "half";
+  }
+  return "empty";
 }
 
 /**

@@ -76,6 +76,14 @@ func ItemIconLayer(item core.ItemID) (uint32, bool) {
 		return uint32(LayerRawBeef), true
 	case core.ItemCookedBeef:
 		return uint32(LayerCookedBeef), true
+	case core.ItemIronHelmet:
+		return uint32(LayerItemIronHelmet), true
+	case core.ItemIronChestplate:
+		return uint32(LayerItemIronChestplate), true
+	case core.ItemIronLeggings:
+		return uint32(LayerItemIronLeggings), true
+	case core.ItemIronBoots:
+		return uint32(LayerItemIronBoots), true
 	default:
 		return 0, false
 	}
@@ -411,6 +419,103 @@ func originalItemTexture(item core.ItemID) []byte {
 				}
 			}
 		}
+	case core.ItemIronHelmet, core.ItemIronChestplate, core.ItemIronLeggings, core.ItemIronBoots:
+		// 铁质护甲四件的原创正视剪影，金属感只由铁灰调色板的高光噪点表达；
+		// 四件形状互不相同但同族：正面对称、领口/面甲/裤裆留透明空隙。
+		// 头盔：圆盔体 + 面甲开口 + 顶脊高光，两颊护片垂到下缘。
+		if item == core.ItemIronHelmet {
+			for y, row := range [...]string{
+				"....########....",
+				"...##########...",
+				"..############..",
+				"..############..",
+				"..##..####..##..",
+				"..##.######.##..",
+				"..##.######.##..",
+				"..##........##..",
+				"...##......##...",
+			} {
+				for x, cell := range row {
+					if cell == '#' {
+						m.set(x, y+2)
+					}
+				}
+			}
+			m.line(6, 2, 9, 2, 0, true)
+		}
+		// 胸甲：双肩甲夹颈口缺口 + 收腰下摆，肩顶点亮银。
+		if item == core.ItemIronChestplate {
+			for y, row := range [...]string{
+				"..#####..#####..",
+				".######..######.",
+				".######..######.",
+				"..############..",
+				"..############..",
+				"...##########...",
+				"...##########...",
+				"...##########...",
+				"....########....",
+				"....########....",
+				".....######.....",
+				"......####......",
+			} {
+				for x, cell := range row {
+					if cell == '#' {
+						m.set(x, y+2)
+					}
+				}
+			}
+			m.setAccent(2, 2)
+			m.setAccent(3, 2)
+			m.setAccent(12, 2)
+			m.setAccent(13, 2)
+		}
+		// 护腿：腰带宽 + 双裤筒，裆部留透明空隙。
+		if item == core.ItemIronLeggings {
+			for x := 3; x <= 12; x++ {
+				m.set(x, 3)
+				m.set(x, 4)
+			}
+			for y := 5; y <= 13; y++ {
+				for x := 3; x <= 6; x++ {
+					m.set(x, y)
+				}
+				for x := 9; x <= 12; x++ {
+					m.set(x, y)
+				}
+			}
+			for y := 12; y <= 13; y++ {
+				for x := 4; x <= 5; x++ {
+					m.shape[y*texSize+x] = false
+				}
+				for x := 10; x <= 11; x++ {
+					m.shape[y*texSize+x] = false
+				}
+			}
+			m.line(4, 5, 5, 7, 0, true)
+			m.line(11, 5, 10, 7, 0, true)
+		}
+		// 靴子：一双短靴，靴口横沿 + 靴头朝外的 L 形。
+		if item == core.ItemIronBoots {
+			for _, left := range [...][2]int{{3, 3}, {9, 3}} {
+				footX, topY := left[0], left[1]
+				for y := topY; y <= topY+1; y++ {
+					for x := footX; x <= footX+4; x++ {
+						m.set(x, y)
+					}
+				}
+				for y := topY + 2; y <= topY+7; y++ {
+					for x := footX; x <= footX+2; x++ {
+						m.set(x, y)
+					}
+				}
+				for x := footX; x <= footX+4; x++ {
+					m.set(x, topY+6)
+					m.set(x, topY+7)
+				}
+				m.line(footX, topY+2, footX, topY+5, 0, true)
+			}
+		}
 	default:
 		panic(fmt.Sprintf("物品 %d 缺少原创图稿定义", item))
 	}
@@ -496,6 +601,10 @@ func paletteForItem(item core.ItemID) itemPalette {
 		return itemPalette{rgb{72, 49, 34}, rgb{177, 99, 82}, rgb{221, 144, 119}, rgb{244, 225, 193}}
 	case core.ItemEmptyBucket, core.ItemWaterBucket:
 		return itemPalette{rgb{71, 67, 66}, rgb{171, 177, 180}, rgb{230, 226, 213}, rgb{88, 150, 235}}
+	case core.ItemIronHelmet, core.ItemIronChestplate, core.ItemIronLeggings, core.ItemIronBoots:
+		// 铁质护甲与铁锭同族：暗钢描边、钢灰体、银白高光；accent 亮银只落在
+		// 顶脊/肩甲/裤线等少数点缀位，四件靠形状区分而不是另起色系。
+		return itemPalette{rgb{52, 56, 60}, rgb{171, 177, 180}, rgb{230, 226, 213}, rgb{248, 246, 235}}
 	default:
 		return wood
 	}

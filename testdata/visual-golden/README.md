@@ -4,7 +4,7 @@
 
 - `world/`：无窗口世界场景基线 30 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
 - `motion/`：过程 GIF 基线 11 个（被动牛 4 剧本 + motion 演示 7 个），只验呈现、不进比对，对应 `cmd/mornlea/capture/passive_death_scripts.go` 的 `passiveDeathGIFScripts` 与各 motion 演示入口（按 tick 步进抓帧，标准库 `image/gif` 编码）。
-- `ui/`：前端 UI 部件基线 30 张，对应 `packages/engine/crates/mornlea_client/frontend/visual/fixture-names.ts` 的 `fixtureNames`。
+- `ui/`：前端 UI 部件基线 31 张，对应 `packages/engine/crates/mornlea_client/frontend/visual/fixture-names.ts` 的 `fixtureNames`。
 
 旧目录 `cmd/mornlea/capture/testdata/golden/` 与 `engine/crates/mornlea_client/frontend/visual/golden/` 已清空，仅剩空目录，不再写入。
 
@@ -45,7 +45,7 @@
 | `far-horizon.png` | `far-horizon` | 高空远眺的近景地形、远环壳带、雾过渡与天空四段构图。 |
 | `water-underwater.png` | `water-underwater` | 眼睛浸没的水下视角，水色叠加与穿水衰减同框。 |
 
-## ui（30 张）
+## ui（31 张）
 
 文件名即 fixture 名加 `.png` 后缀，清单以 `fixture-names.ts` 的 `fixtureNames` 为准，对应组件以 `fixtures.tsx` 的注册表为准。
 
@@ -77,6 +77,7 @@
 | `error-line.png` | `error-line` | `p.menu-error` 错误行。 |
 | `hud-hotbar.png` | `hud-hotbar` | `HudRoot` 仅快捷栏。 |
 | `hud-status.png` | `hud-status` | `HudRoot` 完整状态栈（生命、饥饿、氧气与进食轨道）。 |
+| `hud-armor.png` | `hud-armor` | `HudRoot` 护甲条半档粒度：权威点数 7 呈现 3 个完整图标与 1 个半图标，行位紧贴心形行上方。 |
 | `hud-progress.png` | `hud-progress` | `ProgressTrack` 进食进度轨道。 |
 | `hud-popup-crosshair.png` | `hud-popup-crosshair` | `HudRoot` 弹条、准星与命中标记同框。 |
 | `hud-chat.png` | `hud-chat` | `HudRoot` 多行聊天。 |

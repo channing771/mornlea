@@ -4,7 +4,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* v18:帧新增天气状态 TLV 段(tag 12,4 字节灰度 f32,经 sky uniform 预留位
+/* v19:桥下行 uiState 的 hud 分节新增 armor 子分节(护甲点数,JSON 字段级
+ * 演进,ui_push_state 出口签名与字节面不变;版本槽位随桥 schema 演进同步
+ * 推进,与 Go/TS 钉值测试同批切换)。
+ * v18:帧新增天气状态 TLV 段(tag 12,4 字节灰度 f32,经 sky uniform 预留位
  * 灰化天空与云)与降水实例段(tag 13,定长降水实例流,与 avatar 同 96 字节/
  * 实例布局;空流不编码,晴天帧与 v17 逐字节一致)。
  * v17:帧新增 viewmodel TLV 段(tag 11,定长 viewmodel 实例流,与 avatar
@@ -32,7 +35,7 @@
  * 契约);v6:新增远环 LOD tile 出口(render_upload_lod_tile/drop_lod_tile)。
  * 变基重编:远环两项出口在旧基线上原编号 v5/v6,main 的 water pass
  * (按 material 分流 + 半透明 water pass)占用 v5 后整体顺延一格。 */
-#define MORNLEA_CLIENT_ABI_VERSION 18u
+#define MORNLEA_CLIENT_ABI_VERSION 19u
 
 #define MORNLEA_CLIENT_STATUS_OK 0u
 #define MORNLEA_CLIENT_STATUS_ABI_VERSION 1u

@@ -357,7 +357,11 @@ func rejectionUpdate(rejected network.CommandRejected) (MirrorUpdate, error) {
 		network.RejectInvalidSlot,
 		network.RejectHotbarFull,
 		network.RejectDropCapacity,
-		network.RejectContainerCapacity:
+		network.RejectContainerCapacity,
+		// not_armor 是装备互换命令的合法拒绝：手持非护甲使用「使用」键时
+		// 客户端也会上行 `EquipArmor`，服务端的权威判定回来必须走反馈通路
+		// 而不是被判成协议违规断连。
+		network.RejectNotArmor:
 		return MirrorUpdate{Rejected: &rejected}, nil
 	default:
 		return MirrorUpdate{}, fmt.Errorf(

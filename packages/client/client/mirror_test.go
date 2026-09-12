@@ -194,6 +194,22 @@ func TestMirrorSurfacesCommandRejectionAndRejectsUnsupportedData(t *testing.T) {
 	}
 }
 
+// TestMirrorSurfacesNotArmorRejection 锁定装备互换拒绝的上报语义：手持非护甲
+// 发出的 `EquipArmor` 会被服务端以 `not_armor` 拒绝，白名单缺登记会让真实
+// 客户端把这条合法拒绝当协议违规断连——拒绝通路必须与占格/容量拒绝逐语义
+// 一致：原样上抛（含序号）、不改写镜像。
+func TestMirrorSurfacesNotArmorRejection(t *testing.T) {
+	mirror := client.NewMirror()
+	rejected := network.CommandRejected{Sequence: 7, Reason: network.RejectNotArmor}
+	update, err := mirror.Apply(rejected)
+	if err != nil || !reflect.DeepEqual(update.Rejected, &rejected) {
+		t.Fatalf("RejectNotArmor update=%+v err=%v", update, err)
+	}
+	if update.Rejected.Sequence != 7 {
+		t.Fatalf("RejectNotArmor 被改写序号: %+v", update.Rejected)
+	}
+}
+
 func TestMirrorDoesNotConsumePlayerState(t *testing.T) {
 	_, err := client.NewMirror().Apply(network.PlayerState{Ready: false})
 	if err == nil || !strings.Contains(err.Error(), "unsupported server message") {

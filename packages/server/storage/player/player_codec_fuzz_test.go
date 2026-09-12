@@ -12,6 +12,7 @@ func FuzzDecodePlayer(f *testing.F) {
 	for _, name := range []string{
 		"player-v1.bin", "player-v2.bin", "player-v3.bin", "player-v4.bin",
 		"player-v5.bin", "player-v6.bin", "player-v7.bin", "player-v8.bin",
+		"player-v9.bin",
 	} {
 		fixture, err := os.ReadFile(filepath.Join("testdata", name))
 		if err != nil {

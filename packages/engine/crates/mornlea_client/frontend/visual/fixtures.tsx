@@ -171,6 +171,18 @@ const hudStatusFixture: HudState = hudState({
   eating: { active: true, progress: 0.45 },
 });
 
+// hud-armor：护甲条半档粒度基线——权威点数 7 按「2 点每档、半档收尾」呈现
+// 3 个完整图标与 1 个半图标，护甲行紧贴心形行上方。与 `hud-status` 互补：
+// 氧气未耗损整行缺席、进食轨道未激活，两行状态栈只有护甲与生命；聊天行刻意
+// 缺席——穿甲后状态栈增高与聊天底锚的并存是已记录的呈现限制，不入基线。
+// 点数为 0 与分节缺席时整行零 DOM 由其余不带 armor 的 HUD 夹具共同见证。
+const hudArmorFixture: HudState = hudState({
+  hotbar: { slots: hudInventorySlots, selectedIndex: 0 },
+  health: { value: 7 },
+  armor: { points: 7 },
+  hunger: { value: 5, saturationZero: false },
+});
+
 // hud-popup-crosshair：物品名弹条 + 十字准星 + 权威命中 marker 同帧共存。
 const hudPopupCrosshairFixture: HudState = hudState({
   hotbar: { slots: hudInventorySlots, selectedIndex: 0 },
@@ -277,6 +289,7 @@ const registry: Record<FixtureName, ReactElement> = {
   // 游戏 HUD 部件：合成 HudState 夹具驱动真实 HudRoot（呈现面与生产一致）。
   "hud-hotbar": hudStage(<HudRoot hud={hudHotbarFixture} />),
   "hud-status": hudStage(<HudRoot hud={hudStatusFixture} />),
+  "hud-armor": hudStage(<HudRoot hud={hudArmorFixture} />),
   // 进食条是唯一的屏幕进度语义（采掘条退役），单条轨道以生产 ProgressTrack
   // 组件按常用填充比例入基线（轨道几何与生产逐项同源）。
   "hud-progress": hudStage(

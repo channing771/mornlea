@@ -265,6 +265,8 @@ func (server *Server) publishLocalResult(
 			Season:         playerUpdate.Season,
 			SeasonProgress: playerUpdate.SeasonProgress,
 			Temperature:    playerUpdate.Temperature,
+			// 护甲点数由 sim 每次发布时从权威装备区现算，这里只搬运。
+			ArmorPoints: playerUpdate.ArmorPoints,
 		}) {
 			server.closePublicationSessionLocked(current, errSessionOutboxFull)
 			return

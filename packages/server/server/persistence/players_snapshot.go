@@ -26,6 +26,10 @@ func (player *cachedPlayer) restore(metadata storage.Metadata) contract.PlayerRe
 	restore.Yaw = player.snapshot.Yaw
 	restore.Pitch = player.snapshot.Pitch
 	restore.Inventory = player.snapshot.Inventory
+	// 装备四槽与背包同理只来自真实存档：上面那条提前返回是「缺失玩家 /
+	// 尚未观察到权威快照」，没有可恢复的装备，保持零值即全空，由 sim 的
+	// RegisterPlayer 落到与新玩家相同的空装备。
+	restore.Armor = player.snapshot.Armor
 	restore.Health = player.snapshot.Health
 	// 三层饥饿状态只有走到这里才来自真实存档：上面那条提前返回是"缺失玩家 /
 	// 尚未观察到权威快照"，那两种情况没有可恢复的饥饿状态，HasHunger 保持假，
@@ -51,7 +55,10 @@ func cachedPlayerFromStored(stored storage.StoredPlayer, pendingName string) *ca
 		Yaw:       stored.Yaw,
 		Pitch:     stored.Pitch,
 		Inventory: stored.Inventory,
-		Health:    stored.Health,
+		// 更旧的 schema 没有装备区，storage 的迁移链已经在这一步之前把它们
+		// 补成空装备，这里因此无条件照抄：漏带会让重登玩家的穿戴静默丢失。
+		Armor:  stored.Armor,
+		Health: stored.Health,
 		// 更旧的 schema 没有饥饿字段，storage 的迁移链已经在这一步之前把它们
 		// 补成固定初值，这里因此无条件照抄。
 		Hunger:          stored.Hunger,
@@ -129,7 +136,10 @@ func (player *cachedPlayer) save(revision uint64) storage.PlayerSave {
 		Yaw:       player.snapshot.Yaw,
 		Pitch:     player.snapshot.Pitch,
 		Inventory: player.snapshot.Inventory,
-		Health:    player.snapshot.Health,
+		// 装备四槽全部落盘：持久化路径是装备跨重启保留的唯一通道，漏写会让
+		// 每次保存都把穿戴覆写成空。
+		Armor:  player.snapshot.Armor,
+		Health: player.snapshot.Health,
 		// 三层全部落盘：不写疲劳会让"重登清疲劳"变成无成本操作（design.md D7）。
 		Hunger:          player.snapshot.Hunger,
 		SaturationMilli: player.snapshot.SaturationMilli,
@@ -155,6 +165,7 @@ func (player *cachedPlayer) matchesSave(save storage.PlayerSave) bool {
 		[3]float32(player.snapshot.Current.Position) != save.Current.Position ||
 		player.snapshot.Yaw != save.Yaw || player.snapshot.Pitch != save.Pitch ||
 		player.snapshot.Inventory != save.Inventory ||
+		player.snapshot.Armor != save.Armor ||
 		player.snapshot.Health != save.Health ||
 		player.snapshot.Hunger != save.Hunger ||
 		player.snapshot.SaturationMilli != save.SaturationMilli ||
@@ -192,9 +203,13 @@ func clonePlayerSnapshot(snapshot contract.PlayerSnapshot) contract.PlayerSnapsh
 func playerSnapshotsEqual(left, right contract.PlayerSnapshot) bool {
 	// 三层饥饿状态参与变更检测：饥饿是唯一会在玩家原地不动时独自变化的状态，
 	// 漏掉任何一个字段都会让"只有饥饿变了"的 tick 被判为无变化而永不落盘。
+	// 装备区同理：装备互换虽必经快捷栏格互换（背包随之变化），但减免受击只
+	// 消耗装备耐久——耐久只决定点数投影与损坏形态，不在背包广播里，漏掉它
+	// 会让"只掉耐久"的战斗永不落盘。
 	// 重生点同理：入睡只改重生点、不动位置，漏掉它会让"睡一觉"永不落盘。
 	if left.Current != right.Current || left.Yaw != right.Yaw ||
 		left.Pitch != right.Pitch || left.Inventory != right.Inventory ||
+		left.Armor != right.Armor ||
 		left.Health != right.Health || left.Hunger != right.Hunger ||
 		left.SaturationMilli != right.SaturationMilli ||
 		left.ExhaustionMilli != right.ExhaustionMilli ||

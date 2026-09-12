@@ -33,6 +33,9 @@ const (
 	CommandInteractBed
 	CommandCollectWater
 	CommandPlaceWater
+	// CommandEquipArmor 请求把权威选中快捷栏格中的护甲件穿到对应槽位；载荷
+	// 只有序号，目标槽位由件类映射唯一确定。只读写玩家自身状态，不触碰区块。
+	CommandEquipArmor
 )
 
 type RejectReason uint8
@@ -52,6 +55,11 @@ const (
 	RejectContainerCapacity RejectReason = 11
 	RejectNotFluidSource    RejectReason = 12
 	RejectBucketMismatch    RejectReason = 13
+	// RejectNotArmor 表示装备互换命令的权威选中快捷栏格未持有可穿戴的护甲件
+	//（空格、非护甲物品或多件栈），权威状态零变化。显式取 14：按前值的
+	// iota 重复语义会拿到与 `RejectBucketMismatch` 相同的字面量 13，让两个
+	// 拒绝原因在 server 的映射 switch 里坍缩成同一个 case。
+	RejectNotArmor RejectReason = 14
 )
 
 type Command struct {
@@ -171,6 +179,9 @@ type PlayerUpdate struct {
 	// from zero——.5 恰值远离零）后收窄为 int8，域由 core 在源头 clamp 到
 	// [-40,45]，无二次裁剪。逐人求值、逐人不可变。
 	Temperature int8
+	// ArmorPoints 是四槽已装备护甲的完好件点数投影（`core.ArmorPoints`，
+	// 0..`core.MaxArmorPoints`），每次发布时从权威装备区现算，损坏件计 0。
+	ArmorPoints uint8
 }
 
 type CompanionUpdate struct {
@@ -260,8 +271,12 @@ type PlayerRestore struct {
 	// 域内值 2..64）；0 表示未声明（未经登录协商的注册路径）。它是会话
 	// 协商事实而非存档状态：不持久化、不进入快照，仅在注册时被换算为
 	// 订阅半径（声明 +1，按引擎视界上界钳制）后即完成使命。
-	ViewDistance     uint8
-	Inventory        core.Inventory
+	ViewDistance uint8
+	Inventory    core.Inventory
+	// Armor 是四槽已装备护甲（按 `core.ArmorSlot` 槽位顺序），随存档跨重启
+	// 保留；缺失路径（新玩家、只给锚点的注册）为零值即全空。损坏形态以
+	// 「数量 1、耐久 0」原地表达。
+	Armor            [core.ArmorSlotCount]core.ItemStack
 	Health           uint8
 	Hunger           uint8
 	SaturationMilli  uint16
@@ -273,10 +288,13 @@ type PlayerRestore struct {
 }
 
 type PlayerSnapshot struct {
-	Current          PlayerLocation
-	Yaw, Pitch       float32
-	Safe             *PlayerLocation
-	Inventory        core.Inventory
+	Current    PlayerLocation
+	Yaw, Pitch float32
+	Safe       *PlayerLocation
+	Inventory  core.Inventory
+	// Armor 是四槽已装备护甲（按 `core.ArmorSlot` 槽位顺序），持久化路径是
+	// 它跨重启保留的唯一通道；漏进快照之外会在重登时静默落回空装备。
+	Armor            [core.ArmorSlotCount]core.ItemStack
 	Health           uint8
 	Hunger           uint8
 	SaturationMilli  uint16

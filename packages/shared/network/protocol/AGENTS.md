@@ -39,6 +39,7 @@
   `TestProtocolV12ChestStatePacketIDIsFrozen`、
   `TestProtocolV22TillSoilPacketIDIsFrozen`、
   `TestProtocolV27BoneMealPacketIDIsFrozen`、
+  `TestProtocolV42EquipArmorPacketIDIsFrozen`、
   `TestGridCraftingPacketIDsAreFrozen`、
   `TestCommandRejectReasonIDsAreFrozen` 各钉死对应版本的 ID；新增消息只
   追加新 ID（`TestCompanionMessageIDsAreAppendOnly`/

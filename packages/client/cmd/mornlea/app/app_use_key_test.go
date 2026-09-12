@@ -264,3 +264,89 @@ func TestUseKeyRisingEdgeSkipsPlaceForNonPlaceableItem(t *testing.T) {
 		}
 	}
 }
+
+// TestUseKeyRisingEdgeSendsEquipArmorWhileHoldingArmor 钉死「使用」键上升沿的
+// 装备分流：手持护甲（58..61 四件）时上行 `EquipArmor`（仅携带序号）而不是
+// `PlaceBlock`——护甲不可放置，`core.ItemPlacement` 对护甲本就为空，本判定
+// 与服务端权威装备互换共用 `core.ArmorSlotOf` 这同一份件→槽事实源。表里
+// 每件护甲都有上行行，另以手持面包做「非护甲不装备」的对照。
+func TestUseKeyRisingEdgeSendsEquipArmorWhileHoldingArmor(t *testing.T) {
+	// 护甲件是耐久物品，合法栈要求耐久落在 1..上限：夹具统一取满耐久完好件，
+	// 经 `core.ItemMaxDurability` 派生而非硬编码。
+	armorStack := func(item core.ItemID) core.ItemStack {
+		maxDurability, ok := core.ItemMaxDurability(item)
+		if !ok {
+			t.Fatalf("物品 %d 应登记耐久上限", item)
+		}
+		return core.ItemStack{Item: item, Count: 1, Durability: maxDurability}
+	}
+	for _, tc := range []struct {
+		name string
+		held core.ItemStack
+		// want 是「使用」键上升沿必须发出的命令；nil 表示一条命令也不发。
+		want any
+	}{
+		{"手持铁头盔发装备", armorStack(core.ItemIronHelmet),
+			network.EquipArmor{Sequence: 1}},
+		{"手持铁胸甲发装备", armorStack(core.ItemIronChestplate),
+			network.EquipArmor{Sequence: 1}},
+		{"手持铁护腿发装备", armorStack(core.ItemIronLeggings),
+			network.EquipArmor{Sequence: 1}},
+		{"手持铁靴子发装备", armorStack(core.ItemIronBoots),
+			network.EquipArmor{Sequence: 1}},
+		{"手持面包不装备", core.ItemStack{Item: core.ItemBread, Count: 1}, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app, serverEndpoint := newInteractiveTestApplication(t)
+			if err := app.predictor.Begin(network.PlayerState{
+				ServerTick: 1, Dimension: core.Overworld,
+				Position: mgl32.Vec3{0.5, 10, 3.5}, OnGround: true, Ready: true,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			app.camera = client.Camera{Pos: mgl32.Vec3{0.5, 10.5, 3.5}}
+			var inventory core.Inventory
+			inventory.Hotbar.Selected = 4
+			inventory.Hotbar.Slots[4] = tc.held
+			if err := app.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
+				t.Fatal(err)
+			}
+
+			app.placeBlock(false)
+			if tc.want != nil {
+				if message := receiveInteractiveClientMessage(t, serverEndpoint); message != tc.want {
+					t.Fatalf("使用键上升沿 = %#v，想要 %#v", message, tc.want)
+				}
+			} else if app.sequence != 0 {
+				t.Fatalf("非护甲手持分配了序号：sequence=%d", app.sequence)
+			}
+			// 客户端不预测装备结果：本地背包镜像必须原样保持，穿戴等权威
+			// `InventoryUpdate` 广播回来才变化。
+			got, confirmed := app.inventory.Hotbar()
+			if !confirmed || got.Slots[4] != tc.held {
+				t.Fatalf("客户端预测了装备互换：快捷栏格 4 = %+v", got.Slots[4])
+			}
+			assertNoInteractiveClientMessage(t, serverEndpoint)
+		})
+	}
+}
+
+// TestUseKeyRisingEdgeEquipArmorNeedsConfirmedHotbar 锁定装备分流与放置同一条
+// 纪律：快捷栏尚未确认时不判手持物、不分配序号——客户端绝不据猜测的手持物
+// 上行装备意图。
+func TestUseKeyRisingEdgeEquipArmorNeedsConfirmedHotbar(t *testing.T) {
+	app, serverEndpoint := newInteractiveTestApplication(t)
+	if err := app.predictor.Begin(network.PlayerState{
+		ServerTick: 1, Dimension: core.Overworld,
+		Position: mgl32.Vec3{0.5, 10, 3.5}, OnGround: true, Ready: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	app.camera = client.Camera{Pos: mgl32.Vec3{0.5, 10.5, 3.5}}
+
+	app.placeBlock(false)
+	assertNoInteractiveClientMessage(t, serverEndpoint)
+	if app.sequence != 0 {
+		t.Fatalf("未确认快捷栏分配了序号：sequence=%d", app.sequence)
+	}
+}

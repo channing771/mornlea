@@ -47,6 +47,7 @@ function stackOrder(root: HTMLElement): readonly string[] {
   const tokens = [
     "hud-popup",
     "hud-progress",
+    "hud-status-row--armor",
     "hud-status-row--primary",
     "hud-status-row--oxygen",
     "hud-hotbar",
@@ -224,6 +225,75 @@ describe("权威驱动与未确认隐藏", () => {
     // 选中格双层轮廓只落在 selectedIndex 一格。
     expect(root.querySelectorAll(".hud-slot--selected")).toHaveLength(1);
     expect(slots[0]?.classList.contains("hud-slot--selected")).toBe(true);
+  });
+});
+
+describe("护甲条", () => {
+  it("0 点与镜像缺席：不渲染任何护甲条 DOM 节点（既有零穿戴场景零漂移硬前提）", () => {
+    for (const armor of [undefined, { points: 0 }]) {
+      const root = renderHud({ ...base, armor });
+      expect(root.querySelector(".hud-status-row--armor")).toBeNull();
+      expect(root.querySelectorAll(".hud-cell--armor-full, .hud-cell--armor-half, .hud-cell--armor-empty")).toHaveLength(0);
+    }
+  });
+
+  it("7 点呈现 3 个满档 + 1 个半档，其余为空档补齐十档", () => {
+    const root = renderHud({ ...base, armor: { points: 7 } });
+    expect(cellSequence(root.querySelector(".hud-status-row--armor"))).toEqual([
+      "hud-cell--armor-full",
+      "hud-cell--armor-full",
+      "hud-cell--armor-full",
+      "hud-cell--armor-half",
+      "hud-cell--armor-empty",
+      "hud-cell--armor-empty",
+      "hud-cell--armor-empty",
+      "hud-cell--armor-empty",
+      "hud-cell--armor-empty",
+      "hud-cell--armor-empty",
+    ]);
+  });
+
+  it("20 点（=MaxArmorPoints）呈现十个满档，不超十档；1 点恰为 1 半档", () => {
+    const full = renderHud({ ...base, armor: { points: 20 } });
+    expect(cellSequence(full.querySelector(".hud-status-row--armor"))).toEqual(
+      Array<string>(10).fill("hud-cell--armor-full"),
+    );
+    const one = renderHud({ ...base, armor: { points: 1 } });
+    expect(cellSequence(one.querySelector(".hud-status-row--armor"))).toEqual([
+      "hud-cell--armor-half",
+      ...Array<string>(9).fill("hud-cell--armor-empty"),
+    ]);
+  });
+
+  it("护甲行紧贴心形行上方：关闭态在氧气行与主行之间，打开态在贴条与主行之间", () => {
+    const armored = { ...base, armor: { points: 7 } };
+    expect(stackOrder(renderHud(armored))).toEqual([
+      "hud-status-row--oxygen",
+      "hud-status-row--armor",
+      "hud-status-row--primary",
+      "hud-hotbar",
+    ]);
+    expect(stackOrder(renderHud({ ...armored, containerOpen: true }))).toEqual([
+      "hud-hotbar",
+      "hud-status-row--armor",
+      "hud-status-row--primary",
+      "hud-status-row--oxygen",
+    ]);
+  });
+
+  it("护甲行净空经令牌由类消费：行距不旁路、打开态由护甲行承担贴条净空", () => {
+    const css = readHudCss();
+    const marginOf = (token: string) => `margin-top: calc(${token} * var(--hud-scale))`;
+    // 关闭态：护甲行与主行之间只隔一个状态行堆叠行距。
+    expect(ruleBodies(css, ".hud-status-row--armor")).toContain(marginOf("var(--hud-status-bar-gap)"));
+    // 打开态：护甲行承担「净空 + 行距」，紧随其后的主行回落为一个行距。
+    expect(ruleBodies(css, ".hud-root--open .hud-status-row--armor")).toContain(
+      "margin-top: calc( (var(--hud-status-hotbar-gap) + var(--hud-status-bar-gap))" +
+        " * var(--hud-scale) )",
+    );
+    expect(ruleBodies(css, ".hud-status-row--armor + .hud-status-row--primary")).toContain(
+      marginOf("var(--hud-status-bar-gap)"),
+    );
   });
 });
 

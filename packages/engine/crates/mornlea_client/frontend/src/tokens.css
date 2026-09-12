@@ -163,7 +163,7 @@
   --hud-slot-lift-blur: 10px; /* 选中抬起投影模糊半径 */
   --hud-hotbar-row-width: 464px; /* panel.go hotbarRowWidth = 9×48 + 8×4 */
   --hud-design-width: 476px; /* hudScale 宽度分母 = hotbarRowWidth + 2×padding */
-  --hud-design-height: 160px; /* layout.go closedHUDHeight（缩放高度分母） */
+  --hud-design-height: 180px; /* 关闭态缩放高度分母（含主行/护甲行/氧气行三行状态栈记账） */
   --hud-edge-margin: 8px; /* hudEdgeMargin（视口安全边距） */
   --hud-select-border: 3px; /* hotbarSelectBorder（选中格外扩框） */
   --hud-select-inset: 3px; /* hotbarSelectInset（选中格 sage 内衬） */
@@ -265,6 +265,13 @@
   --hud-oxygen-empty-edge: rgb(72, 148, 184);
   --hud-oxygen-face: rgb(48, 172, 222);
   --hud-oxygen-shine: rgb(160, 232, 255);
+  /* 护甲（icons.tsx 胸甲剪影，与快捷栏铁甲 sprite 同族铁灰调色板：
+   * 暗钢描边、钢灰甲体、银白高光） */
+  --hud-armor-empty-face: rgb(38, 42, 48);
+  --hud-armor-empty-edge: rgb(92, 100, 110);
+  --hud-armor-face: rgb(171, 177, 180);
+  --hud-armor-edge: rgb(88, 94, 102);
+  --hud-armor-shine: rgb(230, 226, 213);
 
   /* ---- 动效时长尺度：所有 transition 只消费这些令牌 ---- */
   --motion-fast: 120ms;

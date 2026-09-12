@@ -469,6 +469,11 @@ func (a *Application) assembleHUDState() client.UIHudState {
 	if health, ready := a.predictor.Health(); ready {
 		state.Health = client.NewUIHudHealth(health)
 	}
+	// 护甲点数与生命值同一镜像纪律：点数为 0 时分节照常下行（前端据此不渲染
+	// 任何护甲条像素），分节缺席只表达镜像尚未确认。
+	if armor, ready := a.predictor.Armor(); ready {
+		state.Armor = client.NewUIHudArmor(armor)
+	}
 	if hunger, ready := a.predictor.Hunger(); ready {
 		// 饱和度归零是呈现分支位:与饥饿值同一份权威确认状态。
 		saturationZero, _ := a.predictor.SaturationZero()

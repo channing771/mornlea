@@ -199,6 +199,15 @@ func translateClientMessage(
 			Yaw:      message.Yaw,
 			Pitch:    message.Pitch,
 		}, true
+	case network.EquipArmor:
+		// 与 DropSelectedItem 同形：只搬运序号。目标槽位由护甲件类在权威侧
+		// 唯一映射，选中格也由 sim 从权威状态取得，server 不做第二次校验；
+		// Memory 与 TCP 共用这一入口。
+		return contract.Command{
+			Session:  id,
+			Sequence: message.Sequence,
+			Kind:     contract.CommandEquipArmor,
+		}, true
 	case network.CloseContainer:
 		return contract.Command{
 			Session:  id,

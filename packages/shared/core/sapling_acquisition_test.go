@@ -49,9 +49,9 @@ func TestSaplingHasNoCraftingSmeltingOrStartingInventory(t *testing.T) {
 			t.Fatalf("配方 %d 产出树苗：%+v", id, pattern.Output)
 		}
 	}
-	if recipes != int(core.RecipeBucket) {
+	if recipes != int(core.RecipeIronBoots) {
 		t.Fatalf("配方注册表枚举到 %d 条，想要与末项常量一致的 %d 条（注册表出现空洞？）",
-			recipes, core.RecipeBucket)
+			recipes, core.RecipeIronBoots)
 	}
 	// 熔炼：没有任何物品的熔炼产物是树苗。
 	for item := core.ItemID(0); item < core.ItemIDMax; item++ {

@@ -30,6 +30,9 @@ type playerDTO struct {
 	RespawnPresent   bool
 	RespawnPosition  [3]float32
 	RespawnDimension core.DimensionID
+	// Armor 是四槽已装备护甲；只有 schema v9 起的负载才会解码出非空值，
+	// 更旧的 schema 由迁移链清为四空槽。codec 层不做语义校验。
+	Armor [core.ArmorSlotCount]core.ItemStack
 }
 
 type playerMigration func(playerDTO) (playerDTO, error)
@@ -78,6 +81,12 @@ var playerMigrations = map[uint32]playerMigration{
 		dto.RespawnPresent = false
 		dto.RespawnPosition = [3]float32{}
 		dto.RespawnDimension = 0
+		return dto, nil
+	},
+	// v8 没有装备字段，历史存档一律迁移为四空槽：升级前不存在已装备护甲，
+	// 零值数组就是「无穿戴」的规范形态，登录后的穿戴行为与升级前一致。
+	8: func(dto playerDTO) (playerDTO, error) {
+		dto.Armor = [core.ArmorSlotCount]core.ItemStack{}
 		return dto, nil
 	},
 }
