@@ -77,7 +77,7 @@
 | `error-line.png` | `error-line` | `p.menu-error` 错误行。 |
 | `hud-hotbar.png` | `hud-hotbar` | `HudRoot` 仅快捷栏。 |
 | `hud-status.png` | `hud-status` | `HudRoot` 完整状态栈（生命、饥饿、氧气与进食轨道）。 |
-| `hud-armor.png` | `hud-armor` | `HudRoot` 护甲条半档粒度：权威点数 7 呈现 3 个完整图标与 1 个半图标，行位紧贴心形行上方。
+| `hud-armor.png` | `hud-armor` | `HudRoot` 护甲条半档粒度：权威点数 7 呈现 3 个完整图标与 1 个半图标，行位紧贴心形行上方。 |
 | `hud-progress.png` | `hud-progress` | `ProgressTrack` 进食进度轨道。 |
 | `hud-popup-crosshair.png` | `hud-popup-crosshair` | `HudRoot` 弹条、准星与命中标记同框。 |
 | `hud-chat.png` | `hud-chat` | `HudRoot` 多行聊天。 |
