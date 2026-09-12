@@ -40,6 +40,10 @@ type combatActorSnapshot struct {
 	selectedSlot   uint8
 	selectedItem   core.ItemID
 	selectedCount  uint8
+	// armorPoints 是玩家目标在快照时刻的四槽护甲点数（`core.ArmorPoints`）。
+	// 它随同一快照冻结，保证「结算时刻点数」语义：减免按冻结值计算，不受
+	// 快照之后同 tick 内任何装备变化影响；非玩家目标恒为 0。
+	armorPoints uint8
 }
 
 type combatIntent struct {
@@ -54,6 +58,9 @@ type combatIntent struct {
 	selectedSlot     uint8
 	selectedItem     core.ItemID
 	selectedCount    uint8
+	// targetArmorPoints 冻结目标玩家的护甲点数，与栏位身份同属 intent 的
+	// 快照字段：结算点不再回读 live 状态，同 tick 内多次冻结天然一致。
+	targetArmorPoints uint8
 }
 
 func (engine *engineContext) advanceCombat(result *TickResult) {
@@ -131,6 +138,7 @@ func (engine *engineContext) advanceCombatWithLimits(
 			selectedSlot:   selectedSlot,
 			selectedItem:   selectedItem,
 			selectedCount:  selectedCount,
+			armorPoints:    core.ArmorPoints(player.armor),
 		}
 		snapshotCount++
 	}
@@ -183,9 +191,10 @@ func (engine *engineContext) advanceCombatWithLimits(
 		}
 		intents[intentCount] = combatIntent{
 			attacker: attacker.actor, target: target.actor, damage: hostileMeleeDamage,
-			dimension:        attacker.dimension,
-			distance:         float32(math.Sqrt(float64(horizontalDistanceSq(attacker.position, target.position)))),
-			attackerPosition: attacker.position, targetPosition: target.position,
+			targetArmorPoints: target.armorPoints,
+			dimension:         attacker.dimension,
+			distance:          float32(math.Sqrt(float64(horizontalDistanceSq(attacker.position, target.position)))),
+			attackerPosition:  attacker.position, targetPosition: target.position,
 			attackerYaw: attacker.yaw,
 		}
 		intentCount++
@@ -295,7 +304,7 @@ func (engine *engineContext) playerCombatIntent(
 	}
 	return combatIntent{
 		attacker: attacker.actor, target: target.actor, dimension: attacker.dimension,
-		damage:   core.WeaponDamage(attacker.selectedItem),
+		damage: core.WeaponDamage(attacker.selectedItem), targetArmorPoints: target.armorPoints,
 		distance: targetDistance, attackerPosition: attacker.position, targetPosition: target.position,
 		attackerYaw: attacker.yaw, selectedSlot: attacker.selectedSlot, selectedItem: attacker.selectedItem,
 		selectedCount: attacker.selectedCount,
@@ -381,7 +390,18 @@ func (engine *engineContext) settleCombatIntent(result *TickResult, intent comba
 	}
 
 	if targetPlayer != nil {
-		targetPlayer.applyDamage(intent.damage)
+		// 护甲减免只挂在近战结算点：按 intent 冻结的目标点数把原始伤害折算
+		// 为有效伤害后再进入 applyDamage。摔落/溺水/饥饿不经此处，天然不受
+		// 减免；击退、仇恨、疲劳与 CombatHit 广播一律按原始 intent 结算，
+		// 不随减免变化。
+		effective := core.ReducedDamage(intent.damage, intent.targetArmorPoints)
+		targetPlayer.applyDamage(effective)
+		// 与扣血同 tick 原子：只有实际产生减免（有效伤害低于原始伤害且点数
+		// 大于 0）的受击才全件耗 1 耐久；点数为 0 或伤害被下限托住时零消耗。
+		// 装备槽不在背包广播里，耐久变化经下一 tick 的点数投影可见。
+		if intent.targetArmorPoints > 0 && effective < intent.damage {
+			consumeArmorDurability(&targetPlayer.armor)
+		}
 		targetPlayer.state.Velocity = targetPlayer.state.Velocity.Add(combatKnockback(
 			intent.attackerPosition, intent.targetPosition, intent.attackerYaw,
 		))

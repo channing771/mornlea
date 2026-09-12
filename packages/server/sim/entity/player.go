@@ -103,6 +103,14 @@ type playerState struct {
 	// 它同样留在 playerState 而不是上移 actorState：伙伴不进食。
 	eating eatingState
 
+	// armor 是四槽已装备护甲（按 `core.ArmorSlot` 槽位顺序）。装备区唯一写者
+	// 是权威 sim：恢复路径从存档装载、装备互换原子写槽、受击减免时扣耐久、
+	// 死亡与背包一并掉落。槽内只允许「空」或「恰好一件」的护甲件栈（堆叠
+	// 上限 1）；损坏形态以「数量 1、耐久 0」原地表达，不换物品编号。它随
+	// 快照进存档、随 `PlayerHash` 进 parity 断言，但不必置 inventoryDirty：
+	// 点数投影随每 tick 的 `PlayerUpdate` 下发，背包广播不承载装备槽。
+	armor [core.ArmorSlotCount]core.ItemStack
+
 	// sneakingHeld 是玩家本 tick 的持续潜行意图，来自 `Command.Sneaking`
 	// （协议 v41 的 `PlayerInput.Sneaking`），语义与 `miningHeld`/`eatingHeld`
 	// 对称：每 `CommandPlayerInput` 更新一次，供开容器/门床交互分流。
@@ -161,6 +169,12 @@ func (engine *engineContext) RegisterPlayer(id SessionID, restore PlayerRestore)
 	if !restore.Inventory.Valid() {
 		panic("sim: register session with invalid inventory")
 	}
+	// 装备区与背包同界：恢复输入是装备槽唯一的跨重启来源，结构非法（多件栈、
+	// 错槽、非护甲物品、越界耐久）在这里 fail fast，绝不静默降级——静默丢装备
+	// 会破坏「重启后装备与点数保值」的 MUST 且无任何报错。
+	if !armorRestoreValid(restore.Armor) {
+		panic("sim: register session with invalid armor")
+	}
 	candidates := spawnCandidates(restore.SpawnAnchor, engine.tunables.SpawnRadius)
 	health := restore.Health
 	if health == 0 {
@@ -177,6 +191,8 @@ func (engine *engineContext) RegisterPlayer(id SessionID, restore PlayerRestore)
 			yaw: restore.Yaw, pitch: restore.Pitch,
 			inventory:      restore.Inventory,
 			inventoryDirty: true},
+		// 装备区随存档恢复；缺失路径（新玩家、只给锚点的注册）为零值即全空。
+		armor: restore.Armor,
 		// 网格不跨重启保留（spec「网格不入存档」）：注册一律得到空的个人 2×2。
 		// 与 inventoryDirty 同理置初始真，首个 Active tick 发布完整初始状态。
 		crafting:      CraftingGrid{Size: CraftingGridSizePersonal},
@@ -319,7 +335,10 @@ func (player *playerState) snapshot(
 		Yaw:       player.yaw,
 		Pitch:     player.pitch,
 		Inventory: player.inventory,
-		Health:    player.health,
+		// 装备四槽原样进快照：持久化路径是它跨重启保留的唯一通道，与背包
+		// 同理，任何一个槽漏进快照都会在重登时静默落回空装备。
+		Armor:  player.armor,
+		Health: player.health,
 		// 三层饥饿状态原样进快照：持久化路径（internal/server 的 save/restore）
 		// 是它跨重启保留的唯一通道，任何一个字段漏进快照都会在重登时静默落回初值。
 		Hunger:          player.hunger,
@@ -344,8 +363,12 @@ func (engine *engineContext) PlayerHash(id SessionID) ([32]byte, bool) {
 		return [32]byte{}, false
 	}
 	player := session.player
-	// 54 字节玩家状态（含 1 字节生命值）+ 1 字节选中栏位 + 每个物品栏位 3 字节。
-	var encoded [54 + 1 + core.InventorySlots*3]byte
+	// 54 字节玩家状态（含 1 字节生命值）+ 1 字节选中栏位 + 每个物品栏位 3 字节
+	// + 每个护甲槽位 5 字节。护甲槽比物品栏位多出的 2 字节是耐久：护甲耐久
+	// 直接参与减免点数与损坏形态，Memory/TCP 的 parity 断言 MUST 覆盖它，
+	// 因此装备区不沿用物品栏位省略耐久的紧凑形态；这里的字节排布是本函数
+	// 自有的哈希前置编码，与存档 codec 无关，也没有解码方。
+	var encoded [54 + 1 + core.InventorySlots*3 + core.ArmorSlotCount*5]byte
 	offset := 0
 	putUint32 := func(value uint32) {
 		binary.LittleEndian.PutUint32(encoded[offset:], value)
@@ -397,6 +420,14 @@ func (engine *engineContext) PlayerHash(id SessionID) ([32]byte, bool) {
 		encoded[offset] = stack.Count
 		offset++
 	}
+	for _, stack := range player.armor {
+		binary.LittleEndian.PutUint16(encoded[offset:], uint16(stack.Item))
+		offset += 2
+		encoded[offset] = stack.Count
+		offset++
+		binary.LittleEndian.PutUint16(encoded[offset:], stack.Durability)
+		offset += 2
+	}
 	return sha256.Sum256(encoded[:]), true
 }
 
@@ -429,6 +460,9 @@ func (player *playerState) update(
 		Oxygen:            player.oxygen,
 		Hunger:            player.hunger,
 		SaturationZero:    player.saturationZero,
+		// 点数投影每次发布时从四槽装备现算：装备区写者分散在恢复/互换/耐久
+		// 各路径，投影处不缓存任何派生值，天然不会出现失效遗漏。
+		ArmorPoints: core.ArmorPoints(player.armor),
 	}
 }
 

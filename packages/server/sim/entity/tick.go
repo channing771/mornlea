@@ -176,6 +176,16 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 			}
 			player.inventory = next
 			player.inventoryDirty = true
+		case CommandEquipArmor:
+			// 装备互换只读写玩家自身的快捷栏格与护甲槽，不触碰区块，直接在
+			// 命令阶段结算（与背包移动同族）；拒绝沿既有稳定拒绝路径。
+			if reason, rejected := engine.executeEquipArmor(command); rejected {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   reason,
+				})
+			}
 		case CommandTillSoil:
 			// 与放置同形的两段式：命令阶段只做玩家与朝向的廉价校验，真正的
 			// 射线、目标判定与写方块推迟到 interactions 循环——阶段顺序契约

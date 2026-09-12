@@ -68,6 +68,7 @@ const (
 	CommandInteractBed           = contract.CommandInteractBed
 	CommandCollectWater          = contract.CommandCollectWater
 	CommandPlaceWater            = contract.CommandPlaceWater
+	CommandEquipArmor            = contract.CommandEquipArmor
 	RejectInvalidRay             = contract.RejectInvalidRay
 	RejectNoTarget               = contract.RejectNoTarget
 	RejectChunkNotReady          = contract.RejectChunkNotReady
@@ -82,6 +83,7 @@ const (
 	RejectContainerCapacity      = contract.RejectContainerCapacity
 	RejectNotFluidSource         = contract.RejectNotFluidSource
 	RejectBucketMismatch         = contract.RejectBucketMismatch
+	RejectNotArmor               = contract.RejectNotArmor
 	CompanionActionMove          = contract.CompanionActionMove
 	CompanionActionMineHold      = contract.CompanionActionMineHold
 	CompanionActionMineRelease   = contract.CompanionActionMineRelease
