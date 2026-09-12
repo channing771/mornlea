@@ -453,7 +453,8 @@ func TestPlayerV6FixtureMigratesToInitialHunger(t *testing.T) {
 
 // TestPlayerV9Fixture 冻结当前 schema 的编码结果，防止字节布局无声漂移。
 // 装备区取非平凡取值：头盔完好（满耐久 165）、胸甲损坏（耐久 0）、腿脚为空，
-// 让 12 字节装备区的前 6 字节承重、后 6 字节钉死「空槽写零」。
+// 让 20 字节装备区的前 10 字节（头盔 + 胸甲）承重、后 10 字节（腿脚）钉死
+// 「空槽写零」。
 //
 // 冻结的 v8 golden（testdata/player-v8.bin）刻意保留在原处不再生成：它是
 // "旧存档仍然可读"的唯一真实证据，见 TestPlayerV8FixtureMigratesToEmptyArmor。
@@ -551,7 +552,7 @@ func TestPlayerV7FixtureMigratesToNoRespawn(t *testing.T) {
 // 区的 v9 记录，迁移分支根本不会被执行，用例会全绿而什么都没测。
 //
 // 「原字节段保留」按段断言：装备区是尾部追加，v8 负载必须逐位成为 v9 负载的
-// 前缀、随后跟 12 字节空装备区；信封里只有 schema 号（恰推进一格）与随负载
+// 前缀、随后跟 20 字节空装备区；信封里只有 schema 号（恰推进一格）与随负载
 // 变化的 payload 长度/CRC 两处不同，身份段（magic、信封版本、PlayerID、修订号）
 // 逐位不变。
 func TestPlayerV8FixtureMigratesToEmptyArmor(t *testing.T) {
