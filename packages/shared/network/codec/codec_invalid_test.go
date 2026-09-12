@@ -203,7 +203,8 @@ func TestSmallPacketRejectsMalformedPayloads(t *testing.T) {
 			return err
 		}},
 		{"unknown rejection reason", func() error {
-			_, err := decodeServerControlPayload(protocol.StatePlay, 4, []byte{0, 0, 0, 0, 0, 0, 0, 0, 15})
+			// 原因 ID 15 已分配给 `not_armor`，未知原因样本随之推进到 16。
+			_, err := decodeServerControlPayload(protocol.StatePlay, 4, []byte{0, 0, 0, 0, 0, 0, 0, 0, 16})
 			return err
 		}},
 	}

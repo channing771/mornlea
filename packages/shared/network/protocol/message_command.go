@@ -183,3 +183,23 @@ func (command PlaceWater) Validate() error {
 	}
 	return nil
 }
+
+// EquipArmor 请求把权威选中快捷栏格中的护甲件穿到对应槽位。
+//
+// 与 DropSelectedItem 同形：只带序号。客户端**不声明目标槽位、也不声明物品**
+// ——槽位由护甲件类经权威映射唯一决定（`core.ArmorSlotOf`），作用的护甲件
+// 一律取权威选中的快捷栏格，与「位置与栏位都由服务端决定」是同一条边界。
+// 互换在同一权威 tick 内原子完成（手中旧件换回手、原装备件上台），成功经
+// 既有 `InventoryUpdate` 广播覆盖，不设私有成功确认消息；选中格未持有
+// 护甲件时服务端以 `CommandRejected{Reason: RejectNotArmor}` 拒绝且不产生
+// 任何状态变更。
+type EquipArmor struct {
+	Sequence uint64
+}
+
+func (EquipArmor) clientMessage() {}
+func (EquipArmor) clientPacket()  {}
+
+// Validate 与 `DropSelectedItem` 同形：本命令没有 wire 上的取值域约束，
+// 序号语义由会话层解释，零序号合法。
+func (EquipArmor) Validate() error { return nil }

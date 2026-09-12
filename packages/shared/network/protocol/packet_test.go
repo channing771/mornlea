@@ -30,6 +30,7 @@ func TestValidateClientPacket(t *testing.T) {
 		{"till soil", StatePlay, TillSoil{Yaw: 90, Pitch: -15}},
 		{"collect water", StatePlay, CollectWater{Yaw: 90, Pitch: -15}},
 		{"place water", StatePlay, PlaceWater{Yaw: 90, Pitch: -15}},
+		{"equip armor", StatePlay, EquipArmor{}},
 	}
 	for _, tc := range valid {
 		t.Run(tc.name, func(t *testing.T) {
@@ -97,8 +98,8 @@ func TestProtocolV1StateAndErrorCodesAreFrozen(t *testing.T) {
 			t.Fatalf("%s state = %d, want %d", tc.name, tc.got, tc.want)
 		}
 	}
-	if ProtocolVersion != 41 {
-		t.Fatalf("protocol version = %d, want 41", ProtocolVersion)
+	if ProtocolVersion != 42 {
+		t.Fatalf("protocol version = %d, want 42", ProtocolVersion)
 	}
 
 	codes := []struct {
@@ -142,6 +143,7 @@ func TestValidateServerPacket(t *testing.T) {
 		{"block changes", StatePlay, validPacketBlockChanges()},
 		{"forget chunks", StatePlay, ForgetChunks{Chunks: []core.ChunkPos{{}}}},
 		{"player state", StatePlay, PlayerState{Position: mgl32.Vec3{1, 2, 3}, Velocity: mgl32.Vec3{4, 5, 6}, Yaw: 90, Pitch: -15, MiningActive: true, MiningTarget: core.BlockPos{X: 1, Y: 2, Z: 3}, MiningProgressTicks: 6, MiningRequiredTicks: 15, MiningHarvestable: true}},
+		{"player state with max armor", StatePlay, PlayerState{ArmorPoints: core.MaxArmorPoints}},
 		{"command reject", StatePlay, CommandRejected{Reason: RejectInvalidRay}},
 		{"keep alive", StatePlay, KeepAlive{Token: 1}},
 		{"disconnect", StatePlay, Disconnect{Code: DisconnectTimeout}},
@@ -195,6 +197,7 @@ func TestValidateServerPacket(t *testing.T) {
 		{"player state hunger out of range", StatePlay, PlayerState{Hunger: core.MaxHunger + 1}},
 		{"player state weather out of range", StatePlay, PlayerState{WeatherKind: core.WeatherThunder + 1}},
 		{"player state season out of range", StatePlay, PlayerState{Season: core.SeasonWinter + 1}},
+		{"player state armor out of range", StatePlay, PlayerState{ArmorPoints: core.MaxArmorPoints + 1}},
 		{"unknown command rejection", StatePlay, CommandRejected{Reason: RejectReason("other")}},
 		{"inventory state out of range", StatePlay, InventoryState{Inventory: core.Inventory{Hotbar: core.Hotbar{Selected: core.HotbarSlots}}}},
 		{"empty drop upserts", StatePlay, ItemDropUpserts{}},

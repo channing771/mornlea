@@ -38,6 +38,7 @@ func TestProtocolMessageShapesImplementSealedInterfaces(t *testing.T) {
 		},
 		protocol.KeepAliveReply{Token: 1},
 		protocol.ChatCommand{Text: "@A x"},
+		protocol.EquipArmor{Sequence: 2},
 	}
 	serverMessages := []protocol.ServerMessage{
 		protocol.ChunkSnapshot{},
@@ -78,7 +79,7 @@ func TestProtocolMessageShapesImplementSealedInterfaces(t *testing.T) {
 		protocol.CompanionDespawn{ID: companion.ID{}},
 		protocol.PlaceBlockSucceeded{Sequence: 1},
 	}
-	if len(clientMessages) != 8 || len(serverMessages) != 18 {
+	if len(clientMessages) != 9 || len(serverMessages) != 18 {
 		t.Fatal("消息集合不完整")
 	}
 }
@@ -177,8 +178,8 @@ func TestBucketCommandIDsAppendOnly(t *testing.T) {
 	if id, ok := protocol.ClientPacketID(protocol.StatePlay, protocol.PlaceWater{}); !ok || id != 17 {
 		t.Fatalf("PlaceWater ID = (%d,%v)，想要 (17,true)", id, ok)
 	}
-	if protocol.ProtocolVersion != 41 {
-		t.Fatalf("ProtocolVersion = %d，想要 41", protocol.ProtocolVersion)
+	if protocol.ProtocolVersion != 42 {
+		t.Fatalf("ProtocolVersion = %d，想要 42", protocol.ProtocolVersion)
 	}
 }
 
@@ -201,6 +202,7 @@ func TestRejectReasonsAreStableProtocolValues(t *testing.T) {
 		{protocol.RejectContainerCapacity, "container_capacity"},
 		{protocol.RejectNotFluidSource, "not_fluid_source"},
 		{protocol.RejectBucketMismatch, "bucket_mismatch"},
+		{protocol.RejectNotArmor, "not_armor"},
 	}
 	for _, tc := range tests {
 		if string(tc.got) != tc.want {

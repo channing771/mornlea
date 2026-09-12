@@ -10,7 +10,8 @@ import (
 
 // TestProtocolV37PlayerStateCarriesSeasonAndTemperature 覆盖 v37 追加的季节
 // 三字节：`Season`（u8）、`SeasonProgress`（u8）按此序紧跟在 `WeatherKind`
-// 之后，`Temperature`（i8）是载荷最末一字节，全合法季节往返保值。
+// 之后，`Temperature`（i8）紧跟 `SeasonProgress` 之后（v42 起其后还有 1 字节
+// 护甲点数），全合法季节往返保值。
 //
 // 样本取 2/128/−8 三个中间值：0 与「编码器漏写该字段、解码器读出零值」不可
 // 分辨，进度取 128（0x80）与温度取 −8（0xf8）还能分辨「u8 当 i8 解」之类的
@@ -37,10 +38,11 @@ func TestProtocolV37PlayerStateCarriesSeasonAndTemperature(t *testing.T) {
 		}
 
 		// 三新字节恰好接在天气之后：载荷末尾依次是 8 字节小端绝对世界时间、
-		// 1 字节天气，再接季节、年内进度各 1 字节，最后 1 字节温度。
+		// 1 字节天气，再接季节、季内进度、温度各 1 字节，最后 1 字节护甲点数
+		// （v42 起，此处夹具为零值）。
 		got := hex.EncodeToString(payload)
 		wantSuffix := "0807060504030201" + "01" +
-			hex.EncodeToString([]byte{byte(season), 128, 0xF8})
+			hex.EncodeToString([]byte{byte(season), 128, 0xF8}) + "00"
 		if len(got) < len(wantSuffix) || got[len(got)-len(wantSuffix):] != wantSuffix {
 			t.Fatalf("季节 %d 的 payload = %s，想要以 %s 结尾", season, got, wantSuffix)
 		}

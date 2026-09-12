@@ -63,14 +63,14 @@ func TestGridCraftingPacketIDsAreFrozen(t *testing.T) {
 	}{
 		{StatePlay, CraftingState{}, 21},
 	})
-	if _, ok := ClientPacketForID(StatePlay, 17+1); ok {
-		t.Fatal("Play client packet ID 18 必须保持未分配")
+	if _, ok := ClientPacketForID(StatePlay, 18+1); ok {
+		t.Fatal("Play client packet ID 19 必须保持未分配")
 	}
 	if _, ok := ServerPacketForID(StatePlay, 28+1); ok {
 		t.Fatal("Play server packet ID 29 必须保持未分配")
 	}
-	if ProtocolVersion != 41 {
-		t.Fatalf("协议版本 = %d，想要 41——夜行者三类消息由 v30 承载、显示相位偏移由 v31 承载、私有战斗命中由 v32 承载、被动牛三类消息由 v33 承载、放牧位由 v34 承载、死亡原因位由 v35 承载、天气字节由 v36 承载、季节三字段由 v37 承载、水桶双命令由 v38 承载、双维值域放行由 v39 承载、登录视距字节由 v40 承载、潜行位由 v41 承载", ProtocolVersion)
+	if ProtocolVersion != 42 {
+		t.Fatalf("协议版本 = %d，想要 42——夜行者三类消息由 v30 承载、显示相位偏移由 v31 承载、私有战斗命中由 v32 承载、被动牛三类消息由 v33 承载、放牧位由 v34 承载、死亡原因位由 v35 承载、天气字节由 v36 承载、季节三字段由 v37 承载、水桶双命令由 v38 承载、双维值域放行由 v39 承载、登录视距字节由 v40 承载、潜行位由 v41 承载、护甲点数与装备互换命令由 v42 承载", ProtocolVersion)
 	}
 }
 
@@ -102,8 +102,8 @@ func TestProtocolV22TillSoilPacketIDIsFrozen(t *testing.T) {
 	} else if _, isTake := packet.(TakeCraftingOutput); !isTake {
 		t.Fatalf("Play client packet ID 15 = %T，想要 TakeCraftingOutput", packet)
 	}
-	if ProtocolVersion != 41 {
-		t.Fatalf("协议版本 = %d，想要 41", ProtocolVersion)
+	if ProtocolVersion != 42 {
+		t.Fatalf("协议版本 = %d，想要 42", ProtocolVersion)
 	}
 }
 
@@ -119,8 +119,37 @@ func TestProtocolV27BoneMealPacketIDIsFrozen(t *testing.T) {
 	if _, isBone := packet.(BoneMeal); !isBone {
 		t.Fatalf("Play client packet ID 14 = %T，想要 BoneMeal", packet)
 	}
-	if _, ok := ClientPacketForID(StatePlay, 17+1); ok {
-		t.Fatal("Play client packet ID 18 必须保持未分配")
+	// 18 已由装备互换命令占用（v42）；「相邻编号不被静默占用」的门禁语义
+	// 随之推进到 19。
+	if _, ok := ClientPacketForID(StatePlay, 18+1); ok {
+		t.Fatal("Play client packet ID 19 必须保持未分配")
+	}
+}
+
+// TestProtocolV42EquipArmorPacketIDIsFrozen 钉死 v42 的 wire 变化之一：装备
+// 互换命令占用 Play/C→S 的 ID 18（载荷仅 u64 序号），废止的 ID 1 依旧不复用。
+// 上界断言写成「相邻已分配编号 +1」而不是裸字面量，下次追加客户端 packet 时
+// 它会跟着末项走，不会静默退化成「测一个已合法的 ID」。
+func TestProtocolV42EquipArmorPacketIDIsFrozen(t *testing.T) {
+	id, ok := ClientPacketID(StatePlay, EquipArmor{})
+	if !ok || id != 18 {
+		t.Fatalf("EquipArmor ID = %d, ok=%v，想要 18, true", id, ok)
+	}
+	packet, ok := ClientPacketForID(StatePlay, 18)
+	if !ok {
+		t.Fatal("Play client packet ID 18 未注册")
+	}
+	if _, isEquip := packet.(EquipArmor); !isEquip {
+		t.Fatalf("Play client packet ID 18 = %T，想要 EquipArmor", packet)
+	}
+	if _, ok := ClientPacketForID(StatePlay, 1); ok {
+		t.Fatal("Play client packet ID 1 必须保持未分配")
+	}
+	if _, ok := ClientPacketForID(StatePlay, 18+1); ok {
+		t.Fatal("Play client packet ID 19 必须保持未分配")
+	}
+	if ProtocolVersion != 42 {
+		t.Fatalf("协议版本 = %d，想要 42", ProtocolVersion)
 	}
 }
 
@@ -187,6 +216,7 @@ func TestCommandRejectReasonIDsAreFrozen(t *testing.T) {
 		{RejectContainerCapacity, 12},
 		{RejectNotFluidSource, 13},
 		{RejectBucketMismatch, 14},
+		{RejectNotArmor, 15},
 	}
 	for _, tc := range reasons {
 		got, ok := CommandRejectReasonID(tc.reason)
@@ -204,7 +234,7 @@ func TestCommandRejectReasonIDsAreFrozen(t *testing.T) {
 	if _, ok := CommandRejectReasonForID(0); ok {
 		t.Fatal("zero rejection reason ID decoded")
 	}
-	if _, ok := CommandRejectReasonForID(15); ok {
+	if _, ok := CommandRejectReasonForID(16); ok {
 		t.Fatal("unknown rejection reason ID decoded")
 	}
 }
@@ -303,6 +333,9 @@ func sameClientPacketType(left, right ClientPacket) bool {
 		return ok
 	case PlaceWater:
 		_, ok := right.(PlaceWater)
+		return ok
+	case EquipArmor:
+		_, ok := right.(EquipArmor)
 		return ok
 	}
 	return false

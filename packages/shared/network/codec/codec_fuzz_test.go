@@ -37,9 +37,9 @@ func FuzzSmallPacketCodec(f *testing.F) {
 	}
 	f.Add(uint8(protocol.StatePlay), uint32(0), []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
 	f.Add(uint8(protocol.StatePlay), uint32(5), []byte{1, 0, 0, 0, 0, 0, 0, 0})
-	// protocol.PlayerState 的种子由编码器现算，尾部字段（v21 起含 Oxygen、v24 起含 Hunger）
-	// 一变就自动跟上，不会像手写字节那样悄悄退化成"截断的旧版载荷"。饥饿值取
-	// 非零非满的中间值：满值样本进不了"越界饥饿必须被拒"的邻域。
+	// protocol.PlayerState 的种子由编码器现算，尾部字段（v21 起含 Oxygen、v24 起含 Hunger、
+	// v42 起含护甲点数）一变就自动跟上，不会像手写字节那样悄悄退化成"截断的旧版载荷"。
+	// 饥饿值取非零非满的中间值：满值样本进不了"越界饥饿必须被拒"的邻域。
 	if id, payload, err := encodeServerControlPayload(protocol.StatePlay, protocol.PlayerState{
 		Dimension: 0, Health: 15, Oxygen: 0x0101, Hunger: 12, WorldTimeTicks: 24000,
 	}); err == nil {
@@ -67,6 +67,12 @@ func FuzzSmallPacketCodec(f *testing.F) {
 	}
 	if id, payload, err := encodeClientPacketPayload(protocol.StatePlay, protocol.PlaceWater{
 		Sequence: 0x0102030405060708, Yaw: 1.5, Pitch: -0.5,
+	}); err == nil {
+		f.Add(uint8(protocol.StatePlay), id, payload)
+	}
+	// v42 装备互换命令与 DropSelectedItem 同形：种子同样由编码器现算。
+	if id, payload, err := encodeClientPacketPayload(protocol.StatePlay, protocol.EquipArmor{
+		Sequence: 0x0102030405060708,
 	}); err == nil {
 		f.Add(uint8(protocol.StatePlay), id, payload)
 	}

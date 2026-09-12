@@ -97,6 +97,10 @@ func encodeClientPacketPayload(state protocol.State, packet protocol.ClientPacke
 			e.u8(message.To)
 		case protocol.TakeCraftingOutput:
 			e.u64(message.Sequence)
+		case protocol.EquipArmor:
+			// v42：装备互换命令与 `DropSelectedItem` 同形，只携带 u64 序号；
+			// 目标槽位由服务端按护甲件类映射决定，wire 上不携带。
+			e.u64(message.Sequence)
 		default:
 			return 0, nil, codecError("encode client", state, packetID, protocol.InvalidClientPacket(state, packet))
 		}
@@ -328,6 +332,11 @@ func decodeClientPacketPayload(state protocol.State, packetID uint32, payload []
 				place.Pitch, err = d.f32()
 			}
 			packet = place
+		case 18:
+			// v42：装备互换命令与 `DropSelectedItem` 同形，只读 u64 序号。
+			var equip protocol.EquipArmor
+			equip.Sequence, err = d.u64()
+			packet = equip
 		default:
 			return nil, codecError("decode client", state, packetID, errUnknownPacketID)
 		}

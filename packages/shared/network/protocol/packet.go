@@ -7,7 +7,12 @@ import (
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-// ProtocolVersion 是当前唯一支持的协议版本；v41 在 `PlayerInput` 尾部追加
+// ProtocolVersion 是当前唯一支持的协议版本；v42 在 `PlayerState` 载荷尾部
+// （`Temperature` 之后）追加 1 字节护甲点数 `ArmorPoints`（u8，合法域
+// 0..`core.MaxArmorPoints`，越界拒绝），在 Play C→S 尾部新增 ID 18 的装备
+// 互换命令 `EquipArmor`（u64 序号，与 `DropSelectedItem` 同形：目标槽位由
+// 护甲件类经权威映射唯一决定，互换成功经既有 `InventoryUpdate` 广播覆盖），
+// 并新增 `RejectReason` 15（非护甲件）；v41 在 `PlayerInput` 尾部追加
 // `Sneaking` 潜行位（紧跟 `Sprinting` 之后）；v40 在 `LoginStart` 载荷尾部
 // （`DisplayName` 之后）追加 1 字节期望视距（u8，闭区间 2..64 合法：越界值
 // 由服务端登录驱动以 `LoginProtocolViolation` 回 `LoginReject` 拒绝登录，
@@ -46,6 +51,10 @@ import (
 // despawn 只携带 ID），并维护旧客户端握手拒绝语义；v29 在 `PlayerState` 尾部追加
 // `SaturationZero` 饱和度归零提示位（紧跟 `Hunger` 之后、`WorldTimeTicks` 之前）；v28 在 `PlayerInput` 尾部追加 `Sprinting` 疾跑位（紧跟 `Eating` 之后），v41 在 `PlayerInput` 尾部追加 `Sneaking` 潜行位（紧跟 `Sprinting` 之后）；v27 新增 Play C→S ID 14 `BoneMeal`，v26 新增 Play S→C ID 20 `PlaceBlockSucceeded`，v25 只扩展既有 `Mining` 位语义不新增字段，v24 上线权威饥饿 Eating/Hunger 并拒绝 v23 及更早登录。
 //
+// v42 是纯追加：只在 `PlayerState` 载荷尾部（`Temperature` 之后）新增 1 字节
+// 护甲点数、只在 Play C→S 尾部新增 ID 18 的 `EquipArmor`，不改动既有 packet
+// 的 wire 形状与全部长度上限；新增的 `RejectReason` 15 只扩拒绝原因枚举，
+// 不改动既有编号；旧版握手拒绝是既有语义。
 // v41 是纯追加：只在 `PlayerInput` 载荷尾部新增 1 字节潜行位，不新增
 // packet、不改动既有包 ID、不改动既有 packet 的 wire 形状与全部长度上限、
 // 不新增 `RejectReason`（潜行放置分流复用既有 `RejectInvalidInput` 编号）；
@@ -78,7 +87,7 @@ import (
 //   - `PlayerInput`（Play/C→S ID 0）末尾追加 1 字节 `Sprinting`，紧跟 `Eating` 之后；
 //     v41 在其后（`Sprinting` 之后）再追加 1 字节 `Sneaking`。
 //     四者同形：客户端只声明按键意图，权威结算全在服务端。
-//   - `PlayerState`（Play/S→C ID 3）在 v24 已追加 1 字节 `Hunger`，在 v29 再追加 1 字节 `SaturationZero`，在 v31 再追加 2 字节 `DayPhaseOffset`（u16，值域 0..23999，越界拒绝），均落在 `WorldTimeTicks` 之前；v36 在 `WorldTimeTicks` 之后再追加 1 字节 `WeatherKind`（u8，值域 0..2，越界拒绝）；v37 在 `WeatherKind` 之后追加 3 字节 `Season`/`SeasonProgress`/`Temperature`（u8/u8/i8，季节值域 0..3 越界拒绝，进度与温度全域合法）。三层饥饿状态里只有饥饿值与零提示位上线，饱和度与疲劳值是纯服务端量、不占 wire 字段（design.md D6）；相位偏移只平移显示相位，绝对世界时间的推进语义不变；天气是服务端权威三态，客户端只消费最新有效值；季节与温度同为权威派生量，客户端按 ServerTick 门控镜像。
+//   - `PlayerState`（Play/S→C ID 3）在 v24 已追加 1 字节 `Hunger`，在 v29 再追加 1 字节 `SaturationZero`，在 v31 再追加 2 字节 `DayPhaseOffset`（u16，值域 0..23999，越界拒绝），均落在 `WorldTimeTicks` 之前；v36 在 `WorldTimeTicks` 之后再追加 1 字节 `WeatherKind`（u8，值域 0..2，越界拒绝）；v37 在 `WeatherKind` 之后追加 3 字节 `Season`/`SeasonProgress`/`Temperature`（u8/u8/i8，季节值域 0..3 越界拒绝，进度与温度全域合法）；v42 在 `Temperature` 之后再追加 1 字节 `ArmorPoints`（u8，值域 0..`core.MaxArmorPoints`，越界拒绝）。三层饥饿状态里只有饥饿值与零提示位上线，饱和度与疲劳值是纯服务端量、不占 wire 字段（design.md D6）；相位偏移只平移显示相位，绝对世界时间的推进语义不变；天气是服务端权威三态，客户端只消费最新有效值；季节与温度同为权威派生量，客户端按 ServerTick 门控镜像；护甲点数同为服务端权威派生量，客户端只消费最新有效值。
 //
 // 历史：v23 在 `LoginSuccess` 追加 `WorldSeed`（u64，wire 上紧跟 `PlayerID` 之后），
 // 供客户端确定性生成远环壳——该段在旧基线上原编号 v18，main 合并 fluid 系列
@@ -88,7 +97,7 @@ import (
 // v21 在 `PlayerState` 末尾追加 2 字节权威氧气（只发给玩家本人的权威
 // 值）；v20 追加 8 个流体方块编号（只扩方块 ID 集合，wire 形状不变），流体
 // 变更走既有区块变更通道（design.md D8）。
-const ProtocolVersion uint32 = 41
+const ProtocolVersion uint32 = 42
 
 // State 标识连接当前允许交换的 packet 集合。
 type State uint8
@@ -279,6 +288,8 @@ func ValidateClientPacket(state State, packet ClientPacket) error {
 		case CollectWater:
 			return clientPacket.Validate()
 		case PlaceWater:
+			return clientPacket.Validate()
+		case EquipArmor:
 			return clientPacket.Validate()
 		case MoveCraftingStack:
 			return clientPacket.Validate()
