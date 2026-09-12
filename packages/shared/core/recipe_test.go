@@ -446,11 +446,11 @@ func TestRecipeShapeTableOneToThirteenIsFrozen(t *testing.T) {
 
 // TestRecipeRejectsUnknownIDs 覆盖 spec Scenario「未登记配方被拒绝」：
 // recipe 0 与任意大于当前末项的编号都必须稳定拒绝且不产生产物。
-// 写成 `RecipeBucket+1` 起步而不是裸字面量，
+// 写成 `RecipeIronBoots+1` 起步而不是裸字面量，
 // 下次追加配方时这段循环自动跟着末项走。
 func TestRecipeRejectsUnknownIDs(t *testing.T) {
 	unknown := []core.RecipeID{0}
-	for id := core.RecipeBucket + 1; id <= core.RecipeBucket+5; id++ {
+	for id := core.RecipeIronBoots + 1; id <= core.RecipeIronBoots+5; id++ {
 		unknown = append(unknown, id)
 	}
 	unknown = append(unknown, 200, 255)
@@ -507,9 +507,9 @@ func TestRegisteredRecipeCellsStayInsideShapeBounds(t *testing.T) {
 	}
 	// 注册表从 1 起无空洞连续注册到末项常量：循环按「首个未注册即停」推进，
 	// 中间留洞会让后面的配方全部漏检，这里用计数把洞钉出来。
-	if checked != int(core.RecipeBucket) {
+	if checked != int(core.RecipeIronBoots) {
 		t.Fatalf("注册表枚举到 %d 条，想要与末项常量一致的 %d 条（注册表出现空洞？）",
-			checked, core.RecipeBucket)
+			checked, core.RecipeIronBoots)
 	}
 }
 

@@ -131,6 +131,11 @@ var explicitCanonicalItemNames = map[ItemID]string{
 	ItemBrokenIronSword:    "broken_iron_sword",
 	ItemEmptyBucket:        "empty_bucket",
 	ItemWaterBucket:        "water_bucket",
+	// 四件铁质护甲不可放置、无方块名可复用，必须显式登记 machine name。
+	ItemIronHelmet:     "iron_helmet",
+	ItemIronChestplate: "iron_chestplate",
+	ItemIronLeggings:   "iron_leggings",
+	ItemIronBoots:      "iron_boots",
 }
 
 var canonicalItemNames = buildCanonicalItemNames()

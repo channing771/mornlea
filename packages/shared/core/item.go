@@ -116,6 +116,15 @@ const (
 	// 与完成采掘树叶时的独立概率判定，两者都走既有权威掉落物系统。同样只能
 	// 追加在 `ItemIDMax` 哨兵之前。
 	ItemSapling
+	// 四件铁质护甲是可穿戴物品：堆叠上限 1、不经 `ItemPlacement` 放置、
+	// 不出现在任何 `BlockDrop` 表（唯一来源是护甲配方）；耐久上限登记在
+	// `ItemMaxDurability`，数值单一真源在 armor 域。损坏形态沿耐久原地表达
+	// （耐久归零的护甲件保留在槽内贡献 0 点，见 armor 域 `ArmorPoints`），
+	// 不新增损坏物品编号。同样只能追加在 `ItemIDMax` 哨兵之前。
+	ItemIronHelmet
+	ItemIronChestplate
+	ItemIronLeggings
+	ItemIronBoots
 	// ItemIDMax 是合法物品编号的独占上界（最后一个合法 ItemID + 1），本身不是
 	// 物品枚举成员。它供测试以「item < ItemIDMax」穷举全部物品，替代依赖
 	//「某个具体物品恰为枚举末项」的脆弱写法；放在 core 是因为物品注册表归属
@@ -340,6 +349,9 @@ func ItemStackLimit(item ItemID) (uint8, bool) {
 		ItemBrokenWoodenSword, ItemBrokenStoneSword, ItemBrokenIronSword,
 		ItemEmptyBucket, ItemWaterBucket:
 		return 1, true
+	// 护甲件与工具同形：单件穿戴、不可堆叠。
+	case ItemIronHelmet, ItemIronChestplate, ItemIronLeggings, ItemIronBoots:
+		return 1, true
 	default:
 		return 0, false
 	}
@@ -366,6 +378,16 @@ func ItemMaxDurability(item ItemID) (uint16, bool) {
 		return 131, true
 	case ItemIronHoe:
 		return 250, true
+	// 铁质护甲的耐久上限数值单一真源在 armor 域：本表只登记「这些物品有
+	// 耐久上限」，不复制数值。
+	case ItemIronHelmet:
+		return ironHelmetMaxDurability, true
+	case ItemIronChestplate:
+		return ironChestplateMaxDurability, true
+	case ItemIronLeggings:
+		return ironLeggingsMaxDurability, true
+	case ItemIronBoots:
+		return ironBootsMaxDurability, true
 	default:
 		return 0, false
 	}

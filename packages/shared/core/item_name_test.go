@@ -108,6 +108,10 @@ func TestItemDisplayNameExplicitNamesAreStable(t *testing.T) {
 		{ItemCookedBeef, "熟牛肉"},
 		{ItemEmptyBucket, "空桶"},
 		{ItemWaterBucket, "水桶"},
+		{ItemIronHelmet, "铁头盔"},
+		{ItemIronChestplate, "铁胸甲"},
+		{ItemIronLeggings, "铁护腿"},
+		{ItemIronBoots, "铁靴子"},
 	} {
 		if name, ok := ItemDisplayName(test.item); !ok || name != test.want {
 			t.Fatalf("物品 %d 显示名=%q（ok=%v），想要 %q", test.item, name, ok, test.want)

@@ -65,6 +65,14 @@ const (
 	RecipeIronSword
 	// RecipeBucket 左中/右中/底中 3 铁锭合成 1 空桶。
 	RecipeBucket
+	// RecipeIronHelmet 顶排 3 铁锭、次排左右各 1（5 件）合成满耐久铁头盔。
+	RecipeIronHelmet
+	// RecipeIronChestplate 次排左右各 1、下两排其余六格满（8 件）合成满耐久铁胸甲。
+	RecipeIronChestplate
+	// RecipeIronLeggings 顶排 3 铁锭、下两排左右各 1（7 件）合成满耐久铁护腿。
+	RecipeIronLeggings
+	// RecipeIronBoots 上两排左右各 1（4 件）合成满耐久铁靴子。
+	RecipeIronBoots
 )
 
 // Recipe 返回 id 的固定形状配方；未知 ID 返回 false。
@@ -305,6 +313,49 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 			},
 			Output: ItemStack{Item: ItemEmptyBucket, Count: 1},
 		}, true
+	// 四条铁质护甲配方：产物耐久引用 armor 域单一真源常量，合成是护甲耐久
+	// 的唯一来源。四条形状全部左右对称，镜像与自身相同（与熔炉圆环、床的
+	// 声明方式同形）。
+	case RecipeIronHelmet:
+		return RecipePattern{
+			Width: 3, Height: 2, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemIronIngot, ItemIronIngot, ItemIronIngot,
+				ItemIronIngot, ItemNone, ItemIronIngot,
+				ItemNone, ItemNone, ItemNone,
+			},
+			Output: ItemStack{Item: ItemIronHelmet, Count: 1, Durability: ironHelmetMaxDurability},
+		}, true
+	case RecipeIronChestplate:
+		return RecipePattern{
+			Width: 3, Height: 3, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemIronIngot, ItemNone, ItemIronIngot,
+				ItemIronIngot, ItemIronIngot, ItemIronIngot,
+				ItemIronIngot, ItemIronIngot, ItemIronIngot,
+			},
+			Output: ItemStack{Item: ItemIronChestplate, Count: 1, Durability: ironChestplateMaxDurability},
+		}, true
+	case RecipeIronLeggings:
+		return RecipePattern{
+			Width: 3, Height: 3, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemIronIngot, ItemIronIngot, ItemIronIngot,
+				ItemIronIngot, ItemNone, ItemIronIngot,
+				ItemIronIngot, ItemNone, ItemIronIngot,
+			},
+			Output: ItemStack{Item: ItemIronLeggings, Count: 1, Durability: ironLeggingsMaxDurability},
+		}, true
+	case RecipeIronBoots:
+		return RecipePattern{
+			Width: 3, Height: 2, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemIronIngot, ItemNone, ItemIronIngot,
+				ItemIronIngot, ItemNone, ItemIronIngot,
+				ItemNone, ItemNone, ItemNone,
+			},
+			Output: ItemStack{Item: ItemIronBoots, Count: 1, Durability: ironBootsMaxDurability},
+		}, true
 	default:
 		return RecipePattern{}, false
 	}
@@ -323,9 +374,10 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 // 或有效尺寸之外的格（个人网格的格 4..8）残留物品时，一律判定无匹配——
 // 正常权威路径不会构造出这两种输入，这里是防御层。
 //
-// 实现是固定 20 条 × 至多 9 格的纯值循环，无 map/slice 分配，不建通用矩阵包
-// （design.md D3）。循环上界用命名常量 RecipeBucket 而非字面量：追加新配方时
-// 它随注册表自然延伸（与 BlockIDMax 同形的哨兵纪律）。
+// 实现是固定 24 条 × 至多 9 格的纯值循环，无 map/slice 分配，不建通用矩阵包
+// （design.md D3）。循环上界用命名常量而非字面量、恒取注册表当前末项
+// （现为 `RecipeIronBoots`）：追加新配方时把上界推进到新末项即可，与
+// `BlockIDMax` 同形的哨兵纪律。
 func MatchCraftingGrid(size uint8, slots [CraftingGridSlots]ItemStack) (RecipeID, ItemStack, bool) {
 	if size != 2 && size != 3 {
 		return 0, ItemStack{}, false
@@ -347,7 +399,7 @@ func MatchCraftingGrid(size uint8, slots [CraftingGridSlots]ItemStack) (RecipeID
 	if !ok {
 		return 0, ItemStack{}, false
 	}
-	for id := RecipeStoneBricks; id <= RecipeBucket; id++ {
+	for id := RecipeStoneBricks; id <= RecipeIronBoots; id++ {
 		pattern, registered := recipePattern(id)
 		if !registered {
 			continue
