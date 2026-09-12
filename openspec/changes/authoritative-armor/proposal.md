@@ -14,7 +14,7 @@
 - `packages/server/storage/player` 玩家 schema v8→v9：装备四格随快照持久化（每格沿用背包格同一 5 字节栈编码），v8 旧档只读迁移为空装备。
 - `packages/client`：镜像 `ArmorPoints`、桥 `uiState` 追加 armor 分节（client ABI v18→v19，Go/Rust/TS 三端钉值）、WebView 状态行组件族新增护甲条（10 档图标、半档粒度、点数为 0 时零像素差异）、使用键手持护甲时上行 `EquipArmor`（沿 F-03 判定先例）。
 - `packages/server/server`：命令接线与 Memory/TCP parity；重启保值集成测试。
-- 新 capture 场景（穿甲 HUD）与 golden 追加；audit 增加护甲域单一真源守卫。
+- 新穿甲 HUD 部件基线场景（`frontend/visual` fixture `hud-armor`）与 golden 追加；audit 增加护甲域单一真源守卫。
 
 ## 契约与版本影响
 
@@ -22,7 +22,7 @@
 - 玩家 schema v8→v9（尾部追加 20 字节装备区；v1..v8 只读迁移，v8 迁移后装备为空）。
 - client ABI v18→v19（桥 `uiState` 追加 armor 分节，三端钉值同步）。
 - engine ABI、区块 schema、世界 metadata、`companions.ai`/`hostile_mobs`/`passive_mobs` schema、benchmark scenario 均不变。
-- golden：点数为 0 时 HUD 零像素差异，既有场景不重生成；新增 1 张穿甲场景 golden。
+- golden：点数为 0 时 HUD 零像素差异，既有场景不重生成；新增 1 张穿甲部件基线 golden（前端 `ui/` 30→31，世界场景 30 张逐位零差异）。
 
 ## 用户可观察结果
 
@@ -51,3 +51,5 @@
 > 修订（2026-09-12，控制会话）：原将护甲四件的快捷栏 sprite 顺延 D-11；实现任务组 1 时实测客户端存在「所有注册物品必须有图标」守护测试（顺延将带红 21 例），改判**任务组 6 交付四件程序化 sprite**，不等 D-11。
 
 > 修订（2026-09-12，任务组 3 实现）：装备区字节布局由「每槽 3 字节、共 12 字节」更正为「每槽沿用背包格同一 5 字节栈编码（item u16 小端 + count 1 字节 + durability u16 小端）、共 20 字节」。原前提「背包格每格 3 字节」与 codec 现实不符——3 字节只是 v2/v3 legacy 无耐久布局；耐久 0/165 形态必须逐位保值的 MUST 也只有 5 字节编码可满足。
+
+> 修订（2026-09-12，任务组 7 实现）：穿甲 HUD 场景载体由世界 capture 场景更正为前端部件基线（`frontend/visual` fixture）。原前提「无头 capture 画面呈现 HUD 条带」已不成立——常显 HUD（状态行、氧气、准星等）自 `webview-game-ui-unification` 起全量迁 WebView，无头路径 hudPush 纪律层零值退化、画面零 HUD 像素（water-underwater golden 目检佐证）；护甲条像素的唯一可入库载体是前端部件基线。世界场景 30 张与前端部件 30 张既有基线的零差异验收口径不变。

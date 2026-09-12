@@ -7,7 +7,7 @@
 - **network（`packages/shared/network`）**：`protocol/packet.go` 版本 42；`message_player.go` 尾部追加 `ArmorPoints`；`message_command.go` 新 `EquipArmor{Sequence}` 与 `not_armor` 拒绝原因；`registry.go` 登记命令 ID 18 与拒绝原因 ID。纯追加，无既有字段重排。
 - **storage（`packages/server/storage/player`）**：schema v9 在既有载荷尾部追加 4×5 字节装备区（每槽沿用背包格同一 5 字节栈编码：item u16 小端 + count 1 字节 + durability u16 小端）；`player_types.go` 的 `StoredPlayer`/`PlayerSave` 增加装备字段；`player_migration.go` 增加 v8→v9 只读迁移；testdata 增加 v9 fixture 并保留 v8 fixture 作迁移输入。
 - **server（`packages/server/server`）**：`session_ingress.go` 接线 `EquipArmor`；parity 与重启保值集成测试。
-- **client（`packages/client`）**：镜像 `ArmorPoints`；桥 `uiState` armor 分节（client ABI v18→v19，Go 组装、Rust 中继零行为、TS 类型三端钉值）；前端状态行组件族新增护甲条；`cmd/mornlea` 输入路径在使用键上升沿且手持护甲时上行 `EquipArmor`（不发 `PlaceBlock`）；capture 新场景。
+- **client（`packages/client`）**：镜像 `ArmorPoints`；桥 `uiState` armor 分节（client ABI v18→v19，Go 组装、Rust 中继零行为、TS 类型三端钉值）；前端状态行组件族新增护甲条；`cmd/mornlea` 输入路径在使用键上升沿且手持护甲时上行 `EquipArmor`（不发 `PlaceBlock`）；前端部件基线新 fixture `hud-armor`（常显 HUD 已迁 WebView、无头 capture 路径 hudPush 零值退化，护甲条像素载体为部件基线而非世界 capture）。
 
 ## 关键裁决
 
@@ -33,7 +33,7 @@
 
 ### D5 HUD 零点数零像素
 
-点数为 0 时护甲条不渲染任何像素，保证协议 v41 既有 golden 逐位零漂移（沿 B-12 `SaturationZero` 抖动门控先例）；穿甲呈现走新 capture 场景。
+点数为 0 时护甲条不渲染任何像素，保证协议 v41 既有 golden 逐位零漂移（沿 B-12 `SaturationZero` 抖动门控先例）；穿甲呈现走前端部件基线新 fixture `hud-armor`（点数 7 呈现 3 个完整图标与 1 个半图标）。
 **否决替代**：常显空护甲条——全部世界场景 golden 重生成，违背最小视觉扰动。
 
 ### D6 损坏形态护甲可穿戴、贡献 0 点
@@ -46,7 +46,7 @@
 - **线上协议**：v41 客户端连 v42 服务端按既有单向纪律在登录层拒绝；`PlayerState` 载荷尾部追加、命令 ID 与拒绝原因均为注册表追加，无既有 ID 重排。
 - **存档**：v1..v8 只读迁移读入（装备空），首次保存写 v9；无回写旧版路径（沿全仓存档单向纪律）。
 - **回退方案**：整分支 revert 即回到 v41/v8/v18 基线；因存档只前向，回退后 v9 存档不可读属已接受代价（与历次 schema 升版一致）。
-- **验证方法**：定点 `-race`（core/network/storage/sim/server/client 六组）→ parity（Memory/TCP 装备与减免一致）→ 重启保值集成 → `make frontend-check` → `make visual-check`（既有场景零差异 + 新场景）→ 全量 `make test-race` + `make rust` + `openspec validate --all --strict`（阶段 4 门禁）。
+- **验证方法**：定点 `-race`（core/network/storage/sim/server/client 六组）→ parity（Memory/TCP 装备与减免一致）→ 重启保值集成 → `make frontend-check` → `make visual-check`（既有世界场景零差异）与 `make frontend-visual-check`（既有部件零差异 + 新增 `hud-armor`）→ 全量 `make test-race` + `make rust` + `openspec validate --all --strict`（阶段 4 门禁）。
 
 ## 版本槽位持有
 

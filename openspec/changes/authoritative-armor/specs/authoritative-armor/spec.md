@@ -143,5 +143,5 @@
 #### Scenario: 护甲条半档粒度
 
 - **GIVEN** 权威点数为 7
-- **WHEN** 渲染穿甲 capture 场景
+- **WHEN** 渲染穿甲 HUD 部件基线场景（前端 `frontend/visual` fixture `hud-armor`）
 - **THEN** 护甲条呈现 3 个完整图标与 1 个半图标（7/20 按 2 点每档、半档收尾）

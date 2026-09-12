@@ -26,9 +26,9 @@
   - 文件：`packages/client/client`（镜像 `ArmorPoints`、`EquipArmor` 上行命令构造）、桥状态组装与 client ABI v18→v19（armor 分节三端钉值：Go 组装、Rust 中继、`packages/client/frontend` TS 类型；Rust 侧零行为仅测试清单同步）、前端状态行组件族（护甲条：10 档、半档粒度、0 点零渲染）+ vitest 组件断言、护甲四件的程序化快捷栏 sprite（清偿任务组 1 遗留的 21 例缺图标红测）、`packages/client/cmd/mornlea`（使用键上升沿手持护甲 → 上行 `EquipArmor`，不发 `PlaceBlock`）及输入判定测试。
   - 验证：`go test ./packages/client/... -race -count=1`；`make frontend-check`。
 
-- [ ] 7. capture 场景、golden 与 audit 守卫
-  - 文件：`packages/client/cmd/mornlea/capture`（新场景：穿甲 HUD，权威装配护甲后定格；既有场景清单不变）、对应 golden 再生（仅新增 1 张，既有场景零差异）、`packages/audit`（护甲域单一真源守卫：点数/耐久/公式只允许被 core 定义、其他包只读消费，沿 `TestDifficultyStaysASingleCoreDomain` 形态）、基线文档同步（根 `AGENTS.md` 版本矩阵、`openspec/config.yaml` 上下文、`docs/notes/progress.md`）。
-  - 验证：`go test ./packages/audit -count=1`；`make visual-check`（既有零差异）后 `make visual-update` 仅新增场景并复跑全绿。
+- [ ] 7. 穿甲 HUD 部件基线、golden 与 audit 守卫
+  - 文件：`packages/engine/crates/mornlea_client/frontend/visual`（新 fixture `hud-armor`：合成 `HudState` 携权威点数 7 驱动真实 `HudRoot`，呈现 3 个完整图标 + 1 个半图标；常显 HUD 已全量迁 WebView、无头 capture 路径 hudPush 零值退化、画面零 HUD 像素，部件基线是护甲条像素的唯一载体；既有 fixture 清单顺序不变，追加于 `hud-status` 之后）、对应 golden（`testdata/visual-golden/ui/hud-armor.png` 仅新增 1 张，既有部件与世界场景零差异；`testdata/visual-golden/README.md` ui 段同步）、`packages/audit`（护甲域单一真源守卫：点数/耐久/公式只允许被 core 定义、其他包只读消费，沿 `TestDifficultyStaysASingleCoreDomain` 形态）、基线文档同步（根 `AGENTS.md` 版本矩阵、`openspec/config.yaml` 上下文、`docs/notes/progress.md`）。
+  - 验证：`go test ./packages/audit -count=1`；`make visual-check`（世界 30 景零差异）与 `make frontend-visual-check`（部件既有 30 张零差异）后 `make frontend-visual-update` 仅新增 `hud-armor` 并复跑两者全绿。
 
 - [ ] 8. 收尾门禁
   - 命令：`test -z "$(gofmt -l .)"`；`go vet ./packages/contracts/... ./packages/shared/... ./packages/server/... ./packages/client/... ./packages/tools/... ./packages/audit/...`；`make test-race`；`make rust`；`openspec validate --all --strict --no-interactive`。

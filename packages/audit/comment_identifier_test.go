@@ -100,8 +100,9 @@ var nonGoNameExemptions = map[string]string{
 	"mornlea_lod_shell":      "Rust engine lod 模块的 FFI 出口函数名，snake_case，Go 侧没有同名声明",
 	"mornlea_tree_blocks":    "Rust engine worldgen 的运行时树形几何 FFI 出口函数名，snake_case，Go 侧没有同名声明",
 	"mornlea_worldgen_chunk": "Rust engine worldgen 的 FFI 出口函数名，snake_case，Go 侧没有同名声明",
-	"mornlea_worldgen_probe": "Rust engine worldgen probe 的 FFI 出口函数名，snake_case，Go 侧没有同名声明",
+	"mornlea_worldgen_probe": "Rust engine worldgen 的 FFI 出口函数名，snake_case，Go 侧没有同名声明",
 	"LodQuad":                "Rust engine lod 模块的壳 quad 结构体类型名，定义在 Rust 侧，Go 侧没有同名声明",
+	"not_armor":              "协议 CommandRejected 的拒绝原因标识符（`RejectNotArmor` 的线上字面值），小写下划线形状进 wire 字节，Go 侧没有同名声明",
 }
 
 // isShoutingName 判断名字是否形如「全大写 + 下划线」的常量命名。
