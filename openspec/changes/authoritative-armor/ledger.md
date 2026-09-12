@@ -19,4 +19,5 @@
 
 ## 验证证据（按 SHA）
 
-- SHA `0fb77e74`（任务组 1）：`go test ./packages/shared/core -race -count=1` → ok 1.461s，verbose 235 PASS / 0 FAIL；`gofmt -l packages/shared/core` 无输出；`go vet ./packages/shared/core/...` 干净；worktree 首跑前已执行 `make rust`（成功），六模块 `go build ./...` 通过。已知下游影响：`packages/client/cmd/mornlea/app` 21 例因护甲缺图标红（任务组 6 交付 sprite 后清偿）。
+- SHA `0fb77e74`（任务组 1）：`go test ./packages/shared/core -race -count=1` → ok 1.461s，verbose 235 PASS / 0 FAIL；`gofmt -l packages/shared/core` 无输出；`go vet ./packages/shared/core/...` 干净；worktree 首跑前已执行 `make rust`（成功），六模块 `go build ./...` 通过。已知下游影响：`packages/client/cmd/mornlea/app` 21 例因护甲缺图标红（任务组 6 交付 sprite 后清偿）。评审（SHA `0fb77e74`）：SPEC PASS / QUALITY PASS，零 blocking；待办仅 `recipe_shape_internal_test.go` 头注释陈旧。
+- SHA `4e5b91df`（任务组 2，含修复轮 `4e5b91df`）：首轮 `a654843b` 全部 `packages/shared/network/... -race` 4 包 ok、fuzz 冒烟 10s 0 失败、六模块 build 通过；评审 SPEC PASS / QUALITY FAIL（1 blocking：子树外 3 处协议钉值测试仍断言 41，重蹈 v41 升版失误模式）；修复轮 `4e5b91df` 后定点复核全绿——`go test ./packages/server/cmd/mornlea-server -count=1` ok 1.259s、`go test ./packages/client/cmd/mornlea/app -count=1 -run Protocol` ok、`go test ./packages/shared/network -race -count=1` ok 1.862s（gofmt/vet 三处包树干净），按审查者预授权标准达标关闭。已知豁免维持：app 包 21 例图标红待任务组 6。
