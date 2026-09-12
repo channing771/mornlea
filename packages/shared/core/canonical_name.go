@@ -136,6 +136,11 @@ var explicitCanonicalItemNames = map[ItemID]string{
 	ItemIronChestplate: "iron_chestplate",
 	ItemIronLeggings:   "iron_leggings",
 	ItemIronBoots:      "iron_boots",
+	// 弓箭批次四件同样不可放置、无方块名可复用，必须显式登记 machine name。
+	ItemBow:       "bow",
+	ItemArrow:     "arrow",
+	ItemBone:      "bone",
+	ItemBrokenBow: "broken_bow",
 }
 
 var canonicalItemNames = buildCanonicalItemNames()

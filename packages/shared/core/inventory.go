@@ -154,6 +154,37 @@ func (inventory Inventory) SetSlot(slot uint8, stack ItemStack) (Inventory, bool
 	return next, true
 }
 
+// ConsumeItem 在完整物品状态的副本上原子扣除一个指定物品：按固定扫描序
+// （快捷栏 0..8 在前、背包 9..35 在后，区段内统一索引升序）找到第一个数量
+// 大于零的匹配栈恰减 1，扣到零的栈规范化为零值空栈。任何区段都没有可消耗的
+// 匹配栈（空物品状态、目标物品只剩零数量残留栈、空物品或未注册编号）时返回
+// 原值与 false，绝不留下部分扣减。
+//
+// 扫描序是确定性契约：弹药类消耗（弓的发射结算）依赖「先快捷栏后背包、区段
+// 内取最低索引」的固定顺序，保证同一物品状态重复结算必然得到同一结果。数量
+// 为零的残留栈刻意跳过——它们不是可消耗的来源，与 `ConsumeRecipe` 对空栈的
+// 处理同形。实现在 36 格副本上的单次扫描，无分配。
+func (inventory Inventory) ConsumeItem(id ItemID) (Inventory, bool) {
+	if id == ItemNone {
+		return inventory, false
+	}
+	for slot := uint8(0); slot < InventorySlots; slot++ {
+		stack, _ := inventory.Slot(slot)
+		if stack.Item != id || stack.Count == 0 {
+			continue
+		}
+		// copy-on-write：只有真正找到可消耗栈时才复制原值，失败路径零复制。
+		next := inventory
+		stack.Count--
+		if stack.Count == 0 {
+			stack = ItemStack{}
+		}
+		next.setSlot(slot, stack)
+		return next, true
+	}
+	return inventory, false
+}
+
 // ConsumeRecipe 在合成网格的副本上原子执行一次形状消费：按与
 // `MatchCraftingGrid` 完全相同的归一化与对齐（先正向，形状开 `Mirror` 位时
 // 再按水平镜像重试一次），对被形状覆盖的每个非空格恰减 1，扣到零的格规范化

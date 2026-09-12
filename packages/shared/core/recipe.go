@@ -73,6 +73,12 @@ const (
 	RecipeIronLeggings
 	// RecipeIronBoots 上两排左右各 1（4 件）合成满耐久铁靴子。
 	RecipeIronBoots
+	// RecipeArrow 上格砾石、下格木棍的纵向两格合成 2 支箭。
+	//
+	// 它是远程战斗的弹药前置：砾石走采掘线、木棍走 RecipeStick，形状宽 1
+	// 高 2，2×2 个人网格即可合成（无需先造工作台）。镜像与自身相同；倒置
+	// （木棍在砾石上方）是垂直翻转，永不匹配。
+	RecipeArrow
 )
 
 // Recipe 返回 id 的固定形状配方；未知 ID 返回 false。
@@ -356,6 +362,17 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 			},
 			Output: ItemStack{Item: ItemIronBoots, Count: 1, Durability: ironBootsMaxDurability},
 		}, true
+	// 箭：砾石位于木棍正上方的纵向两格，产出 2 支箭。箭没有耐久概念，产物
+	// 耐久保持零值，否则同物品的两个栈会因无意义字段拒绝合并。
+	case RecipeArrow:
+		return RecipePattern{
+			Width: 1, Height: 2, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemGravel, ItemNone, ItemNone,
+				ItemStick, ItemNone, ItemNone,
+			},
+			Output: ItemStack{Item: ItemArrow, Count: 2},
+		}, true
 	default:
 		return RecipePattern{}, false
 	}
@@ -374,9 +391,9 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 // 或有效尺寸之外的格（个人网格的格 4..8）残留物品时，一律判定无匹配——
 // 正常权威路径不会构造出这两种输入，这里是防御层。
 //
-// 实现是固定 24 条 × 至多 9 格的纯值循环，无 map/slice 分配，不建通用矩阵包
+// 实现是固定 25 条 × 至多 9 格的纯值循环，无 map/slice 分配，不建通用矩阵包
 // （design.md D3）。循环上界用命名常量而非字面量、恒取注册表当前末项
-// （现为 `RecipeIronBoots`）：追加新配方时把上界推进到新末项即可，与
+// （现为 `RecipeArrow`）：追加新配方时把上界推进到新末项即可，与
 // `BlockIDMax` 同形的哨兵纪律。
 func MatchCraftingGrid(size uint8, slots [CraftingGridSlots]ItemStack) (RecipeID, ItemStack, bool) {
 	if size != 2 && size != 3 {
@@ -399,7 +416,7 @@ func MatchCraftingGrid(size uint8, slots [CraftingGridSlots]ItemStack) (RecipeID
 	if !ok {
 		return 0, ItemStack{}, false
 	}
-	for id := RecipeStoneBricks; id <= RecipeIronBoots; id++ {
+	for id := RecipeStoneBricks; id <= RecipeArrow; id++ {
 		pattern, registered := recipePattern(id)
 		if !registered {
 			continue

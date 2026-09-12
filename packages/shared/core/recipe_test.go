@@ -446,11 +446,11 @@ func TestRecipeShapeTableOneToThirteenIsFrozen(t *testing.T) {
 
 // TestRecipeRejectsUnknownIDs 覆盖 spec Scenario「未登记配方被拒绝」：
 // recipe 0 与任意大于当前末项的编号都必须稳定拒绝且不产生产物。
-// 写成 `RecipeIronBoots+1` 起步而不是裸字面量，
+// 写成 `RecipeArrow+1` 起步而不是裸字面量，
 // 下次追加配方时这段循环自动跟着末项走。
 func TestRecipeRejectsUnknownIDs(t *testing.T) {
 	unknown := []core.RecipeID{0}
-	for id := core.RecipeIronBoots + 1; id <= core.RecipeIronBoots+5; id++ {
+	for id := core.RecipeArrow + 1; id <= core.RecipeArrow+5; id++ {
 		unknown = append(unknown, id)
 	}
 	unknown = append(unknown, 200, 255)
@@ -459,12 +459,15 @@ func TestRecipeRejectsUnknownIDs(t *testing.T) {
 			t.Fatalf("recipe %d 被接受为 %+v：表末之后的编号必须稳定拒绝", id, pattern)
 		}
 	}
-	// 对照组：火把与床配方都在表内，必须可查询。
+	// 对照组：火把、床与箭配方都在表内，必须可查询。
 	if _, ok := core.Recipe(core.RecipeTorch); !ok {
 		t.Fatal("火把配方未注册")
 	}
 	if _, ok := core.Recipe(core.RecipeBed); !ok {
 		t.Fatal("床配方未注册")
+	}
+	if _, ok := core.Recipe(core.RecipeArrow); !ok {
+		t.Fatal("箭配方未注册")
 	}
 }
 
@@ -507,9 +510,9 @@ func TestRegisteredRecipeCellsStayInsideShapeBounds(t *testing.T) {
 	}
 	// 注册表从 1 起无空洞连续注册到末项常量：循环按「首个未注册即停」推进，
 	// 中间留洞会让后面的配方全部漏检，这里用计数把洞钉出来。
-	if checked != int(core.RecipeIronBoots) {
+	if checked != int(core.RecipeArrow) {
 		t.Fatalf("注册表枚举到 %d 条，想要与末项常量一致的 %d 条（注册表出现空洞？）",
-			checked, core.RecipeIronBoots)
+			checked, core.RecipeArrow)
 	}
 }
 
@@ -705,5 +708,95 @@ func TestNonToolRecipesOutputZeroDurability(t *testing.T) {
 		if !ok || pattern.Output.Durability != 0 {
 			t.Fatalf("Recipe(%d) 产物 = %+v, %v，非工具耐久必须为 0", id, pattern.Output, ok)
 		}
+	}
+}
+
+// TestRecipeArrowShapeIsFrozen 锁定箭配方的稳定语义：recipe 25，形状为宽 1
+// 高 2 的纵向两格——砾石位于木棍正上方，产出 2 支箭。编号紧随铁靴子配方
+// （24）追加；recipe ID 是协议稳定值，重排会让已发出的请求指向别的配方。
+func TestRecipeArrowShapeIsFrozen(t *testing.T) {
+	if core.RecipeArrow != core.RecipeIronBoots+1 {
+		t.Fatalf("RecipeArrow = %d，必须紧随 RecipeIronBoots(%d)",
+			core.RecipeArrow, core.RecipeIronBoots)
+	}
+	if core.RecipeArrow != 25 {
+		t.Fatalf("RecipeArrow = %d，必须稳定为 25", core.RecipeArrow)
+	}
+	want := core.RecipePattern{
+		Width: 1, Height: 2, Mirror: true,
+		Cells: [core.CraftingGridSlots]core.ItemID{
+			core.ItemGravel, core.ItemNone, core.ItemNone,
+			core.ItemStick, core.ItemNone, core.ItemNone,
+		},
+		Output: core.ItemStack{Item: core.ItemArrow, Count: 2},
+	}
+	pattern, ok := core.Recipe(core.RecipeArrow)
+	if !ok || pattern != want {
+		t.Fatalf("Recipe(箭) = %+v, %v，想要 %+v", pattern, ok, want)
+	}
+	if !pattern.Output.Valid() || pattern.Output.Durability != 0 {
+		t.Fatalf("箭配方产物 %+v 必须是合法的零耐久物品栈", pattern.Output)
+	}
+}
+
+// TestMatchCraftingGridArrowPersonalGrid 覆盖「箭配方可在个人 2×2 网格合成」：
+// 宽 1 高 2 的形状在个人网格的两列位置都能匹配并产出 2 支箭，工作台 3×3 同样
+// 匹配；倒置（木棍在砾石上方）是垂直翻转，永不参与匹配；错料与形状外的额外
+// 材料也必须失配。
+func TestMatchCraftingGridArrowPersonalGrid(t *testing.T) {
+	for _, column := range []struct {
+		name       string
+		gravelSlot uint8
+		stickSlot  uint8
+	}{
+		{"左列", 0, 2},
+		{"右列", 1, 3},
+	} {
+		t.Run(column.name, func(t *testing.T) {
+			grid := buildCraftingGrid(
+				gridCell{column.gravelSlot, core.ItemGravel},
+				gridCell{column.stickSlot, core.ItemStick},
+			)
+			id, output, ok := core.MatchCraftingGrid(2, grid)
+			if !ok || id != core.RecipeArrow {
+				t.Fatalf("个人网格匹配 = (%d, %v)，想要箭配方 %d", id, ok, core.RecipeArrow)
+			}
+			if output != (core.ItemStack{Item: core.ItemArrow, Count: 2}) {
+				t.Fatalf("箭配方产物 = %+v，想要 2 支箭", output)
+			}
+		})
+	}
+	// 工作台 3×3 网格同样匹配（纵向两格摆在左列中间）。
+	grid := buildCraftingGrid(
+		gridCell{3, core.ItemGravel},
+		gridCell{6, core.ItemStick},
+	)
+	if id, output, ok := core.MatchCraftingGrid(3, grid); !ok || id != core.RecipeArrow ||
+		output != (core.ItemStack{Item: core.ItemArrow, Count: 2}) {
+		t.Fatalf("工作台网格匹配 = (%d, %+v, %v)，想要箭配方与 2 支箭", id, output, ok)
+	}
+	// 倒置（木棍在砾石上方）是垂直翻转，必须失配。
+	inverted := buildCraftingGrid(
+		gridCell{0, core.ItemStick},
+		gridCell{2, core.ItemGravel},
+	)
+	if _, _, ok := core.MatchCraftingGrid(2, inverted); ok {
+		t.Fatal("倒置摆放产生了匹配：垂直翻转永不参与匹配")
+	}
+	// 错料（泥土在木棍上方）必须失配。
+	wrongMaterial := buildCraftingGrid(
+		gridCell{0, core.ItemDirt},
+		gridCell{2, core.ItemStick},
+	)
+	if _, _, ok := core.MatchCraftingGrid(2, wrongMaterial); ok {
+		t.Fatal("错料摆放产生了匹配")
+	}
+	// 形状外多放一枚砾石会把包围盒撑成 2×2，必须失配。
+	extraMaterial := buildCraftingGrid(
+		gridCell{0, core.ItemGravel}, gridCell{1, core.ItemGravel},
+		gridCell{2, core.ItemStick},
+	)
+	if _, _, ok := core.MatchCraftingGrid(2, extraMaterial); ok {
+		t.Fatal("形状外多放材料仍产生了匹配")
 	}
 }

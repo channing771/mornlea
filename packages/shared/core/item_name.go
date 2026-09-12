@@ -51,6 +51,11 @@ var itemDisplayNames = map[ItemID]string{
 	ItemIronChestplate: "铁胸甲",
 	ItemIronLeggings:   "铁护腿",
 	ItemIronBoots:      "铁靴子",
+	// 弓箭批次四件同样不可放置、没有方块名可回退，必须显式登记物品名。
+	ItemBow:       "弓",
+	ItemArrow:     "箭",
+	ItemBone:      "骨头",
+	ItemBrokenBow: "损坏的弓",
 }
 
 // ItemDisplayName 返回物品的中文显示名，供客户端物品名弹条与容器 tooltip

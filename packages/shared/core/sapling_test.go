@@ -41,15 +41,16 @@ func TestSaplingIDsAppendBeforeSentinels(t *testing.T) {
 	if core.ItemSapling != 57 {
 		t.Fatalf("ItemSapling = %d，必须稳定为 57", core.ItemSapling)
 	}
-	// 护甲四件批次紧随树苗追加在哨兵之前，哨兵随之后移到 62。
+	// 护甲四件批次紧随树苗追加在哨兵之前，弓箭四件再紧随护甲追加，
+	// 哨兵随之后移到 66。
 	if core.ItemIronHelmet != core.ItemSapling+1 {
 		t.Fatalf("ItemIronHelmet = %d，必须紧随 ItemSapling(%d)", core.ItemIronHelmet, core.ItemSapling)
 	}
-	if core.ItemIDMax != core.ItemIronBoots+1 {
-		t.Fatalf("ItemIDMax = %d，必须紧随 ItemIronBoots(%d)", core.ItemIDMax, core.ItemIronBoots)
+	if core.ItemIDMax != core.ItemBrokenBow+1 {
+		t.Fatalf("ItemIDMax = %d，必须紧随 ItemBrokenBow(%d)", core.ItemIDMax, core.ItemBrokenBow)
 	}
-	if core.ItemIDMax != 62 {
-		t.Fatalf("ItemIDMax = %d，必须稳定为 62", core.ItemIDMax)
+	if core.ItemIDMax != 66 {
+		t.Fatalf("ItemIDMax = %d，必须稳定为 66", core.ItemIDMax)
 	}
 	if !core.RegisteredItem(core.ItemSapling) {
 		t.Fatalf("树苗物品 %d 未注册", core.ItemSapling)
