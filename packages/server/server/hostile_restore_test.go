@@ -51,8 +51,8 @@ func hostileRestoreFixture() []storage.StoredHostileMob {
 }
 
 // assertHostilesRestored 逐字段断言权威侧夜行者集合与存档记录一致（按 ID
-// 升序），覆盖位置/速度/生命/冷却/目标/重规划节奏/远离累计的全部持久化
-// 字段。路径是运行时派生物，不存在于记录或权威侧，因此天然不参与比对。
+// 升序），覆盖位置/速度/生命/冷却/目标/重规划节奏/远离累计与 kind 的全部
+// 持久化字段。路径是运行时派生物，不存在于记录或权威侧，因此天然不参与比对。
 func assertHostilesRestored(t *testing.T, mobs []contract.HostileMob, want []storage.StoredHostileMob) {
 	t.Helper()
 	if len(mobs) != len(want) {
@@ -68,6 +68,7 @@ func assertHostilesRestored(t *testing.T, mobs []contract.HostileMob, want []sto
 			HurtCooldown: mob.HurtCooldown, BurnCooldown: mob.BurnCooldown,
 			HasTarget: mob.HasTarget, PlayerID: mob.PlayerID,
 			NextRepathTicks: mob.NextRepathTicks, DistantTicks: mob.DistantTicks,
+			Kind: mob.Kind,
 		}
 		if got != record {
 			t.Fatalf("第 %d 只夜行者=%+v，想要存档记录 %+v", index, got, record)
