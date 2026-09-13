@@ -212,6 +212,13 @@ func (engine *Engine) ProjectilesForTest() []ProjectileSnapshot {
 	return engine.entities.ProjectilesForTest()
 }
 
+// Projectiles 返回按 ID 升序的全量在飞投射物值快照（瞬态实体，不进存档）：
+// 供发布侧每 tick 取一次共享快照，组装按会话订阅的 spawn/state 批次；despawn
+// 由发布侧「镜像有而截面无」的差异判据派生。调用方只读消费。
+func (engine *Engine) Projectiles() []ProjectileSnapshot {
+	return engine.entities.Projectiles()
+}
+
 // RestorePassive 把一条被动牛身体记录恢复为权威事实：与 `RestoreHostile`
 // 同形，供服务端启动在首 tick 前接线。校验与容量拒绝由 entity 侧执行，
 // 失败整体返回错误且不改变既有集合。

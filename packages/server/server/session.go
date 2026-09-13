@@ -86,6 +86,11 @@ type session struct {
 	// visibleHostiles 是该会话已发布 spawn 的夜行者 ID 镜像：夜行者没有
 	// 名称标签等每个体附加域，一个集合足以承载差分发布的全部状态。
 	visibleHostiles map[uint64]struct{}
+	// visibleProjectiles 是该会话已发布 spawn 的投射物 ID 镜像：与夜行者侧
+	// 同形，承载差分发布（进入视野 spawn、逐 tick state、离开或消失 despawn）
+	// 的全部状态。镜像只含 ID：弹种与维度在投射物整个生命周期不变，spawn
+	// 一次携带即可。
+	visibleProjectiles map[uint64]struct{}
 	// visiblePassives 是该会话已发布 spawn 的被动牛 ID 镜像：与夜行者侧同
 	// 形，差分发布（进入视野 spawn、逐 tick state、离开或死亡 despawn）的
 	// 全部状态都由这一个集合承载。
@@ -114,29 +119,30 @@ func newSession(
 	}
 	ctx, cancel := context.WithCancel(parent)
 	current := &session{
-		id:                spec.ID,
-		generation:        spec.Generation,
-		playerID:          spec.PlayerID,
-		displayName:       spec.DisplayName,
-		endpoint:          spec.Endpoint,
-		ctx:               ctx,
-		cancel:            cancel,
-		outbox:            make(chan network.ServerMessage, config.OutboxCapacity),
-		workers:           workers,
-		exit:              make(chan SessionExit, 1),
-		detach:            detach,
-		viewDistance:      spec.Restore.ViewDistance,
-		heartbeatReply:    make(chan uint64, 1),
-		publications:      make(map[core.ChunkKey]*publication),
-		pendingSnapshots:  make(map[core.ChunkKey]snapshotRequest),
-		visiblePlayers:    make(map[core.PlayerID]visiblePlayer),
-		visibleCompanions: make(map[companion.ID]struct{}),
-		visibleHostiles:   make(map[uint64]struct{}),
-		visiblePassives:   make(map[uint64]struct{}),
-		publishedDrops:    make(map[core.DropID]contract.DropSnapshot, contract.MaxSessionDrops),
-		dropScratch:       make([]contract.DropSnapshot, 0, contract.MaxSessionDrops),
-		dropUpsertScratch: make([]network.ItemDrop, 0, contract.MaxSessionDrops),
-		dropRemoveScratch: make([]core.DropID, 0, contract.MaxSessionDrops),
+		id:                 spec.ID,
+		generation:         spec.Generation,
+		playerID:           spec.PlayerID,
+		displayName:        spec.DisplayName,
+		endpoint:           spec.Endpoint,
+		ctx:                ctx,
+		cancel:             cancel,
+		outbox:             make(chan network.ServerMessage, config.OutboxCapacity),
+		workers:            workers,
+		exit:               make(chan SessionExit, 1),
+		detach:             detach,
+		viewDistance:       spec.Restore.ViewDistance,
+		heartbeatReply:     make(chan uint64, 1),
+		publications:       make(map[core.ChunkKey]*publication),
+		pendingSnapshots:   make(map[core.ChunkKey]snapshotRequest),
+		visiblePlayers:     make(map[core.PlayerID]visiblePlayer),
+		visibleCompanions:  make(map[companion.ID]struct{}),
+		visibleHostiles:    make(map[uint64]struct{}),
+		visibleProjectiles: make(map[uint64]struct{}),
+		visiblePassives:    make(map[uint64]struct{}),
+		publishedDrops:     make(map[core.DropID]contract.DropSnapshot, contract.MaxSessionDrops),
+		dropScratch:        make([]contract.DropSnapshot, 0, contract.MaxSessionDrops),
+		dropUpsertScratch:  make([]network.ItemDrop, 0, contract.MaxSessionDrops),
+		dropRemoveScratch:  make([]core.DropID, 0, contract.MaxSessionDrops),
 	}
 	workers.Add(2)
 	go current.writeLoop()
@@ -158,22 +164,23 @@ func newObserverSession(
 	}
 	ctx, cancel := context.WithCancel(parent)
 	current := &session{
-		id:                id,
-		generation:        generation,
-		endpoint:          endpoint,
-		ctx:               ctx,
-		cancel:            cancel,
-		outbox:            make(chan network.ServerMessage, capacity),
-		workers:           workers,
-		detach:            detach,
-		heartbeatReply:    make(chan uint64, 1),
-		publications:      make(map[core.ChunkKey]*publication),
-		pendingSnapshots:  make(map[core.ChunkKey]snapshotRequest),
-		visiblePlayers:    make(map[core.PlayerID]visiblePlayer),
-		visibleCompanions: make(map[companion.ID]struct{}),
-		visibleHostiles:   make(map[uint64]struct{}),
-		visiblePassives:   make(map[uint64]struct{}),
-		publishedDrops:    make(map[core.DropID]contract.DropSnapshot),
+		id:                 id,
+		generation:         generation,
+		endpoint:           endpoint,
+		ctx:                ctx,
+		cancel:             cancel,
+		outbox:             make(chan network.ServerMessage, capacity),
+		workers:            workers,
+		detach:             detach,
+		heartbeatReply:     make(chan uint64, 1),
+		publications:       make(map[core.ChunkKey]*publication),
+		pendingSnapshots:   make(map[core.ChunkKey]snapshotRequest),
+		visiblePlayers:     make(map[core.PlayerID]visiblePlayer),
+		visibleCompanions:  make(map[companion.ID]struct{}),
+		visibleHostiles:    make(map[uint64]struct{}),
+		visibleProjectiles: make(map[uint64]struct{}),
+		visiblePassives:    make(map[uint64]struct{}),
+		publishedDrops:     make(map[core.DropID]contract.DropSnapshot),
 	}
 	workers.Add(1)
 	go current.writeLoop()
