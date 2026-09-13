@@ -557,6 +557,21 @@ func TestBowLastDurabilityPointSwapsToBrokenForm(t *testing.T) {
 	if player.bow != (bowState{}) {
 		t.Fatalf("发射后拉弓状态=%+v，想要清空", player.bow)
 	}
+
+	// 弹药耗尽的那次发射之后（spec Scenario 后半句）：再拉弓必须因无箭不开弓
+	// ——进度逐 tick 恒为零，损坏形态也拉不起来。
+	player.miningHeld = true
+	for tick := 1; tick <= 8; tick++ {
+		advanceActorsTick(engine)
+		if player.bow != (bowState{}) {
+			t.Fatalf("耗尽弹药后第 %d tick 拉弓状态=%+v，想要恒为空", tick, player.bow)
+		}
+	}
+	player.miningHeld = false
+	advanceActorsTick(engine)
+	if got := len(engine.projectiles.entries); got != 1 {
+		t.Fatalf("补拉的 tick 又生成投射物=%d，想要仍是发射那一次的 1", got)
+	}
 }
 
 // TestBowBrokenBowHasNoDrawSemantics 覆盖 Scenario「损坏弓不可拉弓」：手持
