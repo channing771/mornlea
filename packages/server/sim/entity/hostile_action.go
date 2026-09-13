@@ -93,7 +93,7 @@ func (engine *engineContext) applyHostileActions(actions []HostileAction) {
 
 // settleHostileRangedShot 结算掷骨者的射击意图：仅掷骨者（kind 门禁）、存活
 // 个体且射击冷却就绪时接受；在眼位沿「基准方向 + 确定性散布」生成一条骨刺
-// （伤害 3、初速 22 格/秒，经 Task 4 的 `spawnProjectile` 唯一入口），并把
+// （伤害 3、初速 22 格/秒，经投射物域的唯一生成入口 `spawnProjectile`），并把
 // 冷却置满固定周期。基准方向由编排层按目标眼位归一化给出，「同维目标」由
 // 编排层在提交前裁决；散布在本结算点按 (worldSeed, 权威 tick, 敌怪 ID) 求值，
 // 保证相同输入的重放逐位一致。任一校验不成立都整体丢弃且不消耗冷却。

@@ -716,8 +716,10 @@ func (m *hostileManager) considerHurlerShot(
 // 与近战/采掘/投射物同一 `core.RaycastBlocks` 出口与 `core.InteractionTarget`
 // 谓词（空气与流体不是遮挡）。世界读取走管理器的既有 3×3 区块视图（与寻路
 // 网格同一「深拷贝即隔离」纪律）；两端点间距 ≤14 格必然落在视图内，覆盖区块
-// 未就绪按遮挡保守处理——宁可漏射也不凭缺失数据开火。成本有界：仅在冷却就
-// 绪时调用（每位掷骨者至多每 40 tick 一次深拷贝）。
+// 未就绪按遮挡保守处理——宁可漏射也不凭缺失数据开火。成本有界：冷却就绪且
+// 存在目标的每位掷骨者每 tick 构造一次 3×3 区块视图（视线被持续遮挡时不射
+// 击、冷却恒就绪，故每 tick 都发生），总成本上界 = 掷骨者数 × 常数，与发令
+// 者视线命中 `issuerLookHit` 每玩家一次区块视图同级。
 func (m *hostileManager) hostileRangedLineOfSight(
 	mob *contract.HostileMob,
 	target hostileTargetPlayer,
