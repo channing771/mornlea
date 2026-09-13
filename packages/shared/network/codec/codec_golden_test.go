@@ -20,7 +20,7 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		wantID  uint32
 		wantHex string
 	}{
-		{"hello", protocol.StateHandshake, protocol.ClientHello{ProtocolVersion: 43}, 0, "2b"},
+		{"hello", protocol.StateHandshake, protocol.ClientHello{ProtocolVersion: 44}, 0, "2c"},
 		// v40 新增：`LoginStart` 载荷尾部（`DisplayName` 之后）追加 1 字节
 		// `ViewDistance`（u8，合法域 2..64）。样本取 32（0x20）这个非零非满
 		// 值：取 0 会因域外值连编码都被拒绝，取 64 又与「恰好越界 +1」只差
@@ -84,7 +84,7 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		wantID  uint32
 		wantHex string
 	}{
-		{"server hello", protocol.StateHandshake, protocol.ServerHello{ProtocolVersion: 43}, 0, "2b"},
+		{"server hello", protocol.StateHandshake, protocol.ServerHello{ProtocolVersion: 44}, 0, "2c"},
 		{"handshake reject", protocol.StateHandshake, protocol.HandshakeReject{ServerProtocolVersion: 42, Code: protocol.HandshakeVersionMismatch, Message: "no"}, 1, "2a01026e6f"},
 		{"login success", protocol.StateLogin, protocol.LoginSuccess{PlayerID: id, WorldSeed: 0x1122334455667788}, 0, "00112233445546778899aabbccddeeff8877665544332211"},
 		{"login reject", protocol.StateLogin, protocol.LoginReject{Code: protocol.LoginInvalidIdentity, Message: "no"}, 1, "02026e6f"},

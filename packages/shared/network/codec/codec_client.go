@@ -101,6 +101,22 @@ func encodeClientPacketPayload(state protocol.State, packet protocol.ClientPacke
 			// v42：装备互换命令与 `DropSelectedItem` 同形，只携带 u64 序号；
 			// 目标槽位由服务端按护甲件类映射决定，wire 上不携带。
 			e.u64(message.Sequence)
+		case protocol.MoveStackPartial:
+			// v44：u64 序号 + 18 字节容器引用 + u8 视图 + u8 来源 + u8 目标 +
+			// u8 单件标志，固定 30 字节；移动数量由服务端推导，wire 上无数量字段。
+			e.u64(message.Sequence)
+			encodeContainerRef(&e, message.Container)
+			e.u8(message.View)
+			e.u8(message.From)
+			e.u8(message.To)
+			e.bool(message.Single)
+		case protocol.QuickMoveStack:
+			// v44：u64 序号 + 18 字节容器引用 + u8 视图 + u8 来源，固定 28 字节；
+			// 目标序由服务端按固定确定性契约推导，wire 上不携带目标格。
+			e.u64(message.Sequence)
+			encodeContainerRef(&e, message.Container)
+			e.u8(message.View)
+			e.u8(message.From)
 		default:
 			return 0, nil, codecError("encode client", state, packetID, protocol.InvalidClientPacket(state, packet))
 		}
@@ -337,6 +353,41 @@ func decodeClientPacketPayload(state protocol.State, packetID uint32, payload []
 			var equip protocol.EquipArmor
 			equip.Sequence, err = d.u64()
 			packet = equip
+		case 19:
+			// v44：分堆部分移动，固定 30 字节；域校验由本函数尾部的
+			// `ValidateDecodedClientWirePacket` 统一入口执行，此处只搬运字节。
+			var partial protocol.MoveStackPartial
+			partial.Sequence, err = d.u64()
+			if err == nil {
+				partial.Container, err = decodeContainerRef(&d)
+			}
+			if err == nil {
+				partial.View, err = d.u8()
+			}
+			if err == nil {
+				partial.From, err = d.u8()
+			}
+			if err == nil {
+				partial.To, err = d.u8()
+			}
+			if err == nil {
+				partial.Single, err = d.bool()
+			}
+			packet = partial
+		case 20:
+			// v44：快捷搬运，固定 28 字节；与部分移动同前缀、去掉目标与单件标志。
+			var quick protocol.QuickMoveStack
+			quick.Sequence, err = d.u64()
+			if err == nil {
+				quick.Container, err = decodeContainerRef(&d)
+			}
+			if err == nil {
+				quick.View, err = d.u8()
+			}
+			if err == nil {
+				quick.From, err = d.u8()
+			}
+			packet = quick
 		default:
 			return nil, codecError("decode client", state, packetID, errUnknownPacketID)
 		}

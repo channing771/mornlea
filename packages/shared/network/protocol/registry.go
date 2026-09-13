@@ -49,6 +49,11 @@ func ClientPacketID(state State, packet ClientPacket) (uint32, bool) {
 			return 17, true
 		case EquipArmor:
 			return 18, true
+		// 分堆双命令：部分移动与快捷搬运依次占用 19/20（v44），下一 ID 21 仍未分配。
+		case MoveStackPartial:
+			return 19, true
+		case QuickMoveStack:
+			return 20, true
 		}
 	}
 	return 0, false
@@ -104,6 +109,11 @@ func ClientPacketForID(state State, id uint32) (ClientPacket, bool) {
 			return PlaceWater{}, true
 		case 18:
 			return EquipArmor{}, true
+		// 分堆双命令：与 `ClientPacketID` 的 19/20 对称（v44），下一 ID 21 仍未分配。
+		case 19:
+			return MoveStackPartial{}, true
+		case 20:
+			return QuickMoveStack{}, true
 		}
 	}
 	return nil, false
