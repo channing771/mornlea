@@ -193,6 +193,17 @@ it("右键槽位阻止浏览器上下文菜单并携带 Shift 单件档", () => 
   });
 });
 
+it("右键面板空白不弹菜单也不发射事件", () => {
+  const emit = vi.fn();
+  render(<GamePanels game={state} onEvent={emit} />);
+  // 页脚属面板空白承载面：容器级兜底只阻断原生菜单，不产生槽位语义事件。
+  const blank = screen.getByText("E / Esc 关闭");
+  const event = createEvent.contextMenu(blank);
+  fireEvent(blank, event);
+  expect(event.defaultPrevented).toBe(true);
+  expect(emit).not.toHaveBeenCalled();
+});
+
 it("页脚提示行说明半组、单件与快捷搬运", () => {
   render(<GamePanels game={state} onEvent={() => { }} />);
   expect(screen.getByText("先选物品，再选目标位置；右键半组 / Shift+右键单件 / Shift+点击快速搬运")).toBeTruthy();

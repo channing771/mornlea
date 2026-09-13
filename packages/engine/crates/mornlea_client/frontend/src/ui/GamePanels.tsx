@@ -32,7 +32,9 @@ export function GamePanels({ game, hud, onEvent }: Props) {
     </button>;
     const grid = (area: SlotArea, slots: readonly HudSlot[], columns: number, offset = 0) => <div className="game-slot-grid" style={{ "--game-columns": columns } as CSSProperties}>{slots.map((slot, index) => slotButton(area, slot, index + offset))}</div>;
     return <div className="game-panel-overlay">
-    <section className={`game-panel${crafting?"":" game-panel--compact"}`} role="dialog" aria-modal="true" aria-label={titles[game.kind]}>
+    {/* 容器级兜底：右键落在面板空白（页眉/页脚/留白）也只阻断原生菜单，
+        不发射语义事件——槽位语义操作由槽位级 onContextMenu 独家承担。 */}
+    <section className={`game-panel${crafting?"":" game-panel--compact"}`} role="dialog" aria-modal="true" aria-label={titles[game.kind]} onContextMenu={event => event.preventDefault()}>
   <header className="game-panel-header">
     <div>
     <p className="game-eyebrow">MORNLEA / 旅途日常</p>
