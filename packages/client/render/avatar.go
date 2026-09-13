@@ -95,17 +95,30 @@ func compareEntityKeys(left, right EntityKey) int {
 // Avatar 是远端玩家或伙伴渲染所需的插值后姿态。`Roll` 与 `Flash` 只服务
 // 被动牛的死亡保留呈现（侧倒滚转角与向红插值系数，由死亡相位函数赋值）；
 // `Swing` 是四肢摆动角（弧度，有符号基准值，由呈现速度差分门控后赋值，见
-// `AvatarSwingAngle`）；其余身份域保持零值，零值时牛实例变换与颜色与变更前
-// 逐字节一致。
+// `AvatarSwingAngle`）；`HostileKind` 是敌怪类别分支（仅 EntityHostile 域
+// 消费，与 wire 侧 kind 字节同值映射，零值即夜行者）；其余身份域保持零
+// 值，零值时牛实例变换与颜色与变更前逐字节一致。
 type Avatar struct {
-	Key      EntityKey
-	Position mgl32.Vec3
-	Yaw      float32
-	Pitch    float32
-	Roll     float32
-	Flash    float32
-	Swing    float32
+	Key         EntityKey
+	Position    mgl32.Vec3
+	Yaw         float32
+	Pitch       float32
+	Roll        float32
+	Flash       float32
+	Swing       float32
+	HostileKind uint8
 }
+
+// 敌怪类别在呈现侧的分支域：与 wire 侧 kind 字节同值映射（0=夜行者、
+// 1=掷骨者），`EntityKind` 不因类别增值——夜行者和掷骨者共享 Hostile 身份
+// 域与 6 部件预算，几何与配色在 `appendHostileAvatarParts` 内按本值分支。
+const (
+	// HostileKindNightwalker 表示夜行者（近战追击），零值分支与引入本字段
+	// 前的部件逐字节一致。
+	HostileKindNightwalker uint8 = 0
+	// HostileKindBoneThrower 表示掷骨者（远程投掷骨刺）。
+	HostileKindBoneThrower uint8 = 1
+)
 
 type avatarPart struct {
 	transform mgl32.Mat4
@@ -264,16 +277,31 @@ var (
 	hostileHeadColor = [4]float32{0.45, 0.4, 0.5, 0.9}
 )
 
+// hurlerPalette 是掷骨者的原创固定调色：骨白躯干（hurlerBaseColor，
+// ≈ #DBCCA8——高亮度暖白，直指其投掷骨刺的材质来源）与深灰头部
+// （hurlerHeadColor，≈ #4D4D4D——中性暗灰，压住整体明度）。与夜行者的
+// 暗青/灰紫、玩家/伙伴共用调色板的全部槽位不重合；数值为原创设计。
+var (
+	hurlerBaseColor = [4]float32{0.86, 0.80, 0.66, 0.9}
+	hurlerHeadColor = [4]float32{0.3, 0.3, 0.3, 0.9}
+)
+
 const (
 	hostileLimbShade = float32(0.78)
 	hostileHeadShade = float32(1.1)
+	// hurlerArmWidth 是掷骨者的手臂厚度（格）：细于夜行者的 0.1，投掷者
+	// 的瘦削轮廓与近战者的粗壮手臂一眼可辨。
+	hurlerArmWidth = float32(0.06)
 )
 
-// appendHostileAvatarParts 追加一只夜行者的 6 个 cuboid：与玩家同构的双臂
-// 双腿直立骨架，但头身比例刻意不同——头部更大（0.72 宽）、躯干更短
-// （0.55 高）、手臂更长（0.85），叠加灰紫头部与暗青躯干构成与玩家/伙伴
-// 一眼可辨的原创轮廓。身体仍锚定在站位 Y（脚底），俯仰只作用于头部。
+// appendHostileAvatarParts 追加一只敌怪的 6 个 cuboid：按类别字节分支——
+// 夜行者（暗青/灰紫、粗臂）或掷骨者（骨白/深灰、细臂）；`EntityKind` 不
+// 增值，两类共享 Hostile 身份域与 6 部件预算。身体仍锚定在站位 Y（脚
+// 底），俯仰只作用于头部。
 func appendHostileAvatarParts(dst []avatarPart, avatar Avatar) []avatarPart {
+	if avatar.HostileKind == HostileKindBoneThrower {
+		return appendBoneThrowerAvatarParts(dst, avatar)
+	}
 	root := mgl32.Translate3D(avatar.Position[0], avatar.Position[1], avatar.Position[2]).Mul4(
 		mgl32.HomogRotate3DY(avatar.Yaw),
 	)
@@ -295,6 +323,34 @@ func appendHostileAvatarParts(dst []avatarPart, avatar Avatar) []avatarPart {
 			mgl32.HomogRotate3DX(-swing), -swing, avatarShade(hostileBaseColor, hostileLimbShade), avatarMaterialSolid),
 		swungLimb(root, mgl32.Vec3{0.09, 0.55, 0}, mgl32.Vec3{0.09, 0.275, 0}, mgl32.Vec3{0.15, 0.55, 0.2},
 			mgl32.HomogRotate3DX(swing), swing, avatarShade(hostileBaseColor, hostileLimbShade), avatarMaterialSolid),
+	)
+	return dst
+}
+
+// appendBoneThrowerAvatarParts 追加一只掷骨者的 6 个 cuboid：骨架与夜行者
+// 同构（同转轴、同头身比例），差异收敛在配色（骨白躯干 + 深灰头部）与细
+// 臂（`hurlerArmWidth`）；零摆动直通平移缩放链，部件数与 96B 实例布局
+// 不变。
+func appendBoneThrowerAvatarParts(dst []avatarPart, avatar Avatar) []avatarPart {
+	root := mgl32.Translate3D(avatar.Position[0], avatar.Position[1], avatar.Position[2]).Mul4(
+		mgl32.HomogRotate3DY(avatar.Yaw),
+	)
+	head := root.Mul4(mgl32.Translate3D(0, 1.5, 0)).
+		Mul4(mgl32.HomogRotate3DX(avatar.Pitch)).
+		Mul4(mgl32.Translate3D(0, 0.25, 0)).
+		Mul4(mgl32.Scale3D(0.72, 0.5, 0.72))
+	swing := avatar.Swing
+	dst = append(dst,
+		avatarPart{transform: head, color: avatarShade(hurlerHeadColor, hostileHeadShade), material: avatarMaterialSolid},
+		avatarCuboid(root, mgl32.Vec3{0, 1.0, 0}, mgl32.Vec3{0.34, 0.55, 0.22}, hurlerBaseColor),
+		swungLimb(root, mgl32.Vec3{-0.23, 1.405, 0}, mgl32.Vec3{-0.23, 0.98, 0}, mgl32.Vec3{hurlerArmWidth, 0.85, 0.2},
+			mgl32.HomogRotate3DX(swing), swing, avatarShade(hurlerBaseColor, hostileLimbShade), avatarMaterialSolid),
+		swungLimb(root, mgl32.Vec3{0.23, 1.405, 0}, mgl32.Vec3{0.23, 0.98, 0}, mgl32.Vec3{hurlerArmWidth, 0.85, 0.2},
+			mgl32.HomogRotate3DX(-swing), -swing, avatarShade(hurlerBaseColor, hostileLimbShade), avatarMaterialSolid),
+		swungLimb(root, mgl32.Vec3{-0.09, 0.55, 0}, mgl32.Vec3{-0.09, 0.275, 0}, mgl32.Vec3{0.15, 0.55, 0.2},
+			mgl32.HomogRotate3DX(-swing), -swing, avatarShade(hurlerBaseColor, hostileLimbShade), avatarMaterialSolid),
+		swungLimb(root, mgl32.Vec3{0.09, 0.55, 0}, mgl32.Vec3{0.09, 0.275, 0}, mgl32.Vec3{0.15, 0.55, 0.2},
+			mgl32.HomogRotate3DX(swing), swing, avatarShade(hurlerBaseColor, hostileLimbShade), avatarMaterialSolid),
 	)
 	return dst
 }

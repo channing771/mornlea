@@ -377,6 +377,15 @@ const (
 	ProjectileKindArrow = protocol.ProjectileKindArrow
 )
 
+// 敌怪 kind 字节同样定义在 protocol 包；客户端镜像与呈现层按同一数值
+// 消费，再导出保持 network.X 单一引用面。
+const (
+	// HostileKindNightwalker 表示夜行者（近战追击）。
+	HostileKindNightwalker = protocol.HostileKindNightwalker
+	// HostileKindBoneThrower 表示掷骨者（远程投掷骨刺）。
+	HostileKindBoneThrower = protocol.HostileKindBoneThrower
+)
+
 // 区块快照值类型定义在 protocol 包（密封接口与 Validate 同包）；再导出保持
 // 既有 network.X 引用与编解码往返的类型身份。
 type (

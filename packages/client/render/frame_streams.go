@@ -169,6 +169,24 @@ func (e *InstanceEncoder) ResetFalls() {
 	e.falls.Reset()
 }
 
+// EncodeProjectileInstances 把投射物镜像呈现编码为 96 字节/实例的字节流
+// （与 avatar 同布局）：每枚投射物恰一个 cuboid 实例，长轴沿权威速度估计
+// 取向，配色按弹种固定。输入应为镜像的 ID 升序呈现列表；段预算
+// `MaxProjectileInstances` 之外的部分按输入顺序丢弃尾部。投射物无跨帧跟
+// 踪表，会话重置无需清理。dst 会被重置复用。
+func (e *InstanceEncoder) EncodeProjectileInstances(dst []byte, projectiles []Projectile) []byte {
+	if len(projectiles) > MaxProjectileInstances {
+		projectiles = projectiles[:MaxProjectileInstances]
+	}
+	e.parts = e.parts[:0]
+	for _, projectile := range projectiles {
+		e.parts = buildProjectileParts(e.parts, projectile)
+	}
+	dst = growEncodeBuffer(dst, len(e.parts)*avatarInstanceBytes)
+	encodeAvatarPartsInto(dst, e.parts)
+	return dst
+}
+
 // EncodeWeatherInstances 把降水编码为 96 字节/实例的字节流:晴天返回空,
 // 雨/雷暴返回固定上限数量（形态由共享温度公式按粒子高度选形，位置是权威 tick
 // 的纯函数；yearPhase/effPhase 由调用方从镜像季节与权威时间派生传入）。

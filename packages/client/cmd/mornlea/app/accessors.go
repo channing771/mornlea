@@ -141,6 +141,12 @@ func (a *Application) Passives() *client.Passives {
 	return a.passives
 }
 
+// Projectiles 返回投射物镜像的可变指针，供 capture 场景注入与恢复夹具
+// 个体；未装配投射物镜像时为 nil，调用方需先判空。
+func (a *Application) Projectiles() *client.Projectiles {
+	return a.projectiles
+}
+
 // SetCaptureBlock 是 GIF 剧本专用的单格写块口（capture-only）：经与线上相同
 // 的镜像 `Apply` 入口落地并标记 dirty，revision 相对当前值单步前进；生产帧
 // 循环与玩法路径不得调用，调用点审计见 capture 包的 GIF 剧本单格测试。

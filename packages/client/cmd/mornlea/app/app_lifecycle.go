@@ -122,6 +122,9 @@ func (a *Application) resetSessionOwnedState() {
 	if a.passives != nil {
 		a.passives.Reset()
 	}
+	if a.projectiles != nil {
+		a.projectiles.Reset()
+	}
 	a.furnace.Reset()
 	a.chest.Reset()
 	// 合成网格镜像随会话一并清空：断线后不继承任何已确认网格状态
