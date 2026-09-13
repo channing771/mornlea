@@ -19,12 +19,13 @@ import (
 	"github.com/channing771/mornlea/packages/shared/network"
 )
 
-// TestHostileMobCaptureScenePosition 锁住 hostile-mob 的表内位置：夹在
-// `sword-combat` 与 `passive-herd` 之间（spec visual-verification
-// delta「场景表顺序与导出」，完整相邻链为 ai-companion、sword-combat、
-// hostile-mob、passive-herd、water-surface-slope），同时确认既有尾段不变量
-// 未被本场景移动——`far-horizon` 仍为倒数第二、`water-underwater` 仍为唯一
-// 末场景。
+// TestHostileMobCaptureScenePosition 锁住 hostile-mob 的表内位置：紧随
+// `sword-combat`（spec visual-verification delta「场景表顺序与导出」，
+// 完整相邻链为 ai-companion、sword-combat、hostile-mob、ranged-mob、
+// passive-herd、water-surface-slope——远程敌怪夜景由
+// TestRangedMobCaptureScenePosition 锁在 hostile-mob 之后），同时确认既有
+// 尾段不变量未被本场景移动——`far-horizon` 仍为倒数第二、`water-underwater`
+// 仍为唯一末场景。
 // 断言写「相邻关系」而不是「在表里」：后者是存在性断言，插到别的位置也
 // 照样通过，正是要挡的那种改动。
 func TestHostileMobCaptureScenePosition(t *testing.T) {
