@@ -23,7 +23,7 @@
   1. 管理器侧（`packages/server/server/hostile_manager.go`）：目标选择后按 kind 分派——夜行者走既有 chase（A* 接近 + 近战意图冻结）；掷骨者走 ranged advisor（>14 格 A* 接近、6..14 格保持、<6 格直线后退意图——直走世界轴向量，可能被墙挡住，规格按「直线后退意图」措辞；40 tick 射击冷却 + `core.InteractionTarget` 同源 LOS + 确定性散布方向经新 `HostileAction` kind 入域）。
   2. 引擎侧（`applyHostileActions`）：按 kind 结算——近战意图沿用既有冻结分叉；`RangedAttack` 意图校验冷却与存活后在射点生成骨刺（散布 hash 在引擎内求值，管理器只给基准方向，保证同输入重放一致）。
 - **射击冷却**：掷骨者 `shootCooldown` 为引擎内瞬态计时（40 tick 周期），**不入存档**——重启后冷却归零，最坏提前一拍开火，属接受的恢复语义（v2 record 只追加 kind 字节，不再扩记录）。
-- **掉落**：`dropHostileLoot` 按 kind 分派：夜行者腐肉 1（不变）；掷骨者骨头 0..2（hash）+ 弓 1/8（确定性 hash，沿树苗掉落先例；容量不足走既有 `PrepareDropBatch` 原子拒绝语义）。
+- **掉落**：`dropHostileLoot` 按 kind 分派：夜行者腐肉 1（不变）；掷骨者骨头 0..2（hash）+ 弓 1/8（确定性 hash，沿树苗掉落先例；走与夜行者共享的既有掉落批原子语义——容量不足确定性省略、死亡照常完成，任务组 5 核实更正「待重试」措辞）。
 - **被否的完整 ECS/共享抽象重构**：当前两族敌怪共享面已显式且测试锁定；被动族（牛）已走独立机制；出现第三族敌怪或跨族行为收敛需求前，重构无第二消费者。评估全文随本 change 归档，`docs/feature-backlog.md` B-26 行回填结论。
 
 ## D4 tick 阶段与死亡结算
