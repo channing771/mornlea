@@ -213,6 +213,57 @@ func TestProjectileMirrorRejectsInvalidMessages(t *testing.T) {
 	}
 }
 
+// TestProjectileVelocityEstimateDiffsAgainstLatestAuthoritativeSnapshot 锁定
+// 速度再估计的基准：必须对最近一条权威快照位置差分，而不是呈现位置——
+// 呈现位置在 ≥3 快照后落后插值滞后窗（2 tick），对它差分会系统性高估幅
+// 值、把切线换成多 tick 弦。live 接线（Drain → Advance → RenderFrame）
+// 在每批 state 之间都隔着 Advance，本测试按同形时序交错推进。
+func TestProjectileVelocityEstimateDiffsAgainstLatestAuthoritativeSnapshot(t *testing.T) {
+	projectiles := &Projectiles{}
+	// 弹道位置：水平恒速 -2 格/tick，垂直受重力逐 tick 递减（-1、-2、-3、
+	// -4）——切线方向逐 tick 变化，弦差分在垂直分量上必然露馅。
+	positions := []mgl32.Vec3{
+		{0, 64, 0}, {0, 63, -2}, {0, 61, -4}, {0, 58, -6}, {0, 54, -8},
+	}
+	if err := projectiles.ApplySpawn(projectileSpawnMessageOf(
+		100, 7, network.ProjectileKindArrow, positions[0], mgl32.Vec3{0, -1, -2},
+	)); err != nil {
+		t.Fatalf("ApplySpawn: %v", err)
+	}
+	for tick := uint64(101); tick <= 104; tick++ {
+		// 与 live 帧循环同形：上一批 state 确认后先推进插值再收下一批。
+		projectiles.Advance(0)
+		if err := projectiles.ApplyStates(projectileStateMessageOf(tick, 7, positions[tick-100])); err != nil {
+			t.Fatalf("ApplyStates %d: %v", tick, err)
+		}
+	}
+	presentations := projectiles.AppendPresentations(nil)
+	// 末批（tick 104）的逐 tick 权威位移是 (0,-4,-2)：对快照差分即精确值，
+	// 对滞后 2 tick 的呈现位置差分则得到 3 tick 弦 (0,-9,-6)/1。
+	if got, want := presentations[0].Velocity, (mgl32.Vec3{0, -4, -2}); got != want {
+		t.Fatalf("交错 Advance 后速度估计=%v，想要逐 tick 权威差分 %v", got, want)
+	}
+
+	// 常速直线弹道同样锁幅值：滞后基准会把 2 格/tick 高估成 6 格/tick。
+	straight := &Projectiles{}
+	straightPositions := []mgl32.Vec3{{0, 8, 0}, {0, 8, -2}, {0, 8, -4}, {0, 8, -6}, {0, 8, -8}}
+	if err := straight.ApplySpawn(projectileSpawnMessageOf(
+		100, 9, network.ProjectileKindShard, straightPositions[0], mgl32.Vec3{0, 0, -2},
+	)); err != nil {
+		t.Fatalf("ApplySpawn: %v", err)
+	}
+	for tick := uint64(101); tick <= 104; tick++ {
+		straight.Advance(0)
+		if err := straight.ApplyStates(projectileStateMessageOf(tick, 9, straightPositions[tick-100])); err != nil {
+			t.Fatalf("ApplyStates %d: %v", tick, err)
+		}
+	}
+	presentations = straight.AppendPresentations(nil)
+	if got, want := presentations[0].Velocity, (mgl32.Vec3{0, 0, -2}); got != want {
+		t.Fatalf("常速弹道速度估计=%v，想要 %v", got, want)
+	}
+}
+
 func TestProjectileResetClearsMirror(t *testing.T) {
 	projectiles := &Projectiles{}
 	if err := projectiles.ApplySpawn(projectileSpawnMessageOf(1, 7, network.ProjectileKindShard, mgl32.Vec3{1, 1, 1}, mgl32.Vec3{0, -1, 0})); err != nil {

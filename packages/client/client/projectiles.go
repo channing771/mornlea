@@ -77,8 +77,10 @@ func (projectiles *Projectiles) ApplySpawn(spawn network.ProjectileSpawn) error 
 
 // ApplyStates 只接受 `ServerTick` 更新的状态：未知 ID 的记录丢弃且不隐式
 // 造实体，过期（不比镜像新）的记录丢弃并保持既有值，其余记录按批次 tick
-// 更新位置。速度按位置差分重估（位移除以 tick 差）；零位移的更新保持上一
-// 次估计——悬停瞬间的取向不退回未知，呈现侧因此拿到稳定的取向输入。
+// 更新位置。速度对**最近一条权威快照位置**差分重估（位移除以 tick 差）——
+// 不对插值后的呈现位置差分：呈现落后插值滞后窗（2 tick），滞后基准会把
+// 幅值高估数倍、把切线换成多 tick 弦。零位移的更新保持上一次估计——悬停
+// 瞬间的取向不退回未知，呈现侧因此拿到稳定的取向输入。
 func (projectiles *Projectiles) ApplyStates(states network.ProjectileState) error {
 	if err := states.Validate(); err != nil {
 		return projectileProtocolError("ProjectileState: %v", err)
@@ -91,7 +93,7 @@ func (projectiles *Projectiles) ApplyStates(states network.ProjectileState) erro
 		if states.ServerTick <= state.lastTick {
 			continue
 		}
-		delta := update.Position.Sub(state.position)
+		delta := update.Position.Sub(state.snapshots.latest().position)
 		if delta.LenSqr() > 0 {
 			state.velocity = delta.Mul(1 / float32(states.ServerTick-state.lastTick))
 		}
