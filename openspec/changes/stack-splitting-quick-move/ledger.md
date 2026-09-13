@@ -12,3 +12,7 @@
 
 - Task 3（提交 `c9fc5da3`，基线 `d5d2650b`）：`go test ./packages/server/sim/... -race -count=1` 全绿（contract 1.686s、entity 7.339s、realm 8.573s、runtime 21.681s）；`go vet ./packages/server/...`、`gofmt -l` 干净。audit 基线红（协议 v44 与 AGENTS.md/config.yaml v43 滞后）为 Task 7 计划内状态，未新增失败项。
 
+- Ruling: ingress 视图域翻译采用显式常量映射（`translateStackSplitView`：`network.StackViewX`→`contract.StackViewX`，未知视图按未知消息失败）而非透传 wire 字节 — 双保险：contract 钉值测试拦「两侧常量漂移」，显式映射拦「协议扩视图而 sim 未跟进」— 若删掉映射改回透传，`TestTranslateStackSplitRejectsUnnamedView` 必须同步删除并说明理由。
+- Ruling: 容器域 parity 夹具让熔炉输入与燃料永不同时非空 — 一旦点燃，`ProgressTicks`/`BurnTicks` 随登录阶段错位的绝对 tick 漂移，两条传输天然不可比 — 若要在 parity 里覆盖燃烧中的熔炉状态，必须先引入 tick 归一层。
+
+- Task 5（提交 `25ab5bb8`，基线 `66917cac`）：先红后绿——单元表驱动三用例与 parity 脚本在无 ingress 时红（`translateClientMessage` 返回 false、memory 发送后 60s 超时），实现后全绿。验证：`go test ./packages/server/server -race -count=1` 全绿（270s）；`go test ./packages/shared/network/... ./packages/server/sim/contract -count=1` 全绿；`go vet` 同三域干净；`gofmt -l` 干净（`packages/shared/world/furnace.go` 的格式偏差为基线 HEAD 既有、非本任务引入，未顺手改）。发现：容器域被拒命令仍向查看者回显一条内容不变的 ChestState/FurnaceState（既有发布语义），parity 计数按 6/8 钉住。
