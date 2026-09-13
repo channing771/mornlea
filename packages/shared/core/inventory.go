@@ -143,6 +143,51 @@ func (inventory Inventory) MoveStack(from, to uint8) (Inventory, bool) {
 	return inventory, true
 }
 
+// MoveStackAmount 在完整状态的副本上做至多 amount 个物品的部分移动：空目标
+// 接收 min(amount, 来源数量)，同类目标按剩余容量截断合并、余量留在来源格。
+// 数量语义由调用方显式传入（服务端按来源栈推导半组 ceil(n/2) 或单件 1），
+// 本原语只做「至多 amount」的确定性搬运，不做任何推导——这样客户端不可能
+// 借它表达任意数量的语义，推导权收在权威侧。异类非空目标直接拒绝而非交换：
+// 交换是 `MoveStack` 的整堆语义，半组/单件移动一旦交换，来源格会意外失去
+// 整堆控制权，与「恰好一半/恰好一个」的玩家意图不符。同格、越界、空来源、
+// amount 为零或可移动量为零（同类满目标）返回原值和 false，任何失败路径
+// 零改动。
+func (inventory Inventory) MoveStackAmount(from, to, amount uint8) (Inventory, bool) {
+	if from == to || amount == 0 {
+		return inventory, false
+	}
+	source, ok := inventory.Slot(from)
+	if !ok || source.Item == ItemNone {
+		return inventory, false
+	}
+	target, ok := inventory.Slot(to)
+	if !ok {
+		return inventory, false
+	}
+	if target.Item != ItemNone && target.Item != source.Item {
+		return inventory, false
+	}
+	if target.Item == ItemNone {
+		// 空目标先继承来源的物品与耐久字段并清零数量，随后与同类合并共用
+		// 同一段「按剩余容量截断」的搬运逻辑，两分支不再分叉。
+		target = source
+		target.Count = 0
+	}
+	limit, _ := ItemStackLimit(source.Item)
+	moved := min(min(amount, source.Count), limit-target.Count)
+	if moved == 0 {
+		return inventory, false
+	}
+	target.Count += moved
+	source.Count -= moved
+	if source.Count == 0 {
+		source = ItemStack{}
+	}
+	inventory.setSlot(to, target)
+	inventory.setSlot(from, source)
+	return inventory, true
+}
+
 // SetSlot 返回把统一索引 slot 写为 stack 后的新值；
 // 索引越界或物品未注册时返回原值和 false。
 func (inventory Inventory) SetSlot(slot uint8, stack ItemStack) (Inventory, bool) {

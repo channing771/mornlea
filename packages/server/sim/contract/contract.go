@@ -36,6 +36,36 @@ const (
 	// CommandEquipArmor 请求把权威选中快捷栏格中的护甲件穿到对应槽位；载荷
 	// 只有序号，目标槽位由件类映射唯一确定。只读写玩家自身状态，不触碰区块。
 	CommandEquipArmor
+	// CommandMoveStackPartial 请求半组/单件部分数量移动：`Slot`/`ToSlot` 是
+	// `StackView` 视图域的统一索引，`Single` 在半组（ceil）与单件（1）两档间
+	// 选择。移动数量 MUST 由服务端在结算时按权威来源栈推导，命令载荷不存在
+	// 客户端可声明的数量。背包/合成视图只读写玩家自身状态，命令阶段内联
+	// 结算；容器视图携带 `Furnace` 容器引用并延迟到区块写相位结算（与
+	// `CommandMoveFurnaceStack` 同路径）。
+	CommandMoveStackPartial
+	// CommandQuickMoveStack 请求快捷搬运：把 `Slot`（`StackView` 视图域的
+	// 统一索引）整堆移动到对侧区域的首个可容纳位置。目标序是固定确定性
+	// 契约（容器区来源按拾取四相位序并入背包、箱子/网格按统一索引升序、
+	// 熔炉按「熔炼输入优先于燃料」、纯背包面板快捷栏↔背包对侧互移），由
+	// 服务端权威推导，命令不携带目标字段；余量按既有合并语义留在来源格，
+	// 对侧零吸收时整单拒绝。结算相位与 `CommandMoveStackPartial` 同族：
+	// 背包/合成视图内联，容器视图延迟到区块写相位。
+	CommandQuickMoveStack
+)
+
+// 分堆命令族（`CommandMoveStackPartial` 与 `CommandQuickMoveStack`）的视图域
+// 值域。值与协议侧 `network.StackView*` 常量逐值相同（ingress 按两侧常量
+// 显式映射而不是透传字节，等值由 contract 钉值测试拦住漂移）；sim 按它
+// 分派结算相位与值域上界。
+// 零值即背包域，其它命令族不携带该字段，零值不会误入分堆路径。
+const (
+	// StackViewInventory 是背包视图域：统一索引 0..`core.InventorySlots`-1。
+	StackViewInventory uint8 = 0
+	// StackViewCrafting 是合成统一视图域：网格 0..8、背包 9..44。
+	StackViewCrafting uint8 = 1
+	// StackViewContainer 是容器统一视图域：箱子 0..62、熔炉 0..38，命令必须
+	// 携带与查看关系一致的合法容器引用（`Command.Furnace`）。
+	StackViewContainer uint8 = 2
 )
 
 type RejectReason uint8
@@ -83,6 +113,14 @@ type Command struct {
 	Eating       bool
 	Sprinting    bool
 	Sneaking     bool
+	// StackView 是分堆命令族（`CommandMoveStackPartial` 与
+	// `CommandQuickMoveStack`）的视图域，取值 `StackView*` 三常量之一；
+	// 其它命令族恒为零值。
+	StackView uint8
+	// Single 是部分移动（`CommandMoveStackPartial`）的数量档位：false = 半组
+	//（来源数量向上取整）、true = 单件（1）。数量由服务端在结算时按权威
+	// 来源栈推导；快捷搬运恒为整堆，不消费本字段。
+	Single bool
 }
 
 type GeneratedChunk struct {

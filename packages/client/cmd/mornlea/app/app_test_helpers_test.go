@@ -157,9 +157,16 @@ func audioPlayerState(tick uint64, health, hunger uint8, reset bool) network.Pla
 	}
 }
 
-// gameTestAction 保留真实视图身份与生产守卫，测试只提供语义操作。
+// gameTestAction 保留真实视图身份与生产守卫，测试只提供语义操作；默认左键、
+// 无修饰位（既有整堆两击路径）。
 func gameTestAction(a *Application, op, area string, index int) {
-	a.handleGameAction(client.UIGameAction{Token: a.buildGameUIState().Token, Op: op, Area: area, Index: index})
+	gameTestPointerAction(a, op, area, index, "left", false)
+}
+
+// gameTestPointerAction 是带按键类型与 Shift 修饰位的语义操作入口，供分堆
+// 与快捷搬运分支的测试构造右键/Shift 交互。
+func gameTestPointerAction(a *Application, op, area string, index int, button string, shift bool) {
+	a.handleGameAction(client.UIGameAction{Token: a.buildGameUIState().Token, Op: op, Area: area, Index: index, Button: button, Shift: shift})
 }
 
 type gameEventDrainer struct {

@@ -201,6 +201,17 @@ const (
 	RejectNotArmor = protocol.RejectNotArmor
 )
 
+// 分堆双命令的视图域枚举定义在 protocol 包；再导出供服务端 ingress 显式
+// 映射与测试夹具共用同一组取值（语义见 protocol 侧注释）。
+const (
+	// StackViewInventory 是背包视图：统一索引 0..35。
+	StackViewInventory = protocol.StackViewInventory
+	// StackViewCrafting 是合成统一视图：网格 0..8、背包 9..44。
+	StackViewCrafting = protocol.StackViewCrafting
+	// StackViewContainer 是容器统一视图：熔炉 0..38、箱子 0..62。
+	StackViewContainer = protocol.StackViewContainer
+)
+
 // 物品栏与容器消息 DTO 定义在 protocol 包；再导出保持既有 network.X 引用。
 type (
 	// InventoryState 是服务端发给所属玩家的完整权威物品状态。
@@ -217,6 +228,12 @@ type (
 	OpenContainer = protocol.OpenContainer
 	// MoveContainerStack 是容器统一栏位间的整堆移动命令。
 	MoveContainerStack = protocol.MoveContainerStack
+	// MoveStackPartial 是分堆部分移动命令：半组（向上取整）或单件两档，
+	// 数量由服务端按来源栈推导。
+	MoveStackPartial = protocol.MoveStackPartial
+	// QuickMoveStack 是快捷搬运命令：来源格整堆移到对侧区域首个可容纳
+	// 位置，目标序由服务端权威推导。
+	QuickMoveStack = protocol.QuickMoveStack
 	// CloseContainer 是关闭容器命令。
 	CloseContainer = protocol.CloseContainer
 	// FurnaceState 是服务端发给当前查看者的完整熔炉状态。

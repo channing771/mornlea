@@ -163,6 +163,39 @@ func translateClientMessage(
 			Slot:     message.From,
 			ToSlot:   message.To,
 		}, true
+	case network.MoveStackPartial:
+		// 半组/单件部分移动：ingress 是两命令的唯一翻译点，序号透传，数量
+		// 由 sim 按结算时点的权威来源栈推导，这里只搬运视图域、容器引用、
+		// 统一索引与单件标志；Memory 与 TCP 共用这一入口。
+		view, ok := translateStackSplitView(message.View)
+		if !ok {
+			return contract.Command{}, false
+		}
+		return contract.Command{
+			Session:   id,
+			Sequence:  message.Sequence,
+			Kind:      contract.CommandMoveStackPartial,
+			Furnace:   message.Container,
+			StackView: view,
+			Slot:      message.From,
+			ToSlot:    message.To,
+			Single:    message.Single,
+		}, true
+	case network.QuickMoveStack:
+		// 快捷搬运与部分移动同族，但没有目标格——目标序是服务端权威推导
+		// 的固定确定性契约，命令不携带任何目标字段。
+		view, ok := translateStackSplitView(message.View)
+		if !ok {
+			return contract.Command{}, false
+		}
+		return contract.Command{
+			Session:   id,
+			Sequence:  message.Sequence,
+			Kind:      contract.CommandQuickMoveStack,
+			Furnace:   message.Container,
+			StackView: view,
+			Slot:      message.From,
+		}, true
 	case network.TillSoil:
 		// 与 OpenContainer 同形：只搬运序号与朝向，目标与栏位都由 sim 从权威
 		// 状态取得，server 不做第二次校验。
@@ -257,6 +290,24 @@ func translateClientMessage(
 		}, true
 	default:
 		return contract.Command{}, false
+	}
+}
+
+// translateStackSplitView 把分堆双命令的协议侧视图域字节显式映射到 sim
+// 契约常量，而不是盲目透传 wire 字节：两侧常量的逐值等同由 contract 包的
+// 钉值测试（`TestStackSplitViewConstantsMirrorProtocol`）担保，若协议侧将来
+// 扩充视图域而 sim 未跟进，这里按未知消息失败，把未定义视图挡在权威结算
+// 之外。值域外视图的拦截（{0,1,2} 之外整包拒绝）已由协议校验层完成。
+func translateStackSplitView(view uint8) (uint8, bool) {
+	switch view {
+	case network.StackViewInventory:
+		return contract.StackViewInventory, true
+	case network.StackViewCrafting:
+		return contract.StackViewCrafting, true
+	case network.StackViewContainer:
+		return contract.StackViewContainer, true
+	default:
+		return 0, false
 	}
 }
 

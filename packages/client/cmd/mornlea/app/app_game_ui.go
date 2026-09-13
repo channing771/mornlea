@@ -173,6 +173,30 @@ func (a *Application) handleGameAction(action client.UIGameAction) {
 	if !valid {
 		return
 	}
+	// Shift+左键单击：无视既有来源直发一次快捷搬运；目标落位由服务端按
+	// 固定确定性契约推导，客户端不预测、不改镜像。
+	if action.Shift && action.Button != "right" {
+		a.gameSource = nil
+		a.gameUIDirty = true
+		switch kind {
+		case "chest":
+			state, _ := a.chest.State()
+			a.sendGameCommand(network.QuickMoveStack{Sequence: a.nextSequence(), Container: state.Chest, View: network.StackViewContainer, From: to})
+		case "furnace":
+			state, _ := a.furnace.State()
+			a.sendGameCommand(network.QuickMoveStack{Sequence: a.nextSequence(), Container: state.Furnace, View: network.StackViewContainer, From: to})
+		default:
+			// 个人背包面板的背包/快捷栏格走背包视图域（原始 0..35 索引），
+			// 与整堆移动的双背包端回退同形；网格格与工作台面板仍走合成
+			// 视图统一映射（网格 0..8、背包 9..44）。
+			if kind == "inventory" && target.Area == "inventory" {
+				a.sendGameCommand(network.QuickMoveStack{Sequence: a.nextSequence(), View: network.StackViewInventory, From: to - 9})
+				return
+			}
+			a.sendGameCommand(network.QuickMoveStack{Sequence: a.nextSequence(), View: network.StackViewCrafting, From: to})
+		}
+		return
+	}
 	if a.gameSource == nil {
 		a.gameSource = &target
 		a.gameUIDirty = true
@@ -192,6 +216,27 @@ func (a *Application) handleGameAction(action client.UIGameAction) {
 	a.gameUIDirty = true
 	if from == to {
 		a.playLocalCue(audio.CueUIClick)
+		return
+	}
+	// 右键第二击：部分数量移动。半组/单件档位由第二击的 Shift 位决定，
+	// 数量由服务端按来源栈推导；视图域分派与下方整堆路径一致（触及网格
+	// 走合成视图，背包内部走背包视图，容器面板带权威引用）。
+	if action.Button == "right" {
+		if kind == "chest" {
+			state, _ := a.chest.State()
+			a.sendGameCommand(network.MoveStackPartial{Sequence: a.nextSequence(), Container: state.Chest, View: network.StackViewContainer, From: from, To: to, Single: action.Shift})
+			return
+		}
+		if kind == "furnace" {
+			state, _ := a.furnace.State()
+			a.sendGameCommand(network.MoveStackPartial{Sequence: a.nextSequence(), Container: state.Furnace, View: network.StackViewContainer, From: from, To: to, Single: action.Shift})
+			return
+		}
+		if from >= 9 && to >= 9 {
+			a.sendGameCommand(network.MoveStackPartial{Sequence: a.nextSequence(), View: network.StackViewInventory, From: from - 9, To: to - 9, Single: action.Shift})
+			return
+		}
+		a.sendGameCommand(network.MoveStackPartial{Sequence: a.nextSequence(), View: network.StackViewCrafting, From: from, To: to, Single: action.Shift})
 		return
 	}
 	if kind == "chest" {

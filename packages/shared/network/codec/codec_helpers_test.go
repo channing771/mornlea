@@ -170,6 +170,12 @@ func sameClientPacket(got, want protocol.ClientPacket) bool {
 	case protocol.EquipArmor:
 		other, ok := want.(protocol.EquipArmor)
 		return ok && got == other
+	case protocol.MoveStackPartial:
+		other, ok := want.(protocol.MoveStackPartial)
+		return ok && got == other
+	case protocol.QuickMoveStack:
+		other, ok := want.(protocol.QuickMoveStack)
+		return ok && got == other
 	default:
 		return false
 	}

@@ -63,14 +63,14 @@ func TestGridCraftingPacketIDsAreFrozen(t *testing.T) {
 	}{
 		{StatePlay, CraftingState{}, 21},
 	})
-	if _, ok := ClientPacketForID(StatePlay, 18+1); ok {
-		t.Fatal("Play client packet ID 19 必须保持未分配")
+	if _, ok := ClientPacketForID(StatePlay, 20+1); ok {
+		t.Fatal("Play client packet ID 21 必须保持未分配")
 	}
 	if _, ok := ServerPacketForID(StatePlay, 31+1); ok {
 		t.Fatal("Play server packet ID 32 必须保持未分配")
 	}
-	if ProtocolVersion != 43 {
-		t.Fatalf("协议版本 = %d，想要 43——夜行者三类消息由 v30 承载、显示相位偏移由 v31 承载、私有战斗命中由 v32 承载、被动牛三类消息由 v33 承载、放牧位由 v34 承载、死亡原因位由 v35 承载、天气字节由 v36 承载、季节三字段由 v37 承载、水桶双命令由 v38 承载、双维值域放行由 v39 承载、登录视距字节由 v40 承载、潜行位由 v41 承载、护甲点数与装备互换命令由 v42 承载、投射物三类消息与敌怪 kind 字节由 v43 承载", ProtocolVersion)
+	if ProtocolVersion != 44 {
+		t.Fatalf("协议版本 = %d，想要 44——夜行者三类消息由 v30 承载、显示相位偏移由 v31 承载、私有战斗命中由 v32 承载、被动牛三类消息由 v33 承载、放牧位由 v34 承载、死亡原因位由 v35 承载、天气字节由 v36 承载、季节三字段由 v37 承载、水桶双命令由 v38 承载、双维值域放行由 v39 承载、登录视距字节由 v40 承载、潜行位由 v41 承载、护甲点数与装备互换命令由 v42 承载、投射物三类消息与敌怪 kind 字节由 v43 承载、分堆双命令由 v44 承载", ProtocolVersion)
 	}
 }
 
@@ -102,8 +102,8 @@ func TestProtocolV22TillSoilPacketIDIsFrozen(t *testing.T) {
 	} else if _, isTake := packet.(TakeCraftingOutput); !isTake {
 		t.Fatalf("Play client packet ID 15 = %T，想要 TakeCraftingOutput", packet)
 	}
-	if ProtocolVersion != 43 {
-		t.Fatalf("协议版本 = %d，想要 43", ProtocolVersion)
+	if ProtocolVersion != 44 {
+		t.Fatalf("协议版本 = %d，想要 44", ProtocolVersion)
 	}
 }
 
@@ -119,10 +119,10 @@ func TestProtocolV27BoneMealPacketIDIsFrozen(t *testing.T) {
 	if _, isBone := packet.(BoneMeal); !isBone {
 		t.Fatalf("Play client packet ID 14 = %T，想要 BoneMeal", packet)
 	}
-	// 18 已由装备互换命令占用（v42）；「相邻编号不被静默占用」的门禁语义
-	// 随之推进到 19。
-	if _, ok := ClientPacketForID(StatePlay, 18+1); ok {
-		t.Fatal("Play client packet ID 19 必须保持未分配")
+	// 18 已由装备互换命令占用（v42）、19/20 已由分堆双命令占用（v44）；
+	// 「相邻编号不被静默占用」的门禁语义随之推进到 21。
+	if _, ok := ClientPacketForID(StatePlay, 20+1); ok {
+		t.Fatal("Play client packet ID 21 必须保持未分配")
 	}
 }
 
@@ -145,11 +145,12 @@ func TestProtocolV42EquipArmorPacketIDIsFrozen(t *testing.T) {
 	if _, ok := ClientPacketForID(StatePlay, 1); ok {
 		t.Fatal("Play client packet ID 1 必须保持未分配")
 	}
-	if _, ok := ClientPacketForID(StatePlay, 18+1); ok {
-		t.Fatal("Play client packet ID 19 必须保持未分配")
+	// v44 把 19/20 分配给分堆双命令之后，「下一个仍未分配」上界推进到 21。
+	if _, ok := ClientPacketForID(StatePlay, 20+1); ok {
+		t.Fatal("Play client packet ID 21 必须保持未分配")
 	}
-	if ProtocolVersion != 43 {
-		t.Fatalf("协议版本 = %d，想要 43", ProtocolVersion)
+	if ProtocolVersion != 44 {
+		t.Fatalf("协议版本 = %d，想要 44", ProtocolVersion)
 	}
 }
 
@@ -336,6 +337,12 @@ func sameClientPacketType(left, right ClientPacket) bool {
 		return ok
 	case EquipArmor:
 		_, ok := right.(EquipArmor)
+		return ok
+	case MoveStackPartial:
+		_, ok := right.(MoveStackPartial)
+		return ok
+	case QuickMoveStack:
+		_, ok := right.(QuickMoveStack)
 		return ok
 	}
 	return false

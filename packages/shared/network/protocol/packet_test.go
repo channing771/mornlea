@@ -25,6 +25,14 @@ func TestValidateClientPacket(t *testing.T) {
 		{"select hotbar", StatePlay, SelectHotbar{Slot: 8}},
 		{"move inventory stack", StatePlay, MoveInventoryStack{From: 0, To: core.InventorySlots - 1}},
 		{"move crafting stack", StatePlay, MoveCraftingStack{From: 9, To: 0}},
+		{"move stack partial inventory", StatePlay, MoveStackPartial{View: StackViewInventory, From: 0, To: core.InventorySlots - 1}},
+		{"quick move stack container", StatePlay, QuickMoveStack{
+			Container: core.ContainerRef{
+				Dimension: core.Overworld, Chunk: core.ChunkPos{X: 1, Z: 2},
+				Kind: core.ContainerKindChest, Slot: 1, Generation: 1,
+			},
+			View: StackViewContainer, From: 0,
+		}},
 		{"resync", StatePlay, RequestChunkResync{}},
 		{"keep alive reply", StatePlay, KeepAliveReply{Token: 1}},
 		{"till soil", StatePlay, TillSoil{Yaw: 90, Pitch: -15}},
@@ -70,6 +78,8 @@ func TestValidateClientPacket(t *testing.T) {
 		{"inventory move same slot", StatePlay, MoveInventoryStack{From: 2, To: 2}},
 		{"crafting move out of range", StatePlay, MoveCraftingStack{From: 45, To: 0}},
 		{"crafting move both ends in inventory", StatePlay, MoveCraftingStack{From: 9, To: 10}},
+		{"stack split unknown view", StatePlay, MoveStackPartial{View: 3, From: 0, To: 1}},
+		{"stack split container view with zero ref", StatePlay, QuickMoveStack{View: StackViewContainer, From: 0}},
 		{"resync dimension outside overworld and depths", StatePlay, RequestChunkResync{Dimension: core.DimensionID(2)}},
 		{"play packet during handshake", StateHandshake, PlayerInput{}},
 		{"play packet during login", StateLogin, PlayerInput{}},
@@ -98,8 +108,8 @@ func TestProtocolV1StateAndErrorCodesAreFrozen(t *testing.T) {
 			t.Fatalf("%s state = %d, want %d", tc.name, tc.got, tc.want)
 		}
 	}
-	if ProtocolVersion != 43 {
-		t.Fatalf("protocol version = %d, want 43", ProtocolVersion)
+	if ProtocolVersion != 44 {
+		t.Fatalf("protocol version = %d, want 44", ProtocolVersion)
 	}
 
 	codes := []struct {
