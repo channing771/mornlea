@@ -186,3 +186,186 @@ func TestGameEventsDrainWithoutDeveloperPanel(t *testing.T) {
 		t.Fatal("非dev游戏未消费事件")
 	}
 }
+
+// TestGameRightClickSplitSendsPartialOnceAndWaitForAuthority 钉住右键两击的
+// 部分移动语义：首击只记录来源，第二击按其 Shift 位在半组/单件两档间定档，
+// 数量由服务端推导，确认前镜像逐格不变。
+func TestGameRightClickSplitSendsPartialOnceAndWaitForAuthority(t *testing.T) {
+	a, endpoint := newInteractiveTestApplication(t)
+	a.menu.phase = MenuPhaseGame
+	before := core.Inventory{}
+	before.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 3}
+	if err := a.inventory.Apply(network.InventoryState{Inventory: before}); err != nil {
+		t.Fatal(err)
+	}
+	a.setInventoryOpen(true)
+	// 右键首击：只记录来源，不发命令。
+	gameTestPointerAction(a, "slot", "inventory", 0, "right", false)
+	assertNoInteractiveClientMessage(t, endpoint)
+	if a.gameSource == nil || a.gameSource.Area != "inventory" || a.gameSource.Index != 0 {
+		t.Fatalf("右键首击未记录来源: %#v", a.gameSource)
+	}
+	// 右键二击（无 Shift）：半组档，背包内部走背包视图域。
+	gameTestPointerAction(a, "slot", "inventory", 10, "right", false)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.MoveStackPartial); !ok ||
+		got.View != network.StackViewInventory || got.From != 0 || got.To != 10 || got.Single {
+		t.Fatalf("半组请求: %#v", got)
+	}
+	if a.gameSource != nil {
+		t.Fatal("部分移动后来源未清除")
+	}
+	if after, _ := a.inventory.State(); after != before {
+		t.Fatal("部分移动点击改写权威镜像")
+	}
+	// Shift+右键二击：单件档。
+	gameTestPointerAction(a, "slot", "inventory", 0, "right", false)
+	gameTestPointerAction(a, "slot", "inventory", 10, "right", true)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.MoveStackPartial); !ok ||
+		got.View != network.StackViewInventory || got.From != 0 || got.To != 10 || !got.Single {
+		t.Fatalf("单件请求: %#v", got)
+	}
+	// Shift+右键首击同样只记录来源：定档只由第二击决定。
+	gameTestPointerAction(a, "slot", "inventory", 0, "right", true)
+	assertNoInteractiveClientMessage(t, endpoint)
+	if a.gameSource == nil {
+		t.Fatal("Shift+右键首击未记录来源")
+	}
+	// 混合键序以第二击类型定档：右键选源后左键二击仍发整堆命令。
+	gameTestPointerAction(a, "slot", "inventory", 10, "left", false)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.MoveInventoryStack); !ok || got.From != 0 || got.To != 10 {
+		t.Fatalf("混合键序整堆请求: %#v", got)
+	}
+	// 右键二击同格：与整堆一致的取消语义，不发命令。
+	gameTestPointerAction(a, "slot", "inventory", 0, "right", false)
+	gameTestPointerAction(a, "slot", "inventory", 0, "right", false)
+	assertNoInteractiveClientMessage(t, endpoint)
+}
+
+// TestGameRightClickPartialAcrossGridAndContainers 钉住部分移动的视图域分派：
+// 触及网格的移动走合成视图，容器面板走容器视图并携带权威引用。
+func TestGameRightClickPartialAcrossGridAndContainers(t *testing.T) {
+	a, endpoint := newInteractiveTestApplication(t)
+	a.menu.phase = MenuPhaseGame
+	if err := a.inventory.Apply(network.InventoryState{}); err != nil {
+		t.Fatal(err)
+	}
+	grid := network.CraftingState{Size: 3}
+	grid.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 4}
+	if err := a.crafting.Apply(grid); err != nil {
+		t.Fatal(err)
+	}
+	a.setInventoryOpen(true)
+	// 工作台：网格格 → 背包格走合成视图统一索引。
+	gameTestPointerAction(a, "slot", "crafting", 0, "right", false)
+	gameTestPointerAction(a, "slot", "inventory", 0, "right", false)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.MoveStackPartial); !ok ||
+		got.View != network.StackViewCrafting || got.From != 0 || got.To != 9 {
+		t.Fatalf("合成视图半组请求: %#v", got)
+	}
+	// 直接切换到箱子视图（容器开着的真实路径是权威下发新状态）：避免
+	// 关闭面板触发 CloseContainer 挡在断言前面。
+	chest := network.ChestState{Chest: core.ContainerRef{Kind: core.ContainerKindChest, Generation: 1}}
+	chest.Items[0] = core.ItemStack{Item: core.ItemStone, Count: 4}
+	if err := a.chest.Apply(chest); err != nil {
+		t.Fatal(err)
+	}
+	gameTestPointerAction(a, "slot", "chest", 0, "right", true)
+	gameTestPointerAction(a, "slot", "inventory", 0, "right", false)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.MoveStackPartial); !ok ||
+		got.Container != chest.Chest || got.View != network.StackViewContainer || got.From != 36 || got.To != 0 {
+		t.Fatalf("箱子视图单件请求: %#v", got)
+	}
+}
+
+// TestGameRightClickPartialRejectsFurnaceOutputTarget 钉住部分移动沿既有熔炉
+// 约束：输出格不得作为目标，非法目标不得破坏来源。
+func TestGameRightClickPartialRejectsFurnaceOutputTarget(t *testing.T) {
+	a, endpoint := newInteractiveTestApplication(t)
+	a.menu.phase = MenuPhaseGame
+	if err := a.inventory.Apply(network.InventoryState{}); err != nil {
+		t.Fatal(err)
+	}
+	furnace := network.FurnaceState{Furnace: core.FurnaceRef{Generation: 1}}
+	furnace.Input = core.ItemStack{Item: core.ItemRawIron, Count: 4}
+	if err := a.furnace.Apply(furnace); err != nil {
+		t.Fatal(err)
+	}
+	a.setInventoryOpen(true)
+	gameTestPointerAction(a, "slot", "furnace", 0, "right", false)
+	gameTestPointerAction(a, "slot", "furnace", 2, "right", false)
+	assertNoInteractiveClientMessage(t, endpoint)
+	if a.gameSource == nil || a.gameSource.Area != "furnace" {
+		t.Fatal("非法目标破坏了部分移动来源")
+	}
+}
+
+// TestGameShiftLeftClickQuickMoveClearsSourceAndMapsView 钉住 Shift+左键单击
+// 的快捷搬运：无视既有来源直发一次请求，视图域按当前面板身份映射（容器
+// 面板带权威引用；合成/背包面板用统一合成视图索引）。
+func TestGameShiftLeftClickQuickMoveClearsSourceAndMapsView(t *testing.T) {
+	a, endpoint := newInteractiveTestApplication(t)
+	a.menu.phase = MenuPhaseGame
+	if err := a.inventory.Apply(network.InventoryState{}); err != nil {
+		t.Fatal(err)
+	}
+	grid := network.CraftingState{Size: 3}
+	grid.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 4}
+	if err := a.crafting.Apply(grid); err != nil {
+		t.Fatal(err)
+	}
+	a.setInventoryOpen(true)
+	// 预置来源：快捷搬运必须忽略并清除它。
+	gameTestAction(a, "slot", "crafting", 1)
+	if a.gameSource == nil {
+		t.Fatal("夹具：来源未记录")
+	}
+	gameTestPointerAction(a, "slot", "crafting", 0, "left", true)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.QuickMoveStack); !ok ||
+		got.View != network.StackViewCrafting || got.From != 0 || got.Container != (core.ContainerRef{}) {
+		t.Fatalf("工作台网格快捷搬运: %#v", got)
+	}
+	if a.gameSource != nil {
+		t.Fatal("快捷搬运未清除既有来源")
+	}
+	// 背包格按统一合成视图 +9 映射。
+	gameTestPointerAction(a, "slot", "inventory", 5, "left", true)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.QuickMoveStack); !ok ||
+		got.View != network.StackViewCrafting || got.From != 14 {
+		t.Fatalf("工作台背包快捷搬运: %#v", got)
+	}
+	// 直接经权威状态切换视图（避免关闭面板触发 CloseContainer 挡在断言
+	// 前面）：箱子优先于熔炉成为当前视图。
+	chest := network.ChestState{Chest: core.ContainerRef{Kind: core.ContainerKindChest, Generation: 1}}
+	if err := a.chest.Apply(chest); err != nil {
+		t.Fatal(err)
+	}
+	furnace := network.FurnaceState{Furnace: core.FurnaceRef{Generation: 2}}
+	if err := a.furnace.Apply(furnace); err != nil {
+		t.Fatal(err)
+	}
+	gameTestPointerAction(a, "slot", "inventory", 0, "left", true)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.QuickMoveStack); !ok ||
+		got.Container != chest.Chest || got.View != network.StackViewContainer || got.From != 0 {
+		t.Fatalf("箱子背包快捷搬运: %#v", got)
+	}
+	gameTestPointerAction(a, "slot", "chest", 3, "left", true)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.QuickMoveStack); !ok ||
+		got.Container != chest.Chest || got.View != network.StackViewContainer || got.From != 39 {
+		t.Fatalf("箱内快捷搬运: %#v", got)
+	}
+	// 镜像层关闭箱子即切换到熔炉视图，不产生协议消息。
+	if err := a.chest.Close(network.ContainerClosed{Container: chest.Chest}); err != nil {
+		t.Fatal(err)
+	}
+	gameTestPointerAction(a, "slot", "furnace", 1, "left", true)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.QuickMoveStack); !ok ||
+		got.Container != furnace.Furnace || got.View != network.StackViewContainer || got.From != 37 {
+		t.Fatalf("熔炉快捷搬运: %#v", got)
+	}
+	// 快捷搬运从输出格取回是合法来源方向，不受输出格目标约束影响。
+	gameTestPointerAction(a, "slot", "furnace", 2, "left", true)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.QuickMoveStack); !ok ||
+		got.From != core.FurnaceOutputSlot {
+		t.Fatalf("熔炉输出快捷搬运: %#v", got)
+	}
+}

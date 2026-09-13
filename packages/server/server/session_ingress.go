@@ -297,7 +297,7 @@ func translateClientMessage(
 // 契约常量，而不是盲目透传 wire 字节：两侧常量的逐值等同由 contract 包的
 // 钉值测试（`TestStackSplitViewConstantsMirrorProtocol`）担保，若协议侧将来
 // 扩充视图域而 sim 未跟进，这里按未知消息失败，把未定义视图挡在权威结算
-// 之外。值域内视图的拦截（{0,1,2} 之外整包拒绝）已由协议校验层完成。
+// 之外。值域外视图的拦截（{0,1,2} 之外整包拒绝）已由协议校验层完成。
 func translateStackSplitView(view uint8) (uint8, bool) {
 	switch view {
 	case network.StackViewInventory:

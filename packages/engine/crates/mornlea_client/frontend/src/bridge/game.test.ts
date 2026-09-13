@@ -10,7 +10,17 @@ describe("游戏桥拒绝边界", () => {
         { type: "game-action", token: 1, op: "slot", area: "output", index: 0 },
         { type: "game-action", token: 0, op: "close" },
         { type: "game-action", token: 1, op: "close", index: 0 },
+        // 旧字段集（缺 button/shift）被新 schema 拒绝属预期，前端与 Go 同批发布。
+        { type: "game-action", token: 1, op: "slot", area: "inventory", index: 0 },
+        { type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, button: "left" },
+        { type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, shift: false },
+        { type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, button: "middle", shift: false },
+        { type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, button: "left", shift: "false" },
     ])("拒绝非法游戏事件 %j", event => expect(() => createEnvelope([event as UplinkEvent])).toThrow());
+    it.each([
+        { type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, button: "left", shift: false },
+        { type: "game-action", token: 1, op: "slot", area: "furnace", index: 2, button: "right", shift: true },
+    ])("携带按键与修饰位的槽位事件通过 %j", event => expect(() => createEnvelope([event as UplinkEvent])).not.toThrow());
 });
 
 const emptySlots = (count: number) => Array.from({ length: count }, () => ({ item: 0, count: 0 }));

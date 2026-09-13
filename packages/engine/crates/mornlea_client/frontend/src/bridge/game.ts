@@ -40,6 +40,10 @@ export type GameAction = {
   readonly op: "slot";
   readonly area: SlotArea;
   readonly index: number;
+  /** 槽位点击的按键类型：左键整堆/快捷搬运、右键部分移动。 */
+  readonly button: "left" | "right";
+  /** Shift 修饰位：左键为快捷搬运，右键第二击在单件/半组间定档。 */
+  readonly shift: boolean;
 });
 const limits: Record<SlotArea, number> = {
   inventory: 35,
@@ -106,11 +110,14 @@ export function validateGameAction(raw: unknown): GameAction {
   const keys = ["type", "token", "op"];
   switch (r.op) {
     case "slot":
-      object(r, [...keys, "area", "index"]);
+      object(r, [...keys, "area", "index", "button", "shift"]);
       slotRef({
         area: r.area,
         index: r.index
       });
+      if (r.button !== "left" && r.button !== "right")
+        return fail();
+      bool(r.shift);
       break;
     case "hotbar":
     case "recipe":

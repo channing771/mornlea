@@ -1042,7 +1042,9 @@
             "token",
             "op",
             "area",
-            "index"
+            "index",
+            "button",
+            "shift"
           ],
           "properties": {
             "type": {
@@ -1063,6 +1065,12 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 35
+            },
+            "button": {
+              "$ref": "#/$defs/gamePointerButton"
+            },
+            "shift": {
+              "$ref": "#/$defs/gamePointerShift"
             }
           }
         },
@@ -1074,7 +1082,9 @@
             "token",
             "op",
             "area",
-            "index"
+            "index",
+            "button",
+            "shift"
           ],
           "properties": {
             "type": {
@@ -1095,6 +1105,12 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 8
+            },
+            "button": {
+              "$ref": "#/$defs/gamePointerButton"
+            },
+            "shift": {
+              "$ref": "#/$defs/gamePointerShift"
             }
           }
         },
@@ -1106,7 +1122,9 @@
             "token",
             "op",
             "area",
-            "index"
+            "index",
+            "button",
+            "shift"
           ],
           "properties": {
             "type": {
@@ -1127,6 +1145,12 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 26
+            },
+            "button": {
+              "$ref": "#/$defs/gamePointerButton"
+            },
+            "shift": {
+              "$ref": "#/$defs/gamePointerShift"
             }
           }
         },
@@ -1138,7 +1162,9 @@
             "token",
             "op",
             "area",
-            "index"
+            "index",
+            "button",
+            "shift"
           ],
           "properties": {
             "type": {
@@ -1159,10 +1185,27 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 2
+            },
+            "button": {
+              "$ref": "#/$defs/gamePointerButton"
+            },
+            "shift": {
+              "$ref": "#/$defs/gamePointerShift"
             }
           }
         }
       ]
+    },
+    "gamePointerButton": {
+      "description": "槽位点击的按键类型：左键走整堆两击/快捷搬运语义，右键走部分数量语义；浏览器上下文菜单不参与。",
+      "enum": [
+        "left",
+        "right"
+      ]
+    },
+    "gamePointerShift": {
+      "description": "Shift 修饰位：左键单击为快捷搬运；右键第二击为单件（缺席 Shift 为半组）。数量与落位一律由服务端推导。",
+      "type": "boolean"
     },
     "gameRecipe": {
       "type": "object",

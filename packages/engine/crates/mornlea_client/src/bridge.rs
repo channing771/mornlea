@@ -152,6 +152,20 @@ fn valid_game_action(event: &serde_json::Value) -> bool {
         Some("recipe") => Some(9),
         Some("slot") => {
             keys.push("area");
+            keys.push("button");
+            keys.push("shift");
+            // 槽位操作必携按键类型与 Shift 修饰位:分堆/快捷搬运的语义分派
+            // 依赖这两个字段,缺失或非法值在此整包拒绝(旧字段集同拒)。
+            if !event
+                .get("button")
+                .and_then(|v| v.as_str())
+                .is_some_and(|button| button == "left" || button == "right")
+            {
+                return false;
+            }
+            if event.get("shift").and_then(|v| v.as_bool()).is_none() {
+                return false;
+            }
             match event.get("area").and_then(|v| v.as_str()) {
                 Some("inventory") => Some(35),
                 Some("crafting") => Some(8),
@@ -430,14 +444,36 @@ mod game_action_tests {
     #[test]
     fn invalid_game_actions_never_enter_queue() {
         for event in [
-            serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"inventory","index":36}),
+            serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"inventory","index":36,"button":"left","shift":false}),
             serde_json::json!({"type":"game-action","token":1,"op":"close","index":0}),
             serde_json::json!({"type":"game-action","token":0,"op":"close"}),
+            // 旧字段集（缺按键语义）被新 schema 拒绝属预期，前端与 Go 同批发布。
+            serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"inventory","index":0}),
+            serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"inventory","index":0,"button":"left"}),
+            serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"inventory","index":0,"shift":false}),
+            serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"inventory","index":0,"button":"middle","shift":false}),
+            serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"inventory","index":0,"button":"left","shift":"false"}),
         ] {
             let mut queue = UiEventQueue::new();
             let data = serde_json::to_vec(&serde_json::json!({"v":1,"events":[event]})).unwrap();
             assert!(queue.enqueue_envelope(&data).is_err());
             assert!(queue.is_empty());
+        }
+    }
+
+    /// 槽位事件的按键语义字段（`button`/`shift`）必须能过原生桥浅校验进入
+    /// 队列——否则分堆/快捷搬运的合法载荷会在半路被吞，Go 永远收不到。
+    #[test]
+    fn slot_pointer_semantics_enter_queue() {
+        for event in [
+            serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"inventory","index":0,"button":"left","shift":false}),
+            serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"furnace","index":2,"button":"right","shift":true}),
+            serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"chest","index":26,"button":"right","shift":true}),
+        ] {
+            let mut queue = UiEventQueue::new();
+            let data = serde_json::to_vec(&serde_json::json!({"v":1,"events":[event]})).unwrap();
+            assert!(queue.enqueue_envelope(&data).is_ok());
+            assert_eq!(queue.len(), 1);
         }
     }
 }

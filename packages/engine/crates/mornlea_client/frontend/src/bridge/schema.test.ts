@@ -537,6 +537,18 @@ describe("schema：上行 uplinkEnvelope 合法夹具", () => {
       }),
     ).toBe(true);
   });
+
+  it("game-action slot 携带 button/shift 通过校验", () => {
+    expect(
+      validateEnvelope({
+        v: 1,
+        events: [
+          { type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, button: "left", shift: false },
+          { type: "game-action", token: 1, op: "slot", area: "crafting", index: 8, button: "right", shift: true },
+        ],
+      }),
+    ).toBe(true);
+  });
 });
 
 describe("schema：上行 uplinkEnvelope 非法用例一律拒绝", () => {
@@ -584,6 +596,41 @@ describe("schema：上行 uplinkEnvelope 非法用例一律拒绝", () => {
 
   it("未知 debug-edit op 拒绝", () => {
     expect(validateEnvelope({ v: 1, events: [{ type: "debug-edit", op: "rewind" }] })).toBe(false);
+  });
+
+  it("game-action slot 缺 button/shift 或取值非法拒绝", () => {
+    // 旧字段集（缺按键语义）被新 schema 拒绝属预期，前端与 Go 同批发布。
+    expect(
+      validateEnvelope({ v: 1, events: [{ type: "game-action", token: 1, op: "slot", area: "inventory", index: 0 }] }),
+    ).toBe(false);
+    expect(
+      validateEnvelope({
+        v: 1,
+        events: [{ type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, button: "left" }],
+      }),
+    ).toBe(false);
+    expect(
+      validateEnvelope({
+        v: 1,
+        events: [{ type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, shift: false }],
+      }),
+    ).toBe(false);
+    expect(
+      validateEnvelope({
+        v: 1,
+        events: [
+          { type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, button: "middle", shift: false },
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      validateEnvelope({
+        v: 1,
+        events: [
+          { type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, button: "left", shift: "no" },
+        ],
+      }),
+    ).toBe(false);
   });
 
   it("信封版本非 1 拒绝", () => {

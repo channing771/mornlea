@@ -19,7 +19,14 @@ export function GamePanels({ game, hud, onEvent }: Props) {
         </div> : <p className="game-key-hint">Tab 自由光标 · E 行囊</p>;
     const personal = game.kind === "inventory" || game.kind === "character";
     const crafting = game.kind === "inventory" || game.kind === "workbench";
-    const slotButton = (area: SlotArea, slot: HudSlot, index: number) => <button key={index} type="button" className={`game-slot${area === "inventory" && index < 9 && hud?.hotbar?.selectedIndex === index ? " game-slot--selected" : ""}`} disabled={!game.confirmed} aria-label={`${labels[area]} ${index + 1}：${slot.name || "空"}`} aria-pressed={game.source?.area === area && game.source.index === index} onClick={() => emit({ type: "game-action", token: game.token, op: "slot", area, index })}>
+    // 槽位交互只透传语义字段（按键类型与 Shift 修饰位）：数量推导与落位
+    // 全部由服务端权威完成，前端不自行计算分堆或快捷搬运结果。
+    const slotAction = (area: SlotArea, index: number, button: "left" | "right", shift: boolean) => emit({ type: "game-action", token: game.token, op: "slot", area, index, button, shift });
+    const slotButton = (area: SlotArea, slot: HudSlot, index: number) => <button key={index} type="button" className={`game-slot${area === "inventory" && index < 9 && hud?.hotbar?.selectedIndex === index ? " game-slot--selected" : ""}`} disabled={!game.confirmed} aria-label={`${labels[area]} ${index + 1}：${slot.name || "空"}`} aria-pressed={game.source?.area === area && game.source.index === index} onClick={event => slotAction(area, index, "left", event.shiftKey)} onContextMenu={event => {
+        // 右键在面板上只触发槽位语义操作，不弹出浏览器上下文菜单。
+        event.preventDefault();
+        slotAction(area, index, "right", event.shiftKey);
+    }}>
     <SlotContents slot={slot}/>
     <span className="game-tooltip" role="tooltip">{slot.name || "空槽位"}{slot.count > 0 ? ` × ${slot.count}` : ""}{slot.durability !== undefined ? ` · 耐久 ${Math.round(slot.durability * 100)}%` : ""}</span>
     </button>;
@@ -90,7 +97,7 @@ export function GamePanels({ game, hud, onEvent }: Props) {
                     <SlotIcon slot={slot}/>
                     </div>)}</div>
                 </div>}</aside>}</div>}
-  <footer className="game-panel-footer">{game.kind === "character" ? "" : game.confirmed ? "先选物品，再选目标位置" : "正在整理行囊…"}<span>E / Esc 关闭</span>
+  <footer className="game-panel-footer">{game.kind === "character" ? "" : game.confirmed ? "先选物品，再选目标位置；右键半组 / Shift+右键单件 / Shift+点击快速搬运" : "正在整理行囊…"}<span>E / Esc 关闭</span>
     </footer>
  </section>
     </div>;

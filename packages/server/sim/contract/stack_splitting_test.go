@@ -7,8 +7,8 @@ import (
 )
 
 // TestStackSplitViewConstantsMirrorProtocol 锁定 sim 契约侧的视图域常量与
-// 协议侧逐值相同：ingress 直接搬运 wire 的视图字节，任何一侧漂移都会让权威
-// 结算分派到错误的视图域与结算相位。
+// 协议侧逐值相同：ingress 把 wire 视图字节显式映射到 sim 契约常量，任何一侧
+// 漂移都会让权威结算分派到错误的视图域与结算相位。
 func TestStackSplitViewConstantsMirrorProtocol(t *testing.T) {
 	if StackViewInventory != protocol.StackViewInventory ||
 		StackViewCrafting != protocol.StackViewCrafting ||

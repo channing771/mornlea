@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, createEvent, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { GamePanels } from "./GamePanels";
 import type { GameState } from "../bridge/game";
@@ -44,7 +44,9 @@ it("背包和产物发出语义事件", () => {
     token: 3,
     op: "slot",
     area: "inventory",
-    index: 35
+    index: 35,
+    button: "left",
+    shift: false
   });
   fireEvent.click(screen.getByRole("button", { name: "取出合成产物：石头" }));
   expect(emit).toHaveBeenLastCalledWith({
@@ -67,7 +69,9 @@ it.each(["chest", "furnace", "workbench"] as const)("%s 面板语义槽位", kin
     type: "game-action",
     token: 3,
     op: "slot", area,
-    index: 0
+    index: 0,
+    button: "left",
+    shift: false
   });
 });
 
@@ -136,4 +140,60 @@ it("背包与配方材料复用同一缓存图标", () => {
     recipeIndex: 0
   }} onEvent={() => { }} />);
   expect(container.querySelectorAll(`img.game-item-icon[src="${icon}"]`)).toHaveLength(2);
+});
+
+// 左/右键 × Shift × 有无来源的发射矩阵：组件只按交互形状透传语义字段，
+// 来源是否在 Go 侧记录不影响事件形状（半组选中与整堆同高亮）。
+it.each([
+  { button: "left", shift: false, source: false },
+  { button: "left", shift: false, source: true },
+  { button: "left", shift: true, source: false },
+  { button: "left", shift: true, source: true },
+  { button: "right", shift: false, source: false },
+  { button: "right", shift: false, source: true },
+] as const)("槽位发射矩阵 %s+shift=%s+source=%s", ({ button, shift, source }) => {
+  const emit = vi.fn();
+  render(<GamePanels game={source ? { ...state, source: { area: "inventory", index: 0 } } : state} onEvent={emit} />);
+  if (source) {
+    expect(screen.getByRole("button", { name: "背包 1：空" }).getAttribute("aria-pressed")).toBe("true");
+  }
+  const slot = screen.getByRole("button", { name: "背包 2：空" });
+  if (button === "left") {
+    fireEvent.click(slot, { shiftKey: shift });
+  } else {
+    fireEvent.contextMenu(slot, { shiftKey: shift });
+  }
+  expect(emit).toHaveBeenCalledTimes(1);
+  expect(emit).toHaveBeenCalledWith({
+    type: "game-action",
+    token: 3,
+    op: "slot",
+    area: "inventory",
+    index: 1,
+    button,
+    shift
+  });
+});
+
+it("右键槽位阻止浏览器上下文菜单并携带 Shift 单件档", () => {
+  const emit = vi.fn();
+  render(<GamePanels game={state} onEvent={emit} />);
+  const slot = screen.getByRole("button", { name: "背包 1：空" });
+  const event = createEvent.contextMenu(slot, { shiftKey: true });
+  fireEvent(slot, event);
+  expect(event.defaultPrevented).toBe(true);
+  expect(emit).toHaveBeenLastCalledWith({
+    type: "game-action",
+    token: 3,
+    op: "slot",
+    area: "inventory",
+    index: 0,
+    button: "right",
+    shift: true
+  });
+});
+
+it("页脚提示行说明半组、单件与快捷搬运", () => {
+  render(<GamePanels game={state} onEvent={() => { }} />);
+  expect(screen.getByText("先选物品，再选目标位置；右键半组 / Shift+右键单件 / Shift+点击快速搬运")).toBeTruthy();
 });
