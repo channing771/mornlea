@@ -301,7 +301,7 @@ func TestGameRightClickPartialRejectsFurnaceOutputTarget(t *testing.T) {
 
 // TestGameShiftLeftClickQuickMoveClearsSourceAndMapsView 钉住 Shift+左键单击
 // 的快捷搬运：无视既有来源直发一次请求，视图域按当前面板身份映射（容器
-// 面板带权威引用；合成/背包面板用统一合成视图索引）。
+// 面板带权威引用；工作台用统一合成视图索引）。
 func TestGameShiftLeftClickQuickMoveClearsSourceAndMapsView(t *testing.T) {
 	a, endpoint := newInteractiveTestApplication(t)
 	a.menu.phase = MenuPhaseGame
@@ -367,5 +367,54 @@ func TestGameShiftLeftClickQuickMoveClearsSourceAndMapsView(t *testing.T) {
 	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.QuickMoveStack); !ok ||
 		got.From != core.FurnaceOutputSlot {
 		t.Fatalf("熔炉输出快捷搬运: %#v", got)
+	}
+}
+
+// TestGamePersonalPanelQuickMoveRoutesInventoryView 钉住个人背包面板（2×2）
+// 的快捷搬运视图域分派：背包/快捷栏格走背包视图域原始 0..35 索引（服务端
+// 据此走纯背包面板互移），网格格仍走合成视图统一网格索引；工作台背包格
+// 的合成视图 +9 映射不变。
+func TestGamePersonalPanelQuickMoveRoutesInventoryView(t *testing.T) {
+	a, endpoint := newInteractiveTestApplication(t)
+	a.menu.phase = MenuPhaseGame
+	if err := a.inventory.Apply(network.InventoryState{}); err != nil {
+		t.Fatal(err)
+	}
+	grid := network.CraftingState{Size: 2}
+	grid.Slots[1] = core.ItemStack{Item: core.ItemStone, Count: 4}
+	if err := a.crafting.Apply(grid); err != nil {
+		t.Fatal(err)
+	}
+	a.setInventoryOpen(true)
+	if state := a.buildGameUIState(); state.Kind != "inventory" {
+		t.Fatalf("夹具：视图身份 %q", state.Kind)
+	}
+	// 个人面板背包格：背包视图域原始索引，而非合成视图 +9 映射。
+	gameTestPointerAction(a, "slot", "inventory", 12, "left", true)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.QuickMoveStack); !ok ||
+		got.View != network.StackViewInventory || got.From != 12 || got.Container != (core.ContainerRef{}) {
+		t.Fatalf("个人面板背包快捷搬运: %#v", got)
+	}
+	// 个人面板快捷栏格同样走背包视图域。
+	gameTestPointerAction(a, "slot", "inventory", 0, "left", true)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.QuickMoveStack); !ok ||
+		got.View != network.StackViewInventory || got.From != 0 {
+		t.Fatalf("个人面板快捷栏快捷搬运: %#v", got)
+	}
+	// 个人面板 2×2 网格格：仍走合成视图统一网格索引。
+	gameTestPointerAction(a, "slot", "crafting", 1, "left", true)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.QuickMoveStack); !ok ||
+		got.View != network.StackViewCrafting || got.From != 1 {
+		t.Fatalf("个人面板网格快捷搬运: %#v", got)
+	}
+	// 工作台背包格：网格升级为 3×3 后保持合成视图 +9 统一映射不变。
+	workbench := network.CraftingState{Size: 3}
+	if err := a.crafting.Apply(workbench); err != nil {
+		t.Fatal(err)
+	}
+	gameTestPointerAction(a, "slot", "inventory", 5, "left", true)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.QuickMoveStack); !ok ||
+		got.View != network.StackViewCrafting || got.From != 14 {
+		t.Fatalf("工作台背包快捷搬运: %#v", got)
 	}
 }

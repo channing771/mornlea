@@ -186,8 +186,13 @@ func (a *Application) handleGameAction(action client.UIGameAction) {
 			state, _ := a.furnace.State()
 			a.sendGameCommand(network.QuickMoveStack{Sequence: a.nextSequence(), Container: state.Furnace, View: network.StackViewContainer, From: to})
 		default:
-			// 背包/合成面板共用既有统一映射（网格 0..8、背包 9..44），因此
-			// 快捷搬运与整堆移动走同一合成视图域。
+			// 个人背包面板的背包/快捷栏格走背包视图域（原始 0..35 索引），
+			// 与整堆移动的双背包端回退同形；网格格与工作台面板仍走合成
+			// 视图统一映射（网格 0..8、背包 9..44）。
+			if kind == "inventory" && target.Area == "inventory" {
+				a.sendGameCommand(network.QuickMoveStack{Sequence: a.nextSequence(), View: network.StackViewInventory, From: to - 9})
+				return
+			}
 			a.sendGameCommand(network.QuickMoveStack{Sequence: a.nextSequence(), View: network.StackViewCrafting, From: to})
 		}
 		return
