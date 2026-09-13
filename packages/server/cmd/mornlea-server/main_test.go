@@ -102,10 +102,10 @@ func TestDefaultOptions(t *testing.T) {
 
 func TestServerProtocolV26IsCurrent(t *testing.T) {
 	// 字面量随 `network.ProtocolVersion` 的现行契约同步（v40 登录视距字节、
-	// v41 潜行位、v42 护甲点数与装备互换命令）；
+	// v41 潜行位、v42 护甲点数与装备互换命令、v43 投射物三消息）；
 	// 函数名保留历史编号先例，仅钉住「专用服务端跟随当前协议」。
-	if network.ProtocolVersion != 42 {
-		t.Fatalf("专用服务端协议版本 = %d，想要 42", network.ProtocolVersion)
+	if network.ProtocolVersion != 43 {
+		t.Fatalf("专用服务端协议版本 = %d，想要 43", network.ProtocolVersion)
 	}
 }
 
@@ -337,8 +337,8 @@ func TestRunMigrateMaterialsCompletesAndRerunsWithSameArguments(t *testing.T) {
 	if got := reopened.Metadata().FormatVersion; got != 6 {
 		t.Fatalf("迁移后 metadata 版本 = %d，期望 6", got)
 	}
-	// 迁移只动世界 metadata，协议契约必须保持现行值（v42）不变。
-	if network.ProtocolVersion != 42 {
+	// 迁移只动世界 metadata，协议契约必须保持现行值（v43）不变。
+	if network.ProtocolVersion != 43 {
 		t.Fatalf("迁移命令改变了协议版本: %d", network.ProtocolVersion)
 	}
 }
