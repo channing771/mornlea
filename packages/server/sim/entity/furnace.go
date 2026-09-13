@@ -315,8 +315,11 @@ func setFurnaceViewSlot(
 		if !stack.Valid() {
 			return inventory, furnace, false
 		}
+		// 输出白名单 MUST 覆盖 `core.SmeltingOutput` 的全部产物：漏掉一项时
+		// 从输出格取回该产物的余量无法写回，整条移动命令被拒收，熔炉界面
+		// 被冻结（生牛肉熔炼产物曾长期缺失于此）。
 		switch stack.Item {
-		case core.ItemNone, core.ItemIronIngot, core.ItemGlass, core.ItemBrick:
+		case core.ItemNone, core.ItemIronIngot, core.ItemGlass, core.ItemBrick, core.ItemCookedBeef:
 			furnace.Output = stack
 		default:
 			return inventory, furnace, false

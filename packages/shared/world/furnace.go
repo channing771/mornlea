@@ -51,12 +51,15 @@ func validFurnaceInput(stack core.ItemStack) bool {
 }
 
 // validFurnaceOutput 报告输出格是否为空或装着固定熔炼产物。
+// 白名单 MUST 覆盖 `core.SmeltingOutput` 的全部产物：漏掉一项时熔炉 tick
+// 写入该产物后整只熔炉判非法，区块存档按损坏拒绝、界面移动连锁失败
+//（生牛肉熔炼产物曾长期缺失于此）。
 func validFurnaceOutput(stack core.ItemStack) bool {
 	if !stack.Valid() {
 		return false
 	}
 	switch stack.Item {
-	case core.ItemNone, core.ItemIronIngot, core.ItemGlass, core.ItemBrick:
+	case core.ItemNone, core.ItemIronIngot, core.ItemGlass, core.ItemBrick, core.ItemCookedBeef:
 		return true
 	default:
 		return false
