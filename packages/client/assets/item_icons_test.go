@@ -111,6 +111,8 @@ func TestItemIconMaterialsAndBrokenFormsStayDistinct(t *testing.T) {
 		{core.ItemPotato, core.ItemPoisonousPotato},
 		{core.ItemRawBeef, core.ItemCookedBeef},
 		{core.ItemEmptyBucket, core.ItemWaterBucket},
+		// 弓与损坏弓形状互异：断口残段剪影与完好浅弧不共字（同一木弓调色）。
+		{core.ItemBow, core.ItemBrokenBow},
 		// 护甲四件互不相同：形状是四件的唯一区分面（同一铁灰调色板），
 		// 一张通用剪影盖四件的话这组配对即红。
 		{core.ItemIronHelmet, core.ItemIronChestplate},
