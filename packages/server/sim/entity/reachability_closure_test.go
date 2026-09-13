@@ -288,11 +288,15 @@ func reachabilityClosure() map[core.ItemID]bool {
 				changed = add(drop) || changed
 			}
 		}
-		// 规则三：生物掉落。牛与夜行者都在缺省世界里自然生成，死亡时分别掉 1
-		// 生牛肉（`passive.go` 的 `dropPassiveLoot`）与 1 腐肉（`hostile.go` 的
-		// `dropHostileLoot`），与闭包内容无关，因此无条件计入。
+		// 规则三：生物掉落。牛与两类敌怪都在缺省世界里自然生成，死亡时分别
+		// 掉 1 生牛肉（`passive.go` 的 `dropPassiveLoot`）、1 腐肉（夜行者）
+		// 与 0..2 骨头 + 1/8 概率 1 弓（掷骨者，`hostile.go` 的
+		// `dropHostileLoot`），与闭包内容无关，因此无条件计入；损坏的弓经
+		// 规则五的损坏映射随后入闭包。
 		changed = add(core.ItemRawBeef) || changed
 		changed = add(core.ItemRottenFlesh) || changed
+		changed = add(core.ItemBone) || changed
+		changed = add(core.ItemBow) || changed
 		// 规则四：取水命令（`bucket.go` 的 `ApplyBucketCollect`，见 spec
 		// authoritative-fluid）：手持空桶命中水源源格，原格换成水桶。水桶不是
 		// 任何配方或熔炼的产物，这条命令是它唯一的来源。

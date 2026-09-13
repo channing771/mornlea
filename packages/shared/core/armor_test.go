@@ -57,8 +57,8 @@ func TestIronArmorItemsAreRegisteredWithFixedSemantics(t *testing.T) {
 			}
 		})
 	}
-	if core.ItemIDMax != 62 {
-		t.Fatalf("ItemIDMax = %d，护甲四件追加后必须为 62", core.ItemIDMax)
+	if core.ItemIDMax != 66 {
+		t.Fatalf("ItemIDMax = %d，护甲四件与弓箭批次追加后必须为 66", core.ItemIDMax)
 	}
 }
 

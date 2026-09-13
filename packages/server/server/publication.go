@@ -30,7 +30,9 @@ func (server *Server) publishWithChats(result contract.TickResult, chats []chatD
 	// 夜行者发布走 tick 末的单一值快照（Engine 集合秩序即 ID 升序）：集合
 	// 为空时容量为 0 的 make 不产生分配，无夜行者的世界不为此付出代价。
 	// 被动牛同理：同一份 tick 末快照与同 tick 死亡集合供全部会话共享。
+	// 投射物是瞬态实体，同一份 tick 末快照供全部会话共享（重启后为空）。
 	hostiles := server.engine.HostileMobs()
+	projectiles := server.engine.Projectiles()
 	passives := server.engine.PassiveMobs()
 	deaths := server.engine.PassiveDeaths()
 	for _, id := range server.sortedPublicationIDsLocked() {
@@ -40,10 +42,10 @@ func (server *Server) publishWithChats(result contract.TickResult, chats []chatD
 		}
 		if observer := server.config.InterestObserver; observer != nil {
 			started := time.Now()
-			server.publishSession(current, result, players, definitions, chats, hostiles, passives, deaths)
+			server.publishSession(current, result, players, definitions, chats, hostiles, projectiles, passives, deaths)
 			observer(time.Since(started))
 		} else {
-			server.publishSession(current, result, players, definitions, chats, hostiles, passives, deaths)
+			server.publishSession(current, result, players, definitions, chats, hostiles, projectiles, passives, deaths)
 		}
 	}
 }
@@ -55,6 +57,7 @@ func (server *Server) publishSession(
 	definitions map[companion.ID]companion.Definition,
 	chats []chatDelivery,
 	hostiles []contract.HostileMob,
+	projectiles []contract.ProjectileSnapshot,
 	passives []contract.PassiveMob,
 	passiveDeaths []uint64,
 ) {
@@ -85,6 +88,12 @@ func (server *Server) publishSession(
 		return
 	}
 	if !server.publishHostiles(current, result.Tick, hostiles) {
+		return
+	}
+	// 投射物段固定排在夜行者段之后：每会话每 tick 的实体族包序因此确定为
+	// hostile despawn→spawn→state 之后紧随 projectile despawn→spawn→state，
+	// 两条传输与全部会话保持同一字节流次序。
+	if !server.publishProjectiles(current, result.Tick, projectiles) {
 		return
 	}
 	if !server.publishPassives(current, result.Tick, passives, passiveDeaths) {

@@ -16,7 +16,7 @@ import (
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-// hostileWireOffsets 是单条 72-byte 记录内各字段的字节偏移，与
+// hostileWireOffsets 是单条 73-byte 记录内各字段的字节偏移，与
 // appendHostileMob/decodeHostileMob 的固定布局一一对应。布局变化时本表
 // 必须同步更新（与 companion codec 的 offset 测试同一纪律）。
 const (
@@ -34,6 +34,7 @@ const (
 	hostileWirePlayerID   = 46
 	hostileWireNextRepath = 62
 	hostileWireDistant    = 70
+	hostileWireKind       = 72
 )
 
 // hostileRecordOffset 返回第 index 条记录在文件中的起始偏移。
@@ -50,8 +51,9 @@ func fixtureHostileTargetPlayerID() core.PlayerID {
 	}
 }
 
-// fixtureHostileRecords 返回三条字段各异的合法记录。顺序刻意逆序：编码端
-// 必须按 ID 升序写出，磁盘形态与调用方传入顺序解耦（companion 先例）。
+// fixtureHostileRecords 返回三条字段各异的合法记录，kind 覆盖 {0,1} 两端：
+// 携带目标的掷骨者（kind=1）与两只无目标的夜行者（kind=0）。顺序刻意逆序：
+// 编码端必须按 ID 升序写出，磁盘形态与调用方传入顺序解耦（companion 先例）。
 func fixtureHostileRecords() []StoredHostileMob {
 	tracking := StoredHostileMob{
 		ID: 0x8000000000000002, Dimension: core.Overworld,
@@ -59,7 +61,7 @@ func fixtureHostileRecords() []StoredHostileMob {
 		OnGround: true, Yaw: 1.25,
 		Health: 17, AttackCooldown: 3, HurtCooldown: 1, BurnCooldown: 5,
 		HasTarget: true, PlayerID: fixtureHostileTargetPlayerID(),
-		NextRepathTicks: 905, DistantTicks: 120,
+		NextRepathTicks: 905, DistantTicks: 120, Kind: 1,
 	}
 	idle := StoredHostileMob{
 		ID: 0x4000000000000001, Dimension: core.Overworld,
@@ -74,6 +76,16 @@ func fixtureHostileRecords() []StoredHostileMob {
 		Health: 1, BurnCooldown: 19, DistantTicks: maxHostileDistantTicks,
 	}
 	return []StoredHostileMob{tracking, idle, far}
+}
+
+// fixtureHostileRecordsV1Migrated 返回 v1 旧档迁移后的期望记录：v1 没有
+// kind 字节，读入恒为夜行者（0），其余字段与当前夹具逐字段一致。
+func fixtureHostileRecordsV1Migrated() []StoredHostileMob {
+	records := fixtureHostileRecordsSorted()
+	for index := range records {
+		records[index].Kind = 0
+	}
+	return records
 }
 
 func fixtureHostileRecordsSorted() []StoredHostileMob {
@@ -118,8 +130,10 @@ func TestHostileCodecHeaderAndRecordLayout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(encoded) != hostileHeaderLength+hostileRecordLength {
-		t.Fatalf("单记录文件长度=%d，想要 %d", len(encoded), hostileHeaderLength+hostileRecordLength)
+	// 长度先行：文件必须恰好是 32-byte 头 + 73-byte 记录，越界字节一律没有；
+	// 本断言先于后续逐字段字节断言，布局漂移时在这里失败而不是越界索引。
+	if len(encoded) != hostileHeaderLength+hostileRecordLengthV2 {
+		t.Fatalf("单记录文件长度=%d，想要 %d", len(encoded), hostileHeaderLength+hostileRecordLengthV2)
 	}
 	if string(encoded[0:4]) != "MHST" {
 		t.Fatalf("magic=%q，想要 MHST", encoded[0:4])
@@ -127,8 +141,8 @@ func TestHostileCodecHeaderAndRecordLayout(t *testing.T) {
 	if got := binary.LittleEndian.Uint32(encoded[4:8]); got != 1 {
 		t.Fatalf("envelope=%d，想要 1", got)
 	}
-	if got := binary.LittleEndian.Uint32(encoded[8:12]); got != 1 {
-		t.Fatalf("schema=%d，想要 1", got)
+	if got := binary.LittleEndian.Uint32(encoded[8:12]); got != 2 {
+		t.Fatalf("schema=%d，想要 2", got)
 	}
 	if got := binary.LittleEndian.Uint64(encoded[12:20]); got != 7 {
 		t.Fatalf("revision=%d，想要 7", got)
@@ -136,8 +150,8 @@ func TestHostileCodecHeaderAndRecordLayout(t *testing.T) {
 	if got := binary.LittleEndian.Uint32(encoded[20:24]); got != 1 {
 		t.Fatalf("count=%d，想要 1", got)
 	}
-	if got := binary.LittleEndian.Uint32(encoded[24:28]); got != hostileRecordLength {
-		t.Fatalf("payloadLen=%d，想要 %d", got, hostileRecordLength)
+	if got := binary.LittleEndian.Uint32(encoded[24:28]); got != hostileRecordLengthV2 {
+		t.Fatalf("payloadLen=%d，想要 %d", got, hostileRecordLengthV2)
 	}
 	hasher := crc32.New(crc32.MakeTable(crc32.Castagnoli))
 	_, _ = hasher.Write(encoded[8:28])
@@ -195,6 +209,11 @@ func TestHostileCodecHeaderAndRecordLayout(t *testing.T) {
 	if got := binary.LittleEndian.Uint16(encoded[base+hostileWireDistant:]); got != record.DistantTicks {
 		t.Fatalf("distant=%d，想要 %d", got, record.DistantTicks)
 	}
+	// kind 是 v2 记录的收尾字节：v1 布局在 distantTicks 结束，kind 只能
+	// 钉在 72 号偏移上，前移或重排既有字段都算布局漂移。
+	if got := encoded[base+hostileWireKind]; got != record.Kind {
+		t.Fatalf("kind=%d，想要 %d", got, record.Kind)
+	}
 }
 
 func TestHostileCodecRoundTripIsExactAndSorted(t *testing.T) {
@@ -218,6 +237,11 @@ func TestHostileCodecRoundTripIsExactAndSorted(t *testing.T) {
 }
 
 func TestHostileCodecAcceptsMaximumRecordsAndEnforcesFileLimit(t *testing.T) {
+	// 物理上界钉死为规格数字：32-byte 头 + 64 条 73-byte 记录。推导常量
+	// 若用错步长（例如误用 v1 的 72）会在这里直接红。
+	if MaxFileLength != 4704 {
+		t.Fatalf("MaxFileLength=%d，想要 4704", MaxFileLength)
+	}
 	records := make([]StoredHostileMob, MaxHostileMobs)
 	for index := range records {
 		records[index] = StoredHostileMob{ID: uint64(index) + 1, Dimension: core.Overworld, Health: 1}
@@ -300,6 +324,7 @@ func TestHostileCodecRejectsInvalidSaves(t *testing.T) {
 		{"hurt cooldown above period", func(r *StoredHostileMob) { r.HurtCooldown = 21 }},
 		{"burn cooldown above period", func(r *StoredHostileMob) { r.BurnCooldown = 21 }},
 		{"distant above despawn threshold", func(r *StoredHostileMob) { r.DistantTicks = 601 }},
+		{"kind outside domain", func(r *StoredHostileMob) { r.Kind = 2 }},
 		{"position below world", func(r *StoredHostileMob) { r.Position[1] = worldBottom - 0.5 }},
 		{"position at world top", func(r *StoredHostileMob) { r.Position[1] = worldTop }},
 		{"no target keeps player ID", func(r *StoredHostileMob) {
@@ -433,6 +458,14 @@ func TestHostileCodecRejectsCorruptFiles(t *testing.T) {
 		}},
 		{"distant above threshold", storagedef.ErrCorrupt, func(payload []byte) {
 			binary.LittleEndian.PutUint16(payload[base2+hostileWireDistant:], maxHostileDistantTicks+1)
+			repairHostileCRC(payload)
+		}},
+		{"kind outside domain", storagedef.ErrCorrupt, func(payload []byte) {
+			// 末条记录（tracking）的 kind 先把 distant 归零再置非法 kind：
+			// v2 记录以 kind 收尾、文件最后一个字节即它的 kind 字节。归零
+			// 保证拒绝只能来自 kind 值域校验，而不是 distant 越界或校验和。
+			binary.LittleEndian.PutUint16(payload[base2+hostileWireDistant:], 0)
+			payload[len(payload)-1] = 2
 			repairHostileCRC(payload)
 		}},
 		{"position below world", storagedef.ErrCorrupt, func(payload []byte) {

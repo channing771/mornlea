@@ -248,6 +248,7 @@ func hostileRestartStorageRecords(host *Host) []storage.StoredHostileMob {
 			PlayerID:        mob.PlayerID,
 			NextRepathTicks: mob.NextRepathTicks,
 			DistantTicks:    mob.DistantTicks,
+			Kind:            mob.Kind,
 		})
 	}
 	return records

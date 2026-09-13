@@ -19,33 +19,37 @@ var ErrHostileProtocol = errors.New("hostile protocol error")
 // 忽略，不驱逐既有身体。
 const MaxHostiles = 64
 
-// HostilePresentation 是一只夜行者的只读呈现值：位置与朝向已经过与远端
-// 玩家/伙伴相同的时间边界插值，生命是最近一次权威 state 的直读值。
+// HostilePresentation 是一只敌怪的只读呈现值：位置与朝向已经过与远端
+// 玩家/伙伴相同的时间边界插值，生命与类别是最近一次权威 record 的直读
+// 值；`Kind` 与 wire 侧 kind 字节同值（0=夜行者、1=掷骨者），供呈现侧
+// 分流几何与配色。
 type HostilePresentation struct {
 	ID        uint64
+	Kind      uint8
 	Dimension core.DimensionID
 	Position  mgl32.Vec3
 	Yaw       float32
 	Health    uint8
 }
 
-// hostilePresentationState 是一只夜行者的客户端镜像：身体事实 latest-wins，
+// hostilePresentationState 是一只敌怪的客户端镜像：身体事实 latest-wins，
 // 移动呈现复用 `remoteActor` 的既有时间边界（不预测生命、伤害、冷却或出生
 // 位置——它们只随权威消息到达）。
 type hostilePresentationState struct {
 	health uint8
+	kind   uint8
 	remoteActor
 }
 
-// Hostiles 是权威夜行者的固定容量 latest-wins 镜像。它由客户端主线程独占；
+// Hostiles 是权威敌怪的固定容量 latest-wins 镜像。它由客户端主线程独占；
 // 镜像层拒绝（消息校验失败）返回错误，镜像层丢弃（未知 ID、过期 tick、
-// 容量溢出、重复 spawn）按稳定规则静默处理——夜行者是纯权威事实，客户端
+// 容量溢出、重复 spawn）按稳定规则静默处理——敌怪是纯权威事实，客户端
 // 没有任何可失配的本地预测，健壮性优先于会话终结。
 type Hostiles struct {
 	values map[uint64]*hostilePresentationState
 }
 
-// ApplySpawn 建立（或按稳定规则忽略）一只夜行者的身体。同 ID 已有身体时
+// ApplySpawn 建立（或按稳定规则忽略）一只敌怪的身体。同 ID 已有身体时
 // 忽略重复 spawn（既有镜像保持不变）；镜像已满时同样忽略新个体。
 func (hostiles *Hostiles) ApplySpawn(spawn network.HostileSpawn) error {
 	if err := spawn.Validate(); err != nil {
@@ -61,7 +65,7 @@ func (hostiles *Hostiles) ApplySpawn(spawn network.HostileSpawn) error {
 		if len(hostiles.values) >= MaxHostiles {
 			continue
 		}
-		state := &hostilePresentationState{health: record.Health}
+		state := &hostilePresentationState{health: record.Health, kind: record.Kind}
 		state.pushSnapshot(remoteSnapshot{
 			tick:      spawn.ServerTick,
 			dimension: record.Dimension,
@@ -75,7 +79,8 @@ func (hostiles *Hostiles) ApplySpawn(spawn network.HostileSpawn) error {
 
 // ApplyStates 只接受 `ServerTick` 更新的状态：未知 ID 的记录丢弃且不隐式
 // 造实体，过期（不比镜像新）的记录丢弃并保持既有值，其余记录按批次 tick
-// 更新身体与生命。
+// 更新身体、生命与类别（类别随生命周期不变，state 尾部字节是冗余直读，
+// 镜像不依赖它重建类别）。
 func (hostiles *Hostiles) ApplyStates(states network.HostileState) error {
 	if err := states.Validate(); err != nil {
 		return hostileProtocolError("HostileState: %v", err)
@@ -89,6 +94,7 @@ func (hostiles *Hostiles) ApplyStates(states network.HostileState) error {
 			continue
 		}
 		state.health = update.Health
+		state.kind = update.Kind
 		state.pushSnapshot(remoteSnapshot{
 			tick:      states.ServerTick,
 			dimension: state.dimension,
@@ -123,6 +129,7 @@ func (hostiles *Hostiles) AppendPresentations(dst []HostilePresentation) []Hosti
 	for id, state := range hostiles.values {
 		dst = append(dst, HostilePresentation{
 			ID:        id,
+			Kind:      state.kind,
 			Dimension: state.dimension,
 			Position:  state.position,
 			Yaw:       state.yaw,

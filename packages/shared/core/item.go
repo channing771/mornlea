@@ -125,6 +125,17 @@ const (
 	ItemIronChestplate
 	ItemIronLeggings
 	ItemIronBoots
+	// 弓箭四件沿远程战斗批次追加在哨兵之前：`ItemBow` 是玩家可拉弓的远程
+	// 武器，堆叠上限 1，耐久上限登记在 `ItemMaxDurability`，耐久归零沿工具
+	// 同款机制换成损坏形态 `ItemBrokenBow`；`ItemArrow` 是弓的弹药，`ItemBone`
+	// 是掷骨者死亡掉落的战利品，两者都可堆叠 64、没有耐久。四件都不出现在
+	// 任何 `BlockDrop` 表（箭的唯一来源是合成，骨头与弓来自权威模拟的敌怪
+	// 掉落路径）、不经 `ItemPlacement` 放置。同样只能追加在 `ItemIDMax`
+	// 哨兵之前。
+	ItemBow
+	ItemArrow
+	ItemBone
+	ItemBrokenBow
 	// ItemIDMax 是合法物品编号的独占上界（最后一个合法 ItemID + 1），本身不是
 	// 物品枚举成员。它供测试以「item < ItemIDMax」穷举全部物品，替代依赖
 	//「某个具体物品恰为枚举末项」的脆弱写法；放在 core 是因为物品注册表归属
@@ -339,7 +350,10 @@ func ItemStackLimit(item ItemID) (uint8, bool) {
 		ItemWheatSeeds, ItemWheat, ItemBread,
 		ItemStick, ItemWorkbench, ItemBoneMeal,
 		ItemPotato, ItemCarrot, ItemPoisonousPotato, ItemDoor,
-		ItemTorch, ItemRottenFlesh, ItemBed, ItemRawBeef, ItemCookedBeef, ItemSapling:
+		ItemTorch, ItemRottenFlesh, ItemBed, ItemRawBeef, ItemCookedBeef, ItemSapling,
+		// 箭与骨头是可堆叠的消耗材料：箭由砾石加木棍合成，骨头来自掷骨者
+		// 掉落，两者都没有耐久概念。
+		ItemArrow, ItemBone:
 		return MaxStackCount, true
 	case ItemStonePickaxe, ItemIronPickaxe,
 		ItemBrokenStonePickaxe, ItemBrokenIronPickaxe,
@@ -351,6 +365,9 @@ func ItemStackLimit(item ItemID) (uint8, bool) {
 		return 1, true
 	// 护甲件与工具同形：单件穿戴、不可堆叠。
 	case ItemIronHelmet, ItemIronChestplate, ItemIronLeggings, ItemIronBoots:
+		return 1, true
+	// 弓与损坏的弓沿工具先例：单件持有、不可堆叠，耐久状态由字段表达。
+	case ItemBow, ItemBrokenBow:
 		return 1, true
 	default:
 		return 0, false
@@ -370,6 +387,10 @@ func ItemMaxDurability(item ItemID) (uint16, bool) {
 		return 131, true
 	case ItemIronSword:
 		return 250, true
+	// 弓的耐久上限数值只登记在这一张表里：发射结算每次成功射击恰扣 1 点，
+	// 与镐/锄的「每次成功动作恰扣 1 点」节奏同形。
+	case ItemBow:
+		return 120, true
 	// 锄头取与同材质镐相同的耐久：两者都是「每次成功动作恰好扣 1 点」的工具
 	// （采掘破坏方块扣 1、翻地成功扣 1），同一材质给两种工具不同数值只会制造
 	// 第二套没有来源的数字，也会让「石器换代到铁器」的手感在采掘与耕种两条线
@@ -410,6 +431,9 @@ func ItemBrokenForm(item ItemID) (ItemID, bool) {
 		return ItemBrokenStoneSword, true
 	case ItemIronSword:
 		return ItemBrokenIronSword, true
+	// 弓沿工具先例：耐久归零原地换成损坏形态，损坏的弓不可再拉弓。
+	case ItemBow:
+		return ItemBrokenBow, true
 	default:
 		return ItemNone, false
 	}

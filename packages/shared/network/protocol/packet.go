@@ -7,7 +7,15 @@ import (
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-// ProtocolVersion 是当前唯一支持的协议版本；v42 在 `PlayerState` 载荷尾部
+// ProtocolVersion 是当前唯一支持的协议版本；v43 在 Play S→C 尾部追加
+// ID 29/30/31 的三类投射物消息 `ProjectileSpawn`/`ProjectileState`/
+// `ProjectileDespawn`（每类 `ServerTick` u64 + count u8 + ≤128 条按 ID 严格
+// 升序的 record；spawn 携带 ID/弹种 kind/dimension/position/velocity，state
+// 携带 ID/position，despawn 只携带 ID；弹种值域 {0,1}，0=骨刺、1=箭，越界
+// 拒绝），并在敌怪 `HostileSpawn`/`HostileState` record 尾部（`Health` 之后）
+// pure-append 1 字节敌怪 kind（u8，仅 0/1 合法，0=夜行者、1=掷骨者，越界
+// 拒绝），spawn record 由 29 变为 30 字节、state record 由 37 变为 38 字节，
+// despawn record 不变；v42 在 `PlayerState` 载荷尾部
 // （`Temperature` 之后）追加 1 字节护甲点数 `ArmorPoints`（u8，合法域
 // 0..`core.MaxArmorPoints`，越界拒绝），在 Play C→S 尾部新增 ID 18 的装备
 // 互换命令 `EquipArmor`（u64 序号，与 `DropSelectedItem` 同形：目标槽位由
@@ -51,6 +59,10 @@ import (
 // despawn 只携带 ID），并维护旧客户端握手拒绝语义；v29 在 `PlayerState` 尾部追加
 // `SaturationZero` 饱和度归零提示位（紧跟 `Hunger` 之后、`WorldTimeTicks` 之前）；v28 在 `PlayerInput` 尾部追加 `Sprinting` 疾跑位（紧跟 `Eating` 之后），v41 在 `PlayerInput` 尾部追加 `Sneaking` 潜行位（紧跟 `Sprinting` 之后）；v27 新增 Play C→S ID 14 `BoneMeal`，v26 新增 Play S→C ID 20 `PlaceBlockSucceeded`，v25 只扩展既有 `Mining` 位语义不新增字段，v24 上线权威饥饿 Eating/Hunger 并拒绝 v23 及更早登录。
 //
+// v43 是纯追加：只在 Play S→C 尾部新增 ID 29/30/31 的投射物三类消息，只在
+// 敌怪 spawn/state record 尾部新增 1 字节 kind（既有字段的位置与语义不变），
+// 不新增 C→S 消息、不改动既有包 ID、不新增 `RejectReason`；旧版握手
+// 拒绝是既有语义。
 // v42 是纯追加：只在 `PlayerState` 载荷尾部（`Temperature` 之后）新增 1 字节
 // 护甲点数、只在 Play C→S 尾部新增 ID 18 的 `EquipArmor`，不改动既有 packet
 // 的 wire 形状与全部长度上限；新增的 `RejectReason` 15 只扩拒绝原因枚举，
@@ -97,7 +109,7 @@ import (
 // v21 在 `PlayerState` 末尾追加 2 字节权威氧气（只发给玩家本人的权威
 // 值）；v20 追加 8 个流体方块编号（只扩方块 ID 集合，wire 形状不变），流体
 // 变更走既有区块变更通道（design.md D8）。
-const ProtocolVersion uint32 = 42
+const ProtocolVersion uint32 = 43
 
 // State 标识连接当前允许交换的 packet 集合。
 type State uint8
@@ -408,6 +420,12 @@ func ValidateServerPacket(state State, packet ServerPacket) error {
 		case PassiveState:
 			return serverPacket.Validate()
 		case PassiveDespawn:
+			return serverPacket.Validate()
+		case ProjectileSpawn:
+			return serverPacket.Validate()
+		case ProjectileState:
+			return serverPacket.Validate()
+		case ProjectileDespawn:
 			return serverPacket.Validate()
 		default:
 			return InvalidServerPacket(state, packet)

@@ -35,8 +35,9 @@ zstd 压缩的 chunk snapshot 编解码、长度前缀帧封装与字节原语�
   `TestSmallPacketRejectsMalformedPayloads`、
   `TestPlayClientPacketIDOneIsUnknown`、
   `TestCodecDelegatesControlPacketsAndCloseIsIdempotent` 钉死分发与拒绝。
-- companion/hostile 的 wire 编解码函数住 `companion_wire.go`/
-  `hostile_wire.go`，保持 unexported 包内直呼：它们消费 `protocol` 导出
+- companion/hostile/projectile 的 wire 编解码函数住 `companion_wire.go`/
+  `hostile_wire.go`/`codec_projectile.go`，保持 unexported 包内直呼：它们消费
+  `protocol` 导出
   的 wire 长度常量取上限，不得改从 `packages/shared/companion` 直接取值
   （否则破坏 archcheck 边与常量同源契约）。
 
@@ -73,9 +74,10 @@ zstd 压缩的 chunk snapshot 编解码、长度前缀帧封装与字节原语�
 
 ## fuzz 与 golden 义务 (`codec/*_fuzz_test.go`, `codec/codec_golden_test.go`, `codec/testdata/`)
 
-- wire 域的全部 6 个 fuzz 入口（`FuzzSmallPacketCodec`、
+- wire 域的全部 7 个 fuzz 入口（`FuzzSmallPacketCodec`、
   `FuzzChunkSnapshotCodec`、`FuzzReadFrame`、`FuzzPrimitiveDecoder`、
-  `FuzzCompanionMessageCodec`、`FuzzHostileMessageCodec`）住本包：新增或
+  `FuzzCompanionMessageCodec`、`FuzzHostileMessageCodec`、
+  `FuzzProjectileMessageCodec`）住本包：新增或
   改动任何 wire 布局必须同步扩展对应 fuzz 种子与断言，删除或跳过即违反
   协议演进契约。
 - golden 是 wire 字节的冻结证据：`TestProtocolV1SmallPacketGolden`、

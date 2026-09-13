@@ -213,7 +213,15 @@ const (
 	LayerItemIronChestplate = LayerSapling + 2
 	LayerItemIronLeggings   = LayerSapling + 3
 	LayerItemIronBoots      = LayerSapling + 4
-	layerCount              = LayerItemIronBoots + 1
+	// LayerItemBow..LayerItemBrokenBow 是远程战斗四件（弓/箭/骨头/损坏的
+	// 弓）的原创图标层（透明背景镂空图标，与掉落薄片和 UI 图标共用同一
+	// 层），只能追加在护甲层之后保持全部冻结层号不变；显式偏移写法与雪
+	// 层/树苗/护甲同形，不开放材质包文件覆盖。
+	LayerItemBow       = LayerItemIronBoots + 1
+	LayerItemArrow     = LayerItemIronBoots + 2
+	LayerItemBone      = LayerItemIronBoots + 3
+	LayerItemBrokenBow = LayerItemIronBoots + 4
+	layerCount         = LayerItemBrokenBow + 1
 )
 
 type textureBinding struct {
@@ -757,7 +765,8 @@ func isCutoutLayer(layer int) bool {
 		(layer >= int(LayerCrack0) && layer <= int(LayerCrack9)) ||
 		layer == int(LayerRawBeef) || layer == int(LayerCookedBeef) ||
 		(layer >= int(LayerItemCoal) && layer <= int(LayerItemWaterBucket)) ||
-		(layer >= int(LayerItemIronHelmet) && layer <= int(LayerItemIronBoots))
+		(layer >= int(LayerItemIronHelmet) && layer <= int(LayerItemIronBoots)) ||
+		(layer >= int(LayerItemBow) && layer <= int(LayerItemBrokenBow))
 }
 
 func (r *Registry) LayerCount() int { return int(layerCount) }

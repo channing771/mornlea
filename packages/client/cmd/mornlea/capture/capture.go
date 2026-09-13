@@ -111,7 +111,8 @@ func captureSettled(stats client.MesherStats, pending, lodBusy, vistaPending int
 // 紧随 camera-third-front、先于 main-menu，顺序由 visual-verification 的
 // 顺序 MUST 条款固定；`sapling-growth` 同为表中部插入（紧随 `oak-grove`、
 // 先于 `ai-companion`），顺序由 visual-verification delta「树苗与橡树再生
-// 基线场景」的 MUST 条款固定。
+// 基线场景」的 MUST 条款固定；`ranged-mob` 紧随 `hostile-mob` 插入（两片
+// 敌怪夜景相邻），顺序由本 change 的位置测试兜底。
 var captureScenes = []captureScene{
 	{
 		Name:         "terrain-noon",
@@ -407,14 +408,32 @@ var captureScenes = []captureScene{
 		// 标签。夹具与注入细节见 capture_hostile_mob.go。
 		//
 		// 排序约束：本场景 MUST 位于 sword-combat 之后、water-surface-slope
-		// 之前，完整相邻链为 ai-companion、sword-combat、hostile-mob、
-		// water-surface-slope（spec visual-verification「场景表顺序与导出」），由
-		// TestHostileMobCaptureScenePosition 兜底；far-horizon 仍为倒数第二、
+		// 之前，近战与远程两片敌怪夜景相邻（hostile-mob 之后紧随 ranged-mob），
+		// 牧场链随后衔接 water-surface-slope，由
+		// TestHostileMobCaptureScenePosition 与
+		// TestRangedMobCaptureScenePosition 兜底；far-horizon 仍为倒数第二、
 		// water-underwater 仍为唯一末场景。
 		Name:         "hostile-mob",
 		WarmupFrames: 8,
 		Prepare:      prepareHostileMobNight,
 		Apply:        applyHostileMobCaptureState,
+	},
+	{
+		// ranged-mob 是远程敌怪的无窗口夜景 capture 场景：固定夜晚（18000
+		// tick，与 hostile-mob 同一相位）的开阔草地，2 只掷骨者（kind=1，
+		// 骨白双足）经敌怪镜像夹具固定在草地远端、正对目标玩家投掷，2 枚
+		// 骨刺经投射物镜像钉在飞行中途（弹道相位经 PinVolatile 重钉，与
+		// 机器速度无关），目标玩家经远端玩家镜像站在落点侧、面向威胁并
+		// 产生本场景唯一的名牌。夹具与注入细节见 capture_ranged_mob.go。
+		//
+		// 排序约束：本场景 MUST 紧随 hostile-mob（近战与远程两片敌怪夜景
+		// 相邻）、先于 passive-herd，由 TestRangedMobCaptureScenePosition
+		// 兜底；far-horizon 仍为倒数第二、water-underwater 仍为唯一末场景。
+		Name:         "ranged-mob",
+		WarmupFrames: 8,
+		Prepare:      prepareRangedMobNight,
+		Apply:        applyRangedMobCaptureState,
+		PinVolatile:  pinRangedMobVolatile,
 	},
 	{
 		// passive-herd 是被动牛群的无窗口昼间 capture 场景：固定正午（6000
@@ -423,9 +442,10 @@ var captureScenes = []captureScene{
 		// 牛群前方的空位。掉落动画相位经 PinVolatile 钉死为常量，与机器速度
 		// 无关。夹具与注入细节见 capture_passive_herd.go。
 		//
-		// 排序约束：本场景 MUST 紧随 hostile-mob、先于 passive-graze
+		// 排序约束：本场景 MUST 紧随 ranged-mob、先于 passive-graze
 		//（昼夜两片牧场之后紧跟吃草结算对照，完整相邻链为 sword-combat、
-		// hostile-mob、passive-herd、passive-graze、water-surface-slope），由
+		// hostile-mob、ranged-mob、passive-herd、passive-graze、
+		// water-surface-slope），由
 		// TestPassiveHerdCaptureScenePosition 与
 		// TestPassiveGrazeCaptureScenePosition 兜底；far-horizon 仍为倒数第二、
 		// water-underwater 仍为唯一末场景。
@@ -445,7 +465,7 @@ var captureScenes = []captureScene{
 		// 夹具与注入细节见 capture_passive_graze.go。
 		//
 		// 排序约束：本场景 MUST 紧随 passive-herd、先于 water-surface-slope
-		//（完整相邻链为 sword-combat、hostile-mob、passive-herd、
+		//（完整相邻链为 sword-combat、hostile-mob、ranged-mob、passive-herd、
 		// passive-graze、water-surface-slope），由
 		// TestPassiveGrazeCaptureScenePosition 兜底；far-horizon 仍为倒数第二、
 		// water-underwater 仍为唯一末场景。

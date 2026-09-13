@@ -116,6 +116,44 @@ func TestHostilePublicationSpawnsAfterFootChunkSnapshotThenStates(t *testing.T) 
 	}
 }
 
+// TestHostilePublicationCarriesKindOnSpawnAndState 钉住敌怪 kind 随发布携带：
+// 掷骨者恢复后，spawn 与 state 记录都必须携带 kind=1——镜像客户端只凭线上
+// 消息区分夜行者与掷骨者，漏发即呈现层不可区分。
+func TestHostilePublicationCarriesKindOnSpawnAndState(t *testing.T) {
+	h := newRemotePublicationHarness(t, 1)
+	mob := hostilePublicationMob(7, mgl32.Vec3{0.5, 1, 0.5})
+	mob.Kind = contract.HostileKindBoneThrower
+	if err := h.running.engine.RestoreHostile(mob); err != nil {
+		t.Fatalf("RestoreHostile: %v", err)
+	}
+	h.markSnapshotSent(1, core.ChunkPos{})
+	h.publish(contract.TickResult{Tick: 1})
+	messages := onlyHostileMessages(h.drain(1))
+	if len(messages) != 1 {
+		t.Fatalf("spawn tick 夜行者消息=%#v，想要恰好 1 条 spawn", messages)
+	}
+	spawn, ok := messages[0].(network.HostileSpawn)
+	if !ok {
+		t.Fatalf("spawn tick 消息类型=%T，想要 HostileSpawn", messages[0])
+	}
+	if got := spawn.Spawns[0].Kind; got != contract.HostileKindBoneThrower {
+		t.Fatalf("spawn record kind=%d，想要掷骨者 %d", got, contract.HostileKindBoneThrower)
+	}
+
+	h.publish(contract.TickResult{Tick: 2})
+	messages = onlyHostileMessages(h.drain(1))
+	if len(messages) != 1 {
+		t.Fatalf("稳定 tick 夜行者消息=%#v，想要恰好 1 条 state", messages)
+	}
+	state, ok := messages[0].(network.HostileState)
+	if !ok {
+		t.Fatalf("稳定 tick 消息类型=%T，想要 HostileState", messages[0])
+	}
+	if got := state.States[0].Kind; got != contract.HostileKindBoneThrower {
+		t.Fatalf("state record kind=%d，想要掷骨者 %d", got, contract.HostileKindBoneThrower)
+	}
+}
+
 func TestHostilePublicationUnsubscribedFootChunkNeverSends(t *testing.T) {
 	h := newRemotePublicationHarness(t, 1)
 	h.markSnapshotSent(1, core.ChunkPos{})

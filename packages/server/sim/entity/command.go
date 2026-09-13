@@ -47,6 +47,7 @@ type (
 	HostileMob          = contract.HostileMob
 	HostileAction       = contract.HostileAction
 	PassiveMob          = contract.PassiveMob
+	ProjectileSnapshot  = contract.ProjectileSnapshot
 )
 
 const (
@@ -98,6 +99,8 @@ const (
 	ChunkFailed                  = contract.ChunkFailed
 	ChunkUnloading               = contract.ChunkUnloading
 	HostileAttackRange           = contract.HostileAttackRange
+	HostileKindNightwalker       = contract.HostileKindNightwalker
+	HostileKindBoneThrower       = contract.HostileKindBoneThrower
 )
 
 func LookDirection(yaw, pitch float32) mgl32.Vec3 {

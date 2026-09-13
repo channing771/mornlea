@@ -1,5 +1,6 @@
-// Package hostile 承载 hostile（夜行者）存档域：hostile_mobs.bin 聚合文件
-// （MHST 信封、schema v1）的编解码、记录字段校验与夜行者存档值类型。
+// Package hostile 承载 hostile（夜行者与掷骨者）存档域：hostile_mobs.bin
+// 聚合文件（MHST 信封、schema v1/v2）的编解码、记录字段校验与敌怪存档值
+// 类型。
 //
 // 本包是纯 codec 域：夜行者身体类型在本包自包含定义（权威侧身体类型属于
 // internal/sim，存储不得依赖 sim），只依赖 core 值类型并经 storagedef 取
@@ -24,7 +25,8 @@ var ErrHostileMobsNotFound = errors.New("storage: hostile mobs not found")
 // 常量再导出保持既有 storage.MaxHostileMobs 引用不变。
 const MaxHostileMobs = 64
 
-// StoredHostileMob 是一只夜行者在存档中的持久化记录。夜行者的身体事实
+// StoredHostileMob 是一只敌怪（夜行者或掷骨者）在存档中的持久化记录。两类
+// 敌怪的身体事实
 // 与权威侧 `physics.State` 的 position/velocity/onGround 同义，冷却字段是
 // 各自 20-tick 周期计时器的剩余值，`DistantTicks` 是远离全部玩家的累计
 // active tick（达到 despawn 阈值后归零移除）。路径与规划世代是运行时
@@ -64,6 +66,10 @@ type StoredHostileMob struct {
 	NextRepathTicks uint64
 	// DistantTicks 是远离全部 active 玩家的累计 tick，合法区间 0..600。
 	DistantTicks uint16
+	// Kind 是敌怪种类，值域 {0,1}：0 为夜行者（近战追击）、1 为掷骨者
+	// （远程投掷骨刺），与线上 hostile 消息的 kind 字节共用同一值域。v1
+	// 存档没有本字段，只读迁移读入时恒为 0（夜行者）。
+	Kind uint8
 }
 
 // StoredHostileMobs 是从聚合存档恢复的夜行者集合快照；记录按 ID 严格

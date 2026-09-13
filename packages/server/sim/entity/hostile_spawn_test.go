@@ -347,10 +347,33 @@ func TestHostileSpawnRejectsAtGlobalCap(t *testing.T) {
 	}
 }
 
+// findSpawningTickOfKind 是 `findSpawningTick` 的 kind 感知变体：探得第一个
+// 生成出指定 kind 个体的 tick（近玩家上限按 kind 分别计数后，候选的 kind
+// 决定它撞上哪一档上限）。
+func findSpawningTickOfKind(
+	t *testing.T, engine *Engine, start, step uint64, limit int, kind uint8,
+) uint64 {
+	t.Helper()
+	for offset := range limit {
+		tick := start + uint64(offset)*step
+		clearHostilesForTest(engine)
+		engine.worldTime.Store(tick)
+		engine.advanceHostileSpawn()
+		if len(engine.hostiles.entries) == 1 && engine.hostiles.entries[0].kind == kind {
+			clearHostilesForTest(engine)
+			return tick
+		}
+	}
+	t.Fatalf("扫描窗口内没有生成出 kind=%d 的候选 tick", kind)
+	return 0
+}
+
 func TestHostileSpawnRejectsNinthNearAnchorPlayer(t *testing.T) {
 	engine, _ := spawnTestEngine(t, 0)
 	loadSpawnArena(t, engine, -48, 48, -48, 48)
-	tick := findSpawningTick(t, engine, 13000, 1, 400)
+	// 近玩家上限按 kind 分别计数：本用例预置的 8 只都是夜行者，必须以
+	// 夜行者候选（hash%3!=0）的 tick 考察，才能精确落在上限边界上。
+	tick := findSpawningTickOfKind(t, engine, 13000, 1, 4000, HostileKindNightwalker)
 
 	// 锚点玩家 48 格内已有 8 只：生成必须被拒绝。
 	clearHostilesForTest(engine)

@@ -84,6 +84,14 @@ func ItemIconLayer(item core.ItemID) (uint32, bool) {
 		return uint32(LayerItemIronLeggings), true
 	case core.ItemIronBoots:
 		return uint32(LayerItemIronBoots), true
+	case core.ItemBow:
+		return uint32(LayerItemBow), true
+	case core.ItemArrow:
+		return uint32(LayerItemArrow), true
+	case core.ItemBone:
+		return uint32(LayerItemBone), true
+	case core.ItemBrokenBow:
+		return uint32(LayerItemBrokenBow), true
 	default:
 		return 0, false
 	}
@@ -419,6 +427,52 @@ func originalItemTexture(item core.ItemID) []byte {
 				}
 			}
 		}
+	case core.ItemBow, core.ItemBrokenBow:
+		// 弓的正视剪影：木质弓臂是左缘的浅弧（三段折线逼近），弓弦是连接
+		// 两端的细直线（`accent` 浅麻色，握把中段两点）。损坏弓只剩断口
+		// 错开的两截弓臂与弦的残段——中段缺口与垂落的弦头和完好弓一眼
+		// 可辨。
+		broken := item == core.ItemBrokenBow
+		if broken {
+			m.line(4, 2, 2, 6, 1, false)
+			m.line(2, 9, 4, 13, 1, false)
+			m.setAccent(2, 6)
+			m.setAccent(2, 9)
+			m.line(4, 2, 4, 5, 0, true)
+			m.line(4, 13, 4, 10, 0, true)
+		} else {
+			m.line(4, 2, 2, 6, 1, false)
+			m.line(2, 6, 2, 9, 1, false)
+			m.line(2, 9, 4, 13, 1, false)
+			m.setAccent(2, 7)
+			m.setAccent(2, 8)
+			m.line(4, 2, 4, 13, 0, true)
+		}
+	case core.ItemArrow:
+		// 箭的斜置剪影：木杆从左下到右上（三像素宽本体，内部承载高光噪
+		// 点），石镞是杆尖加粗的亮头（`accent`），尾羽是杆尾两道斜挑的短
+		// 划（`accent`）。
+		m.line(3, 13, 11, 5, 1, false)
+		m.line(11, 5, 13, 3, 1, true)
+		m.setAccent(12, 5)
+		m.setAccent(11, 4)
+		m.line(3, 11, 5, 13, 0, true)
+		m.line(4, 10, 6, 12, 0, true)
+	case core.ItemBone:
+		// 骨头的横置剪影：中段骨杆（本体）与两端的双球骨节——骨节由杆端
+		// 两侧的成对圆突构成，整体走骨白调色，与骨粉同族但形状互异。
+		m.line(4, 8, 11, 8, 1, false)
+		for _, end := range [...][2]int{{3, 6}, {12, 6}} {
+			x, y := end[0], end[1]
+			m.set(x, y)
+			m.set(x, y+1)
+			m.set(x, y+2)
+			m.set(x, y+3)
+			m.set(x+1, y-1)
+			m.set(x+1, y+4)
+			m.setAccent(x+1, y)
+			m.setAccent(x+1, y+3)
+		}
 	case core.ItemIronHelmet, core.ItemIronChestplate, core.ItemIronLeggings, core.ItemIronBoots:
 		// 铁质护甲四件的原创正视剪影，金属感只由铁灰调色板的高光噪点表达；
 		// 四件形状互不相同但同族：正面对称、领口/面甲/裤裆留透明空隙。
@@ -605,6 +659,18 @@ func paletteForItem(item core.ItemID) itemPalette {
 		// 铁质护甲与铁锭同族：暗钢描边、钢灰体、银白高光；accent 亮银只落在
 		// 顶脊/肩甲/裤线等少数点缀位，四件靠形状区分而不是另起色系。
 		return itemPalette{rgb{52, 56, 60}, rgb{171, 177, 180}, rgb{230, 226, 213}, rgb{248, 246, 235}}
+	case core.ItemBow, core.ItemBrokenBow:
+		// 弓与损坏弓同族：深胡桃弓臂（暗描边、棕体、浅木高光），accent 是
+		// 弓弦/弦头的浅麻色；两件靠形状（完好弧 vs 断口残段）区分。
+		return itemPalette{rgb{64, 42, 22}, rgb{148, 94, 44}, rgb{196, 146, 80}, rgb{232, 224, 200}}
+	case core.ItemArrow:
+		// 箭：浅木杆配石灰石镞/尾羽的冷灰 accent，与木质工具族的暖棕
+		// accent（握手端）错开——一眼分辨「杆是木、头是石」。
+		return itemPalette{rgb{74, 52, 30}, rgb{157, 116, 66}, rgb{203, 164, 110}, rgb{168, 172, 178}}
+	case core.ItemBone:
+		// 骨头与骨粉同族的骨白调色：暖白体、奶白高光；accent 取微暗的骨影
+		// 灰落在骨节点上，与骨粉的绿色点缀（草肥意象）错开。
+		return itemPalette{rgb{94, 86, 74}, rgb{216, 206, 184}, rgb{244, 236, 214}, rgb{168, 158, 136}}
 	default:
 		return wood
 	}

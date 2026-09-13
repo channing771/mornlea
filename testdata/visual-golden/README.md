@@ -2,13 +2,13 @@
 
 本目录统一存放视觉回归基线，均为测试夹具二进制。
 
-- `world/`：无窗口世界场景基线 30 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
+- `world/`：无窗口世界场景基线 31 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
 - `motion/`：过程 GIF 基线 11 个（被动牛 4 剧本 + motion 演示 7 个），只验呈现、不进比对，对应 `cmd/mornlea/capture/passive_death_scripts.go` 的 `passiveDeathGIFScripts` 与各 motion 演示入口（按 tick 步进抓帧，标准库 `image/gif` 编码）。
 - `ui/`：前端 UI 部件基线 31 张，对应 `packages/engine/crates/mornlea_client/frontend/visual/fixture-names.ts` 的 `fixtureNames`。
 
 旧目录 `cmd/mornlea/capture/testdata/golden/` 与 `engine/crates/mornlea_client/frontend/visual/golden/` 已清空，仅剩空目录，不再写入。
 
-## world（30 张）
+## world（31 张）
 
 文件名即场景名加 `.png` 后缀，场景定义与顺序以 `captureScenes` 为准。
 
@@ -29,6 +29,7 @@
 | `ai-companion.png` | `ai-companion` | AI 伙伴在正午世界中的跟随站位与其呈现状态。 |
 | `sword-combat.png` | `sword-combat` | 持剑攻击姿态与权威命中标记同帧的战斗反馈。 |
 | `hostile-mob.png` | `hostile-mob` | 午夜草地火把亮池边缘夜行者群的站位与受击追逐态。 |
+| `ranged-mob.png` | `ranged-mob` | 午夜草地上骨白双足掷骨者正对目标玩家投掷：两枚骨刺钉在飞行中途（沿初速取向）、目标玩家背影与名牌同框，远程敌怪战斗的夜景基线。 |
 | `passive-herd.png` | `passive-herd` | 正午草地上 3 头贴图牛与 1 个纹理生牛肉掉落的站位与掉落相位。 |
 | `passive-graze.png` | `passive-graze` | 正午草地上低头牛与常态牛的位姿对照，及牛吻部身前由草变泥土的一格。 |
 | `water-surface-slope.png` | `water-surface-slope` | 俯视水池的水面高度斜坡与透水可见的池底材质。 |
@@ -87,7 +88,7 @@
 
 motion 过程 GIF 只验呈现、不进比对：`make visual-check` 只比对 `world/` PNG
 （GIF 剧本不设阈值也不进比对；纯比对运行缺省不生成，`GIFS=1` 显式请求或
-更新基线时才生成），`world/` 的 30 张 PNG 纪律也不含它。
+更新基线时才生成），`world/` 的 31 张 PNG 纪律也不含它。
 
 | 演示文件 | 场景 | 帧数/时长 | 生成入口 |
 |---|---|---|---|

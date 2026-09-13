@@ -385,6 +385,31 @@ type ChunkInfo struct {
 
 const HostileAttackRange = float32(1.8)
 
+// ProjectileSnapshot 是一条在飞投射物的权威投影：非零稳定 ID、弹种（0=骨刺、
+// 1=箭，与协议 v43 的 kind 字节同值）、所在维度、位置与速度。发布侧消费本投影
+// 组装按会话订阅的 spawn/state 批次（despawn 由「镜像有而截面无」的差异判据
+// 派生，与敌怪发布同形）。全部字段为值语义，跨 goroutine 发送成功后视为不可变。
+type ProjectileSnapshot struct {
+	ID        uint64
+	Kind      uint8
+	Dimension core.DimensionID
+	Position  mgl32.Vec3
+	Velocity  mgl32.Vec3
+}
+
+// 敌怪 kind 值域（与协议 v43 hostile record 尾部 kind 字节、hostile_mobs v2
+// 存档记录的 Kind 字段共用同一映射）：0 是夜行者（近战追击），1 是掷骨者
+// （远程投掷骨刺）。新增敌怪类别必须同步扩展协议、存档与引擎三侧值域。
+const (
+	HostileKindNightwalker uint8 = 0
+	HostileKindBoneThrower uint8 = 1
+)
+
+// HostileMob 是一只敌怪（任一 kind）的权威投影：非零稳定 ID、所在维度、
+// 物理体、朝向、生命、三个 20-tick 周期冷却与追逐事实。`Kind` 随记录持久化
+// 并随线上消息携带；`ShootCooldown` 是掷骨者射击冷却的瞬态投影（0 = 就绪），
+// 仅供编排层的射击决策消费，永不落盘。全部字段为值语义，跨 goroutine 发送
+// 成功后视为不可变。
 type HostileMob struct {
 	ID              uint64
 	Dimension       core.DimensionID
@@ -398,14 +423,25 @@ type HostileMob struct {
 	PlayerID        core.PlayerID
 	NextRepathTicks uint64
 	DistantTicks    uint16
+	Kind            uint8
+	ShootCooldown   uint8
 }
 
+// HostileAction 是服务端编排层在 tick 边界提交给一只敌怪的本 tick 意图。
+// 移动以世界轴分量表达（与玩家/伙伴输入同界 [-1,1]），攻击意图携带目标
+// 会话；`RangedAttack` 为真表示本意图是掷骨者的远程射击——`AimX/Y/Z` 是
+// 归一化的瞄准基准方向（目标眼位 − 掷骨者眼位），散布由引擎侧确定性求值。
+// 每个 ID 每 tick 取最早的一条合法意图，重复与非法载荷确定性丢弃。
 type HostileAction struct {
 	ID            uint64
 	MoveX, MoveZ  float32
 	Jump          bool
 	AttackTarget  bool
 	TargetSession SessionID
+	// RangedAttack 是射击意图判别位：为真时本意图不携带移动语义，冷却/
+	// 存活/kind 校验在引擎侧结算点统一执行。
+	RangedAttack     bool
+	AimX, AimY, AimZ float32
 }
 
 // PassiveMob 是一头被动牛的权威身体事实：稳定非零身份、所在维度、物理体、

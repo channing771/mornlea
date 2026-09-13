@@ -16,10 +16,13 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"fmt"
 	"math"
 	"slices"
 	"sort"
 	"sync"
+
+	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/packages/server/sim/contract"
 	"github.com/channing771/mornlea/packages/server/sim/runtime"
@@ -43,6 +46,16 @@ const (
 	// 目标是移动玩家：除 revision 失效与路径走尽外，这个节奏保证目标漂移
 	// 与「卡住」的个体也会被周期性重排（写入持久化世界时间轴，跨重启保留）。
 	hostileRepathPeriodTicks = uint64(20)
+	// hostileRangedApproachDistance / hostileRangedRetreatDistance 是掷骨者的
+	// 距离带判界（格，水平距离）：>14 寻路接近、6..14 保持位置、<6 直线后退
+	//（边界值本身归保持带）。固定数值契约，由 manager 测试钉住。
+	hostileRangedApproachDistance = float32(14)
+	hostileRangedRetreatDistance  = float32(6)
+)
+
+var (
+	hostileRangedApproachDistanceSq = hostileRangedApproachDistance * hostileRangedApproachDistance
+	hostileRangedRetreatDistanceSq  = hostileRangedRetreatDistance * hostileRangedRetreatDistance
 )
 
 // hostileAttackRangeSquared 是攻击距离边界的平方。与 sim 的结算重验使用同一
@@ -146,15 +159,18 @@ func (m *hostileManager) close() {
 	m.waitGroup.Wait()
 }
 
-// advance 是 tick 边界的编排入口，固定次序为：观察截面刷新 → 结果应用（ID
-// 序）→ 快照派发（含目标选择与追逐事实写定）→ waypoint 执行。派发先于执行，
-// 保证「进入攻击距离的同一 tick」目标事实已经落盘、攻击意图可以立即冻结；全
-// 部阶段在持有 stepMu 的 tick 路径内完成，任何一步都不等待 A*。
-func (m *hostileManager) advance() {
+// advanceWithTunables 是 tick 边界的编排入口，固定次序为：观察截面刷新 →
+// 结果应用（ID 序）→ 快照派发（含目标选择与追逐事实写定）→ waypoint 执行。
+// 派发先于执行，保证「进入攻击距离的同一 tick」目标事实已经落盘、攻击意图
+// 可以立即冻结；全部阶段在持有 stepMu 的 tick 路径内完成，任何一步都不等待
+// A*。眼位高度（射击基准方向与 LOS 射线的端点）取本 tick 的 physics 快照，
+// 与 sim 引擎的结算眼位同源同值；生产路径由 Server.step 传入本 tick 冻结的
+// TickTunables，测试经 `advanceHostileManager` 以活动快照推进。
+func (m *hostileManager) advanceWithTunables(tickTunables runtime.TickTunables) {
 	m.refreshMobs()
 	m.applyPathOutcomes()
 	m.dispatchSnapshots()
-	m.advanceRunners()
+	m.advanceRunners(tickTunables.Physics.EyeHeight)
 }
 
 // refreshMobs 缓存本 tick 的夜行者值快照与在线玩家事实，并让槽位集合跟随夜
@@ -264,13 +280,16 @@ func (m *hostileManager) revisionsCurrent(dimension core.DimensionID, revisions 
 	return true
 }
 
-// advanceRunners 推进全部夜行者的 waypoint 执行（ID 升序）：先做攻击距离裁
-// 决——与所选目标的水平距离进入边界即停移并冻结一次攻击意图（冷却中不再重
-// 复冻结）；否则对既有路径做提交前重验（revision 与当前格），消费已到达的
-// waypoint 并把朝向下一 waypoint 的世界轴方向量经 `contract.HostileAction` 提交。
-// 失效路径清空并把重规划排到下一 tick；路径走尽同样下一 tick 以目标当前位置
-// 重规划。无路径的夜行者不提交任何移动意图——绝不穿墙直线接近目标。
-func (m *hostileManager) advanceRunners() {
+// advanceRunners 推进全部敌怪按 ID 升序的本 tick 决策。夜行者：先做攻击距
+// 离裁决——与所选目标的水平距离进入边界即停移并冻结一次攻击意图（冷却中不再
+// 重复冻结）。掷骨者走 ranged advisor（`advanceHurlerBand`）：射击决策与距离
+// 带无关（冷却就绪 + LOS 即射，同 tick 射击优先于移动），距离带给出移动意图
+// （>14 接近走下方共享 waypoint 执行、6..14 保持、<6 直线后退）。夜行者的既
+// 有 waypoint 执行对两类共享：提交前重验（revision 与当前格）、消费已到达的
+// waypoint、把朝向下一 waypoint 的世界轴方向量经 `contract.HostileAction` 提
+// 交。失效路径清空并把重规划排到下一 tick；路径走尽同样下一 tick 以目标当前
+// 位置重规划。无路径的敌怪不提交任何接近移动——绝不穿墙直线接近目标。
+func (m *hostileManager) advanceRunners(eyeHeight float32) {
 	now := m.engine.WorldTime()
 	for index := range m.mobs {
 		mob := &m.mobs[index]
@@ -282,14 +301,20 @@ func (m *hostileManager) advanceRunners() {
 			// 追逐事实以槽位为准：本 tick 派发的记账（或建档时的恢复事实播
 			// 种）在这里可见，攻击意图因此能与目标选择同 tick 生效。
 			target, ok := m.targetByID(slot.target)
-			if ok && target.dimension == mob.Dimension &&
-				withinHostileAttackRange([3]float32(mob.State.Position), target.position) {
-				m.engine.EnqueueHostileAction(contract.HostileAction{
-					ID:            mob.ID,
-					AttackTarget:  true,
-					TargetSession: target.session,
-				})
-				continue
+			if ok && target.dimension == mob.Dimension {
+				if mob.Kind == contract.HostileKindBoneThrower {
+					if m.advanceHurlerBand(mob, slot, target, eyeHeight) {
+						continue
+					}
+					// 接近带：落入下方共享 waypoint 执行。
+				} else if withinHostileAttackRange([3]float32(mob.State.Position), target.position) {
+					m.engine.EnqueueHostileAction(contract.HostileAction{
+						ID:            mob.ID,
+						AttackTarget:  true,
+						TargetSession: target.session,
+					})
+					continue
+				}
 			}
 		}
 		if slot.path == nil {
@@ -390,6 +415,15 @@ func (m *hostileManager) dispatchSnapshots() {
 		if withinHostileAttackRange([3]float32(mob.State.Position), target.position) {
 			// 攻击距离内无需路径：停移与攻击冻结由 advanceRunners 裁决。
 			continue
+		}
+		if mob.Kind == contract.HostileKindBoneThrower {
+			// 掷骨者的保持/后退带不派发寻路（水平 ≤14 格）：位置决策由
+			// advanceHurlerBand 全权处理，只有接近带才消费 A* 快照预算。
+			dx := mob.State.Position.X() - target.position[0]
+			dz := mob.State.Position.Z() - target.position[2]
+			if dx*dx+dz*dz <= hostileRangedApproachDistanceSq {
+				continue
+			}
 		}
 		// 两槽非阻塞投递：满槽即顺延，绝不阻塞权威 tick 等待 A* 槽位。
 		select {
@@ -603,6 +637,116 @@ func withinHostileAttackRange(from, to [3]float32) bool {
 	return dx*dx+dz*dz <= hostileAttackRangeSquared
 }
 
+// advanceHurlerBand 是掷骨者的距离带决策（ranged advisor 的移动半边）：先做
+// 射击决策（与距离带无关，见 `considerHurlerShot`；同 tick 射击优先，本拍不
+// 再提交移动），随后按水平距离带裁决移动：
+//   - >14 格：接近带——返回 false 落入共享 waypoint 执行（A* 接近）；
+//   - 6..14 格（含边界）：保持带——不提交任何移动意图；
+//   - <6 格：直线后退带——提交背向目标的世界轴归一化向量（不做绕障承诺，
+//     可能被墙挡住，位移由权威物理裁决）。
+//
+// 返回 true 表示本 tick 的移动决策已完全处理，调用方跳过 waypoint 执行。
+func (m *hostileManager) advanceHurlerBand(
+	mob *contract.HostileMob,
+	slot *hostileChaseSlot,
+	target hostileTargetPlayer,
+	eyeHeight float32,
+) bool {
+	if m.considerHurlerShot(mob, target, eyeHeight) {
+		return true
+	}
+	dx := mob.State.Position.X() - target.position[0]
+	dz := mob.State.Position.Z() - target.position[2]
+	distanceSq := dx*dx + dz*dz
+	switch {
+	case distanceSq > hostileRangedApproachDistanceSq:
+		return false
+	case distanceSq < hostileRangedRetreatDistanceSq:
+		length := float32(math.Sqrt(float64(distanceSq)))
+		if length == 0 {
+			// 与目标重合没有可退方向：本拍保持，下一拍由目标位移重新裁决。
+			return true
+		}
+		m.engine.EnqueueHostileAction(contract.HostileAction{
+			ID:    mob.ID,
+			MoveX: dx / length,
+			MoveZ: dz / length,
+		})
+		return true
+	default:
+		return true
+	}
+}
+
+// considerHurlerShot 是掷骨者的射击决策：冷却就绪（投影的瞬态
+// `ShootCooldown` 为 0——管理器读的是上一 tick 末的状态，实际结算点在引擎
+// 侧再验一次，射击间隔因此 ≥ 40 tick）且视线无遮挡时，提交一条
+// `RangedAttack` 意图，基准方向 = 归一化(目标眼位 − 掷骨者眼位)，眼位高度取
+// 本 tick 的 physics 快照（与引擎结算同源）。散布由引擎侧确定性求值，管理器
+// 只给基准方向。返回是否已提交射击意图。
+func (m *hostileManager) considerHurlerShot(
+	mob *contract.HostileMob,
+	target hostileTargetPlayer,
+	eyeHeight float32,
+) bool {
+	if mob.ShootCooldown != 0 {
+		return false
+	}
+	if !m.hostileRangedLineOfSight(mob, target, eyeHeight) {
+		return false
+	}
+	eye := mob.State.Position.Add(mgl32.Vec3{0, eyeHeight, 0})
+	targetEye := mgl32.Vec3(target.position).Add(mgl32.Vec3{0, eyeHeight, 0})
+	aim := targetEye.Sub(eye)
+	if aim.LenSqr() == 0 {
+		return false
+	}
+	aim = aim.Normalize()
+	m.engine.EnqueueHostileAction(contract.HostileAction{
+		ID:           mob.ID,
+		RangedAttack: true,
+		AimX:         aim.X(),
+		AimY:         aim.Y(),
+		AimZ:         aim.Z(),
+	})
+	return true
+}
+
+// hostileRangedLineOfSight 报告掷骨者眼位到目标眼位的射线是否无实体方块遮挡：
+// 与近战/采掘/投射物同一 `core.RaycastBlocks` 出口与 `core.InteractionTarget`
+// 谓词（空气与流体不是遮挡）。世界读取走管理器的既有 3×3 区块视图（与寻路
+// 网格同一「深拷贝即隔离」纪律）；两端点间距 ≤14 格必然落在视图内，覆盖区块
+// 未就绪按遮挡保守处理——宁可漏射也不凭缺失数据开火。成本有界：冷却就绪且
+// 存在目标的每位掷骨者每 tick 构造一次 3×3 区块视图（视线被持续遮挡时不射
+// 击、冷却恒就绪，故每 tick 都发生），总成本上界 = 掷骨者数 × 常数，与发令
+// 者视线命中 `issuerLookHit` 每玩家一次区块视图同级。
+func (m *hostileManager) hostileRangedLineOfSight(
+	mob *contract.HostileMob,
+	target hostileTargetPlayer,
+	eyeHeight float32,
+) bool {
+	view := companionChunkViewFor(m.engine, mob.Dimension, [3]float32(mob.State.Position))
+	eye := mob.State.Position.Add(mgl32.Vec3{0, eyeHeight, 0})
+	targetEye := mgl32.Vec3(target.position).Add(mgl32.Vec3{0, eyeHeight, 0})
+	delta := targetEye.Sub(eye)
+	length := delta.Len()
+	if length < 1e-6 {
+		return true
+	}
+	_, blocked, err := core.RaycastBlocks(eye, delta, length,
+		func(position core.BlockPos) (bool, error) {
+			block, ok := view.blockAt(position.X, position.Y, position.Z)
+			if !ok {
+				return false, fmt.Errorf("server: hostile line-of-sight chunk not ready")
+			}
+			return core.InteractionTarget(block), nil
+		})
+	if err != nil {
+		return false
+	}
+	return !blocked
+}
+
 // onlineHostileTargets 枚举 tick 边界的在线玩家并归一为追逐目标事实：稳定 ID
 // 来自会话注册表，维度/位置/会话取权威模拟，仅保留已激活且存活的玩家。结果
 // 按 `PlayerID` 字节序升序，目标选择的等距裁决因此可重放。调用方必须持有
@@ -627,10 +771,11 @@ func (server *Server) onlineHostileTargets() []hostileTargetPlayer {
 	return players
 }
 
-// advanceHostileChase 是 Server.step 的夜行者编排调用点：先于 engine.Step，
-// 本 tick 的夜行者意图必须先进 inbox 才能被夜行者阶段消费。
-func (server *Server) advanceHostileChase() {
+// advanceHostileChase 是 Server.step 的敌怪编排调用点：先于 engine.Step，
+// 本 tick 的敌怪意图必须先进 inbox 才能被敌怪阶段消费。传入本 tick 冻结的
+// TickTunables，ranged advisor 的眼位高度与同 tick 的引擎结算同源。
+func (server *Server) advanceHostileChase(tickTunables runtime.TickTunables) {
 	if server.hostileManager != nil {
-		server.hostileManager.advance()
+		server.hostileManager.advanceWithTunables(tickTunables)
 	}
 }

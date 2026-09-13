@@ -26,6 +26,7 @@ pub mod lod;
 #[cfg(test)]
 mod plant_tests;
 pub mod pool;
+pub mod projectile;
 pub mod quads;
 pub mod shaders;
 #[cfg(test)]
@@ -168,6 +169,9 @@ pub struct FrameInput {
     /// 降水 instance 字节流(96 字节/实例:与 avatar 同布局,形态已由 Go 侧按
     /// 高度相对雪线选形);空表示本帧无降水(晴天)。
     pub precip_instances: Vec<u8>,
+    /// 权威投射物 instance 字节流(96 字节/实例:与 avatar 同布局,长轴取向与
+    /// 弹种配色已由 Go 侧烘焙);空表示本帧无投射物。
+    pub projectile_instances: Vec<u8>,
     /// 伤害红边强度(0 表示不绘制)。
     pub overlay_strength: f32,
     /// 相机浸没时的全屏水色叠加 RGBA(A <= 0 表示不绘制)。
@@ -201,6 +205,7 @@ impl FrameInput {
             && self.viewmodel_instances.is_empty()
             && self.weather_gray == 0.0
             && self.precip_instances.is_empty()
+            && self.projectile_instances.is_empty()
             && self.overlay_strength == 0.0
             && self.water_tint[3] == 0.0
             && self.name_tag_vertices.is_empty()
@@ -577,6 +582,9 @@ pub struct OffscreenRenderer {
     /// 降水粒子叠加 pass(恒 ≤256 实例,复用 avatar 实例布局与材质分支的
     /// 不透明变体,bind 随 atlas 上传重建)。
     weather_pass: EntityPass,
+    /// 权威投射物 pass(恒 ≤128 实例,复用 avatar 实例布局与材质分支的不
+    /// 透明变体,bind 随 atlas 上传重建)。
+    projectile_pass: EntityPass,
     /// 伤害红边 uniform(16B,strength@0)。
     overlay_uniform: wgpu::Buffer,
     water_tint_uniform: wgpu::Buffer,
@@ -1057,6 +1065,20 @@ impl OffscreenRenderer {
             DEPTH_FORMAT,
         );
 
+        // 权威投射物 pass:恒 ≤128 实例的常驻资源,复用 avatar 的 shader
+        // 模块与不透明管线状态(实例布局与材质分支纪律与 avatar 同源);bind
+        // 随 atlas 上传重建,未上传前不绘制。
+        let projectile_pass = EntityPass::new(
+            &device,
+            &queue,
+            &avatar_module,
+            projectile::PROJECTILE_PASS_LABEL,
+            projectile::PROJECTILE_MAX_INSTANCES,
+            EntityPipelineKind::Opaque,
+            COLOR_FORMAT,
+            DEPTH_FORMAT,
+        );
+
         // 全屏叠加:无深度附件的全屏三角管线,镜像 Go damage_overlay.go。
         // 伤害红边与水下水色共用这一条管线与这一份 layout,各自持有一块 32 字节
         // uniform(vec4 颜色 + edge 位 + 三个 pad):同一帧里两者可能都要画,
@@ -1275,6 +1297,7 @@ impl OffscreenRenderer {
             crack_pass,
             viewmodel_pass,
             weather_pass,
+            projectile_pass,
             name_tag_pass,
             hud_pass,
             debug_pass,
@@ -1386,6 +1409,8 @@ impl OffscreenRenderer {
         self.viewmodel_pass
             .rebuild_bind(&self.device, &atlas_view, &self.sampler);
         self.weather_pass
+            .rebuild_bind(&self.device, &atlas_view, &self.sampler);
+        self.projectile_pass
             .rebuild_bind(&self.device, &atlas_view, &self.sampler);
         self.terrain_bind = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("terrain resources"),
@@ -1825,6 +1850,7 @@ impl OffscreenRenderer {
             || !CrackPass::instances_valid(&input.crack_instances)
             || !viewmodel::instances_valid(&input.viewmodel_instances)
             || !weather::instances_valid(&input.precip_instances)
+            || !projectile::instances_valid(&input.projectile_instances)
             || !weather::gray_valid(input.weather_gray)
             || input.overlay_strength.is_nan()
             || input.water_tint.iter().any(|value| value.is_nan())
@@ -2249,6 +2275,28 @@ impl OffscreenRenderer {
                 frame_view,
                 &self.depth_view,
                 weather::WEATHER_PASS_LABEL,
+            );
+        }
+        // 权威投射物(帧序:avatar → 掉落物 → 轮廓 → 裂纹 → 双手 → 降水之
+        // 后、名牌之前)。世界空间不透明叠加层的末端:高速小目标不被降水粒
+        // 子整片遮盖,又先于名牌/全屏叠加/HUD 等屏幕空间层;空段跳过录制,
+        // 无段帧的 draw 选择与变更前一致。超限已在 validate_frame 整帧拒
+        // 绝,此处只处理合法非空流,不做任何弹道推测(取向与配色已由 Go 编
+        // 码侧烘焙进实例变换)。复用实体通道录制,不新增 render pass 调用
+        // 点,半透明阶段预算门禁计数不变。
+        if projectile::wants_draw(&input.projectile_instances) {
+            debug_assert!(projectile::instances_valid(&input.projectile_instances));
+            self.projectile_pass.upload(
+                &self.queue,
+                &input.view_proj,
+                input.daylight,
+                &input.projectile_instances,
+            );
+            self.projectile_pass.record(
+                encoder,
+                frame_view,
+                &self.depth_view,
+                projectile::PROJECTILE_PASS_LABEL,
             );
         }
         // 名牌(帧序:双手之后、overlay 之前)。

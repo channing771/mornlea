@@ -170,6 +170,11 @@ func (engine *engineContext) advanceCombatWithLimits(
 	var intents [maxCombatIntents]combatIntent
 	intentCount := 0
 	for index := range engine.hostiles.entries {
+		// 掷骨者无近战意图：kind 门禁在意图构建点拦截，即便攻击意图经任何
+		// 路径被冻结也不会进入近战结算（规格：掷骨者不得以近战方式伤害玩家）。
+		if engine.hostiles.entries[index].kind == HostileKindBoneThrower {
+			continue
+		}
 		attacker := combatSnapshotForActor(
 			snapshots[:snapshotCount],
 			combatActor{kind: core.CombatTargetHostile, id: engine.hostiles.entries[index].id},
@@ -271,6 +276,12 @@ func (engine *engineContext) playerCombatIntent(
 	if attacker == nil || !attacker.attacking || attacker.health == 0 || attacker.attackCooldown != 0 {
 		return combatIntent{}, false
 	}
+	// 弓（任一形态）没有近战语义（spec player-bow「持弓排除近战意图与采掘」）：
+	// 主输入位在持弓时让渡给拉弓域，持弓按住绝不生成近战意图——门禁放在意图
+	// 构建点而不是结算点，被排除的攻击者连目标扫描都不会启动。
+	if heldBow(attacker.selectedItem) {
+		return combatIntent{}, false
+	}
 	dimension := engine.dimension(attacker.dimension)
 	if dimension == nil {
 		return combatIntent{}, false
@@ -311,13 +322,17 @@ func (engine *engineContext) playerCombatIntent(
 	}, true
 }
 
+// combatKnockbackSpeed 是近战与弹击共用的击退冲量（格/tick）：沿击退方向的
+// 水平单位向量施加的固定速度增量。
+const combatKnockbackSpeed = float32(0.35)
+
 func combatKnockback(from, to mgl32.Vec3, yaw float32) mgl32.Vec3 {
 	delta := mgl32.Vec3{to.X() - from.X(), 0, to.Z() - from.Z()}
 	if delta.LenSqr() == 0 {
 		look := LookDirection(yaw, 0)
 		delta = mgl32.Vec3{look.X(), 0, look.Z()}
 	}
-	return delta.Normalize().Mul(0.35)
+	return delta.Normalize().Mul(combatKnockbackSpeed)
 }
 
 // settleCombatIntent 在任何状态写入前解析全部 live 身份与冻结栏位；验证成功后

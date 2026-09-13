@@ -533,6 +533,151 @@ func TestConsumeRecipeFailureReturnsOriginalGrid(t *testing.T) {
 	}
 }
 
+// TestInventoryConsumeItemFollowsFixedScanOrder 锁定 `ConsumeItem` 的确定性
+// 扫描序与 copy-on-write 语义：快捷栏 0..8 在前、背包 9..35 在后，区段内取
+// 最低统一索引上第一个数量大于零的匹配栈恰减 1，扣到零的栈规范化为零值空栈。
+// 弹药类消耗（弓的发射结算）依赖这一固定顺序：同一状态重复结算必然得到同一
+// 结果。全部成功路径都必须在值副本上完成，调用方原值不得被改动。
+func TestInventoryConsumeItemFollowsFixedScanOrder(t *testing.T) {
+	t.Run("背包独立来源", func(t *testing.T) {
+		var inventory core.Inventory
+		inventory.Backpack[4] = core.ItemStack{Item: core.ItemArrow, Count: 3}
+
+		next, ok := inventory.ConsumeItem(core.ItemArrow)
+		if !ok {
+			t.Fatal("背包中的箭应当可以消耗")
+		}
+		if next.Backpack[4] != (core.ItemStack{Item: core.ItemArrow, Count: 2}) {
+			t.Fatalf("背包格 = %+v，想要 3−1=2 支箭", next.Backpack[4])
+		}
+		if inventory.Backpack[4].Count != 3 {
+			t.Fatal("ConsumeItem 必须在值副本上完成，原值不得被修改")
+		}
+	})
+
+	t.Run("快捷栏优先于背包", func(t *testing.T) {
+		var inventory core.Inventory
+		inventory.Hotbar.Slots[7] = core.ItemStack{Item: core.ItemArrow, Count: 2}
+		inventory.Backpack[0] = core.ItemStack{Item: core.ItemArrow, Count: 5}
+
+		next, ok := inventory.ConsumeItem(core.ItemArrow)
+		if !ok {
+			t.Fatal("存在箭时消耗应当成功")
+		}
+		if next.Hotbar.Slots[7] != (core.ItemStack{Item: core.ItemArrow, Count: 1}) {
+			t.Fatalf("快捷栏格 = %+v，想要先扣快捷栏剩 1 支", next.Hotbar.Slots[7])
+		}
+		if next.Backpack[0] != (core.ItemStack{Item: core.ItemArrow, Count: 5}) {
+			t.Fatalf("背包格 = %+v，快捷栏有货时背包不得提前消耗", next.Backpack[0])
+		}
+	})
+
+	t.Run("快捷栏内取首个匹配栈", func(t *testing.T) {
+		var inventory core.Inventory
+		inventory.Hotbar.Slots[2] = core.ItemStack{Item: core.ItemArrow, Count: 1}
+		inventory.Hotbar.Slots[5] = core.ItemStack{Item: core.ItemArrow, Count: 4}
+
+		next, ok := inventory.ConsumeItem(core.ItemArrow)
+		if !ok {
+			t.Fatal("存在箭时消耗应当成功")
+		}
+		if next.Hotbar.Slots[2] != (core.ItemStack{}) {
+			t.Fatalf("栏位 2 = %+v，想要最低索引的栈被扣空并规范化为空栈", next.Hotbar.Slots[2])
+		}
+		if next.Hotbar.Slots[5] != (core.ItemStack{Item: core.ItemArrow, Count: 4}) {
+			t.Fatalf("栏位 5 = %+v，首个匹配栈之后的栈不得被消耗", next.Hotbar.Slots[5])
+		}
+	})
+
+	t.Run("背包内取首个匹配栈", func(t *testing.T) {
+		var inventory core.Inventory
+		inventory.Backpack[1] = core.ItemStack{Item: core.ItemArrow, Count: 1}
+		inventory.Backpack[20] = core.ItemStack{Item: core.ItemArrow, Count: 4}
+
+		next, ok := inventory.ConsumeItem(core.ItemArrow)
+		if !ok {
+			t.Fatal("存在箭时消耗应当成功")
+		}
+		if next.Backpack[1] != (core.ItemStack{}) {
+			t.Fatalf("背包格 1 = %+v，想要最低索引的栈被扣空", next.Backpack[1])
+		}
+		if next.Backpack[20] != (core.ItemStack{Item: core.ItemArrow, Count: 4}) {
+			t.Fatalf("背包格 20 = %+v，不得被消耗", next.Backpack[20])
+		}
+	})
+
+	t.Run("零数量栈按空栈跳过", func(t *testing.T) {
+		var inventory core.Inventory
+		inventory.Hotbar.Slots[1] = core.ItemStack{Item: core.ItemArrow, Count: 0}
+		inventory.Hotbar.Slots[3] = core.ItemStack{Item: core.ItemArrow, Count: 2}
+
+		next, ok := inventory.ConsumeItem(core.ItemArrow)
+		if !ok {
+			t.Fatal("存在数量大于零的箭栈时消耗应当成功")
+		}
+		if next.Hotbar.Slots[3] != (core.ItemStack{Item: core.ItemArrow, Count: 1}) {
+			t.Fatalf("栏位 3 = %+v，数量为零的残留栈必须被跳过", next.Hotbar.Slots[3])
+		}
+		if next.Hotbar.Slots[1] != (core.ItemStack{Item: core.ItemArrow, Count: 0}) {
+			t.Fatalf("栏位 1 = %+v，零数量栈不得被当作可消耗来源", next.Hotbar.Slots[1])
+		}
+	})
+
+	t.Run("不同物品互不干扰", func(t *testing.T) {
+		var inventory core.Inventory
+		inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemDirt, Count: 3}
+		inventory.Backpack[2] = core.ItemStack{Item: core.ItemArrow, Count: 2}
+
+		next, ok := inventory.ConsumeItem(core.ItemArrow)
+		if !ok {
+			t.Fatal("背包中的箭应当可以消耗")
+		}
+		if next.Hotbar.Slots[0] != (core.ItemStack{Item: core.ItemDirt, Count: 3}) {
+			t.Fatalf("泥土格 = %+v，消耗箭不得波及其他物品", next.Hotbar.Slots[0])
+		}
+		if next.Backpack[2] != (core.ItemStack{Item: core.ItemArrow, Count: 1}) {
+			t.Fatalf("背包格 = %+v，想要 2−1=1 支箭", next.Backpack[2])
+		}
+	})
+}
+
+// TestInventoryConsumeItemFailsWithoutMatchAndKeepsOriginal 锁定 `ConsumeItem`
+// 失败路径的原子性：全库没有任何可消费的匹配栈（空物品状态、只有其他物品、
+// 目标物品只剩零数量残留栈）时返回原值与 false，绝不留下部分扣减；空物品与
+// 未注册编号一律不可消耗。
+func TestInventoryConsumeItemFailsWithoutMatchAndKeepsOriginal(t *testing.T) {
+	withOtherItems := core.Inventory{}
+	withOtherItems.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemDirt, Count: 5}
+	withOtherItems.Backpack[8] = core.ItemStack{Item: core.ItemStone, Count: 7}
+	zeroCountOnly := core.Inventory{}
+	zeroCountOnly.Hotbar.Slots[4] = core.ItemStack{Item: core.ItemArrow, Count: 0}
+	zeroCountOnly.Backpack[12] = core.ItemStack{Item: core.ItemArrow, Count: 0}
+
+	cases := []struct {
+		name      string
+		inventory core.Inventory
+		item      core.ItemID
+	}{
+		{"空物品状态", core.Inventory{}, core.ItemArrow},
+		{"只有其他物品", withOtherItems, core.ItemArrow},
+		{"只剩零数量残留栈", zeroCountOnly, core.ItemArrow},
+		{"空物品编号", withOtherItems, core.ItemNone},
+		{"未注册编号", withOtherItems, core.ItemID(4242)},
+		{"哨兵编号", withOtherItems, core.ItemIDMax},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			next, ok := tc.inventory.ConsumeItem(tc.item)
+			if ok {
+				t.Fatalf("%s：不可消耗的编号被消耗为 %+v", tc.name, next)
+			}
+			if next != tc.inventory {
+				t.Fatalf("%s：失败消耗修改了原值: %+v", tc.name, next)
+			}
+		})
+	}
+}
+
 func BenchmarkInventoryAddStack(b *testing.B) {
 	var inventory core.Inventory
 	for slot := range inventory.Hotbar.Slots {

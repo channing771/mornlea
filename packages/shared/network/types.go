@@ -354,6 +354,38 @@ const (
 	PassiveDespawnDied = protocol.PassiveDespawnDied
 )
 
+// 投射物消息 DTO 与弹种 kind 定义在 protocol 包；再导出保持既有 network.X
+// 引用。
+type (
+	// ProjectileSpawnRecord 是一条投射物的出生事实。
+	ProjectileSpawnRecord = protocol.ProjectileSpawnRecord
+	// ProjectileSpawn 是投射物出生批次通知。
+	ProjectileSpawn = protocol.ProjectileSpawn
+	// ProjectileStateRecord 是一条投射物在一个权威 tick 的飞行位置。
+	ProjectileStateRecord = protocol.ProjectileStateRecord
+	// ProjectileState 是投射物位置批次通知。
+	ProjectileState = protocol.ProjectileState
+	// ProjectileDespawn 是投射物移除批次通知。
+	ProjectileDespawn = protocol.ProjectileDespawn
+)
+
+// 弹种 kind 字节定义在 protocol 包，再导出保持既有 network.X 引用。
+const (
+	// ProjectileKindShard 表示骨刺（远程敌怪发射）。
+	ProjectileKindShard = protocol.ProjectileKindShard
+	// ProjectileKindArrow 表示箭（玩家弓发射）。
+	ProjectileKindArrow = protocol.ProjectileKindArrow
+)
+
+// 敌怪 kind 字节同样定义在 protocol 包；客户端镜像与呈现层按同一数值
+// 消费，再导出保持 network.X 单一引用面。
+const (
+	// HostileKindNightwalker 表示夜行者（近战追击）。
+	HostileKindNightwalker = protocol.HostileKindNightwalker
+	// HostileKindBoneThrower 表示掷骨者（远程投掷骨刺）。
+	HostileKindBoneThrower = protocol.HostileKindBoneThrower
+)
+
 // 区块快照值类型定义在 protocol 包（密封接口与 Validate 同包）；再导出保持
 // 既有 network.X 引用与编解码往返的类型身份。
 type (

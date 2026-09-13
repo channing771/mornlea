@@ -12,20 +12,28 @@ import (
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-// 夜行者存档的 schema 演进常量。当前只写 v1；未来版本在解码入口按
+// 敌怪存档的 schema 演进常量。写侧只写 v2；v1 旧文件经解码白名单只读放行
+// （kind 恒 0，下次正常保存才升级），未来版本在解码入口按
 // storagedef.ErrFutureVersion 拒绝，绝不猜测布局。
 const (
 	hostileEnvelopeVersion uint32 = 1
 	hostileSchemaV1        uint32 = 1
+	hostileSchemaV2        uint32 = 2
 	// CurrentSchema 是当前写出的 schema；编码端只写当前版本。留根的根包
 	// store 测试以它构造未来 schema 故障注入（跟随权威常量而非字面量），
 	// 故导出。
-	CurrentSchema       uint32 = hostileSchemaV1
+	CurrentSchema       uint32 = hostileSchemaV2
 	hostileHeaderLength        = 32
-	hostileRecordLength        = 72
-	// MaxFileLength 是物理文件字节上界（spec：4640）= 32-byte 头 +
-	// 64 条 72-byte 记录。解码在任何解析与分配之前按本值拒绝超长；根包
-	// 编排读取 hostile_mobs.bin 时按同一上界截断读取，故导出。
+	// v1 记录以 distantTicks 收尾共 72 字节；v2 在记录尾部追加 1 字节 kind，
+	// 共 73 字节。解码白名单同时放行两个 schema，故记录步长按版本取值，
+	// 只有写侧（编码与文件上界推导）使用当前步长。
+	hostileRecordLengthV1 = 72
+	hostileRecordLengthV2 = 73
+	hostileRecordLength   = hostileRecordLengthV2
+	// MaxFileLength 是物理文件字节上界（spec：4704）= 32-byte 头 +
+	// 64 条 73-byte 记录。解码在任何解析与分配之前按本值拒绝超长；根包
+	// 编排读取 hostile_mobs.bin 时按同一上界截断读取，故导出。v1 满容量
+	// 旧文件（4640 字节）小于本上界，不受影响。
 	MaxFileLength = hostileHeaderLength + MaxHostileMobs*hostileRecordLength
 )
 
@@ -45,7 +53,7 @@ var (
 	hostileCRCTable      = crc32.MakeTable(crc32.Castagnoli)
 )
 
-// Encode 把一份夜行者集合快照编码为规范磁盘形态：记录按 ID 升序写出，
+// Encode 把一份敌怪集合快照编码为规范磁盘形态：记录按 ID 升序写出，
 // 输入顺序与字段值不得被修改。revision 为零或任何记录越界都拒绝编码——
 // 编码端产出的字节必须能被 Decode 原样接受，绝不写出不可读文件。
 func Encode(save HostileMobsSave) ([]byte, error) {
@@ -120,10 +128,18 @@ func Decode(data []byte) (StoredHostileMobs, error) {
 	if err != nil {
 		return StoredHostileMobs{}, corrupt("hostile schema", err)
 	}
-	if schema != hostileSchemaV1 {
-		// 白名单只有一个成员，仍显式列出字面常量而不是 current 引用：未来
-		// v2 成为 current 时，v1 文件必须仍被本入口放行（companion 同款
-		// 白名单纪律）。
+	// 白名单显式列出 {v1, v2} 两个字面常量而不是 CurrentSchema 引用：v2
+	// 成为 current 后 v1 文件必须仍被本入口放行（只读迁移，companion 同款
+	// 白名单纪律）。两个 schema 的记录步长不同，随白名单分支一并确定。
+	var recordLength int
+	switch schema {
+	case hostileSchemaV1:
+		// v1 只读迁移：记录没有 kind 尾字节，读入恒为 0（夜行者）；旧文件
+		// 字节在下次正常保存升为 v2 前由根包编排原样保留。
+		recordLength = hostileRecordLengthV1
+	case hostileSchemaV2:
+		recordLength = hostileRecordLengthV2
+	default:
 		if schema > CurrentSchema {
 			return StoredHostileMobs{}, fmt.Errorf("%w: hostile schema %d", storagedef.ErrFutureVersion, schema)
 		}
@@ -147,9 +163,9 @@ func Decode(data []byte) (StoredHostileMobs, error) {
 	if err != nil {
 		return StoredHostileMobs{}, corrupt("hostile payload length", err)
 	}
-	// v1 是固定步长布局：payload 长度必须恰好等于 count 条记录，任何偏差
-	// 都意味着头与数据错位，继续解析没有意义。
-	if payloadLength != count*hostileRecordLength {
+	// 两个 schema 都是固定步长布局：payload 长度必须恰好等于 count 条本
+	// 版本记录，任何偏差都意味着头与数据错位，继续解析没有意义。
+	if payloadLength != count*uint32(recordLength) {
 		return StoredHostileMobs{}, fmt.Errorf("%w: hostile payload length does not match count", storagedef.ErrCorrupt)
 	}
 	wantCRC, err := header.u32()
@@ -165,7 +181,7 @@ func Decode(data []byte) (StoredHostileMobs, error) {
 
 	records := make([]StoredHostileMob, int(count))
 	for index := range records {
-		record, err := decodeHostileMob(&header)
+		record, err := decodeHostileMob(&header, schema)
 		if err != nil {
 			return StoredHostileMobs{}, fmt.Errorf("hostile record %d: %w", index, err)
 		}
@@ -182,10 +198,11 @@ func Decode(data []byte) (StoredHostileMobs, error) {
 	return StoredHostileMobs{Revision: revision, Records: records}, nil
 }
 
-// validateHostileRecord 校验单条夜行者记录的全部不变量：ID 非零、维度已
+// validateHostileRecord 校验单条敌怪记录的全部不变量：ID 非零、维度已
 // 知、位置/速度/朝向有限、世界 Y 落在 [core.MinY, core.MaxY)、生命为正且
-// 不超过 core.MaxHealth、三个冷却计时器不越过周期、目标字段成对一致。编码
-// 与解码共用本函数，保证双向边界一致。
+// 不超过 core.MaxHealth、三个冷却计时器不越过周期、distant 计数不越过
+// despawn 阈值、kind 落在 {0,1} 值域、目标字段成对一致。编码与解码共用
+// 本函数，保证双向边界一致。
 func validateHostileRecord(record StoredHostileMob) error {
 	if record.ID == 0 {
 		return fmt.Errorf("%w: zero hostile ID", storagedef.ErrCorrupt)
@@ -226,6 +243,13 @@ func validateHostileRecord(record StoredHostileMob) error {
 			storagedef.ErrCorrupt, record.DistantTicks, maxHostileDistantTicks,
 		)
 	}
+	// kind 与线上 hostile 消息字节共用 {0,1} 值域：越界值既不在迁移语义
+	// （0=夜行者）内也不在未来扩展预留里，编码与解码两侧一律整拒。
+	if record.Kind > 1 {
+		return fmt.Errorf(
+			"%w: hostile kind %d outside domain {0,1}", storagedef.ErrCorrupt, record.Kind,
+		)
+	}
 	if !record.HasTarget {
 		if record.PlayerID != (core.PlayerID{}) {
 			return fmt.Errorf("%w: hostile without target keeps player ID", storagedef.ErrCorrupt)
@@ -242,11 +266,12 @@ func finiteHostileFloat(value float32) bool {
 	return !math.IsNaN(float64(value)) && !math.IsInf(float64(value), 0)
 }
 
-// appendHostileMob 按固定布局追加一条 72-byte 记录：ID u64、dimension
+// appendHostileMob 按固定布局追加一条 73-byte 记录：ID u64、dimension
 // u32、position 与 velocity 各 3×f32、onGround u8、yaw f32、health 与三个
 // 冷却各 u8、hasTarget u8、目标玩家 ID 16 字节、下一重规划 tick u64、
-// distant u16——恰好无填充；两个布尔各占独立字节（D7 字段切分），非 0/1
-// 的字节由解码端拒绝。调用前必须已通过 validateHostileRecord。
+// distant u16、kind u8——恰好无填充；两个布尔各占独立字节（D7 字段切分），
+// 非 0/1 的字节由解码端拒绝；kind 以 pure-append 方式收尾，既有字段次序
+// 与 v1 记录完全一致。调用前必须已通过 validateHostileRecord。
 func appendHostileMob(dst []byte, record StoredHostileMob) []byte {
 	dst = appendU64(dst, record.ID)
 	dst = appendU32(dst, uint32(record.Dimension))
@@ -270,10 +295,11 @@ func appendHostileMob(dst []byte, record StoredHostileMob) []byte {
 	dst = append(dst, hasTarget)
 	dst = append(dst, record.PlayerID[:]...)
 	dst = appendU64(dst, record.NextRepathTicks)
-	return binary.LittleEndian.AppendUint16(dst, record.DistantTicks)
+	dst = binary.LittleEndian.AppendUint16(dst, record.DistantTicks)
+	return append(dst, record.Kind)
 }
 
-func decodeHostileMob(decoder *byteDecoder) (StoredHostileMob, error) {
+func decodeHostileMob(decoder *byteDecoder, schema uint32) (StoredHostileMob, error) {
 	var record StoredHostileMob
 	id, err := decoder.u64()
 	if err != nil {
@@ -336,6 +362,14 @@ func decodeHostileMob(decoder *byteDecoder) (StoredHostileMob, error) {
 	}
 	if record.DistantTicks, err = decoder.u16(); err != nil {
 		return StoredHostileMob{}, corrupt("hostile distant ticks", err)
+	}
+	// 只有 v2 记录携带 kind 尾字节；v1 记录到此结束，零值恰是迁移语义
+	// 要求的「恒 0（夜行者）」，无需显式赋值。值域 {0,1} 由
+	// validateHostileRecord 与编码端共享校验，非法值在此整拒。
+	if schema == hostileSchemaV2 {
+		if record.Kind, err = decoder.u8(); err != nil {
+			return StoredHostileMob{}, corrupt("hostile kind", err)
+		}
 	}
 	if err := validateHostileRecord(record); err != nil {
 		return StoredHostileMob{}, err

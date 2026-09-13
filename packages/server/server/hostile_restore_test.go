@@ -51,8 +51,8 @@ func hostileRestoreFixture() []storage.StoredHostileMob {
 }
 
 // assertHostilesRestored 逐字段断言权威侧夜行者集合与存档记录一致（按 ID
-// 升序），覆盖位置/速度/生命/冷却/目标/重规划节奏/远离累计的全部持久化
-// 字段。路径是运行时派生物，不存在于记录或权威侧，因此天然不参与比对。
+// 升序），覆盖位置/速度/生命/冷却/目标/重规划节奏/远离累计与 kind 的全部
+// 持久化字段。路径是运行时派生物，不存在于记录或权威侧，因此天然不参与比对。
 func assertHostilesRestored(t *testing.T, mobs []contract.HostileMob, want []storage.StoredHostileMob) {
 	t.Helper()
 	if len(mobs) != len(want) {
@@ -68,6 +68,7 @@ func assertHostilesRestored(t *testing.T, mobs []contract.HostileMob, want []sto
 			HurtCooldown: mob.HurtCooldown, BurnCooldown: mob.BurnCooldown,
 			HasTarget: mob.HasTarget, PlayerID: mob.PlayerID,
 			NextRepathTicks: mob.NextRepathTicks, DistantTicks: mob.DistantTicks,
+			Kind: mob.Kind,
 		}
 		if got != record {
 			t.Fatalf("第 %d 只夜行者=%+v，想要存档记录 %+v", index, got, record)
@@ -130,13 +131,13 @@ func TestHostileStartupRejectsFutureSchemaWithoutOverwrite(t *testing.T) {
 	root := t.TempDir()
 	seedHostileDiskWorld(t, root)
 
-	// 手工构造 schema=2 的未来版本文件：头布局与 `hostileChecksum` 的覆盖
-	// 范围镜像（[8:28] 段加 payload），CRC 因此合法，拒绝必须来自版本门禁
-	// 而不是损坏。
+	// 手工构造 schema=3 的未来版本文件（v2 随 kind 字节交付后已成为当前
+	// 版本，白名单 {1,2}）：头布局与 `hostileChecksum` 的覆盖范围镜像
+	//（[8:28] 段加 payload），CRC 因此合法，拒绝必须来自版本门禁而不是损坏。
 	future := make([]byte, 32)
 	copy(future, "MHST")
 	binary.LittleEndian.PutUint32(future[4:], 1)
-	binary.LittleEndian.PutUint32(future[8:], 2)
+	binary.LittleEndian.PutUint32(future[8:], 3)
 	binary.LittleEndian.PutUint64(future[12:], 1)
 	binary.LittleEndian.PutUint32(future[20:], 0)
 	binary.LittleEndian.PutUint32(future[24:], 0)

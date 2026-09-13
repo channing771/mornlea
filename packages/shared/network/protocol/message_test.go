@@ -178,8 +178,8 @@ func TestBucketCommandIDsAppendOnly(t *testing.T) {
 	if id, ok := protocol.ClientPacketID(protocol.StatePlay, protocol.PlaceWater{}); !ok || id != 17 {
 		t.Fatalf("PlaceWater ID = (%d,%v)，想要 (17,true)", id, ok)
 	}
-	if protocol.ProtocolVersion != 42 {
-		t.Fatalf("ProtocolVersion = %d，想要 42", protocol.ProtocolVersion)
+	if protocol.ProtocolVersion != 43 {
+		t.Fatalf("ProtocolVersion = %d，想要 43", protocol.ProtocolVersion)
 	}
 }
 

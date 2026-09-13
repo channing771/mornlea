@@ -109,6 +109,9 @@ func (a *Application) Frame(drainMax, meshWorkMax int, elapsed time.Duration) (b
 	if a.passives != nil {
 		a.passives.Advance(elapsed)
 	}
+	if a.projectiles != nil {
+		a.projectiles.Advance(elapsed)
+	}
 	return a.RenderFrame(meshWorkMax)
 }
 
@@ -147,6 +150,9 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 			a.passivePresentations,
 			a.serverTick,
 		)
+	}
+	if a.projectiles != nil {
+		a.projectilePresentations = a.projectiles.AppendPresentations(a.projectilePresentations[:0])
 	}
 	blockOutline := render.BlockOutline{}
 	if !blockTargetReset && !a.clientSessionClosed {
@@ -345,6 +351,14 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	a.weatherStream = a.entityEncoder.EncodeWeatherInstances(a.weatherStream, cam.Pos, cam.Yaw, a.serverTick, weather, yearPhase, effPhase)
 	a.weatherStream = a.entityEncoder.AppendSnowKickInstances(a.weatherStream, a.serverTick, snowKick)
 	a.weatherState = render.EncodeWeatherState(a.weatherState, weather)
+	// 投射物实例流与降水段相互独立：镜像呈现（ID 升序、latest-wins）直通
+	// 编码器，帧段恒不超过 128 实例；无投射物时为空流，帧字节与引入前
+	// 逐位一致。
+	a.projectileStream = a.entityEncoder.EncodeProjectileInstances(
+		a.projectileStream, AppendProjectileRenderPresentationsInto(
+			a.projectileScratch[:0], a.projectilePresentations,
+		),
+	)
 
 	right := mgl32.Vec3{
 		float32(math.Cos(float64(cam.Yaw))),
@@ -367,27 +381,28 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	var hudSegment []byte
 
 	rendered := a.renderer.RenderFrame(client.RenderFrame{
-		ViewProj:           viewProj,
-		ViewProjInv:        viewProjInv,
-		Pos:                cam.Pos,
-		Daylight:           daylight,
-		SunDirection:       dayNight.SunDirection,
-		StarVisibility:     dayNight.StarVisibility,
-		SkyColor:           skyColor,
-		CloudMacroX:        cloud.MacroX,
-		CloudLocal:         cloud.Local,
-		Visible:            a.rustVisible,
-		AvatarInstances:    a.avatarStream,
-		DropInstances:      a.dropStream,
-		OutlineInstances:   a.outlineStream,
-		CrackInstances:     a.crackStream,
-		ViewmodelInstances: a.viewmodelStream,
-		WeatherSegment:     a.weatherState,
-		PrecipInstances:    a.weatherStream,
-		OverlayStrength:    a.damageStrength,
-		WaterTint:          underwater.Tint,
-		NameTagSegment:     nameTagSegment,
-		HUDSegment:         hudSegment,
+		ViewProj:            viewProj,
+		ViewProjInv:         viewProjInv,
+		Pos:                 cam.Pos,
+		Daylight:            daylight,
+		SunDirection:        dayNight.SunDirection,
+		StarVisibility:      dayNight.StarVisibility,
+		SkyColor:            skyColor,
+		CloudMacroX:         cloud.MacroX,
+		CloudLocal:          cloud.Local,
+		Visible:             a.rustVisible,
+		AvatarInstances:     a.avatarStream,
+		DropInstances:       a.dropStream,
+		OutlineInstances:    a.outlineStream,
+		CrackInstances:      a.crackStream,
+		ViewmodelInstances:  a.viewmodelStream,
+		WeatherSegment:      a.weatherState,
+		PrecipInstances:     a.weatherStream,
+		ProjectileInstances: a.projectileStream,
+		OverlayStrength:     a.damageStrength,
+		WaterTint:           underwater.Tint,
+		NameTagSegment:      nameTagSegment,
+		HUDSegment:          hudSegment,
 	})
 	if a.combatFeedback.AfterRender(rendered) {
 		// marker 到期：显隐由 WebView 组件按 hud 分节下行驱动，置脏等下一个

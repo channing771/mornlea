@@ -8,10 +8,11 @@ import (
 	"github.com/channing771/mornlea/packages/shared/network/protocol"
 )
 
-// 夜行者域消息的 wire 编解码函数：与 companion_wire.go 同理归编解码簇（本
-// 包），由 `codec_server.go` 包内直呼分发；消息 DTO 与 wire 上限常量定义在
-// `packages/shared/network/protocol`，编解码原语是本包 unexported 类型，因此这组
-// 函数保持包内 unexported。
+// 夜行者与掷骨者两类敌怪共享的敌怪域消息 wire 编解码函数：与
+// companion_wire.go 同理归编解码簇（本包），由 `codec_server.go` 包内直呼
+// 分发；消息 DTO 与 wire 上限常量定义在 `packages/shared/network/protocol`，
+// 编解码原语是本包 unexported 类型，因此这组函数保持包内 unexported。kind
+// 字节以 pure-append 方式位于 spawn/state record 尾部。
 
 func encodeHostileSpawn(e *byteEncoder, spawn protocol.HostileSpawn) {
 	e.u64(spawn.ServerTick)
@@ -24,6 +25,7 @@ func encodeHostileSpawn(e *byteEncoder, spawn protocol.HostileSpawn) {
 		}
 		e.f32(record.Yaw)
 		e.u8(record.Health)
+		e.u8(record.Kind)
 	}
 }
 
@@ -40,6 +42,7 @@ func encodeHostileState(e *byteEncoder, state protocol.HostileState) {
 		}
 		e.f32(record.Yaw)
 		e.u8(record.Health)
+		e.u8(record.Kind)
 	}
 }
 
@@ -89,6 +92,9 @@ func decodeHostileSpawn(d *byteDecoder) (protocol.ServerPacket, error) {
 		if record.Health, err = d.u8(); err != nil {
 			return nil, err
 		}
+		if record.Kind, err = d.u8(); err != nil {
+			return nil, err
+		}
 	}
 	return spawn, nil
 }
@@ -129,6 +135,9 @@ func decodeHostileState(d *byteDecoder) (protocol.ServerPacket, error) {
 			return nil, err
 		}
 		if record.Health, err = d.u8(); err != nil {
+			return nil, err
+		}
+		if record.Kind, err = d.u8(); err != nil {
 			return nil, err
 		}
 	}

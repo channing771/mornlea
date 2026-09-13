@@ -53,6 +53,7 @@ func (engine *Engine) EntitySessionView(id SessionID) entity.SessionView {
 	return entity.SessionView{
 		Ready:  session.hasView,
 		Center: session.center,
+		Radius: session.radius,
 	}
 }
 
@@ -67,7 +68,7 @@ func (engine *Engine) entityViewSnapshot() entity.ViewSnapshot {
 		entries = append(entries, entity.TickSessionView{
 			Session: id,
 			View: entity.SessionView{
-				Ready: session.hasView, Center: session.center,
+				Ready: session.hasView, Center: session.center, Radius: session.radius,
 			},
 			Origin: origin, OriginWanted: originWanted,
 		})
@@ -203,6 +204,19 @@ func (engine *Engine) RestoreHostile(mob HostileMob) error {
 
 func (engine *Engine) HostileMobs() []HostileMob {
 	return engine.entities.HostileMobs()
+}
+
+// ProjectilesForTest 返回在飞投射物的全量值快照，仅供 server 侧测试断言
+// 射击与弹道结果；生产路径不经本入口。
+func (engine *Engine) ProjectilesForTest() []ProjectileSnapshot {
+	return engine.entities.ProjectilesForTest()
+}
+
+// Projectiles 返回按 ID 升序的全量在飞投射物值快照（瞬态实体，不进存档）：
+// 供发布侧每 tick 取一次共享快照，组装按会话订阅的 spawn/state 批次；despawn
+// 由发布侧「镜像有而截面无」的差异判据派生。调用方只读消费。
+func (engine *Engine) Projectiles() []ProjectileSnapshot {
+	return engine.entities.Projectiles()
 }
 
 // RestorePassive 把一条被动牛身体记录恢复为权威事实：与 `RestoreHostile`
