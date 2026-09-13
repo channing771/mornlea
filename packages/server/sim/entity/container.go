@@ -238,6 +238,63 @@ func mergeStacks(source, target core.ItemStack) (nextSource, nextTarget core.Ite
 	}
 }
 
+// stackSplitAmount 按结算时点的权威来源栈推导部分移动数量：单件恒 1，半组
+// 向上取整（7→4、6→4、1→1）。这是三个视图域共用的唯一推导点——数量纪律
+// 要求服务端只对非空来源栈推导，wire 与命令载荷都不存在客户端可声明的数量
+// 字段；空源返回 false，由调用方按 RejectInvalidInput 整单拒绝。
+func stackSplitAmount(source core.ItemStack, single bool) (uint8, bool) {
+	if source.Item == core.ItemNone || source.Count == 0 {
+		return 0, false
+	}
+	if single {
+		return 1, true
+	}
+	return (source.Count + 1) / 2, true
+}
+
+// mergeStacksAmount 计算把 source 中至多 amount 个物品移入 target 后两侧的
+// 新值，是 `mergeStacks` 的部分数量变体：目标为空按 min(amount, 来源数量)
+// 迁移（继承来源的耐久字段），同类目标按目标剩余容量截断合并并把余量留在
+// 源格；异类非空目标 MUST 拒绝——部分移动不做交换，交换是整堆移动独占的
+// 语义（半堆换半堆在无游标态下不可定义）。amount 为零或可移动量为零返回
+// false。
+func mergeStacksAmount(
+	source, target core.ItemStack,
+	amount uint8,
+) (nextSource, nextTarget core.ItemStack, ok bool) {
+	if amount == 0 {
+		return core.ItemStack{}, core.ItemStack{}, false
+	}
+	switch {
+	case target.Item == core.ItemNone:
+		moved := min(amount, source.Count)
+		if moved == 0 {
+			return core.ItemStack{}, core.ItemStack{}, false
+		}
+		nextTarget = source
+		nextTarget.Count = moved
+		if source.Count > moved {
+			nextSource = core.ItemStack{Item: source.Item, Count: source.Count - moved}
+		}
+		return nextSource, nextTarget, true
+	case target.Item == source.Item:
+		limit, hasLimit := core.ItemStackLimit(target.Item)
+		if !hasLimit || target.Count >= limit {
+			return core.ItemStack{}, core.ItemStack{}, false
+		}
+		moved := min(min(amount, source.Count), limit-target.Count)
+		nextTarget = target
+		nextTarget.Count += moved
+		if source.Count > moved {
+			nextSource = core.ItemStack{Item: source.Item, Count: source.Count - moved}
+		}
+		return nextSource, nextTarget, true
+	default:
+		// 异类非空目标拒绝而非交换，保持两侧零变化。
+		return core.ItemStack{}, core.ItemStack{}, false
+	}
+}
+
 // moveChestStack 在玩家物品与箱子的值副本上计算一次整堆移动，
 // 只有两侧最终槽位都满足约束时才返回新值；任何一步失败都返回原值和 false。
 // 箱子格接受任何已注册物品，因此这里只用 ItemStack.Valid 校验，不引入熔炉那样的物品类型约束。
@@ -268,6 +325,69 @@ func moveChestStack(
 	}
 
 	nextSource, nextTarget, ok := mergeStacks(source, target)
+	if !ok {
+		return inventory, chest, false
+	}
+
+	nextInventory, nextChest := inventory, chest
+	if nextInventory, nextChest, ok = setChestViewSlot(
+		nextInventory, nextChest, from, nextSource,
+	); !ok {
+		return inventory, chest, false
+	}
+	if nextInventory, nextChest, ok = setChestViewSlot(
+		nextInventory, nextChest, to, nextTarget,
+	); !ok {
+		return inventory, chest, false
+	}
+	if !nextChest.Valid() || !nextInventory.Valid() {
+		return inventory, chest, false
+	}
+	return nextInventory, nextChest, true
+}
+
+// moveChestStackAmount 在玩家物品与箱子的值副本上计算一次半组/单件部分
+// 移动：值域、有效性与区域路由与 `moveChestStack` 逐字相同（背包区内部仍走
+// `Inventory` 移动原语、跨区走统一栏位读写），合并换成 `mergeStacksAmount`
+// （异类非空目标拒绝而非交换），数量由结算时点的权威来源栈按 single 档位经
+// `stackSplitAmount` 推导。任何一步失败都返回原值和 false。
+func moveChestStackAmount(
+	inventory core.Inventory,
+	chest world.ChestSlot,
+	from, to uint8,
+	single bool,
+) (core.Inventory, world.ChestSlot, bool) {
+	if from >= core.ChestViewSlots || to >= core.ChestViewSlots || from == to {
+		return inventory, chest, false
+	}
+	if !inventory.Valid() || !chest.Valid() || !chest.Active {
+		return inventory, chest, false
+	}
+	// 两侧都在玩家物品栏内时复用部分移动原语。
+	if from < core.InventorySlots && to < core.InventorySlots {
+		source, _ := inventory.Slot(from)
+		amount, ok := stackSplitAmount(source, single)
+		if !ok {
+			return inventory, chest, false
+		}
+		next, ok := inventory.MoveStackAmount(from, to, amount)
+		return next, chest, ok
+	}
+
+	source, ok := chestViewSlot(inventory, chest, from)
+	if !ok || source.Item == core.ItemNone {
+		return inventory, chest, false
+	}
+	amount, ok := stackSplitAmount(source, single)
+	if !ok {
+		return inventory, chest, false
+	}
+	target, ok := chestViewSlot(inventory, chest, to)
+	if !ok {
+		return inventory, chest, false
+	}
+
+	nextSource, nextTarget, ok := mergeStacksAmount(source, target, amount)
 	if !ok {
 		return inventory, chest, false
 	}
@@ -323,8 +443,11 @@ func setChestViewSlot(
 	return next, chest, true
 }
 
-// applyContainerMove 处理跨容器移动命令，成功时同时提交玩家物品与区块中的容器；
-// 按引用的 Kind 分派到熔炉或箱子各自独立的边界与约束检查。
+// applyContainerMove 处理跨容器移动命令（整堆 `CommandMoveFurnaceStack` 与
+// 容器视图半组/单件 `CommandMoveStackPartial`），成功时同时提交玩家物品与
+// 区块中的容器；按引用的 Kind 分派到熔炉或箱子各自独立的边界与约束检查。
+// 两族命令共享查看关系校验、区域路由与提交路径，只有合并语义（整堆交换 vs
+// 部分拒绝）与数量推导点不同。
 func (engine *engineContext) applyContainerMove(
 	id SessionID,
 	command Command,
@@ -339,6 +462,7 @@ func (engine *engineContext) applyContainerMove(
 	}
 	ref := command.Furnace
 	key := core.ChunkKey{Dimension: ref.Dimension, Pos: ref.Chunk}
+	partial := command.Kind == CommandMoveStackPartial
 
 	switch ref.Kind {
 	case core.ContainerKindChest:
@@ -346,9 +470,17 @@ func (engine *engineContext) applyContainerMove(
 		if !ok {
 			return RejectInvalidInput, true
 		}
-		nextInventory, nextChest, ok := moveChestStack(
-			session.player.inventory, chest, command.Slot, command.ToSlot,
-		)
+		var nextInventory core.Inventory
+		var nextChest world.ChestSlot
+		if partial {
+			nextInventory, nextChest, ok = moveChestStackAmount(
+				session.player.inventory, chest, command.Slot, command.ToSlot, command.Single,
+			)
+		} else {
+			nextInventory, nextChest, ok = moveChestStack(
+				session.player.inventory, chest, command.Slot, command.ToSlot,
+			)
+		}
 		if !ok {
 			return RejectInvalidInput, true
 		}
@@ -369,9 +501,17 @@ func (engine *engineContext) applyContainerMove(
 		if !ok {
 			return RejectInvalidInput, true
 		}
-		nextInventory, nextFurnace, ok := moveFurnaceStack(
-			session.player.inventory, furnace, command.Slot, command.ToSlot,
-		)
+		var nextInventory core.Inventory
+		var nextFurnace world.FurnaceSlot
+		if partial {
+			nextInventory, nextFurnace, ok = moveFurnaceStackAmount(
+				session.player.inventory, furnace, command.Slot, command.ToSlot, command.Single,
+			)
+		} else {
+			nextInventory, nextFurnace, ok = moveFurnaceStack(
+				session.player.inventory, furnace, command.Slot, command.ToSlot,
+			)
+		}
 		if !ok {
 			return RejectInvalidInput, true
 		}

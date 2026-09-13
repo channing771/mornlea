@@ -70,6 +70,10 @@ const (
 	CommandCollectWater          = contract.CommandCollectWater
 	CommandPlaceWater            = contract.CommandPlaceWater
 	CommandEquipArmor            = contract.CommandEquipArmor
+	CommandMoveStackPartial      = contract.CommandMoveStackPartial
+	StackViewInventory           = contract.StackViewInventory
+	StackViewCrafting            = contract.StackViewCrafting
+	StackViewContainer           = contract.StackViewContainer
 	RejectInvalidRay             = contract.RejectInvalidRay
 	RejectNoTarget               = contract.RejectNoTarget
 	RejectChunkNotReady          = contract.RejectChunkNotReady
