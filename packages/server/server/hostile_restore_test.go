@@ -130,13 +130,13 @@ func TestHostileStartupRejectsFutureSchemaWithoutOverwrite(t *testing.T) {
 	root := t.TempDir()
 	seedHostileDiskWorld(t, root)
 
-	// 手工构造 schema=2 的未来版本文件：头布局与 `hostileChecksum` 的覆盖
-	// 范围镜像（[8:28] 段加 payload），CRC 因此合法，拒绝必须来自版本门禁
-	// 而不是损坏。
+	// 手工构造 schema=3 的未来版本文件（v2 随 kind 字节交付后已成为当前
+	// 版本，白名单 {1,2}）：头布局与 `hostileChecksum` 的覆盖范围镜像
+	//（[8:28] 段加 payload），CRC 因此合法，拒绝必须来自版本门禁而不是损坏。
 	future := make([]byte, 32)
 	copy(future, "MHST")
 	binary.LittleEndian.PutUint32(future[4:], 1)
-	binary.LittleEndian.PutUint32(future[8:], 2)
+	binary.LittleEndian.PutUint32(future[8:], 3)
 	binary.LittleEndian.PutUint64(future[12:], 1)
 	binary.LittleEndian.PutUint32(future[20:], 0)
 	binary.LittleEndian.PutUint32(future[24:], 0)

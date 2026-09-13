@@ -97,6 +97,7 @@ func TestHostileRestoreValidatesRecordFields(t *testing.T) {
 		"受击冷却越界":       func(m *HostileMob) { m.HurtCooldown = hostileCooldownPeriodTicks + 1 },
 		"灼烧冷却越界":       func(m *HostileMob) { m.BurnCooldown = hostileCooldownPeriodTicks + 1 },
 		"远离累计越界":       func(m *HostileMob) { m.DistantTicks = maxHostileDistantTicks + 1 },
+		"kind 越界":      func(m *HostileMob) { m.Kind = HostileKindBoneThrower + 1 },
 		"无目标却带玩家 ID":   func(m *HostileMob) { m.PlayerID = testTargetPlayerID() },
 		"有目标但玩家 ID 为零": func(m *HostileMob) { m.HasTarget = true },
 		"有目标但非 UUIDv4": func(m *HostileMob) {

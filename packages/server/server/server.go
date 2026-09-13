@@ -355,9 +355,9 @@ func (server *Server) step(scheduled time.Time) contract.TickResult {
 	// 任务编排位于聊天 drain 之后（Accepted 指令刚入队即可同 tick 派发规划）、
 	// engine.Step 之前（伙伴移动输入必须先进 inbox 才能被本 tick 消费）。
 	taskDeliveries := server.advanceCompanionTasks(tickTunables)
-	// 夜行者编排同样先于 engine.Step：有界追逐的移动/攻击意图必须先进
-	// inbox 才能被同 tick 的夜行者阶段消费；派发绝不等待 A*。
-	server.advanceHostileChase()
+	// 敌怪编排同样先于 engine.Step：有界追逐的移动/攻击/射击意图必须先进
+	// inbox 才能被同 tick 的敌怪阶段消费；派发绝不等待 A*。
+	server.advanceHostileChase(tickTunables)
 	result := server.engine.StepWithTunables(tickTunables)
 	if observer := server.config.StreamingObserver; observer != nil {
 		observer(result.Acquire, result.Ready)

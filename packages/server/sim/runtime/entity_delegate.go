@@ -206,6 +206,12 @@ func (engine *Engine) HostileMobs() []HostileMob {
 	return engine.entities.HostileMobs()
 }
 
+// ProjectilesForTest 返回在飞投射物的全量值快照，仅供 server 侧测试断言
+// 射击与弹道结果；生产路径不经本入口。
+func (engine *Engine) ProjectilesForTest() []ProjectileSnapshot {
+	return engine.entities.ProjectilesForTest()
+}
+
 // RestorePassive 把一条被动牛身体记录恢复为权威事实：与 `RestoreHostile`
 // 同形，供服务端启动在首 tick 前接线。校验与容量拒绝由 entity 侧执行，
 // 失败整体返回错误且不改变既有集合。

@@ -150,6 +150,13 @@ func newHostileChaseWorld(
 	return engine, manager, func(list []hostileTargetPlayer) { targets = list }
 }
 
+// advanceHostileManager 是 manager 编排的测试推进入口：以当前活动 tunables
+// 快照委托 `advanceWithTunables`（生产路径由 Server.step 传入本 tick 冻结的
+// TickTunables，活动快照读取留在测试侧以不触碰 audit 的参数束捕获门禁）。
+func advanceHostileManager(manager *hostileManager) {
+	manager.advanceWithTunables(runtime.ActiveTickTunables())
+}
+
 // waitForChaseResults 等待 worker 把 count 份结果送回 channel（flat 世界的
 // A* 在毫秒内完成；超时视为 worker 纪律破坏）。
 func waitForChaseResults(t *testing.T, manager *hostileManager, count int) {
@@ -181,7 +188,7 @@ func TestHostileChaseSelectsNearestSameDimensionLivePlayer(t *testing.T) {
 		chaseTarget(0x01, 1, [3]float32{20.5, 1, 0.5}), // 距 20
 		chaseTarget(0x02, 1, [3]float32{10.5, 1, 0.5}), // 距 10
 	})
-	manager.advance()
+	advanceHostileManager(manager)
 	if got := engine.HostileMobs()[0].PlayerID; got != chasePlayerID(0x02) {
 		t.Fatalf("目标=%v，想要距离更近的 %v", got, chasePlayerID(0x02))
 	}
@@ -195,7 +202,7 @@ func TestHostileChaseTieBreaksEquidistantByPlayerIDBytes(t *testing.T) {
 		chaseTarget(0x05, 1, [3]float32{10.5, 1, 0.5}),
 		chaseTarget(0x03, 1, [3]float32{-9.5, 1, 0.5}),
 	})
-	manager.advance()
+	advanceHostileManager(manager)
 	if got := engine.HostileMobs()[0].PlayerID; got != chasePlayerID(0x03) {
 		t.Fatalf("等距目标=%v，想要字节序较小的 %v", got, chasePlayerID(0x03))
 	}
@@ -212,7 +219,7 @@ func TestHostileChaseIgnoresOtherDimensionAndClearsStaleTarget(t *testing.T) {
 	foreign.dimension = core.DimensionID(9)
 	setTargets([]hostileTargetPlayer{foreign})
 	now := engine.WorldTime()
-	manager.advance()
+	advanceHostileManager(manager)
 	updated := engine.HostileMobs()[0]
 	if updated.HasTarget {
 		t.Fatal("其它维度的玩家被选为目标")
@@ -231,7 +238,7 @@ func TestHostileChaseBuildsAtMostTwoSnapshotsSmallestIDsFirst(t *testing.T) {
 		restoreChaseHostile(t, engine, chaseMob(id, mgl32.Vec3{0.5, 1, float32(id)}))
 	}
 	setTargets([]hostileTargetPlayer{chaseTarget(0x02, 1, [3]float32{10.5, 1, 0.5})})
-	manager.advance()
+	advanceHostileManager(manager)
 	if !chaseSlot(t, manager, 5).pathInFlight {
 		t.Fatal("ID 最小的到期夜行者 5 未被派发")
 	}
@@ -248,9 +255,9 @@ func TestHostileChaseBuildsAtMostTwoSnapshotsSmallestIDsFirst(t *testing.T) {
 	}
 	// 其余顺延：结果落地、名额归还后的下一次推进轮到 ID 9。
 	waitForChaseResults(t, manager, 2)
-	manager.advance()
+	advanceHostileManager(manager)
 	waitForChaseResults(t, manager, 1)
-	manager.advance()
+	advanceHostileManager(manager)
 	if !chaseSlot(t, manager, 9).pathInFlight && chaseSlot(t, manager, 9).path == nil {
 		t.Fatal("顺延的夜行者 9 未在后续 tick 获得重规划")
 	}
@@ -262,14 +269,14 @@ func TestHostileChaseDefersUntilRepathDue(t *testing.T) {
 	mob.NextRepathTicks = engine.WorldTime() + 3
 	restoreChaseHostile(t, engine, mob)
 	setTargets([]hostileTargetPlayer{chaseTarget(0x02, 1, [3]float32{10.5, 1, 0.5})})
-	manager.advance()
+	advanceHostileManager(manager)
 	if chaseSlot(t, manager, 11).pathInFlight {
 		t.Fatal("未到期的夜行者被派发")
 	}
 	for range 3 {
 		engine.Step()
 	}
-	manager.advance()
+	advanceHostileManager(manager)
 	if !chaseSlot(t, manager, 11).pathInFlight {
 		t.Fatal("到期夜行者未被派发")
 	}
@@ -284,7 +291,7 @@ func TestHostileChaseFullSlotsDeferWithoutBlocking(t *testing.T) {
 	manager.semaphore <- struct{}{}
 	done := make(chan struct{})
 	go func() {
-		manager.advance()
+		advanceHostileManager(manager)
 		close(done)
 	}()
 	select {
@@ -300,7 +307,7 @@ func TestHostileChaseFullSlotsDeferWithoutBlocking(t *testing.T) {
 	<-manager.semaphore
 	<-manager.semaphore
 	engine.Step()
-	manager.advance()
+	advanceHostileManager(manager)
 	if !chaseSlot(t, manager, 11).pathInFlight {
 		t.Fatal("名额归还后夜行者未被重新派发")
 	}
@@ -323,7 +330,7 @@ func TestHostileChaseAppliesResultsByIDAndDropsStale(t *testing.T) {
 		mobID: 5, generation: 4, target: target, dimension: core.Overworld,
 		result: pathfind.PathResult{Waypoints: []pathfind.PathCell{{X: 1, Y: 1, Z: 5}}},
 	}
-	manager.advance()
+	advanceHostileManager(manager)
 	if got := chaseSlot(t, manager, 5).path; got == nil || len(got.Waypoints) != 1 {
 		t.Fatalf("夜行者 5 的结果未应用：%+v", got)
 	}
@@ -339,7 +346,7 @@ func TestHostileChaseAppliesResultsByIDAndDropsStale(t *testing.T) {
 		mobID: 5, generation: 4, target: target, dimension: core.Overworld,
 		result: pathfind.PathResult{Waypoints: []pathfind.PathCell{{X: 2, Y: 1, Z: 5}}},
 	}
-	manager.advance()
+	advanceHostileManager(manager)
 	if got := chaseSlot(t, manager, 5).path; got != nil {
 		t.Fatal("世代过期的结果被应用")
 	}
@@ -351,7 +358,7 @@ func TestHostileChaseAppliesResultsByIDAndDropsStale(t *testing.T) {
 		mobID: 5, generation: 5, target: chasePlayerID(0x09), dimension: core.Overworld,
 		result: pathfind.PathResult{Waypoints: []pathfind.PathCell{{X: 2, Y: 1, Z: 5}}},
 	}
-	manager.advance()
+	advanceHostileManager(manager)
 	if got := chaseSlot(t, manager, 5).path; got != nil {
 		t.Fatal("目标变化的结果被应用")
 	}
@@ -361,7 +368,7 @@ func TestHostileChaseDropsResultWhenRevisionChanged(t *testing.T) {
 	engine, manager, setTargets := newHostileChaseWorld(t, nil)
 	restoreChaseHostile(t, engine, chaseMob(11, mgl32.Vec3{0.5, 1, 0.5}))
 	setTargets([]hostileTargetPlayer{chaseTarget(0x02, 1, [3]float32{10.5, 1, 0.5})})
-	manager.advance()
+	advanceHostileManager(manager)
 	waitForChaseResults(t, manager, 1)
 	// 在应用前让结果携带的 revision 过期：应用阶段必须整体丢弃并把重规划
 	// 排到下一 tick。
@@ -371,7 +378,7 @@ func TestHostileChaseDropsResultWhenRevisionChanged(t *testing.T) {
 	}
 	manager.results <- outcome
 	now := engine.WorldTime()
-	manager.advance()
+	advanceHostileManager(manager)
 	if got := chaseSlot(t, manager, 11).path; got != nil {
 		t.Fatal("revision 过期的结果被应用")
 	}
@@ -385,7 +392,7 @@ func TestHostileChaseDispatchDoesNotWaitForAStar(t *testing.T) {
 	restoreChaseHostile(t, engine, chaseMob(11, mgl32.Vec3{0.5, 1, 0.5}))
 	setTargets([]hostileTargetPlayer{chaseTarget(0x02, 1, [3]float32{10.5, 1, 0.5})})
 	// 派发式推进在同一次调用内绝不等待 A*：返回时结果尚未应用。
-	manager.advance()
+	advanceHostileManager(manager)
 	slot := chaseSlot(t, manager, 11)
 	if !slot.pathInFlight {
 		t.Fatal("派发未进入在途状态")
@@ -401,9 +408,9 @@ func TestHostileChaseClampsGoalToWindowEdgeTowardPlayer(t *testing.T) {
 	restoreChaseHostile(t, engine, chaseMob(11, mgl32.Vec3{0.5, 1, 0.5}))
 	// 目标水平 20 格，越出 ±16 窗口：终点必须钳到朝玩家方向的窗缘可站立格。
 	setTargets([]hostileTargetPlayer{chaseTarget(0x02, 1, [3]float32{20.5, 1, 0.5})})
-	manager.advance()
+	advanceHostileManager(manager)
 	waitForChaseResults(t, manager, 1)
-	manager.advance()
+	advanceHostileManager(manager)
 	path := chaseSlot(t, manager, 11).path
 	if path == nil {
 		t.Fatal("钳窗后的路径未应用")
@@ -438,9 +445,9 @@ func TestHostileChaseInvalidatesPathOnRevisionMismatch(t *testing.T) {
 	engine, manager, setTargets := newHostileChaseWorld(t, nil)
 	restoreChaseHostile(t, engine, chaseMob(11, mgl32.Vec3{0.5, 1, 0.5}))
 	setTargets([]hostileTargetPlayer{chaseTarget(0x02, 1, [3]float32{10.5, 1, 0.5})})
-	manager.advance()
+	advanceHostileManager(manager)
 	waitForChaseResults(t, manager, 1)
-	manager.advance()
+	advanceHostileManager(manager)
 	slot := chaseSlot(t, manager, 11)
 	if slot.path == nil {
 		t.Fatal("前置失败：路径未应用")
@@ -449,7 +456,7 @@ func TestHostileChaseInvalidatesPathOnRevisionMismatch(t *testing.T) {
 	// waypoint 提交前的重验必须清空路径并把重规划排到下一 tick。
 	slot.path.Revisions[0].Revision++
 	now := engine.WorldTime()
-	manager.advance()
+	advanceHostileManager(manager)
 	if slot.path != nil {
 		t.Fatal("revision 失配后旧路径未被清空")
 	}
@@ -464,7 +471,7 @@ func TestHostileChaseStopsAndFreezesAttackWithinRange(t *testing.T) {
 	restoreChaseHostile(t, engine, chaseMob(11, mgl32.Vec3{2.0, 1, 0.5}))
 	setTargets([]hostileTargetPlayer{chaseTarget(0x02, 1, [3]float32{0.5, 1, 0.5})})
 	engine.SetPlayerPositionForTest(1, mgl32.Vec3{0.5, 1, 0.5})
-	manager.advance()
+	advanceHostileManager(manager)
 	if slot := chaseSlot(t, manager, 11); slot.path != nil || slot.pathInFlight {
 		t.Fatal("攻击距离内仍发起寻路")
 	}
@@ -486,7 +493,7 @@ func TestHostileChaseHoldsAttackWhileCooldownActive(t *testing.T) {
 	restoreChaseHostile(t, engine, mob)
 	setTargets([]hostileTargetPlayer{chaseTarget(0x02, 1, [3]float32{0.5, 1, 0.5})})
 	engine.SetPlayerPositionForTest(1, mgl32.Vec3{0.5, 1, 0.5})
-	manager.advance()
+	advanceHostileManager(manager)
 	engine.Step()
 	if got, ok := engine.Player(1); !ok || got.Health != core.MaxHealth {
 		t.Fatalf("冷却中的夜行者仍结算攻击：生命=%v（ok=%v）", got.Health, ok)
@@ -501,7 +508,7 @@ func TestHostileChaseCooldownOneAttacksSameTick(t *testing.T) {
 	setTargets([]hostileTargetPlayer{chaseTarget(0x02, 1, [3]float32{0.5, 1, 0.5})})
 	engine.SetPlayerPositionForTest(1, mgl32.Vec3{0.5, 1, 0.5})
 
-	manager.advance()
+	advanceHostileManager(manager)
 	engine.Step()
 	if got, ok := engine.Player(1); !ok || got.Health != core.MaxHealth-3 {
 		t.Fatalf("cooldown 1 同 tick 生命=%v（ok=%v），想要 %d", got.Health, ok, core.MaxHealth-3)
@@ -518,9 +525,9 @@ func TestHostileChaseNeverCutsCornersWithoutPath(t *testing.T) {
 	restoreChaseHostile(t, engine, chaseMob(11, mgl32.Vec3{2.5, 1, 2.5}))
 	setTargets([]hostileTargetPlayer{chaseTarget(0x02, 1, [3]float32{20.5, 1, 2.5})})
 	for cycle := 0; cycle < 4; cycle++ {
-		manager.advance()
+		advanceHostileManager(manager)
 		if pending := len(manager.results); pending > 0 {
-			manager.advance() // 应用失败结果：清路径、重规划排下一 tick
+			advanceHostileManager(manager) // 应用失败结果：清路径、重规划排下一 tick
 		}
 		engine.Step()
 	}
@@ -541,9 +548,9 @@ func TestHostileChaseWalksWaypointsAndAttacksTarget(t *testing.T) {
 	setTargets([]hostileTargetPlayer{chaseTarget(0x02, 1, [3]float32{10.5, 1, 0.5})})
 	attacked := false
 	for cycle := 0; cycle < 200 && !attacked; cycle++ {
-		manager.advance()
+		advanceHostileManager(manager)
 		if pending := len(manager.results); pending > 0 {
-			manager.advance()
+			advanceHostileManager(manager)
 		}
 		engine.Step()
 		mob := engine.HostileMobs()[0]
@@ -557,7 +564,7 @@ func TestHostileChaseWalksWaypointsAndAttacksTarget(t *testing.T) {
 		t.Fatal("夜行者未在预算周期内追至攻击距离")
 	}
 	// 进入攻击距离后的第一个推进冻结攻击意图，下一 tick 经权威模拟结算。
-	manager.advance()
+	advanceHostileManager(manager)
 	engine.Step()
 	if got, ok := engine.Player(1); !ok || got.Health >= core.MaxHealth {
 		t.Fatalf("进入攻击距离后未冻结攻击意图：生命=%v（ok=%v）", got.Health, ok)

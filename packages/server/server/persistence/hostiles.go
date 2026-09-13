@@ -344,8 +344,10 @@ func cloneAndSortHostileRecords(records []storage.StoredHostileMob) []storage.St
 	return clone
 }
 
-// hostileStorageRecord 把权威夜行者值快照转换为存档记录：字段面一一对应，
-// 路径与 worker generation 等运行时派生物不在权威值内，天然不落盘。
+// hostileStorageRecord 把权威敌怪值快照转换为存档记录：字段面一一对应，
+// 路径与 worker generation 等运行时派生物不在权威值内，天然不落盘。kind 随
+// v2 记录尾部字节持久化；射击冷却是瞬态投影，刻意不映射（重启后从就绪态
+// 开始）。
 func hostileStorageRecord(mob contract.HostileMob) storage.StoredHostileMob {
 	return storage.StoredHostileMob{
 		ID:              mob.ID,
@@ -362,11 +364,12 @@ func hostileStorageRecord(mob contract.HostileMob) storage.StoredHostileMob {
 		PlayerID:        mob.PlayerID,
 		NextRepathTicks: mob.NextRepathTicks,
 		DistantTicks:    mob.DistantTicks,
+		Kind:            mob.Kind,
 	}
 }
 
 // hostileRestoreRecord 把存档记录恢复为权威值快照：与 hostileStorageRecord
-// 互为逆变换，供启动恢复接线使用。
+// 互为逆变换，供启动恢复接线使用。射击冷却不在记录内，恢复后恒为就绪态。
 func hostileRestoreRecord(record storage.StoredHostileMob) contract.HostileMob {
 	return contract.HostileMob{
 		ID:        record.ID,
@@ -385,5 +388,6 @@ func hostileRestoreRecord(record storage.StoredHostileMob) contract.HostileMob {
 		PlayerID:        record.PlayerID,
 		NextRepathTicks: record.NextRepathTicks,
 		DistantTicks:    record.DistantTicks,
+		Kind:            record.Kind,
 	}
 }

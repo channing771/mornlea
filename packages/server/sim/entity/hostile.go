@@ -17,12 +17,15 @@ import (
 // 与 `internal/storage` 夜行者存档 codec 中的周期/累计上限同源，任何一侧单独
 // 调整都必须同步另一侧并更新 golden。
 const (
-	// maxHostiles 是全服同时存在的夜行者数量上限。
+	// maxHostiles 是全服同时存在的敌怪（两类 kind 共享）数量上限。
 	maxHostiles = 64
 	// hostileCooldownPeriodTicks 是攻击/受击/灼烧三个计时器共享的周期长度。
 	hostileCooldownPeriodTicks uint8 = 20
 	// maxHostileDistantTicks 是远离全部 active 玩家的 despawn 累计 tick 上限。
 	maxHostileDistantTicks uint16 = 600
+	// hostileShootCooldownTicks 是掷骨者两次射击之间的固定冷却周期（tick）。
+	// 瞬态计时：不入快照与存档，重启后从就绪态开始。
+	hostileShootCooldownTicks uint8 = 40
 )
 
 // hostileState 是一只夜行者的权威身体事实。字段面与 `internal/storage` 的
@@ -37,18 +40,24 @@ type hostileState struct {
 	state physics.State
 	input physics.Input
 	id    uint64
-	// dimension 恒为夜行者所在维度；恢复与生成都校验维度存在。
+	// dimension 恒为敌怪所在维度；恢复与生成都校验维度存在。
 	dimension core.DimensionID
 	yaw       float32
+	// kind 是敌怪种类（0=夜行者、1=掷骨者，与存档/线上同域）：两类共享
+	// 生成预算、灼烧、远离消失与死亡结算的全部代码路径，行为差异只收敛在
+	// 生成 kind 分派、掉落批次与编排层 advisor 三处。
+	kind uint8
 	// health 合法区间 1..core.MaxHealth；归零的个体在同一权威 tick 内走死亡
 	// 结算（移除 + 掉落）后不会留存。
 	health uint8
 	// attackCooldown/hurtCooldown 是攻击与受击保护的剩余 tick；burnCooldown
 	// 是灼烧周期的剩余 tick（露天白昼逐 tick 递减，归零结算 1 点伤害并回到
-	// 满周期；遮顶或夜间重置回满周期）。
+	// 满周期；遮顶或夜间重置回满周期）。shootCooldown 是掷骨者射击冷却的
+	// 剩余 tick（0 = 就绪）——瞬态，不入快照或存档，恢复恒就绪。
 	attackCooldown uint8
 	hurtCooldown   uint8
 	burnCooldown   uint8
+	shootCooldown  uint8
 	// hasTarget 与 targetPlayer 成对表达追逐目标；无目标时 `targetPlayer`
 	// 必须为零值，与存档记录的成对约束一致。目标选择由 server 编排层做出并经
 	// `PlanHostileChase` 写回权威事实；`nextRepathTicks` 是持久化世界时间轴上
@@ -138,6 +147,7 @@ func (engine *engineContext) RestoreHostile(mob HostileMob) error {
 		id:              mob.ID,
 		dimension:       mob.Dimension,
 		yaw:             mob.Yaw,
+		kind:            mob.Kind,
 		health:          mob.Health,
 		attackCooldown:  mob.AttackCooldown,
 		hurtCooldown:    mob.HurtCooldown,
@@ -187,6 +197,12 @@ func validateHostileMob(mob HostileMob) error {
 		return fmt.Errorf("sim: hostile distant ticks %d exceeds limit %d",
 			mob.DistantTicks, maxHostileDistantTicks)
 	}
+	// kind 值域与存档侧 `validateHostileRecord` 的 {0,1} 矩阵同域同判：两个包
+	// 靠同值常量与对齐的用例保持一致，越界记录在恢复入口整体拒绝。
+	if mob.Kind > HostileKindBoneThrower {
+		return fmt.Errorf("sim: hostile kind %d outside domain {0,%d}",
+			mob.Kind, HostileKindBoneThrower)
+	}
 	if !mob.HasTarget {
 		if mob.PlayerID != (core.PlayerID{}) {
 			return errors.New("sim: hostile without target keeps player ID")
@@ -224,6 +240,10 @@ func (engine *engineContext) hostileMobAt(index int) HostileMob {
 		PlayerID:        entry.targetPlayer,
 		NextRepathTicks: entry.nextRepathTicks,
 		DistantTicks:    entry.distantTicks,
+		Kind:            entry.kind,
+		// ShootCooldown 是瞬态投影：编排层据此决定是否提交射击意图，
+		// 持久化转换不得拷贝本字段（重启后冷却从就绪态开始）。
+		ShootCooldown: entry.shootCooldown,
 	}
 }
 
@@ -438,10 +458,12 @@ func (engine *engineContext) settleHostileDeaths(pending *pendingChunkChanges) {
 	}
 }
 
-// dropHostileLoot 在死亡位置所在 chunk 环形尝试放置 1 个腐肉：候选 chunk 按
-// deathDropChunks 的既定全序（环形半径 0、1、2…，同圈稳定排序）逐个预演，
-// 首个有容量的 chunk 承接掉落；全部已加载可用 chunk 均满时确定性省略掉落，
-// 死亡仍由调用方完成。
+// dropHostileLoot 在死亡位置所在 chunk 环形尝试放置本个体的掉落批次：候选
+// chunk 按 deathDropChunks 的既定全序（环形半径 0、1、2…，同圈稳定排序）逐个
+// 预演，首个有容量的 chunk 承接整批掉落；全部已加载可用 chunk 均满时确定性
+// 省略掉落，死亡仍由调用方完成。批次内容按 kind 分派（共享同一预演/提交
+// 路径，容量不足整批保留，绝不部分掉落）：夜行者腐肉 1（既有契约不变），
+// 掷骨者骨头 0..2 + 弓 1/8（确定性哈希决定，见 `hostileDeathBatch`）。
 func (engine *engineContext) dropHostileLoot(
 	entry *hostileState,
 	pending *pendingChunkChanges,
@@ -450,8 +472,12 @@ func (engine *engineContext) dropHostileLoot(
 	if dimension == nil {
 		return
 	}
+	batch := engine.hostileDeathBatch(entry)
+	if len(batch) == 0 {
+		// 两项判定都未命中（0 骨头 + 无弓）的掷骨者不发起掉落预演。
+		return
+	}
 	death := blockPosOf(entry.state.Position)
-	batch := [1]core.ItemStack{{Item: core.ItemRottenFlesh, Count: 1}}
 	for _, key := range engine.deathDropChunks(entry.dimension, death.Chunk()) {
 		chunk, ready := dimension.ReadyChunk(key.Pos)
 		if !ready {
@@ -471,6 +497,31 @@ func (engine *engineContext) dropHostileLoot(
 		engine.touchChunk(key, pending)
 		return
 	}
+}
+
+// hostileDeathBatch 构造单只敌怪的死亡掉落批：夜行者恒 1 腐肉；掷骨者由
+// (worldSeed, 权威 tick, 敌怪 ID) 的确定性哈希掷出骨头 0..2 与弓 1/8，同一
+// 击杀事件重放逐件一致，掉落容量被拒也不会重掷判定。
+func (engine *engineContext) hostileDeathBatch(entry *hostileState) []core.ItemStack {
+	if entry.kind != HostileKindBoneThrower {
+		return []core.ItemStack{{Item: core.ItemRottenFlesh, Count: 1}}
+	}
+	bones, bow := sampler.HostileHurlerDropRolls(
+		engine.seed, engine.worldTime.Load(), entry.id,
+	)
+	batch := make([]core.ItemStack, 0, 2)
+	if bones > 0 {
+		batch = append(batch, core.ItemStack{Item: core.ItemBone, Count: uint8(bones)})
+	}
+	if bow {
+		// 掉落的弓是完好形态：耐久按注册表上限满值表达（`ItemStack.Valid`
+		// 对耐久物品要求 1..上限，零耐久的弓不是合法栏位值）。
+		durability, _ := core.ItemMaxDurability(core.ItemBow)
+		batch = append(batch, core.ItemStack{
+			Item: core.ItemBow, Count: 1, Durability: durability,
+		})
+	}
+	return batch
 }
 
 // horizontalDistanceSq 返回两点间的水平距离平方，供半径判定统一使用：

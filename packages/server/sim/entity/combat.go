@@ -170,6 +170,11 @@ func (engine *engineContext) advanceCombatWithLimits(
 	var intents [maxCombatIntents]combatIntent
 	intentCount := 0
 	for index := range engine.hostiles.entries {
+		// 掷骨者无近战意图：kind 门禁在意图构建点拦截，即便攻击意图经任何
+		// 路径被冻结也不会进入近战结算（规格：掷骨者不得以近战方式伤害玩家）。
+		if engine.hostiles.entries[index].kind == HostileKindBoneThrower {
+			continue
+		}
 		attacker := combatSnapshotForActor(
 			snapshots[:snapshotCount],
 			combatActor{kind: core.CombatTargetHostile, id: engine.hostiles.entries[index].id},

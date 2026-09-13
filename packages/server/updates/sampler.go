@@ -251,6 +251,55 @@ func (s Sampler) HostileCandidateHash(seed int64, tick uint64, x, y, z int32) ui
 // 不与任何随机面判定流同源。
 const ProjectileSpawnSalt = 0x5052_4F4A_4543_5449
 
+// HostileShotSpreadSalt 是掷骨者射击散布判定盐值：取 ASCII "SHOTSPRD" 的位
+// 模式。散布决定骨刺的实际弹道，与投射物 ID 派生流互不同源——同一 tick 发射
+// 的多条骨刺各自独立散布，ID 派生不得反向影响弹道。
+const HostileShotSpreadSalt = 0x5348_4F54_5350_5244
+
+// HostileHurlerDropSalt 是掷骨者死亡掉落判定盐值：取 ASCII "HURLDROP" 的位
+// 模式，与全部既有盐值互异。骨头数量与弓的命中是同一击杀事件的两条独立判定，
+// 共用本盐值链上先后两次抽签（与作物产量的同链双判定先例同形）。
+const HostileHurlerDropSalt = 0x4855_524C_4452_4F50
+
+// HostileShotSpreadMaxRadians 是掷骨者射击散布的单轴上限（rad）：水平与竖直
+// 偏移各自独立抽样、绝对值都 ≤ 本值。固定数值契约（±0.06 rad），调整即行为
+// 变更，由 entity 与 updates 两侧测试钉住。
+const HostileShotSpreadMaxRadians = float32(0.06)
+
+// hostileShotSpreadQuantum 是散布偏移的均匀抽样分母：哈希低 20 位映射到
+// [0,1)，粒度约 5.7e-7 rad，远低于任何可观察弹道差异，同时避免把整个 u64
+// 折算进 f32 时的精度损失。
+const hostileShotSpreadQuantum = 1 << 20
+
+// HostileShotSpread 掷一次掷骨者射击的确定性散布：(worldSeed, tick, 敌怪 ID)
+// 的纯整数 splitmix64 哈希派生水平（yaw）与竖直（pitch）两个角偏移，各自
+// 独立抽样、绝对值都 ≤ HostileShotSpreadMaxRadians。无进程级随机源，相同
+// 输入的重放逐位一致。
+func (s Sampler) HostileShotSpread(seed int64, tick uint64, id uint64) (yawOffset, pitchOffset float32) {
+	hash := s.SplitMix64(uint64(seed) ^ HostileShotSpreadSalt)
+	hash = s.SplitMix64(hash ^ tick)
+	hash = s.SplitMix64(hash ^ id)
+	yawOffset = hostileSpreadOffset(hash)
+	return yawOffset, hostileSpreadOffset(s.SplitMix64(hash))
+}
+
+// hostileSpreadOffset 把一次抽签折算为 [-max, +max] 内的均匀角偏移。
+func hostileSpreadOffset(hash uint64) float32 {
+	unit := float32(hash&(hostileShotSpreadQuantum-1)) / hostileShotSpreadQuantum
+	return (unit*2 - 1) * HostileShotSpreadMaxRadians
+}
+
+// HostileHurlerDropRolls 掷一次掷骨者死亡掉落：(worldSeed, tick, 敌怪 ID)
+// 的纯整数哈希链先后抽出骨头数量（0..2，hash%3）与弓的命中（1/8，沿树苗
+// `hash&7==0` 先例）。同一击杀事件的重放逐位一致；容量被拒不会重掷判定。
+func (s Sampler) HostileHurlerDropRolls(seed int64, tick uint64, id uint64) (bones uint8, bow bool) {
+	hash := s.SplitMix64(uint64(seed) ^ HostileHurlerDropSalt)
+	hash = s.SplitMix64(hash ^ tick)
+	hash = s.SplitMix64(hash ^ id)
+	bones = uint8(hash % 3)
+	return bones, s.SplitMix64(hash)&7 == 0
+}
+
 // ProjectileSpawnHash 把投射物的出生事实折进哈希链：seed 与 tick 先混入，再
 // 依次混入维度、弹种、发射者与出生位置三个分量的 IEEE-754 位型。位置取位型
 // 而非整数格：同一格内连续两次发射仍得到不同 ID，相同输入的重放则逐位一致。

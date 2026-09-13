@@ -198,6 +198,8 @@ func TestSamplerSaltConstants(t *testing.T) {
 		{"FarmlandRevertRollSalt", FarmlandRevertRollSalt, 0xfa1abb1edeadc0de},
 		{"SaplingGrowthRollSalt", SaplingGrowthRollSalt, 0x5341_504C_4752_4F57},
 		{"ProjectileSpawnSalt", ProjectileSpawnSalt, 0x5052_4F4A_4543_5449},
+		{"HostileShotSpreadSalt", HostileShotSpreadSalt, 0x5348_4F54_5350_5244},
+		{"HostileHurlerDropSalt", HostileHurlerDropSalt, 0x4855_524C_4452_4F50},
 	} {
 		if v.got != v.want {
 			t.Fatalf("%s=%#x，want %#x", v.name, v.got, v.want)
@@ -230,9 +232,11 @@ func TestSamplerSaltsPairwiseDistinct(t *testing.T) {
 		{"LeavesSaplingDropSalt", LeavesSaplingDropSalt},
 		{"PassiveGrazeRollSalt", PassiveGrazeRollSalt},
 		{"ProjectileSpawnSalt", ProjectileSpawnSalt},
+		{"HostileShotSpreadSalt", HostileShotSpreadSalt},
+		{"HostileHurlerDropSalt", HostileHurlerDropSalt},
 	}
-	if len(salts) != 11 {
-		t.Fatalf("盐值清单长度 %d，想要 11——新增盐值后必须把本断言的清单同步扩容", len(salts))
+	if len(salts) != 13 {
+		t.Fatalf("盐值清单长度 %d，想要 13——新增盐值后必须把本断言的清单同步扩容", len(salts))
 	}
 	for i := range salts {
 		for j := i + 1; j < len(salts); j++ {
@@ -294,4 +298,107 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// TestHostileShotSpreadKAT 把掷骨者射击散布钉在固定输入的实测输出上：散布是
+// 命中判定的数值契约输入，任何搅拌顺序或映射漂移都会让这里的逐位比对变红。
+func TestHostileShotSpreadKAT(t *testing.T) {
+	sampler := Sampler{}
+	for _, v := range []struct {
+		seed      int64
+		tick      uint64
+		id        uint64
+		wantYaw   float32
+		wantPitch float32
+	}{
+		{0, 1, 1, 0.0020711517, -0.0060293195},
+		{42, 13000, 0xdeadbeefcafebabe, -0.049812812, 0.047607422},
+		{-7, 987654321, 7777, 0.055351753, -0.058046035},
+	} {
+		gotYaw, gotPitch := sampler.HostileShotSpread(v.seed, v.tick, v.id)
+		if gotYaw != v.wantYaw || gotPitch != v.wantPitch {
+			t.Fatalf("HostileShotSpread(%d,%d,%d)=(%v,%v)，want (%v,%v)",
+				v.seed, v.tick, v.id, gotYaw, gotPitch, v.wantYaw, v.wantPitch)
+		}
+	}
+}
+
+// TestHostileShotSpreadBoundedAndVaried 钉住散布的形状契约：偏移以 0.06 rad
+// 为界（固定数值契约）、不同输入覆盖多种偏移（不是常量）、相同输入重放
+// 逐位一致。
+func TestHostileShotSpreadBoundedAndVaried(t *testing.T) {
+	sampler := Sampler{}
+	limit := HostileShotSpreadMaxRadians
+	seen := make(map[[2]float32]struct{})
+	for i := range 20000 {
+		seed := int64(i)*7919 - 12345
+		tick := uint64(i) * 1_000_003
+		yaw, pitch := sampler.HostileShotSpread(seed, tick, uint64(i)*31+1)
+		if yaw > limit || yaw < -limit || pitch > limit || pitch < -limit {
+			t.Fatalf("散布偏移 (%v,%v) 越出 ±%v", yaw, pitch, limit)
+		}
+		seen[[2]float32{yaw, pitch}] = struct{}{}
+	}
+	if len(seen) < 10000 {
+		t.Fatalf("2 万个输入只覆盖 %d 种偏移，散布映射退化", len(seen))
+	}
+	aYaw, aPitch := sampler.HostileShotSpread(3, 100, 55)
+	bYaw, bPitch := sampler.HostileShotSpread(3, 100, 55)
+	if aYaw != bYaw || aPitch != bPitch {
+		t.Fatalf("相同输入重放不一致：(%v,%v) vs (%v,%v)", aYaw, aPitch, bYaw, bPitch)
+	}
+}
+
+// TestHostileHurlerDropRollsKAT 把掷骨者死亡掉落判定钉在固定输入的实测输出
+// 上：骨头数量 0..2 与弓的 1/8 判定共用一条盐值链，任何漂移都在此变红。
+func TestHostileHurlerDropRollsKAT(t *testing.T) {
+	sampler := Sampler{}
+	for _, v := range []struct {
+		seed  int64
+		tick  uint64
+		id    uint64
+		bones uint8
+		bow   bool
+	}{
+		{0, 4000, 21, 2, true},
+		{42, 4000, 0xdeadbeefcafebabe, 0, false},
+		{-7, 987654321, 7777, 0, false},
+	} {
+		gotBones, gotBow := sampler.HostileHurlerDropRolls(v.seed, v.tick, v.id)
+		if gotBones != v.bones || gotBow != v.bow {
+			t.Fatalf("HostileHurlerDropRolls(%d,%d,%d)=(%d,%v)，want (%d,%v)",
+				v.seed, v.tick, v.id, gotBones, gotBow, v.bones, v.bow)
+		}
+	}
+}
+
+// TestHostileHurlerDropRollsDistribution 钉住掉落判定的分布契约：骨头 0..2
+// 三档都要出现（比例约 1:1:1），弓命中率约 1/8（宽松边界），重放逐位一致。
+func TestHostileHurlerDropRollsDistribution(t *testing.T) {
+	sampler := Sampler{}
+	var boneCounts [3]int
+	bowHits := 0
+	const samples = 60000
+	for i := range samples {
+		bones, bow := sampler.HostileHurlerDropRolls(int64(i)*7919-12345, uint64(i)*1_000_003, uint64(i)*31+1)
+		boneCounts[bones]++
+		if bow {
+			bowHits++
+		}
+	}
+	for count, hit := range boneCounts {
+		ratio := float64(hit) / samples
+		if ratio < 0.28 || ratio > 0.39 {
+			t.Fatalf("骨头 %d 根的比例=%v，越出均匀三档的宽松边界 [0.28, 0.39]", count, ratio)
+		}
+	}
+	bowRatio := float64(bowHits) / samples
+	if bowRatio < 0.1 || bowRatio > 0.16 {
+		t.Fatalf("弓命中率=%v，越出 1/8 的宽松边界 [0.10, 0.16]", bowRatio)
+	}
+	firstBones, firstBow := sampler.HostileHurlerDropRolls(9, 9, 9)
+	secondBones, secondBow := sampler.HostileHurlerDropRolls(9, 9, 9)
+	if firstBones != secondBones || firstBow != secondBow {
+		t.Fatal("相同输入重放不一致：掉落判定引入了隐藏状态")
+	}
 }

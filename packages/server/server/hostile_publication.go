@@ -77,6 +77,7 @@ func (server *Server) publishHostiles(
 				Velocity: mob.State.Velocity,
 				Yaw:      mob.Yaw,
 				Health:   mob.Health,
+				Kind:     mob.Kind,
 			})
 			continue
 		}
@@ -86,6 +87,7 @@ func (server *Server) publishHostiles(
 			Position:  mob.State.Position,
 			Yaw:       mob.Yaw,
 			Health:    mob.Health,
+			Kind:      mob.Kind,
 		})
 	}
 	if len(spawns) != 0 {
