@@ -54,8 +54,9 @@ const (
 )
 
 // 分堆命令族（`CommandMoveStackPartial` 与 `CommandQuickMoveStack`）的视图域
-// 值域。值与协议侧 `network.StackView*` 常量逐值相同（ingress 直接搬运 wire
-// 的视图字节，漂移由 contract 测试钉住）；sim 按它分派结算相位与值域上界。
+// 值域。值与协议侧 `network.StackView*` 常量逐值相同（ingress 按两侧常量
+// 显式映射而不是透传字节，等值由 contract 钉值测试拦住漂移）；sim 按它
+// 分派结算相位与值域上界。
 // 零值即背包域，其它命令族不携带该字段，零值不会误入分堆路径。
 const (
 	// StackViewInventory 是背包视图域：统一索引 0..`core.InventorySlots`-1。
