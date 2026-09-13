@@ -276,6 +276,12 @@ func (engine *engineContext) playerCombatIntent(
 	if attacker == nil || !attacker.attacking || attacker.health == 0 || attacker.attackCooldown != 0 {
 		return combatIntent{}, false
 	}
+	// 弓（任一形态）没有近战语义（spec player-bow「持弓排除近战意图与采掘」）：
+	// 主输入位在持弓时让渡给拉弓域，持弓按住绝不生成近战意图——门禁放在意图
+	// 构建点而不是结算点，被排除的攻击者连目标扫描都不会启动。
+	if heldBow(attacker.selectedItem) {
+		return combatIntent{}, false
+	}
 	dimension := engine.dimension(attacker.dimension)
 	if dimension == nil {
 		return combatIntent{}, false

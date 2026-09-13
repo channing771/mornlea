@@ -103,6 +103,11 @@ type playerState struct {
 	// 它同样留在 playerState 而不是上移 actorState：伙伴不进食。
 	eating eatingState
 
+	// bow 是权威拉弓进度状态机（见 bow.go）：主输入位在持弓时的权威语义。
+	// 与 `eating` 同为瞬态字段，不持久化、不进入快照/哈希，也不上线协议；
+	// 伙伴不持弓拉射，因此与 `eating` 同理留在 playerState。
+	bow bowState
+
 	// armor 是四槽已装备护甲（按 `core.ArmorSlot` 槽位顺序）。装备区唯一写者
 	// 是权威 sim：恢复路径从存档装载、装备互换原子写槽、受击减免时扣耐久、
 	// 死亡与背包一并掉落。槽内只允许「空」或「恰好一件」的护甲件栈（堆叠
@@ -561,6 +566,13 @@ func (engine *engineContext) advanceActivePlayers() {
 			engine.tunables.EatingTicks,
 			session.viewContainer || !engine.sessionView(session).Ready,
 		)
+		// 拉弓与进食同相位推进（进食之后、物理步之前）：箭在这一刻生成，第一
+		// 步弹道推进发生在同 tick 稍后的投射物阶段。挂起求值与进食同源，两个
+		// 持续输入状态机对"容器打开/视野未就绪"的中断必须永远一致。
+		engine.advanceBowDraw(
+			session,
+			session.viewContainer || !engine.sessionView(session).Ready,
+		)
 		if player.reset {
 			continue
 		}
@@ -697,6 +709,9 @@ func (player *playerState) applyDamage(damage int32) {
 	// 因此都必须排在非正伤害的短路**之后**——摔落曲线在安全高度每次落地都会
 	// 算出负值，写在函数第一行会让"跳一下"打断进食。清空只丢进度，不碰背包。
 	player.eating = eatingState{}
+	// 受伤同样中断拉弓（spec「受伤与死亡 MUST 清零拉弓状态且不发射」）：排在
+	// 非正伤害短路之后的理由同上，清空只丢进度，不碰背包与弓耐久。
+	player.bow = bowState{}
 	// 真正挨一下会惊醒入睡的玩家（spec「受到伤害 SHALL 取消其入睡状态」）；
 	// 同样排在非正伤害短路之后。重生点刻意保留：受击只打断睡觉，不否定床。
 	player.sleeping = false
@@ -822,6 +837,9 @@ func (player *playerState) beginReset() {
 	// 死亡与位置跳变都经这里，进食进度随之作废：重生后站在出生点继续吃完
 	// 死前那半块面包没有任何语义，与 `mining` 上一行同理。
 	player.eating = eatingState{}
+	// 死亡与位置跳变同样作废拉弓进度（spec「死亡 MUST 清零拉弓状态且不发射」）：
+	// 重生后补完死前那一箭没有任何语义，与 `eating` 上一行同理。
+	player.bow = bowState{}
 	// 重生一律清醒：入睡位不跨「待重生」窗口保留，否则重生即睡会让下一次
 	// 全员跳夜判定混入一个不在世界里的玩家。
 	player.sleeping = false

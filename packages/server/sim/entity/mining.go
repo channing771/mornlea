@@ -255,10 +255,15 @@ func (engine *engineContext) advanceMining(
 	for _, id := range sessions[:count] {
 		session := engine.sessions[id]
 		player := session.player
+		held := player.inventory.Hotbar.Slots[player.inventory.Hotbar.Selected].Item
 		if !player.miningHeld || player.meleeSuppressedMining || player.bucketSuppressedMining ||
-			player.reset || !engine.sessionView(session).Ready || session.viewContainer {
+			player.reset || !engine.sessionView(session).Ready || session.viewContainer ||
+			heldBow(held) {
 			// 水桶抑制只活一个 tick：在这里消费自清，不泄漏到后续 tick；按住
 			// 意图保留，下一 tick 由持续输入重新累积。
+			// 手持任一形态弓时主输入位已让渡给拉弓域（spec player-bow「持弓
+			// 排除近战意图与采掘」）：采掘状态在本 tick 清零且不推进，弓也不
+			// 在任何采掘工具表里，规则侧按「无该工具」回退。
 			player.bucketSuppressedMining = false
 			player.mining = miningState{}
 			continue

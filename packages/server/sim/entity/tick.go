@@ -86,6 +86,9 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 					session.player.eatingHeld = false
 					session.player.sneakingHeld = false
 					session.player.mining = miningState{}
+					// 待出生/未激活的玩家不该残留拉弓进度：与采掘同形的防御
+					// 清零，正常路径下 `beginReset` 已经清过。
+					session.player.bow = bowState{}
 				}
 				result.Rejected = append(result.Rejected, Rejection{
 					Session:  command.Session,
@@ -103,6 +106,10 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 				player.eatingHeld = false
 				player.sneakingHeld = false
 				player.mining = miningState{}
+				// 整包被拒的非法输入把主输入位一并作废：拉弓进度随之清零且
+				// 不得结算发射——被拒绝的输入不是玩家松手，若只清位不清状态，
+				// 同一 tick 稍后的拉弓推进会把它当成发射判定点凭空放出一箭。
+				player.bow = bowState{}
 				result.Rejected = append(result.Rejected, Rejection{
 					Session:  command.Session,
 					Sequence: command.Sequence,
