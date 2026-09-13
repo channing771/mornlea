@@ -71,6 +71,7 @@ const (
 	CommandPlaceWater            = contract.CommandPlaceWater
 	CommandEquipArmor            = contract.CommandEquipArmor
 	CommandMoveStackPartial      = contract.CommandMoveStackPartial
+	CommandQuickMoveStack        = contract.CommandQuickMoveStack
 	StackViewInventory           = contract.StackViewInventory
 	StackViewCrafting            = contract.StackViewCrafting
 	StackViewContainer           = contract.StackViewContainer

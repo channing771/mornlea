@@ -239,7 +239,7 @@ func mergeStacks(source, target core.ItemStack) (nextSource, nextTarget core.Ite
 }
 
 // stackSplitAmount 按结算时点的权威来源栈推导部分移动数量：单件恒 1，半组
-// 向上取整（7→4、6→4、1→1）。这是三个视图域共用的唯一推导点——数量纪律
+// 向上取整（7→4、6→3、1→1）。这是三个视图域共用的唯一推导点——数量纪律
 // 要求服务端只对非空来源栈推导，wire 与命令载荷都不存在客户端可声明的数量
 // 字段；空源返回 false，由调用方按 RejectInvalidInput 整单拒绝。
 func stackSplitAmount(source core.ItemStack, single bool) (uint8, bool) {
@@ -443,11 +443,12 @@ func setChestViewSlot(
 	return next, chest, true
 }
 
-// applyContainerMove 处理跨容器移动命令（整堆 `CommandMoveFurnaceStack` 与
-// 容器视图半组/单件 `CommandMoveStackPartial`），成功时同时提交玩家物品与
-// 区块中的容器；按引用的 Kind 分派到熔炉或箱子各自独立的边界与约束检查。
-// 两族命令共享查看关系校验、区域路由与提交路径，只有合并语义（整堆交换 vs
-// 部分拒绝）与数量推导点不同。
+// applyContainerMove 处理跨容器移动命令（整堆 `CommandMoveFurnaceStack`、
+// 容器视图半组/单件 `CommandMoveStackPartial` 与容器视图快捷搬运
+// `CommandQuickMoveStack`），成功时同时提交玩家物品与区块中的容器；按引用
+// 的 Kind 分派到熔炉或箱子各自独立的边界与约束检查。三族命令共享查看关系
+// 校验、区域路由、回收预演与提交路径，只有合并语义（整堆交换 vs 部分拒绝
+// vs 固定目标序整堆转移）不同。
 func (engine *engineContext) applyContainerMove(
 	id SessionID,
 	command Command,
@@ -463,6 +464,7 @@ func (engine *engineContext) applyContainerMove(
 	ref := command.Furnace
 	key := core.ChunkKey{Dimension: ref.Dimension, Pos: ref.Chunk}
 	partial := command.Kind == CommandMoveStackPartial
+	quick := command.Kind == CommandQuickMoveStack
 
 	switch ref.Kind {
 	case core.ContainerKindChest:
@@ -472,11 +474,16 @@ func (engine *engineContext) applyContainerMove(
 		}
 		var nextInventory core.Inventory
 		var nextChest world.ChestSlot
-		if partial {
+		switch {
+		case quick:
+			nextInventory, nextChest, ok = quickMoveChestStack(
+				session.player.inventory, chest, command.Slot,
+			)
+		case partial:
 			nextInventory, nextChest, ok = moveChestStackAmount(
 				session.player.inventory, chest, command.Slot, command.ToSlot, command.Single,
 			)
-		} else {
+		default:
 			nextInventory, nextChest, ok = moveChestStack(
 				session.player.inventory, chest, command.Slot, command.ToSlot,
 			)
@@ -503,11 +510,16 @@ func (engine *engineContext) applyContainerMove(
 		}
 		var nextInventory core.Inventory
 		var nextFurnace world.FurnaceSlot
-		if partial {
+		switch {
+		case quick:
+			nextInventory, nextFurnace, ok = quickMoveFurnaceStack(
+				session.player.inventory, furnace, command.Slot,
+			)
+		case partial:
 			nextInventory, nextFurnace, ok = moveFurnaceStackAmount(
 				session.player.inventory, furnace, command.Slot, command.ToSlot, command.Single,
 			)
-		} else {
+		default:
 			nextInventory, nextFurnace, ok = moveFurnaceStack(
 				session.player.inventory, furnace, command.Slot, command.ToSlot,
 			)

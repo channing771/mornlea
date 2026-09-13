@@ -403,6 +403,90 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 					Reason:   RejectInvalidInput,
 				})
 			}
+		case CommandQuickMoveStack:
+			// 快捷搬运与部分移动同族按视图域分派结算相位：背包与合成域只读写
+			// 玩家自身状态，命令阶段内联结算；容器域会写区块，与跨容器移动
+			// 共享延迟相位。命令不携带目标——目标序是服务端权威推导的固定
+			// 确定性契约（拾取四相位序 / 统一索引升序 / 熔炉输入优先燃料 /
+			// 对侧区域受限两相位序），对侧零吸收或源空整单拒绝。
+			if session.player == nil || session.player.lifecycle != PlayerActive {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectPlayerNotReady,
+				})
+				continue
+			}
+			switch command.StackView {
+			case StackViewInventory:
+				if command.Furnace != (core.FurnaceRef{}) {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidInput,
+					})
+					continue
+				}
+				if command.Slot >= core.InventorySlots {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidSlot,
+					})
+					continue
+				}
+				if !session.player.applyQuickMoveInventory(command.Slot) {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidInput,
+					})
+				}
+			case StackViewCrafting:
+				if command.Furnace != (core.FurnaceRef{}) {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidInput,
+					})
+					continue
+				}
+				player := session.player
+				if command.Slot >= craftingViewSlots {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidSlot,
+					})
+					continue
+				}
+				if command.Slot < core.CraftingGridSlots &&
+					command.Slot >= player.crafting.Size*player.crafting.Size {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidSlot,
+					})
+					continue
+				}
+				if !player.applyQuickMoveCrafting(command.Slot) {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidInput,
+					})
+				}
+			case StackViewContainer:
+				// 与部分移动的容器域同路径：查看关系、容器引用与槽位约束在
+				// `applyContainerMove` 统一校验，区块写相位结算。
+				tick.containerMoves = append(tick.containerMoves, command)
+			default:
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectInvalidInput,
+				})
+			}
 		case CommandCloseFurnace:
 			// 关闭容器对玩家永远成功；关闭工作台要先按关闭规则回收格 4..8，
 			// 无法完整回收时拒绝关闭请求且状态不变（正常路径下回收不变量

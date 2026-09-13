@@ -43,12 +43,20 @@ const (
 	// 结算；容器视图携带 `Furnace` 容器引用并延迟到区块写相位结算（与
 	// `CommandMoveFurnaceStack` 同路径）。
 	CommandMoveStackPartial
+	// CommandQuickMoveStack 请求快捷搬运：把 `Slot`（`StackView` 视图域的
+	// 统一索引）整堆移动到对侧区域的首个可容纳位置。目标序是固定确定性
+	// 契约（容器区来源按拾取四相位序并入背包、箱子/网格按统一索引升序、
+	// 熔炉按「熔炼输入优先于燃料」、纯背包面板快捷栏↔背包对侧互移），由
+	// 服务端权威推导，命令不携带目标字段；余量按既有合并语义留在来源格，
+	// 对侧零吸收时整单拒绝。结算相位与 `CommandMoveStackPartial` 同族：
+	// 背包/合成视图内联，容器视图延迟到区块写相位。
+	CommandQuickMoveStack
 )
 
-// 分堆命令族（`CommandMoveStackPartial`）的视图域值域。值与协议侧
-// `network.StackView*` 常量逐值相同（ingress 直接搬运 wire 的视图字节，
-// 漂移由 contract 测试钉住）；sim 按它分派结算相位与值域上界。零值即背包
-// 域，其它命令族不携带该字段，零值不会误入分堆路径。
+// 分堆命令族（`CommandMoveStackPartial` 与 `CommandQuickMoveStack`）的视图域
+// 值域。值与协议侧 `network.StackView*` 常量逐值相同（ingress 直接搬运 wire
+// 的视图字节，漂移由 contract 测试钉住）；sim 按它分派结算相位与值域上界。
+// 零值即背包域，其它命令族不携带该字段，零值不会误入分堆路径。
 const (
 	// StackViewInventory 是背包视图域：统一索引 0..`core.InventorySlots`-1。
 	StackViewInventory uint8 = 0
@@ -104,11 +112,13 @@ type Command struct {
 	Eating       bool
 	Sprinting    bool
 	Sneaking     bool
-	// StackView 是分堆命令族（`CommandMoveStackPartial`）的视图域，取值
-	// `StackView*` 三常量之一；其它命令族恒为零值。
+	// StackView 是分堆命令族（`CommandMoveStackPartial` 与
+	// `CommandQuickMoveStack`）的视图域，取值 `StackView*` 三常量之一；
+	// 其它命令族恒为零值。
 	StackView uint8
-	// Single 是分堆命令族的数量档位：false = 半组（来源数量向上取整）、
-	// true = 单件（1）。数量由服务端在结算时按权威来源栈推导。
+	// Single 是部分移动（`CommandMoveStackPartial`）的数量档位：false = 半组
+	//（来源数量向上取整）、true = 单件（1）。数量由服务端在结算时按权威
+	// 来源栈推导；快捷搬运恒为整堆，不消费本字段。
 	Single bool
 }
 

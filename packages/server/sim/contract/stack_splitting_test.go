@@ -32,3 +32,15 @@ func TestCommandMoveStackPartialAppendsAfterEquipArmor(t *testing.T) {
 		)
 	}
 }
+
+// TestCommandQuickMoveStackAppendsAfterPartial 钉住快捷搬运命令 kind 以
+// pure-append 紧随部分移动进入枚举尾部：分堆双命令共用 `StackView` 视图域
+// 与结算相位分派，任何重排都会让 runtime 命令排序与过滤漂移。
+func TestCommandQuickMoveStackAppendsAfterPartial(t *testing.T) {
+	if CommandQuickMoveStack != CommandMoveStackPartial+1 {
+		t.Fatalf(
+			"CommandQuickMoveStack=%d，想要紧随 CommandMoveStackPartial(%d) 的 %d",
+			CommandQuickMoveStack, CommandMoveStackPartial, CommandMoveStackPartial+1,
+		)
+	}
+}
