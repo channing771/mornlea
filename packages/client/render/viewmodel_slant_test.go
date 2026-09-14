@@ -185,20 +185,18 @@ func TestViewmodelCrosshairClearNeutral(t *testing.T) {
 	assertViewmodelCrosshairClear(t, (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, armed))
 }
 
-// TestViewmodelCrosshairClearAtNeutral 锁定挥动峰值仍不挡准星：以最大摆
-// 幅档（工具 0.7 弧度）正负峰值直接装配，投影依旧留空准星。
+// `TestViewmodelCrosshairClearAtNeutral` 锁定工具中立姿态留空准星；
+// 活跃挥动允许短暂经过准星附近，不属于本断言的约束范围。
 func TestViewmodelCrosshairClearAtNeutral(t *testing.T) {
 	for _, stack := range []core.ItemStack{
 		{Item: core.ItemIronSword, Count: 1, Durability: 125},
 		{Item: core.ItemIronPickaxe, Count: 1, Durability: 125},
 	} {
 		input := viewmodelTestInput(core.PlayerID{51}, stack, 10)
-		for _, phase := range []float32{0} {
-			parts := buildViewmodelParts(nil, input, phase)
-			dst := growEncodeBuffer(nil, len(parts)*avatarInstanceBytes)
-			encodeAvatarPartsInto(dst, parts)
-			assertViewmodelCrosshairClear(t, dst)
-		}
+		parts := buildViewmodelParts(nil, input, 0)
+		dst := growEncodeBuffer(nil, len(parts)*avatarInstanceBytes)
+		encodeAvatarPartsInto(dst, parts)
+		assertViewmodelCrosshairClear(t, dst)
 	}
 }
 
