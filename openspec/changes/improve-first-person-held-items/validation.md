@@ -1,6 +1,18 @@
 # 主手与持物验证记录
 
-## 已审核效果图版本：2026-09-14
+> 当前轮次：Task4静态933d4107与Task5动作deddd3ae已完成代码审查，测试注释清理d4754c73。用户实机指出镐应由尖端凿击，当前横向工作姿态不自然，Task6正在修正；本轮视觉验收尚未通过。
+
+## 严格校对轮次：桌面与真实工作方向
+
+- Task4静态修正：袖口右边缘入画点从约88%H降低至95.26%H，底边交点从93%W调整至84.78%W；拳掌缩短加厚、闭合握柄。剑尖89.17%W/20.78%H，剑身48.20%H；镐头加大并加入真实渐尖末端，缩短外露柄。Task4独立复审通过933d4107。
+- Task5动作修正：实际相位驱动多轴挥拳/挥砍/下劈，连续起止与较慢回收；实体手腕与袖口、掌心在3D中相接。真实101相位×全部66项×三桌面尺寸×三FOV检查HUD/near-plane/头部/臂根；264实例、96字节、ABI19和权威输入边界保持。Task5独立代码审查通过，不能代替实机手感验收。
+- 生产deddd3ae的实际1280桌面五类75帧30fps循环：`build/held-items-approved/task-5-motion/index.html`；66项198张原图：`task-5-catalogue/index.html`。这些是离屏生产渲染器输出，没有伪造HUD。
+- 实机新版剑与完整HUD：`build/held-items-approved/strict-native-final-sword-1280.png`。此前名为strict-native-sword-1280的截图实际处于第三人称，已改名strict-native-third-person.png，不作为手部证据。12秒原生PNG记录请求55秒超时，未得到动作文件，不记为录制成功。
+- 用户已实际测试并明确指出：镐需要以尖侧挖掘，当前横向姿态不正确。Task6只修正镐工作平面/尖端领先关系；整体视觉验收保持未完成。
+- `make test-race` 在deddd3ae生产冻结后通过全部六模块，日志`strict-final-test-race.log`；期间d4754c73仅更新中立测试注释并移除单元素循环，其定点测试另行通过。六模块`go vet`通过，日志`strict-final-vet.log`。旧主线已复现的dev-check服务端short失败依然单独披露，无绕过。
+- 整分支6728dbe8..d4754c73独立审查：代码集成APPROVED，无阻断正确性发现；视觉验收NOTAPPROVED，遵循用户镐方向反馈继续修正。现有Rust检查证据仍有效，Task4/5没有Rust更改。
+
+## 历史：已审核效果图版本：2026-09-14
 
 最终生产提交 `30c0396ae09615be5af5a400b81d0801cab91a58`，集成主线基线 `6728dbe8ff2e44670c7d9e839ae93aa1c512e5a3`。隔离目录 `.worktrees/first-person-held-items`、分支 `codex/first-person-held-items`；主工作区用户已有改动保留，未推送或合并。
 
