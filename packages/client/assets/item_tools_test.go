@@ -315,10 +315,19 @@ func TestPickSocketPhysicallyJoinsHead(t *testing.T) {
 			if absToolColor(x-socket.Center[0]) >= socket.Size[0]/2 || absToolColor(y-socket.Center[1]) >= socket.Size[1]/2-.002 {
 				t.Errorf("item %d wing root (%v,%v) disconnected from socket %+v", item, x, y, socket)
 			}
+			// 两部件仅绕 Z 转动，厚度区间的交集必须保留实心余量。
+			depthOverlap := min(p.Center[2]+p.Size[2]/2, socket.Center[2]+socket.Size[2]/2) - max(p.Center[2]-p.Size[2]/2, socket.Center[2]-socket.Size[2]/2)
+			if depthOverlap <= .002 {
+				t.Errorf("item %d wing root has no physical depth overlap with socket: %v", item, depthOverlap)
+			}
 			joined++
 		}
-		if joined == 0 {
-			t.Fatal("no physical wing roots checked")
+		want := 2
+		if item == core.ItemBrokenStonePickaxe || item == core.ItemBrokenIronPickaxe {
+			want = 1
+		}
+		if joined != want {
+			t.Errorf("item %d checked %d wing roots, want %d", item, joined, want)
 		}
 	}
 }
