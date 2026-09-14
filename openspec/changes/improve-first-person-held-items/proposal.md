@@ -16,6 +16,6 @@
 - `camera-perspectives`: 第一人称显示主手并隐藏空闲副手，第三人称继续隐藏 viewmodel。
 
 ## Impact
-影响 `packages/client/assets`、`packages/client/render`、`packages/client/cmd/mornlea/app`、capture 动作演示与 Rust viewmodel 容量门禁。仅客户端呈现，无服务端、存档、协议或 ABI 布局变更，不导入外部版权素材。不增加副手玩法、新工具、动作权威语义或 HUD 改版。单帧实例上限调整为 257（主手加最多 16×16 个像素棱柱），热路径无磁盘或网络工作，缓存随材质更新刷新。
+影响 `packages/client/assets`、`packages/client/render`、`packages/client/cmd/mornlea/app`、capture 动作演示与 Rust viewmodel 容量门禁。仅客户端呈现，无服务端、存档、协议或 ABI 布局变更，不导入外部版权素材。不增加副手玩法、新工具、动作权威语义或 HUD 改版。单帧实例上限调整为 264（最多8个主手部件加最多16×16个像素棱柱），热路径无磁盘或网络工作，缓存随材质更新刷新。
 
 用户已审核手部及工具效果图；本轮按该图落实短前臂、真实抓握和工具分面层次，并适配当前主线新增 HUD 状态行。
