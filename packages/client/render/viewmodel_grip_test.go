@@ -234,3 +234,30 @@ func TestViewmodelBlockFaceSlabsDoNotOverlap(t *testing.T) {
 		}
 	}
 }
+
+func TestViewmodelToolSkinPartsStayConnected(t *testing.T) {
+	for _, item := range []core.ItemID{core.ItemIronSword, core.ItemIronPickaxe, core.ItemIronHoe} {
+		parts := buildViewmodelParts(nil, &ViewmodelInput{Selected: core.ItemStack{Item: item, Count: 1}}, 0)
+		inverse := parts[2].transform.Inv()
+		for _, i := range []int{3, 4, 5} {
+			local := inverse.Mul4(parts[i].transform)
+			lo, hi := mgl32.Vec3{1e6, 1e6, 1e6}, mgl32.Vec3{-1e6, -1e6, -1e6}
+			for _, x := range []float32{-.5, .5} {
+				for _, y := range []float32{-.5, .5} {
+					for _, z := range []float32{-.5, .5} {
+						p := local.Mul4x1(mgl32.Vec4{x, y, z, 1})
+						for k := range 3 {
+							lo[k] = min(lo[k], p[k])
+							hi[k] = max(hi[k], p[k])
+						}
+					}
+				}
+			}
+			for k := range 3 {
+				if lo[k] > .501 || hi[k] < -.501 {
+					t.Errorf("tool %d skin part %d floats away from grasp on axis %d: %v .. %v", item, i, k, lo, hi)
+				}
+			}
+		}
+	}
+}

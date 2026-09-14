@@ -247,10 +247,27 @@ func buildViewmodelParts(dst []avatarPart, input *ViewmodelInput, angle float32)
 			if ViewmodelTierOf(input.Selected) != ViewmodelTierSword {
 				toolOffset, toolHeight = .007, -.015
 			}
-			frame := root.Mul4(mgl32.Translate3D(toolOffset, toolHeight, 0)).Mul4(mgl32.HomogRotate3DZ((-45 - 15*normal) * math.Pi / 180)).Mul4(mgl32.HomogRotate3DY(toolYaw)).Mul4(mgl32.Scale3D(toolScale, toolScale, toolScale))
+			// 掌握与工具向相机前置，保持中立投影不变，避免柄被更后的袖口切成碎片。
+			neutral := viewmodelGripRoot(input, 0)
+			heldRoot := root.Mul4(neutral.Inv().Mul4(mgl32.Scale3D(.82, .82, .82)).Mul4(neutral))
+			frame := heldRoot.Mul4(mgl32.Translate3D(toolOffset, toolHeight, 0)).Mul4(mgl32.HomogRotate3DZ((-45 - 15*normal) * math.Pi / 180)).Mul4(mgl32.HomogRotate3DY(toolYaw)).Mul4(mgl32.Scale3D(toolScale, toolScale, toolScale))
+			// 握工具时掌面沿柄收拢，拇指沿柄下垂，折指包住上侧；袖子仍共享同一入画轮廓。
+			grasp := heldRoot.Mul4(mgl32.Translate3D(toolOffset, toolHeight, 0)).Mul4(mgl32.HomogRotate3DZ((-45 - 15*normal) * math.Pi / 180))
+			setHand := func(index int, center, size mgl32.Vec3, color [4]float32) {
+				dst[index] = avatarPart{transform: grasp.Mul4(mgl32.Translate3D(center[0], center[1], center[2])).Mul4(mgl32.Scale3D(size[0], size[1], size[2])), color: color, material: avatarMaterialSolid}
+			}
+			setHand(2, mgl32.Vec3{.005, -.02, .0175}, mgl32.Vec3{.13, .12, .125}, avatarShade(skin, .55))
+			setHand(3, mgl32.Vec3{-.075, -.02, .060}, mgl32.Vec3{.055, .11, .050}, avatarShade(skin, .85))
+			setHand(4, mgl32.Vec3{.005, -.02, .081}, mgl32.Vec3{.13, .12, .002}, skin)
+			setHand(5, mgl32.Vec3{-.025, .065, .055}, mgl32.Vec3{.090, .055, .075}, avatarShade(skin, 1.05))
 			for _, part := range toolParts {
 				partFrame := frame.Mul4(mgl32.Translate3D(part.Center[0], part.Center[1], part.Center[2])).Mul4(mgl32.HomogRotate3DZ(part.RotationZ))
-				add(partFrame, mgl32.Vec3{}, mgl32.Vec3(part.Size), part.Color, avatarMaterialSolid)
+				if part.Beveled {
+					partFrame = partFrame.Mul4(mgl32.Scale3D(part.Size[0]/1.7071068, part.Size[1]/1.4142136, part.Size[2]/1.7071068)).Mul4(mgl32.HomogRotate3DY(math.Pi / 4)).Mul4(mgl32.HomogRotate3DZ(math.Pi / 4))
+					add(partFrame, mgl32.Vec3{}, mgl32.Vec3{1, 1, 1}, part.Color, avatarMaterialSolid)
+				} else {
+					add(partFrame, mgl32.Vec3{}, mgl32.Vec3(part.Size), part.Color, avatarMaterialSolid)
+				}
 			}
 			return dst
 		}

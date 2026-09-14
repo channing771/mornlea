@@ -13,6 +13,8 @@ type ItemToolPart struct {
 	Color        [4]float32
 	// `RotationZ` 只用于弯折刃段，缓存局部转角不进入 ABI。
 	RotationZ float32
+	// `Beveled` 在尺寸盒内旋转实心棱柱，生成向单个顶点收束的终端。
+	Beveled bool
 }
 
 // ItemToolParts 返回注册表拥有的只读工具模型；非工具继续使用原有图标或方块。
@@ -155,14 +157,18 @@ func buildItemToolParts(item core.ItemID, px []byte) []ItemToolPart {
 					angle := float32(math.Atan2(float64(dy), float64(dx)))
 					h, d := [...]float32{.105, .085, .055}[i], [...]float32{.13, .11, .075}[i]
 					x, y := sign*(a[0]+b[0])/2, (a[1]+b[1])/2
-					add(x, y, 0, length+.025, h, d, shade(metal, .08))
-					parts[len(parts)-1].RotationZ = angle
-					add(x, y, d/2+.001, length+.025, h, .002, shade(metal, .70))
-					parts[len(parts)-1].RotationZ = angle
+					if i == 2 {
+						// 菱体后半段埋入翼根，前半段同时收窄宽度与厚度。
+						add(x-dx*.375, y-dy*.375, 0, length*2.2, h*1.8, d*1.4, shade(metal, .22))
+						parts[len(parts)-1].RotationZ = angle
+						parts[len(parts)-1].Beveled = true
+					} else {
+						add(x, y, 0, length+.025, h, d, shade(metal, .08))
+						parts[len(parts)-1].RotationZ = angle
+						add(x, y, d/2+.001, length+.025, h, .002, shade(metal, .70))
+						parts[len(parts)-1].RotationZ = angle
+					}
 				}
-				end := points[3]
-				add(sign*(end[0]+.012), end[1]-.01, 0, .032, .020, .025, shade(metal, .35))
-				parts[len(parts)-1].RotationZ = -sign * .8
 			}
 		} else {
 			width := float32(.30)

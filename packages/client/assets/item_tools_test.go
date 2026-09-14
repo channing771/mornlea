@@ -92,7 +92,7 @@ func TestApprovedPickArmsDescendFromSocket(t *testing.T) {
 	for _, sign := range []float32{-1, 1} {
 		lowered := false
 		for _, p := range pick {
-			if p.Center[0]*sign > .2 && p.Center[1] < socketY-.015 && p.Size[2] > .01 {
+			if p.Center[0]*sign > .2 && toolPartLowestY(p) < socketY-.015 && p.Size[2] > .01 {
 				lowered = true
 			}
 		}
@@ -127,6 +127,7 @@ func TestApprovedToolHandleHasBroadDarkBands(t *testing.T) {
 	}
 }
 
+// 最末实心段的截面本身必须收束，不检查可被宽翼遮住的小终端装饰。
 func TestApprovedPickEndsTaperToPoints(t *testing.T) {
 	parts, _ := NewDefaultRegistry().ItemToolParts(core.ItemIronPickaxe)
 	for _, sign := range []float32{-1, 1} {
@@ -136,10 +137,56 @@ func TestApprovedPickEndsTaperToPoints(t *testing.T) {
 				end = p
 			}
 		}
-		if end.Size[1] > .025 || end.Size[2] > .035 {
-			t.Errorf("pick end remains blunt: %v", end.Size)
+		corners := toolPartLocalCorners(end)
+		var widths, depths [2]float32
+		for i, fraction := range []float32{0, .45} {
+			x := end.Size[0] * fraction
+			lo, hi := [2]float32{1e6, 1e6}, [2]float32{-1e6, -1e6}
+			for a := 0; a < 8; a++ {
+				for axis := 0; axis < 3; axis++ {
+					b := a ^ (1 << axis)
+					if b < a {
+						continue
+					}
+					p, q := corners[a], corners[b]
+					if p[0] == q[0] || x < min(p[0], q[0]) || x > max(p[0], q[0]) {
+						continue
+					}
+					f := (x - p[0]) / (q[0] - p[0])
+					for k := range 2 {
+						v := p[k+1] + (q[k+1]-p[k+1])*f
+						lo[k] = min(lo[k], v)
+						hi[k] = max(hi[k], v)
+					}
+				}
+			}
+			widths[i], depths[i] = hi[0]-lo[0], hi[1]-lo[1]
+		}
+		if widths[1] > widths[0]*.35 || depths[1] > depths[0]*.35 {
+			t.Errorf("pick side %v has an untapered solid end: width %v depth %v", sign, widths, depths)
 		}
 	}
+}
+
+// 缓存几何的八角点用于独立量取局部截面与旋转后的最低端点。
+func toolPartLocalCorners(p ItemToolPart) (corners [8][3]float32) {
+	for i := range 8 {
+		x, y, z := float32(i&1)-.5, float32((i>>1)&1)-.5, float32((i>>2)&1)-.5
+		if p.Beveled {
+			x, y, z = (.5*x-.5*y+.7071068*z)/1.7071068, (.7071068*x+.7071068*y)/1.4142136, (-.5*x+.5*y+.7071068*z)/1.7071068
+		}
+		corners[i] = [3]float32{x * p.Size[0], y * p.Size[1], z * p.Size[2]}
+	}
+	return
+}
+
+func toolPartLowestY(p ItemToolPart) float32 {
+	lowest := float32(1e6)
+	c, s := float32(math.Cos(float64(p.RotationZ))), float32(math.Sin(float64(p.RotationZ)))
+	for _, v := range toolPartLocalCorners(p) {
+		lowest = min(lowest, p.Center[1]+s*v[0]+c*v[1])
+	}
+	return lowest
 }
 
 func TestApprovedHoeIsAngledSlabAndPickFrontIsLight(t *testing.T) {

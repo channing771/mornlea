@@ -125,27 +125,38 @@ func TestViewmodelDesktopToolHeadProportions(t *testing.T) {
 			}
 		}
 		socket := parts[17].transform
-		foot, _ := projectToNDC(projection, socket.Mul4x1(mgl32.Vec4{0, -.5, 0, 1}).Vec3())
-		palmCenter, _ := projectToNDC(projection, parts[2].transform.Mul4x1(mgl32.Vec4{0, 0, 0, 1}).Vec3())
+		shaftStart := socket.Mul4x1(mgl32.Vec4{0, -.5, 0, 1}).Vec3()
+		foot, _ := projectToNDC(projection, shaftStart)
+		// 两个木柄轴上的点固定射线，不能朝偏置掌心重新定向。
+		shaftFinish := parts[8].transform.Mul4x1(mgl32.Vec4{0, -.5, 0, 1}).Vec3()
+		shaftEnd, _ := projectToNDC(projection, shaftFinish)
 		start := mgl32.Vec2{foot[0] * 640, foot[1] * 360}
-		end := mgl32.Vec2{palmCenter[0] * 640, palmCenter[1] * 360}
+		end := mgl32.Vec2{shaftEnd[0] * 640, shaftEnd[1] * 360}
 		axis := end.Sub(start)
 		fraction := float32(1)
-		hull := viewmodelInstanceScreenHull(t, out, 2, projection)
 		cross := func(a, b mgl32.Vec2) float32 { return a[0]*b[1] - a[1]*b[0] }
-		for i, a := range hull {
-			b := hull[(i+1)%len(hull)]
-			a = mgl32.Vec2{a[0] * 640, a[1] * 360}
-			b = mgl32.Vec2{b[0] * 640, b[1] * 360}
-			edge := b.Sub(a)
-			den := cross(axis, edge)
-			if abs32(den) < 1e-6 {
-				continue
-			}
-			u := cross(a.Sub(start), edge) / den
-			v := cross(a.Sub(start), axis) / den
-			if u >= 0 && u <= 1 && v >= 0 && v <= 1 {
-				fraction = min(fraction, u)
+		for _, occluder := range []int{0, 1, 2, 3, 4, 5, 6, 7} {
+			hull := viewmodelInstanceScreenHull(t, out, occluder, projection)
+			for i, a := range hull {
+				b := hull[(i+1)%len(hull)]
+				a = mgl32.Vec2{a[0] * 640, a[1] * 360}
+				b = mgl32.Vec2{b[0] * 640, b[1] * 360}
+				edge := b.Sub(a)
+				den := cross(axis, edge)
+				if abs32(den) < 1e-6 {
+					continue
+				}
+				u := cross(a.Sub(start), edge) / den
+				v := cross(a.Sub(start), axis) / den
+				if u >= 0 && u <= 1 && v >= 0 && v <= 1 {
+					// 仅计算位于木柄前方的实际遮挡面，不能把后方袖子的投影当作遮挡。
+					point := start.Add(axis.Mul(min(1, u+.00001)))
+					ray := mgl32.Vec3{point[0] / 640 * (1280.0 / 720) * float32(math.Tan(35*math.Pi/180)), point[1] / 360 * float32(math.Tan(35*math.Pi/180)), -1}
+					shaftDepth := 1 / ((1-u)/(-shaftStart[2]) + u/(-shaftFinish[2]))
+					if near, ok := viewmodelPartRayDepth(parts[occluder], ray); ok && near <= shaftDepth+.005 {
+						fraction = min(fraction, u)
+					}
+				}
 			}
 		}
 		length := axis.Len() * fraction / 720
@@ -171,5 +182,120 @@ func TestViewmodelDesktopPalmFacetsFollowIdentity(t *testing.T) {
 	}
 	if len(colors) < 2 {
 		t.Fatal("hand identity palettes collapsed")
+	}
+}
+
+// 末端实际轮廓应收束，不能以隐藏在宽截面中的小终端方块冒充镐尖。
+func TestViewmodelPickProjectedTerminalNarrows(t *testing.T) {
+	input := &ViewmodelInput{Selected: core.ItemStack{Item: core.ItemIronPickaxe, Count: 1}, ViewportWidth: 1280, ViewportHeight: 720}
+	parts := buildViewmodelParts(nil, input, 0)
+	out := make([]byte, len(parts)*96)
+	encodeAvatarPartsInto(out, parts)
+	projection := core.Perspective(viewmodelProjectionFovY, 1280.0/720, .1, 100)
+	models, _ := viewmodelDefaultRegistry.ItemToolParts(core.ItemIronPickaxe)
+	for _, sign := range []float32{-1, 1} {
+		var hulls [][]mgl32.Vec2
+		end := float32(-1e6)
+		for i, p := range models {
+			if p.Center[0]*sign < .20 {
+				continue
+			}
+			h := viewmodelInstanceScreenHull(t, out, i+8, projection)
+			for j, v := range h {
+				q := mgl32.Vec2{(v[0] + 1) * 640, (1 - v[1]) * 360}
+				if sign < 0 {
+					q = mgl32.Vec2{q[1], -q[0]}
+				}
+				h[j] = q
+				end = max(end, q[1])
+			}
+			hulls = append(hulls, h)
+		}
+		widths := []float32{}
+		for _, distance := range []float32{24, 8, 2} {
+			y := end - distance
+			lo, hi := float32(1e6), float32(-1e6)
+			for _, h := range hulls {
+				for j, a := range h {
+					b := h[(j+1)%len(h)]
+					if a[1] == b[1] || y < min(a[1], b[1]) || y > max(a[1], b[1]) {
+						continue
+					}
+					x := a[0] + (b[0]-a[0])*(y-a[1])/(b[1]-a[1])
+					lo = min(lo, x)
+					hi = max(hi, x)
+				}
+			}
+			widths = append(widths, hi-lo)
+		}
+		t.Logf("pick side %.0f terminal widths 24/8/2px=%v", sign, widths)
+		if widths[2] > 12 || widths[2] > widths[0]*.5 || widths[1] >= widths[0]*.60 {
+			t.Errorf("pick side %.0f has blunt terminal silhouette %v", sign, widths)
+		}
+	}
+}
+
+func TestViewmodelToolThumbWrapsShaft(t *testing.T) {
+	projection := core.Perspective(viewmodelProjectionFovY, 1280.0/720, .1, 100)
+	for _, id := range []core.ItemID{core.ItemIronSword, core.ItemIronPickaxe, core.ItemIronHoe} {
+		parts := buildViewmodelParts(nil, &ViewmodelInput{Selected: core.ItemStack{Item: id, Count: 1}, ViewportWidth: 1280, ViewportHeight: 720}, 0)
+		center, _ := projectToNDC(projection, parts[2].transform.Col(3).Vec3())
+		t.Logf("tool %d palm center %.4f %.4f", id, (center[0]+1)/2, (1-center[1])/2)
+		if (center[0]+1)/2 < .82 || (center[0]+1)/2 > .86 || (1-center[1])/2 < .76 || (1-center[1])/2 > .82 {
+			t.Errorf("tool %d palm anchor changed", id)
+		}
+		shaft := parts[8].transform
+		inv := shaft.Inv()
+		thumb := inv.Mul4(parts[3].transform)
+		// 拇指应贴在柄侧并沿柄下垂，而不是仅附在空拳下边缘。
+		shaftTop := shaft.Mul4x1(mgl32.Vec4{0, .5, 0, 1}).Vec3()
+		thumbCenter := parts[3].transform.Mul4x1(mgl32.Vec4{0, 0, 0, 1}).Vec3()
+		p, _ := projectToNDC(projection, thumbCenter)
+		q, _ := projectToNDC(projection, shaftTop)
+		t.Logf("tool %d thumb %v shaft lower top %v local center %v", id, p, q, thumb.Col(3))
+		if abs32(p[0]-q[0])*640 > 38 || p[1] < q[1] {
+			t.Errorf("tool %d thumb does not wrap next to lower shaft", id)
+		}
+		axis := parts[3].transform.Col(1).Vec3().Normalize()
+		shaftAxis := shaft.Col(1).Vec3().Normalize()
+		if abs32(axis.Dot(shaftAxis)) < .93 {
+			t.Errorf("tool %d thumb does not turn downward beside shaft", id)
+		}
+	}
+}
+
+// 相机射线与真实仿射立方体求交，深度比较剔除柄后方的投影遮挡。
+func viewmodelPartRayDepth(part avatarPart, ray mgl32.Vec3) (float32, bool) {
+	inverse := part.transform.Inv()
+	origin := inverse.Mul4x1(mgl32.Vec4{0, 0, 0, 1}).Vec3()
+	direction := inverse.Mul4x1(mgl32.Vec4{ray[0], ray[1], ray[2], 0}).Vec3()
+	near, far := float32(0), float32(1e6)
+	for i := range 3 {
+		if abs32(direction[i]) < 1e-7 {
+			if abs32(origin[i]) > .5001 {
+				return 0, false
+			}
+			continue
+		}
+		a, b := (-.5001-origin[i])/direction[i], (.5001-origin[i])/direction[i]
+		near = max(near, min(a, b))
+		far = min(far, max(a, b))
+	}
+	return near, near <= far
+}
+
+func TestViewmodelLowerHandleIsNotCutByCuff(t *testing.T) {
+	for _, id := range []core.ItemID{core.ItemIronSword, core.ItemIronPickaxe, core.ItemIronHoe} {
+		parts := buildViewmodelParts(nil, &ViewmodelInput{Selected: core.ItemStack{Item: id, Count: 1}}, 0)
+		for sample := 0; sample <= 12; sample++ {
+			point := parts[8].transform.Mul4x1(mgl32.Vec4{0, -.49 + float32(sample)*.98/12, 0, 1}).Vec3()
+			depth := -point[2]
+			ray := point.Mul(1 / depth)
+			for _, i := range []int{0, 1, 6, 7} {
+				if near, ok := viewmodelPartRayDepth(parts[i], ray); ok && near < depth-.02 {
+					t.Errorf("tool %d lower shaft split by sleeve part %d at sample %d", id, i, sample)
+				}
+			}
+		}
 	}
 }
