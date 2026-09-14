@@ -85,14 +85,14 @@ func TestApprovedPickArmsDescendFromSocket(t *testing.T) {
 	pick, _ := NewDefaultRegistry().ItemToolParts(core.ItemIronPickaxe)
 	socketY := float32(0)
 	for _, p := range pick {
-		if p.Center[0] == 0 && p.Size[0] > .1 {
+		if p.Center[0] == 0 && p.Size[0] >= .09 {
 			socketY = max(socketY, p.Center[1])
 		}
 	}
 	for _, sign := range []float32{-1, 1} {
 		lowered := false
 		for _, p := range pick {
-			if p.Center[0]*sign > .2 && p.Center[1] < socketY-.10 && p.Size[2] > .01 {
+			if p.Center[0]*sign > .2 && p.Center[1] < socketY-.015 && p.Size[2] > .01 {
 				lowered = true
 			}
 		}
@@ -113,7 +113,7 @@ func TestApprovedToolHandleHasBroadDarkBands(t *testing.T) {
 	parts, _ := NewDefaultRegistry().ItemToolParts(core.ItemIronPickaxe)
 	broad := 0
 	for _, p := range parts {
-		if p.Center[1] >= -.21 && p.Center[1] <= .70 && p.Size[0] <= .08 && p.Size[1] < .2 {
+		if p.Center[1] >= -.21 && p.Center[1] <= .70 && p.Size[0] >= .06 && p.Size[0] <= .08 && p.Center[0] == 0 && p.Size[1] < .2 {
 			if p.Size[1] >= .055 {
 				if p.Color[0]*.2126+p.Color[1]*.7152+p.Color[2]*.0722 > .35 || p.Color[0] <= p.Color[1] || p.Color[1] <= p.Color[2] {
 					t.Errorf("handle band is not dark warm wood: %v", p.Color)
@@ -147,7 +147,7 @@ func TestApprovedHoeIsAngledSlabAndPickFrontIsLight(t *testing.T) {
 	hoe, _ := r.ItemToolParts(core.ItemIronHoe)
 	slab := false
 	for _, p := range hoe {
-		if p.Center[0] < -.1 && p.Size[0] >= .20 && p.Size[1] <= .08 && p.Size[2] >= .07 && p.RotationZ > .25 {
+		if p.Center[0] < -.1 && p.Size[0] >= .20 && p.Size[1] <= .10 && p.Size[2] >= .07 && p.RotationZ > .25 {
 			slab = true
 		}
 	}
@@ -186,7 +186,7 @@ func TestApprovedSwordPointHasContinuousTaperedSupport(t *testing.T) {
 	previousWidth := float32(1)
 	previousLeft, previousRight := float32(-1), float32(1)
 	for step := 0; step <= 27; step++ {
-		y := float32(.765) + float32(step)*.003
+		y := float32(.886) + float32(step)*.001
 		left, right := float32(1), float32(-1)
 		for _, p := range parts {
 			c, s := float32(math.Cos(float64(p.RotationZ))), float32(math.Sin(float64(p.RotationZ)))
@@ -218,5 +218,29 @@ func TestApprovedSwordPointHasContinuousTaperedSupport(t *testing.T) {
 	}
 	if previousWidth > .025 {
 		t.Fatalf("sword tip remains blunt: %v", previousWidth)
+	}
+}
+
+func TestDesktopMetalFrontAndSideRemainDistinct(t *testing.T) {
+	for _, item := range []core.ItemID{core.ItemIronSword, core.ItemIronPickaxe, core.ItemIronHoe} {
+		parts, _ := NewDefaultRegistry().ItemToolParts(item)
+		pairs := 0
+		for _, front := range parts {
+			if min(front.Size[0], front.Size[2]) > .003 || front.Center[1] < .15 {
+				continue
+			}
+			for _, body := range parts {
+				if body.Size[0] < .01 || body.Center[2] != 0 || absToolColor(body.Center[0]-front.Center[0]) > body.Size[0]/2+.001 || absToolColor(body.Center[1]-front.Center[1]) > 1e-5 || body.Size[2] < .10 {
+					continue
+				}
+				pairs++
+				if front.Color[0] < body.Color[0]*3 {
+					t.Errorf("item %d front and side wash together: %v / %v", item, front.Color, body.Color)
+				}
+			}
+		}
+		if pairs == 0 {
+			t.Fatalf("item %d has no integrated bright front and dark solid side", item)
+		}
 	}
 }

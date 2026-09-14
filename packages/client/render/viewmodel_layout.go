@@ -16,7 +16,7 @@ const (
 )
 
 // viewmodelGripRoot 在相机空间按逻辑 viewport 布局，XY 同比补偿世界 FOV，
-// Z 不随 FOV 缩放以保持近裁面距离。臂从右侧出画，窄窗口向上让出完整状态栈。
+// Z 不随 FOV 缩放以保持近裁面距离。臂从右下底边出画，窄窗口向上让出完整状态栈。
 func viewmodelGripRoot(input *ViewmodelInput, angle float32) mgl32.Mat4 {
 	w, h := input.ViewportWidth, input.ViewportHeight
 	if w <= 0 || h <= 0 {
@@ -31,9 +31,6 @@ func viewmodelGripRoot(input *ViewmodelInput, angle float32) mgl32.Mat4 {
 	// 窄窗口收窄组合并向右上让出状态栈；缩放不改变手与物品的局部连接。
 	compact := min(float32(1), w/1000)
 	x := min(float32(.90), float32(.68)+(1-compact)*.55)
-	if ViewmodelTierOf(input.Selected) == ViewmodelTierPick {
-		x -= .04 * min(float32(1), max(float32(0), (w-800)/200))
-	}
 	y := min(float32(.58), 1-2*(viewmodelHUDStatusHeight*scale+55*compact+max(0, 640-w)*.25)/h)
 	y += (.58 - y) * min(float32(1), max(float32(0), (w-800)/200))
 	compensation := tangent / float32(math.Tan(35*math.Pi/180))

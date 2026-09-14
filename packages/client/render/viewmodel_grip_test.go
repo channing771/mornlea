@@ -68,10 +68,11 @@ func TestViewmodelAllIconsVisibleAcrossCompleteSwings(t *testing.T) {
 		for tick := uint64(0); tick <= period; tick++ {
 			angles = append(angles, ViewmodelClickAngle(true, float32(tick)/float32(period), ViewmodelTierOf(stack)))
 		}
-		for _, aspect := range []float32{16.0 / 9, 4.0 / 3} {
+		for _, viewport := range [][2]float32{{1280, 720}, {1600, 900}, {1280, 960}} {
+			aspect := viewport[0] / viewport[1]
 			projection := core.Perspective(viewmodelProjectionFovY, aspect, .1, 100)
 			for _, angle := range angles {
-				parts := buildViewmodelParts(nil, &ViewmodelInput{Selected: stack, Registry: registry, ViewportWidth: aspect * 720, ViewportHeight: 720}, angle)
+				parts := buildViewmodelParts(nil, &ViewmodelInput{Selected: stack, Registry: registry, ViewportWidth: viewport[0], ViewportHeight: viewport[1]}, angle)
 				out := make([]byte, len(parts)*avatarInstanceBytes)
 				encodeAvatarPartsInto(out, parts)
 				hand := viewmodelInstanceScreenHull(t, out, 2, projection)
@@ -158,14 +159,15 @@ func TestViewmodelEveryItemTouchesMainHand(t *testing.T) {
 
 func TestViewmodelBlockFacesStayOnScreenAcrossCompleteSwings(t *testing.T) {
 	for _, item := range []core.ItemID{core.ItemGrass, core.ItemOakLog, core.ItemWorkbench, core.ItemStone} {
-		for _, aspect := range []float32{16.0 / 9, 4.0 / 3} {
+		for _, viewport := range [][2]float32{{1280, 720}, {1600, 900}, {1280, 960}} {
+			aspect := viewport[0] / viewport[1]
 			projection := core.Perspective(viewmodelProjectionFovY, aspect, .1, 100)
 			var angles []float32
 			for step := 0; step <= 28; step++ {
 				angles = append(angles, ViewmodelClickAngle(true, float32(step)/28, ViewmodelTierBlock))
 			}
 			for _, angle := range angles {
-				parts := buildViewmodelParts(nil, &ViewmodelInput{Selected: core.ItemStack{Item: item, Count: 1}, ViewportWidth: aspect * 720, ViewportHeight: 720}, angle)
+				parts := buildViewmodelParts(nil, &ViewmodelInput{Selected: core.ItemStack{Item: item, Count: 1}, ViewportWidth: viewport[0], ViewportHeight: viewport[1]}, angle)
 				out := make([]byte, len(parts)*96)
 				encodeAvatarPartsInto(out, parts)
 				for i := 8; i < len(parts); i++ {
@@ -185,11 +187,12 @@ func TestViewmodelBlockFacesStayOnScreenAcrossCompleteSwings(t *testing.T) {
 }
 
 func TestViewmodelArmEndRemainsClippedAcrossSwing(t *testing.T) {
-	for _, aspect := range []float32{16.0 / 9, 4.0 / 3} {
+	for _, viewport := range [][2]float32{{1280, 720}, {1600, 900}, {1280, 960}} {
+		aspect := viewport[0] / viewport[1]
 		projection := core.Perspective(viewmodelProjectionFovY, aspect, .1, 100)
 		for step := -14; step <= 14; step++ {
 			angle := float32(step) * .05
-			parts := buildViewmodelParts(nil, &ViewmodelInput{ViewportWidth: aspect * 720, ViewportHeight: 720}, angle)
+			parts := buildViewmodelParts(nil, &ViewmodelInput{ViewportWidth: viewport[0], ViewportHeight: viewport[1]}, angle)
 			out := make([]byte, len(parts)*96)
 			encodeAvatarPartsInto(out, parts)
 			for _, x := range []float32{-1, 1} {

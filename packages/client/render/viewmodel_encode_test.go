@@ -73,8 +73,8 @@ func TestViewmodelHandsMatchAvatarArmStyle(t *testing.T) {
 		if material := decodedPartMaterial(out, index); material != avatarMaterialSolid {
 			t.Fatalf("第 %d 只手材质 = %d，想要当前身份布料色的独立分面", index, material)
 		}
-		if size := decodedPartSize(out, index); !approxEqual(size[0], 0.17) || size[1] > .8 || !approxEqual(size[2], 0.185) {
-			t.Fatalf("第 %d 只手尺寸 = %v，想要短前臂截面 0.17×0.185", index, size)
+		if size := decodedPartSize(out, index); !approxEqual(size[0], 0.22) || size[1] > .8 || !approxEqual(size[2], 0.185) {
+			t.Fatalf("第 %d 只手尺寸 = %v，想要短前臂截面 0.22×0.185", index, size)
 		}
 	}
 }

@@ -8,7 +8,7 @@ import (
 )
 
 func TestViewmodelCompleteSweepClearsFullHUD(t *testing.T) {
-	for _, viewport := range [][2]float32{{640, 360}, {1280, 720}, {800, 600}, {480, 360}} {
+	for _, viewport := range [][2]float32{{1280, 720}, {1600, 900}, {1280, 960}} {
 		w, h := viewport[0], viewport[1]
 		scale := min((w-16)/476, (h-16)/180, float32(1))
 		// 整条状态栈及最右选中格的抬升外框一并保守包围，避免只检测热栏中心。

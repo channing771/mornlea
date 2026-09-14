@@ -57,10 +57,15 @@ func TestViewmodelApprovedSwordScreenAnchors(t *testing.T) {
 	projection := core.Perspective(viewmodelProjectionFovY, 1280.0/720, .1, 100)
 	tip := mgl32.Vec2{0, 1}
 	guard := mgl32.Vec2{}
+	guardLeft, guardRight := float32(1), float32(0)
 	models, _ := viewmodelDefaultRegistry.ItemToolParts(core.ItemIronSword)
 	for i, p := range parts[8:] {
 		for _, c := range viewmodelInstanceScreenHull(t, out, i+8, projection) {
 			point := mgl32.Vec2{(c[0] + 1) / 2, (1 - c[1]) / 2}
+			if models[i].Center[1] == .175 {
+				guardLeft = min(guardLeft, point[0])
+				guardRight = max(guardRight, point[0])
+			}
 			if point[1] < tip[1] {
 				tip = point
 			}
@@ -70,14 +75,19 @@ func TestViewmodelApprovedSwordScreenAnchors(t *testing.T) {
 			guard = mgl32.Vec2{(c[0] + 1) / 2, (1 - c[1]) / 2}
 		}
 	}
-	if tip[0] < .87 || tip[0] > .92 || tip[1] < .20 || tip[1] > .25 {
+	if tip[0] < .88 || tip[0] > .90 || tip[1] < .19 || tip[1] > .21 {
 		t.Errorf("sword tip=%v, expected approved upper-right silhouette", tip)
 	}
-	if guard[0] < .83 || guard[0] > .86 || guard[1] < .62 || guard[1] > .68 {
+	if guard[0] < .83 || guard[0] > .85 || guard[1] < .67 || guard[1] > .69 {
 		t.Errorf("guard=%v", guard)
 	}
 	tilt := math.Atan2(float64((tip[0]-guard[0])*1280), float64((guard[1]-tip[1])*720)) * 180 / math.Pi
-	if tilt < 8 || tilt > 18 {
+	length := float32(math.Hypot(float64((tip[0]-guard[0])*1280), float64((tip[1]-guard[1])*720)) / 720)
+	t.Logf("sword tip %v guard %v tilt %.3f length %.4f guard width %.4f", tip, guard, tilt, length, guardRight-guardLeft)
+	if length < .47 || length > .51 || guardRight-guardLeft < .15 || guardRight-guardLeft > .18 {
+		t.Errorf("sword blade/guard proportions differ: %.4f / %.4f", length, guardRight-guardLeft)
+	}
+	if tilt < 10 || tilt > 12 {
 		t.Errorf("sword leans %.1f degrees right, expected 10–15", tilt)
 	}
 }
@@ -85,18 +95,24 @@ func TestViewmodelApprovedSwordScreenAnchors(t *testing.T) {
 func TestViewmodelApprovedClosedFist(t *testing.T) {
 	parts := buildViewmodelParts(nil, &ViewmodelInput{}, 0)
 	inverse := parts[2].transform.Inv()
-	for i := 4; i < 8; i++ {
-		// 指节只在拳掌边缘轻微突出，不能堆成张开的板条。
+	// 亮面贴合实心掌面；不能再出现高于拳掌的独立板条盖。
+	for _, i := range []int{4, 5} {
 		local := inverse.Mul4(parts[i].transform)
-		top := local.Mul4x1(mgl32.Vec4{0, .5, 0, 1})
-		if top[1] > .57 {
-			t.Errorf("finger %d protrudes above closed palm: %v", i, top)
+		for _, x := range []float32{-.5, .5} {
+			for _, y := range []float32{-.5, .5} {
+				for _, z := range []float32{-.5, .5} {
+					p := local.Mul4x1(mgl32.Vec4{x, y, z, 1})
+					if abs32(p[0]) > .52 || abs32(p[1]) > .52 || abs32(p[2]) > .53 {
+						t.Errorf("palm facet %d protrudes: %v", i, p)
+					}
+				}
+			}
 		}
 	}
 }
 
 func TestViewmodelHelmetCheekSeatsInPalm(t *testing.T) {
-	for _, size := range [][2]float32{{640, 360}, {1280, 720}} {
+	for _, size := range [][2]float32{{1280, 720}, {1600, 900}, {1280, 960}} {
 		parts := buildViewmodelParts(nil, &ViewmodelInput{ViewportWidth: size[0], ViewportHeight: size[1], Selected: core.ItemStack{Item: core.ItemIronHelmet, Count: 1}}, 0)
 		out := make([]byte, len(parts)*96)
 		encodeAvatarPartsInto(out, parts)

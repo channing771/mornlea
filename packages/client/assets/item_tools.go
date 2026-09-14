@@ -82,23 +82,27 @@ func buildItemToolParts(item core.ItemID, px []byte) []ItemToolPart {
 	handleTop := float32(.20)
 	bandCount := 6
 	if category != 1 {
-		handleTop = .70
+		handleTop = .59
 		bandCount = 8
+		if category == 3 {
+			handleTop += .025
+		}
 	}
 	bandHeight := (handleTop + .21) / float32(bandCount)
 	for i := 0; i < bandCount; i++ {
 		y := -.21 + (float32(i)+.5)*bandHeight
-		add(0, y, 0, .065, bandHeight, .075, shade(handle, [...]float32{.30, .47, .36, .52, .38, .48, .35, .50}[i]))
+		add(0, y, 0, .065, bandHeight, .075, shade(handle, [...]float32{.18, .29, .21, .33, .23, .30, .20, .32}[i]))
 	}
 	add(0, -.225, 0, .072, .035, .082, shade(metal, .25))
 	if category == 1 {
-		add(0, .175, 0, .25, .052, .12, shade(metal, .28))
+		add(0, .175, 0, .25, .052, .12, shade(metal, .08))
 		for _, sign := range []float32{-1, 1} {
-			add(sign*.139, .175, 0, .045, .07, .13, shade(metal, .24))
+			add(sign*.139, .175, 0, .045, .07, .13, shade(metal, .085))
 			parts[len(parts)-1].RotationZ = -sign * .18
 		}
+		add(0, .175, .061, .25, .052, .002, shade(metal, .27))
 		add(0, .220, 0, .105, .045, .115, shade(metal, .35))
-		length := float32(.535)
+		length := float32(.650)
 		sections := 6
 		if broken {
 			length = .21
@@ -109,70 +113,92 @@ func buildItemToolParts(item core.ItemID, px []byte) []ItemToolPart {
 			h := length / float32(sections)
 			width := [...]float32{.118, .112, .103, .093, .077, .055}[i]
 			y := .242 + (float32(i)+.5)*h
-			add(0, y, 0, width, h, .105, shade(metal, .30))
-			add(-.012, y, .058, width*.56, h, .011, shade(metal, .72))
-			add(-width/2-.010, y, .019, .022, h, .055, shade(edge, .94))
-			add(width/2+.007, y, -.008, .016, h, .07, shade(metal, .45))
+			add(0, y, 0, width, h, .105, shade(metal, .075))
+			add(-.006, y, .053, width-.012, h, .001, shade(metal, .55))
+			add(-width/2+.004, y, .054, .008, h, .002, shade(edge, .94))
+			add(-.009, y, .055, .012, h, .002, shade(metal, .75))
 		}
 		if broken {
 			add(-.025, .242+length+.023, 0, .046, .046, .065, shade(metal, .50))
 		} else {
-			// 收尖体填满刃身上沿，两条连续斜刃从原刃缘收束，避免细颈上的独立菱形帽。
-			const tipBase = float32(.777)
-			const tipHeight = float32(.073)
-			for i := 0; i < 6; i++ {
-				fraction := (float32(i) + .5) / 6
-				width := .075 - float32(i)*.014
-				depth := .100 - float32(i)*.017
-				y := tipBase + tipHeight*fraction
-				add(0, y, .045-depth/2, width, tipHeight/6, depth, shade(metal, .30))
-				add(-.012*(1-fraction), y, .0475, .055*.56*(1-fraction), tipHeight/6, .005, shade(metal, .72))
-			}
-			for _, side := range []struct {
-				x     float32
-				color [4]float32
-			}{{-.042, shade(edge, .94)}, {.036, shade(metal, .45)}} {
-				length := float32(math.Hypot(float64(side.x), float64(tipHeight)))
-				add(side.x/2, tipBase+tipHeight/2, .0325, .010, length, .025, side.color)
-				parts[len(parts)-1].RotationZ = float32(math.Atan2(float64(side.x), float64(tipHeight)))
-			}
+			// 菱形上半部与末段直接相接，连续斜刃替代微小阶梯帽。
+			const tipBase = float32(.892)
+			add(0, tipBase-.005, 0, .039, .039, .105, shade(metal, .075))
+			parts[len(parts)-1].RotationZ = math.Pi / 4
+			add(-.003, tipBase-.004, .053, .035, .035, .002, shade(metal, .55))
+			parts[len(parts)-1].RotationZ = math.Pi / 4
 		}
 	} else {
-		const lift = float32(.33)
-		add(0, .37+lift, 0, .115, .13, .125, shade(metal, .32))
+		const lift = float32(.22)
+		socketY := .37 + lift
 		if category == 2 {
-			// 三段折线下弯后以两级尖端收束，避免恒厚弧段形成圆钩。
+			socketY += .04
+		}
+		if category == 3 {
+			socketY += .045
+		}
+		add(0, socketY, 0, .09, .13, .125, shade(metal, .075))
+		if category == 2 {
+			// 相邻翼段共享端点并小幅相交，粗大斜面连续下垂，右翼明显更长。
 			for _, sign := range []float32{-1, 1} {
 				if broken && sign > 0 {
 					continue
 				}
-				for i := 0; i < 5; i++ {
-					x := [...]float32{.075, .155, .220, .265, .292}[i]
-					y := [...]float32{.421, .397, .347, .293, .251}[i] + lift
-					w := [...]float32{.11, .10, .09, .064, .041}[i]
-					h := [...]float32{.075, .070, .054, .034, .016}[i]
-					d := [...]float32{.12, .105, .082, .052, .022}[i]
-					add(sign*x, y, 0, w, h, d, shade(metal, .34))
-					parts[len(parts)-1].RotationZ = -sign * ([...]float32{.20, .45, .72, .92, 1.04}[i])
-					add(sign*x, y, .5*d+.004, w, h, .008, shade(metal, .78))
-					parts[len(parts)-1].RotationZ = -sign * ([...]float32{.20, .45, .72, .92, 1.04}[i])
+				points := [][2]float32{{.025, .790}, {.17, .755}, {.30, .630}, {.39, .440}}
+				if sign < 0 {
+					points = [][2]float32{{.025, .790}, {.17, .745}, {.29, .670}, {.40, .575}}
 				}
+				for i := 0; i < 3; i++ {
+					a, b := points[i], points[i+1]
+					dx, dy := sign*(b[0]-a[0]), b[1]-a[1]
+					length := float32(math.Hypot(float64(dx), float64(dy)))
+					angle := float32(math.Atan2(float64(dy), float64(dx)))
+					h, d := [...]float32{.105, .085, .055}[i], [...]float32{.13, .11, .075}[i]
+					x, y := sign*(a[0]+b[0])/2, (a[1]+b[1])/2
+					add(x, y, 0, length+.025, h, d, shade(metal, .08))
+					parts[len(parts)-1].RotationZ = angle
+					add(x, y, d/2+.001, length+.025, h, .002, shade(metal, .70))
+					parts[len(parts)-1].RotationZ = angle
+				}
+				end := points[3]
+				add(sign*(end[0]+.012), end[1]-.01, 0, .032, .020, .025, shade(metal, .35))
+				parts[len(parts)-1].RotationZ = -sign * .8
 			}
 		} else {
-			width := float32(.27)
+			width := float32(.30)
 			if broken {
 				width = .14
 			}
 			// 宽刃沿柄套左侧斜出，厚度集中在刃背；不能堆成方锤头。
-			add(-.045, .755, 0, .11, .060, .105, shade(metal, .31))
-			add(-.17, .728, 0, width, .065, .13, shade(metal, .34))
-			parts[len(parts)-1].RotationZ = .55
-			add(-.17, .728, .071, width, .065, .012, shade(metal, .76))
-			parts[len(parts)-1].RotationZ = .55
-			tipX := -.17 - width*.44
-			tipY := .728 - width*.27
+			add(-.045, .740, 0, .11, .100, .105, shade(metal, .31))
+			add(-.18, .725, 0, width, .095, .13, shade(metal, .08))
+			parts[len(parts)-1].RotationZ = .72
+			add(-.18, .725, .071, width, .095, .012, shade(metal, .76))
+			parts[len(parts)-1].RotationZ = .72
+			tipX := -.18 - width*.38
+			tipY := .725 - width*.33
 			add(tipX, tipY, 0, .04, .025, .072, shade(metal, .56))
-			parts[len(parts)-1].RotationZ = .55
+			parts[len(parts)-1].RotationZ = .72
+		}
+	}
+	if category != 1 {
+		y := float32(.59)
+		if category == 2 {
+			y += .04
+		}
+		if category == 3 {
+			y += .045
+		}
+		if category == 2 {
+			add(-.0455, y, 0, .001, .13, .125, shade(metal, .53))
+		} else {
+			add(0, y, .0635, .09, .13, .002, shade(metal, .53))
+		}
+	}
+	if category == 3 {
+		// 锄头上移时同步延长柄到套内，保持连接而不放大整件工具。
+		for i := bandCount + 1; i < len(parts); i++ {
+			parts[i].Center[1] += .025
 		}
 	}
 	return parts
