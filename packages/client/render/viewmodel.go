@@ -222,6 +222,10 @@ func buildViewmodelParts(dst []avatarPart, input *ViewmodelInput, angle float32)
 		if input.Selected.Item == core.ItemIronIngot {
 			gripY = 11
 		}
+		// 弓的握把位于图稿左侧；默认图标中心落在透明区，需对齐实际弓臂。
+		if input.Selected.Item == core.ItemBow || input.Selected.Item == core.ItemBrokenBow {
+			gripX = 2
+		}
 		parts, _ := registry.ItemIconPrisms(input.Selected.Item)
 		for _, part := range parts {
 			center := mgl32.Vec3{(float32(part.X) + float32(part.Width)/2 - gripX) * pixel, (gripY - float32(part.Y) - .5) * pixel, 0}

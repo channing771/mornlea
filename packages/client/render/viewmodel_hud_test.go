@@ -10,9 +10,9 @@ import (
 func TestViewmodelCompleteSweepClearsFullHUD(t *testing.T) {
 	for _, viewport := range [][2]float32{{640, 360}, {1280, 720}, {800, 600}, {480, 360}} {
 		w, h := viewport[0], viewport[1]
-		scale := min((w-16)/476, (h-16)/160, float32(1))
+		scale := min((w-16)/476, (h-16)/180, float32(1))
 		// 整条状态栈及最右选中格的抬升外框一并保守包围，避免只检测热栏中心。
-		left, right, top := (w-476*scale)/2-8*scale, (w+476*scale)/2+8*scale, h-106*scale
+		left, right, top := (w-476*scale)/2-8*scale, (w+476*scale)/2+8*scale, h-126*scale
 		for _, fov := range []float32{30, 70, 110} {
 			projection := core.Perspective(fov*math.Pi/180, w/h, .1, 100)
 			for item := core.ItemID(0); item < core.ItemIDMax; item++ {

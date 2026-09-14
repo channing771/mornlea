@@ -26,7 +26,7 @@ func TestViewmodelHUDFrontendParity(t *testing.T) {
 	for _, formula := range []string{
 		"HOTBAR_ROW_WIDTH=HOTBAR_SLOTS*HOTBAR_SLOT_SIZE+(HOTBAR_SLOTS-1)*HOTBAR_SLOT_GAP;",
 		"DESIGN_WIDTH=HOTBAR_ROW_WIDTH+2*HOTBAR_PANEL_PADDING;",
-		"DESIGN_HEIGHT=HOTBAR_BOTTOM_MARGIN+HOTBAR_SLOT_SIZE+HOTBAR_PANEL_PADDING+STATUS_HOTBAR_GAP+2*(STATUS_BAR_GAP+STATUS_ICON_SIZE)+PROGRESS_TRACK_GAP+PROGRESS_TRACK_HEIGHT+POPUP_TRACK_GAP+POPUP_ROW_HEIGHT;",
+		"DESIGN_HEIGHT=HOTBAR_BOTTOM_MARGIN+HOTBAR_SLOT_SIZE+HOTBAR_PANEL_PADDING+STATUS_HOTBAR_GAP+3*(STATUS_BAR_GAP+STATUS_ICON_SIZE)+PROGRESS_TRACK_GAP+PROGRESS_TRACK_HEIGHT+POPUP_TRACK_GAP+POPUP_ROW_HEIGHT;",
 	} {
 		if !strings.Contains(compact, formula) {
 			t.Fatalf("frontend layout formula changed: %s", formula)
@@ -42,7 +42,7 @@ func TestViewmodelHUDFrontendParity(t *testing.T) {
 		values[name] = float32(n)
 	}
 	width := values["HOTBAR_SLOTS"]*values["HOTBAR_SLOT_SIZE"] + (values["HOTBAR_SLOTS"]-1)*values["HOTBAR_SLOT_GAP"] + 2*values["HOTBAR_PANEL_PADDING"]
-	status := values["HOTBAR_BOTTOM_MARGIN"] + values["HOTBAR_SLOT_SIZE"] + values["HOTBAR_PANEL_PADDING"] + values["STATUS_HOTBAR_GAP"] + 2*values["STATUS_ICON_SIZE"] + values["STATUS_BAR_GAP"]
+	status := values["HOTBAR_BOTTOM_MARGIN"] + values["HOTBAR_SLOT_SIZE"] + values["HOTBAR_PANEL_PADDING"] + values["STATUS_HOTBAR_GAP"] + 3*values["STATUS_ICON_SIZE"] + 2*values["STATUS_BAR_GAP"]
 	height := status + values["STATUS_BAR_GAP"] + values["PROGRESS_TRACK_GAP"] + values["PROGRESS_TRACK_HEIGHT"] + values["POPUP_TRACK_GAP"] + values["POPUP_ROW_HEIGHT"]
 	if width != viewmodelHUDWidth || height != viewmodelHUDHeight || status != viewmodelHUDStatusHeight || values["EDGE_MARGIN"] != viewmodelHUDEdge {
 		t.Fatalf("frontend HUD changed: width=%v height=%v status=%v", width, height, status)
