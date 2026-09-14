@@ -1,5 +1,7 @@
 # Held tools refinement implementation plan
 
+> 第二轮历史实施记录，数值和验证对应当时基线。用户已审核效果图，当前实施以 approved-plan.md 和更新后的 design/spec 为准。
+
 Spec: specs/first-person-viewmodel/spec.md and design.md in this change. Baseline 442076ca. Follow subagent-driven-development, read AGENTS ancestors. This is a continuation; original implementation-plan.md records the previous iteration.
 
 ### Task 1: 立体工具与 HUD 安全构图
