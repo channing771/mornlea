@@ -43,9 +43,13 @@ func TestViewmodelHeldGripRigidDuringSwing(t *testing.T) {
 		neutral := buildViewmodelParts(nil, input, 0)
 		for _, phase := range []float32{.08, .16, .28, .40, .7, .95} {
 			moved := buildViewmodelParts(nil, input, phase)
-			for i := 1; i < len(neutral); i++ {
-				want := neutral[0].transform.Inv().Mul4(neutral[i].transform)
-				got := moved[0].transform.Inv().Mul4(moved[i].transform)
+			// 局部转腕时拳掌和工具一起转，袖子与短腕只负责连续接合。
+			for i := 3; i < len(neutral); i++ {
+				if i == 6 || i == 7 {
+					continue
+				}
+				want := neutral[2].transform.Inv().Mul4(neutral[i].transform)
+				got := moved[2].transform.Inv().Mul4(moved[i].transform)
 				for j := range 16 {
 					if !approxEqual(want[j], got[j]) {
 						t.Fatalf("item %d part %d detached at %f", item, i, phase)

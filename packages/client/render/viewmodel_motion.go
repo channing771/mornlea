@@ -56,18 +56,35 @@ func viewmodelPhasePose(phase float32, tier ViewmodelTier) viewmodelPose {
 	wind := viewmodelPose{x: -.01, y: .02, forward: .015, roll: .025}
 	hit := viewmodelPose{x: -.22, y: .20, forward: .14, pitch: -.35, yaw: -.10, roll: .30}
 	switch tier {
-	case ViewmodelTierSword:
-		hit = viewmodelPose{x: -.20, y: .32, forward: .10, pitch: -.22, yaw: -.18, roll: .80}
-	case ViewmodelTierPick:
-		// 预备时将横头转入凿击平面，保留左尖在损坏形态下也能领先入土。
+	case ViewmodelTierSword, ViewmodelTierPick, ViewmodelTierHoe, ViewmodelTierAxe:
+		// 工具共用前臂轨迹，类别姿态只在腕部附近改变掌握和刃头。
 		wind = viewmodelPose{x: -.01, y: .08, forward: -.04, yaw: -.85, roll: .025}
 		hit = viewmodelPose{x: -.12, y: .22, forward: .15, pitch: -.42, yaw: -1.75, roll: .32}
-	case ViewmodelTierAxe:
-		hit = viewmodelPose{x: -.12, y: .22, forward: .15, pitch: -.95, yaw: .08, roll: .32}
-	case ViewmodelTierHoe:
-		hit = viewmodelPose{x: -.11, y: .20, forward: .14, pitch: -.80, yaw: -.12, roll: .38}
 	case ViewmodelTierBlock:
 		hit = viewmodelPose{x: -.20, y: .18, forward: .10, pitch: -.30, yaw: -.08, roll: .25}
+	}
+	return viewmodelInterpolatePose(phase, wind, hit)
+}
+
+// 工具刃口在握点附近转向；掌心与刃柄同转，袖子只消费共同根轨迹。
+func viewmodelToolLocalPose(phase float32, tier ViewmodelTier) viewmodelPose {
+	var wind, hit viewmodelPose
+	switch tier {
+	case ViewmodelTierSword:
+		wind = viewmodelPose{yaw: .85}
+		hit = viewmodelPose{pitch: .20, yaw: 1.57, roll: .48}
+	case ViewmodelTierHoe, ViewmodelTierAxe:
+		wind = viewmodelPose{yaw: .85}
+		hit = viewmodelPose{pitch: .15, roll: -.10}
+	default:
+		return viewmodelPose{}
+	}
+	return viewmodelInterpolatePose(phase, wind, hit)
+}
+
+func viewmodelInterpolatePose(phase float32, wind, hit viewmodelPose) viewmodelPose {
+	if phase <= 0 || phase >= 1 {
+		return viewmodelPose{}
 	}
 	var a, b viewmodelPose
 	var t float32

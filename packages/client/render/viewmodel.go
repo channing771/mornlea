@@ -253,11 +253,12 @@ func buildViewmodelParts(dst []avatarPart, input *ViewmodelInput, phase float32)
 			// 掌握与工具向相机前置，保持中立投影不变，避免柄被更后的袖口切成碎片。
 			neutral := viewmodelGripRoot(input, 0)
 			heldLocal := neutral.Inv().Mul4(mgl32.Scale3D(.82, .82, .82)).Mul4(neutral)
-			heldRoot := root.Mul4(heldLocal)
-			frame := heldRoot.Mul4(mgl32.Translate3D(toolOffset, toolHeight, 0)).Mul4(mgl32.HomogRotate3DZ((-45 - 15*normal) * math.Pi / 180)).Mul4(mgl32.HomogRotate3DY(toolYaw)).Mul4(mgl32.Scale3D(toolScale, toolScale, toolScale))
 			// 握工具时掌面沿柄收拢，拇指沿柄下垂，折指包住上侧；袖子仍共享同一入画轮廓。
 			graspLocal := heldLocal.Mul4(mgl32.Translate3D(toolOffset, toolHeight, 0)).Mul4(mgl32.HomogRotate3DZ((-45 - 15*normal) * math.Pi / 180))
-			grasp := root.Mul4(graspLocal)
+			localPose := viewmodelToolLocalPose(phase, ViewmodelTierOf(input.Selected))
+			localTurn := mgl32.HomogRotate3DZ(localPose.roll).Mul4(mgl32.HomogRotate3DX(localPose.pitch)).Mul4(mgl32.HomogRotate3DY(localPose.yaw))
+			grasp := root.Mul4(graspLocal).Mul4(localTurn)
+			frame := grasp.Mul4(mgl32.HomogRotate3DY(toolYaw)).Mul4(mgl32.Scale3D(toolScale, toolScale, toolScale))
 			setHand := func(index int, center, size mgl32.Vec3, color [4]float32) {
 				dst[index] = avatarPart{transform: grasp.Mul4(mgl32.Translate3D(center[0], center[1], center[2])).Mul4(mgl32.Scale3D(size[0], size[1], size[2])), color: color, material: avatarMaterialSolid}
 			}
@@ -265,13 +266,17 @@ func buildViewmodelParts(dst []avatarPart, input *ViewmodelInput, phase float32)
 			setHand(3, mgl32.Vec3{-.075, -.02, .060}, mgl32.Vec3{.055, .11, .050}, avatarShade(skin, .85))
 			setHand(4, mgl32.Vec3{.005, -.02, .081}, mgl32.Vec3{.13, .12, .002}, skin)
 			setHand(5, mgl32.Vec3{-.025, .065, .055}, mgl32.Vec3{.090, .055, .075}, avatarShade(skin, 1.05))
-			// 前置掌握与袖口之间保留真实腕部体积；中立时由掌面遮住，转腕时也不会露出断口。
-			wristStart := mgl32.HomogRotate3DZ(-20 * math.Pi / 180).Mul4x1(mgl32.Vec4{.04, -.075, .025, 1}).Vec3()
-			wristEnd := graspLocal.Mul4x1(mgl32.Vec4{.05, -.015, .0175, 1}).Vec3()
+			// 袖子的实体前缘靠近握掌，露出的皮肤只形成短而厚的腕部。
+			cuff := hand.Mul4(mgl32.Translate3D(-.08, .075, .08))
+			dst[1] = avatarPart{transform: cuff.Mul4(mgl32.Scale3D(.18, .05, .13)), color: avatarShade(coat, 1.03), material: avatarMaterialSolid}
+			bridge := hand.Mul4(mgl32.HomogRotate3DX(-.10)).Mul4(mgl32.Translate3D(-.06, -.005, .035))
+			dst[6] = avatarPart{transform: bridge.Mul4(mgl32.Scale3D(.18, .25, .14)), color: avatarShade(coat, 1.08), material: avatarMaterialSolid}
+			wristStart := mgl32.HomogRotate3DZ(-20 * math.Pi / 180).Mul4x1(mgl32.Vec4{-.08, .09, .12, 1}).Vec3()
+			wristEnd := graspLocal.Mul4(localTurn).Mul4x1(mgl32.Vec4{.05, -.015, .0175, 1}).Vec3()
 			wristAxis := wristEnd.Sub(wristStart)
 			wristCenter := wristStart.Add(wristEnd).Mul(.5)
 			wristFrame := root.Mul4(mgl32.Translate3D(wristCenter[0], wristCenter[1], wristCenter[2])).Mul4(mgl32.QuatBetweenVectors(mgl32.Vec3{0, 1, 0}, wristAxis.Normalize()).Mat4())
-			dst[7] = avatarPart{transform: wristFrame.Mul4(mgl32.Scale3D(.07, wristAxis.Len()+.04, .07)), color: avatarShade(skin, .65), material: avatarMaterialSolid}
+			dst[7] = avatarPart{transform: wristFrame.Mul4(mgl32.Scale3D(.09, wristAxis.Len()+.02, .09)), color: avatarShade(skin, .65), material: avatarMaterialSolid}
 			for _, part := range toolParts {
 				partFrame := frame.Mul4(mgl32.Translate3D(part.Center[0], part.Center[1], part.Center[2])).Mul4(mgl32.HomogRotate3DZ(part.RotationZ))
 				if part.Beveled {
