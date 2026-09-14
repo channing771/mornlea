@@ -122,6 +122,12 @@ export interface HudHealth {
   readonly value: number;
 }
 
+/** 已确认权威护甲点数：每档两点、恰十档、半档收尾；点数为 0 时组件不渲染
+ * 任何护甲条像素（与分节缺席同一呈现）。 */
+export interface HudArmor {
+  readonly points: number;
+}
+
 export interface HudHunger {
   readonly value: number;
   readonly saturationZero: boolean;
@@ -159,6 +165,7 @@ export interface HudState {
   readonly viewport: HudViewport;
   readonly hotbar?: HudHotbar;
   readonly health?: HudHealth;
+  readonly armor?: HudArmor;
   readonly hunger?: HudHunger;
   readonly oxygen?: HudOxygen;
   readonly eating: HudEating;
@@ -264,13 +271,15 @@ const MAX_MODE = 64;
 /** editValue 播种文本上界，与 schema `debugRow.editValue` maxLength 同值。 */
 const MAX_DEBUG_SEED = 64;
 // 以下为游戏相位 hud 分节的钉值：与 Go 侧镜像域（core.ItemID/MaxStackCount/
-// MaxHealth/MaxHunger/MaxOxygenTicks、HotbarSlots、maxChatLines/maxChatRunes、
-// maxPopupRunes）及 schema 的 integer/maxLength 上界逐值同源。
+// MaxHealth/MaxArmorPoints/MaxHunger/MaxOxygenTicks、HotbarSlots、
+// maxChatLines/maxChatRunes、maxPopupRunes）及 schema 的 integer/maxLength
+// 上界逐值同源。
 const HOTBAR_SLOTS = 9;
 const SELECTED_INDEX_MAX = HOTBAR_SLOTS - 1;
 const MAX_ITEM_ID = 65535;
 const MAX_STACK_COUNT = 64;
 const MAX_HEALTH = 20;
+const MAX_ARMOR = 20;
 const MAX_HUNGER = 20;
 const MAX_OXYGEN_TICKS = 300;
 const MAX_CHAT_LINES = 6;
@@ -575,6 +584,7 @@ function parseHud(record: RecordLike): HudState {
     [
       "hotbar",
       "health",
+      "armor",
       "hunger",
       "oxygen",
       "popup",
@@ -595,6 +605,11 @@ function parseHud(record: RecordLike): HudState {
     const health = asRecord(record.health, "hud.health");
     requireKeys(health, ["value"], "hud.health");
     hud.health = { value: requireInteger(health, "value", 0, MAX_HEALTH, "hud.health") };
+  }
+  if ("armor" in record) {
+    const armor = asRecord(record.armor, "hud.armor");
+    requireKeys(armor, ["points"], "hud.armor");
+    hud.armor = { points: requireInteger(armor, "points", 0, MAX_ARMOR, "hud.armor") };
   }
   if ("hunger" in record) {
     const hunger = asRecord(record.hunger, "hud.hunger");

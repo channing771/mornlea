@@ -19,13 +19,22 @@ export function GamePanels({ game, hud, onEvent }: Props) {
         </div> : <p className="game-key-hint">Tab 自由光标 · E 行囊</p>;
     const personal = game.kind === "inventory" || game.kind === "character";
     const crafting = game.kind === "inventory" || game.kind === "workbench";
-    const slotButton = (area: SlotArea, slot: HudSlot, index: number) => <button key={index} type="button" className={`game-slot${area === "inventory" && index < 9 && hud?.hotbar?.selectedIndex === index ? " game-slot--selected" : ""}`} disabled={!game.confirmed} aria-label={`${labels[area]} ${index + 1}：${slot.name || "空"}`} aria-pressed={game.source?.area === area && game.source.index === index} onClick={() => emit({ type: "game-action", token: game.token, op: "slot", area, index })}>
+    // 槽位交互只透传语义字段（按键类型与 Shift 修饰位）：数量推导与落位
+    // 全部由服务端权威完成，前端不自行计算分堆或快捷搬运结果。
+    const slotAction = (area: SlotArea, index: number, button: "left" | "right", shift: boolean) => emit({ type: "game-action", token: game.token, op: "slot", area, index, button, shift });
+    const slotButton = (area: SlotArea, slot: HudSlot, index: number) => <button key={index} type="button" className={`game-slot${area === "inventory" && index < 9 && hud?.hotbar?.selectedIndex === index ? " game-slot--selected" : ""}`} disabled={!game.confirmed} aria-label={`${labels[area]} ${index + 1}：${slot.name || "空"}`} aria-pressed={game.source?.area === area && game.source.index === index} onClick={event => slotAction(area, index, "left", event.shiftKey)} onContextMenu={event => {
+        // 右键在面板上只触发槽位语义操作，不弹出浏览器上下文菜单。
+        event.preventDefault();
+        slotAction(area, index, "right", event.shiftKey);
+    }}>
     <SlotContents slot={slot}/>
     <span className="game-tooltip" role="tooltip">{slot.name || "空槽位"}{slot.count > 0 ? ` × ${slot.count}` : ""}{slot.durability !== undefined ? ` · 耐久 ${Math.round(slot.durability * 100)}%` : ""}</span>
     </button>;
     const grid = (area: SlotArea, slots: readonly HudSlot[], columns: number, offset = 0) => <div className="game-slot-grid" style={{ "--game-columns": columns } as CSSProperties}>{slots.map((slot, index) => slotButton(area, slot, index + offset))}</div>;
     return <div className="game-panel-overlay">
-    <section className={`game-panel${crafting?"":" game-panel--compact"}`} role="dialog" aria-modal="true" aria-label={titles[game.kind]}>
+    {/* 容器级兜底：右键落在面板空白（页眉/页脚/留白）也只阻断原生菜单，
+        不发射语义事件——槽位语义操作由槽位级 onContextMenu 独家承担。 */}
+    <section className={`game-panel${crafting?"":" game-panel--compact"}`} role="dialog" aria-modal="true" aria-label={titles[game.kind]} onContextMenu={event => event.preventDefault()}>
   <header className="game-panel-header">
     <div>
     <p className="game-eyebrow">MORNLEA / 旅途日常</p>
@@ -90,7 +99,7 @@ export function GamePanels({ game, hud, onEvent }: Props) {
                     <SlotIcon slot={slot}/>
                     </div>)}</div>
                 </div>}</aside>}</div>}
-  <footer className="game-panel-footer">{game.kind === "character" ? "" : game.confirmed ? "先选物品，再选目标位置" : "正在整理行囊…"}<span>E / Esc 关闭</span>
+  <footer className="game-panel-footer">{game.kind === "character" ? "" : game.confirmed ? "先选物品，再选目标位置；右键半组 / Shift+右键单件 / Shift+点击快速搬运" : "正在整理行囊…"}<span>E / Esc 关闭</span>
     </footer>
  </section>
     </div>;

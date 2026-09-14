@@ -160,27 +160,6 @@ func readyMiningPlayers(
 	return engine, sessions, targets
 }
 
-type farmlandMoistureCandidateWatch struct {
-	phaseSeen     bool
-	candidateSeen bool
-}
-
-func watchFarmlandMoistureCandidateAtPhase(
-	engine *Engine,
-	dimension core.DimensionID,
-	position core.BlockPos,
-) *farmlandMoistureCandidateWatch {
-	watch := &farmlandMoistureCandidateWatch{}
-	engine.stepPhaseObserver = func(phase stepPhase) {
-		if phase != phaseFarmlandMoistureAdvance {
-			return
-		}
-		watch.phaseSeen = true
-		watch.candidateSeen = engine.realm.FarmlandQueued(dimension, position)
-	}
-	return watch
-}
-
 func loadFlatChunks(t *testing.T, dimension *Dimension, minX, maxX, minZ, maxZ int32) {
 	t.Helper()
 	for x := minX; x <= maxX; x++ {

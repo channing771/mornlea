@@ -54,7 +54,7 @@ func (engine *engineContext) advancePassiveSpawn() {
 		return
 	}
 	anchor := blockPosOf(anchorSession.player.state.Position)
-	x, z, _, _ := hostileSpawnColumn(splitmix64(uint64(engine.seed)^now), anchor.X, anchor.Z)
+	x, z, _, _ := hostileSpawnColumn(sampler.SplitMix64(uint64(engine.seed)^now), anchor.X, anchor.Z)
 	if info, ok := dimension.Info(core.BlockPos{X: x, Z: z}.Chunk()); !ok || info.State != realm.ChunkReady {
 		return
 	}
@@ -68,7 +68,7 @@ func (engine *engineContext) advancePassiveSpawn() {
 	}
 	// `id` 即候选哈希（非零）；与既有个体冲突时沿哈希链重散列，预算耗尽仍
 	// 冲突则放弃本 `tick`，绝不截断或覆盖既有集合。
-	id := hostileCandidateHash(engine.seed, now, x, y, z)
+	id := sampler.HostileCandidateHash(engine.seed, now, x, y, z)
 	for attempt := 0; attempt < passiveSpawnMaxRehashes; attempt++ {
 		if id != 0 && engine.passives.findIndex(id) < 0 {
 			engine.passives.insert(passiveState{
@@ -81,7 +81,7 @@ func (engine *engineContext) advancePassiveSpawn() {
 			})
 			return
 		}
-		id = splitmix64(id)
+		id = sampler.SplitMix64(id)
 	}
 }
 

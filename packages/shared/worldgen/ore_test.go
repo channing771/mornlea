@@ -22,7 +22,7 @@ func TestOreGenerationIsDeterministicForSameSeed(t *testing.T) {
 	first := worldgen.New(42, false)
 	second := worldgen.New(42, false)
 	for _, pos := range oreSamplePositions() {
-		if first.BaseBlockAt(pos) != second.BaseBlockAt(pos) {
+		if first.BaseBlockAt(core.Overworld, pos) != second.BaseBlockAt(core.Overworld, pos) {
 			t.Fatalf("同种子在 %+v 结果不一致", pos)
 		}
 	}
@@ -32,7 +32,7 @@ func TestOreGenerationDiffersAcrossSeeds(t *testing.T) {
 	first := worldgen.New(42, false)
 	second := worldgen.New(43, false)
 	for _, pos := range oreSamplePositions() {
-		if first.BaseBlockAt(pos) != second.BaseBlockAt(pos) {
+		if first.BaseBlockAt(core.Overworld, pos) != second.BaseBlockAt(core.Overworld, pos) {
 			return
 		}
 	}
@@ -46,7 +46,7 @@ func TestOreOnlyReplacesStoneWithinHeightLimits(t *testing.T) {
 		for z := int32(-64); z < 64; z++ {
 			for y := int32(-64); y < 120; y += 7 {
 				pos := core.BlockPos{X: x, Y: y, Z: z}
-				block := generator.BaseBlockAt(pos)
+				block := generator.BaseBlockAt(core.Overworld, pos)
 				switch block {
 				case core.CoalOreID:
 					coalSeen = true
@@ -72,10 +72,10 @@ func TestOreNeverReplacesNonStone(t *testing.T) {
 	generator := worldgen.New(7, false)
 	for x := int32(-40); x < 40; x++ {
 		for z := int32(-40); z < 40; z++ {
-			height := generator.HeightAt(x, z)
+			height := generator.HeightAt(core.Overworld, x, z)
 			for _, y := range []int32{core.MinY, height, height - 1} {
 				pos := core.BlockPos{X: x, Y: y, Z: z}
-				block := generator.BaseBlockAt(pos)
+				block := generator.BaseBlockAt(core.Overworld, pos)
 				// 基岩层、地表草层与紧邻的泥土层永远不会是矿石。
 				if block == core.CoalOreID || block == core.IronOreID {
 					t.Fatalf("非石头位置 %+v 生成了矿石", pos)
@@ -87,7 +87,7 @@ func TestOreNeverReplacesNonStone(t *testing.T) {
 
 func TestOreNeverReplacesNaturalGravel(t *testing.T) {
 	pos := core.BlockPos{X: -256, Y: 54, Z: -200}
-	if got := worldgen.New(42, false).BaseBlockAt(pos); got != core.GravelID {
+	if got := worldgen.New(42, false).BaseBlockAt(core.Overworld, pos); got != core.GravelID {
 		t.Fatalf("自然砾石 %+v 被矿石覆盖为 %d", pos, got)
 	}
 }
@@ -95,13 +95,13 @@ func TestOreNeverReplacesNaturalGravel(t *testing.T) {
 func TestBaseBlockAtMatchesGeneratedChunkWithOre(t *testing.T) {
 	generator := worldgen.New(42, false)
 	for _, chunkPos := range []core.ChunkPos{{}, {X: -3, Z: 7}, {X: 5, Z: -2}} {
-		chunk := generator.GenerateChunk(chunkPos)
+		chunk := generator.GenerateChunk(core.Overworld, chunkPos)
 		baseX := chunkPos.X << core.SectionShift
 		baseZ := chunkPos.Z << core.SectionShift
 		for lx := range core.SectionSize {
 			for lz := range core.SectionSize {
 				for y := int32(core.MinY); y < core.MaxY; y++ {
-					want := generator.BaseBlockAt(core.BlockPos{
+					want := generator.BaseBlockAt(core.Overworld, core.BlockPos{
 						X: baseX + int32(lx), Y: y, Z: baseZ + int32(lz),
 					})
 					if got := chunk.BlockAt(lx, y, lz); got != want {

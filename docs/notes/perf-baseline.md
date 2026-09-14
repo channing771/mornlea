@@ -2,13 +2,44 @@
 
 ## 当前 producer 与迁移规则
 
-当前 benchmark producer 为 scenario v22：自然短草又一次改变了被测进程与被测世界本身（稳定方块与 mesh registry 追加 `ShortGrassID`——实际烘焙条目 84 → 85，仍低于冻结上限 96；Go/Rust 植物材质判定集合从 `[31..54]` 扩为 `[31..54] ∪ {68}`，`55..67` 不移动；worldgen `MGW1` 请求扩为 layout 3 且 engine ABI 升为 v10，固定世界在合格草地上方空气格确定性新增短草，每个短草格经既有 plant 路径发射 4 条交叉斜面实例），叠加在 v21（常显 HUD 迁出 GPU 保留面）基线之上；benchmark 仍把 `FluidEnabled` 钉死为 `false`，也不含任何农业方块；固定 benchmark 输入仍为七名远端玩家、零伙伴，无头观察路径零 WebView 参与保持。当前唯一显式跨 workload 迁移为 `21:22`，v6..v21 历史报告仍可同版本读取。历史的 `20:21`、`19:20`、`18:19`、`17:18`、`16:17` 与更早的 `15:16` 已退役，只作本文的归档证据，工具不再接受它们。
+当前 benchmark producer 为 scenario v23：统一方块更新调度器与世界流式收尾又一次改变了被测进程的运行方式（耕地湿度重判的积压消费从 FIFO 改为统一调度器确定性全序、流体定时队列与随机抽样哈希链迁入 `packages/server/updates`、服务端多玩家探针按会话视距 `2/4/6/8` 梯度启用区块订阅与流式、存档 I/O 按类别与 region 并行化并新增 region 句柄 LRU 治理、报告新增 `streaming` 记录性指标族），叠加在 v22（自然短草）基线之上；benchmark 固定世界内容与 v22 逐格一致（仍把 `FluidEnabled` 钉死为 `false`，也不含任何农业方块）；固定 benchmark 输入仍为七名远端玩家、零伙伴，无头观察路径零 WebView 参与保持。当前唯一显式跨 workload 迁移为 `22:23`，v6..v22 历史报告仍可同版本读取。历史的 `21:22`、`20:21`、`19:20`、`18:19`、`17:18`、`16:17` 与更早的 `15:16` 已退役，只作本文的归档证据，工具不再接受它们。
+
+上一代（scenario v22）的判定理由：自然短草又一次改变了被测进程与被测世界本身（稳定方块与 mesh registry 追加 `ShortGrassID`——实际烘焙条目 84 → 85，仍低于冻结上限 96；Go/Rust 植物材质判定集合从 `[31..54]` 扩为 `[31..54] ∪ {68}`，`55..67` 不移动；worldgen `MGW1` 请求扩为 layout 3 且 engine ABI 升为 v10，固定世界在合格草地上方空气格确定性新增短草，每个短草格经既有 plant 路径发射 4 条交叉斜面实例），叠加在 v21（常显 HUD 迁出 GPU 保留面）基线之上。
 
 上一代（scenario v21）的判定理由：常显 HUD 层迁出 GPU 改变了被测进程本身（GPU 保留面只保留容器浮动面板族与悬停 tooltip——关闭容器界面的帧从 v20 关闭态最坏 100 quad/548 glyph 预算降到 0 quad/0 glyph，打开任一容器界面的最坏从 264 quad/700 glyph 预算收缩到 218 quad/268 glyph 预算，tooltip 按 8 rune 截断上限封顶、注册表实测最长名见证 262；固定 quad 上限 320、glyph 上限 768、glyph offset 15616 bytes、总容量 52480 bytes、48-byte instance 与 256-byte 区间对齐全部保持不变，缩出的容量全部沉淀为分支最坏与每帧实例前缀的缩小，因此每帧写入字节数移动；HUD 图集按整张贴图上传的契约与列布局不变；权威 tick 语义不变；benchmark 无头观察路径零 WebView 参与保持），即便 benchmark 世界内容未变——它仍把 `FluidEnabled` 钉死为 `false`，也不含任何农业方块；固定 benchmark 输入仍为七名远端玩家、零伙伴。
 
 上上代（scenario v20）的判定理由：客户端 UI 对齐改变了被测进程本身（Hotbar HUD 新增准星与物品名弹条、容器界面改为原版式浮动面板并新增面板描边与悬停 tooltip 背景，`maxHotbarQuads` 267 → 320、`maxHotbarGlyphs` 700 → 768 使固定上传布局移动——glyph offset 13312 → 15616、总容量 46912 → 52480 bytes、空聊天帧每帧实际写入 13312 → 15616 bytes；HUD 图集既有 cell 程序化重绘但不新增列；权威 tick 语义不变）。
 
 三代前（scenario v19）的判定理由：`authoritative-hunger` 改变了被测进程本身（Hotbar HUD 新增右下角饥饿条，`maxHotbarQuads` 247 → 267 使固定上传布局移动——glyph offset 12288 → 13312、总容量 45888 → 46912 bytes、空聊天帧每帧实际写入 12288 → 13312 bytes；HUD 图集在爱心之后新增空/满两列程序化鸡腿；权威 tick 多出饥饿三层状态的推进与结算）。
+
+## unified-block-updates-world-streaming scenario v23 记录（record-only，非新基线）
+
+2026-09-09 在 `feat/unified-block-updates-world-streaming` 分支提交 `0dd8ff0b5002f0079fb5839082c4e8bcd73295fd` 上，用无窗口离屏入口跑了一次 scenario v23 Memory producer（该 scenario 由本 change 提交 `fe58ce76` 升版：per-session 视距梯度 2/4/6/8 的 streaming 指标族进入报告）：
+
+```bash
+make rust
+make build
+./bin/mornlea --benchmark --benchmark-transport memory --perf-output /tmp/mornlea-v23-0dd8ff0b/memory-v23.json
+```
+
+进程退出码 0，报告完整写出（`scenario_version=23`、`transport=memory`、`Apple M2 / 16GiB`、`macOS 26.6.2`、`go1.26.0 darwin/arm64`、`2560x1440`、`load_seconds=42.15`、`snapshot_seconds=21.76`、`cooldown_seconds=30`），SHA-256 `c6dc6ce8954fc144c5f2ce0dfbd5d55328ed1b2402066ffe3ee57aa71ed573c8`。这是**记录性测量**：不覆盖 `docs/notes/perf-baseline.json`，不提升任何基线；上方「当前 producer 与迁移规则」段落仍停在 v22 的正式表述，升版叙述与显式迁移归档阶段另行决策。本次运行硬件为 Apple M2 / 16GiB，与既有 M5 / 24GiB 记录不同机，跨硬件只作定性对照、不作相对比较。
+
+| 指标 | 数值 |
+|---|---|
+| still | fps 171.92、p50 5.808 ms、p95 5.896 ms、p99 5.999 ms、max 18.897 ms、peak RSS 1515.5 MiB、10,314 帧 |
+| flying | fps 437.99、p50 1.644 ms、p95 5.849 ms、p99 17.932 ms、max 39.440 ms、peak RSS 1685.2 MiB、52,523 帧 |
+| 权威 tick | p50 1.057 ms、p95 9.216 ms、p99 11.212 ms、max 11.788 ms（200 帧） |
+| 区块持久化 | p50 4.974 ms、p95 11.491 ms、p99 14.864 ms、max 33.304 ms（5,031 次快照） |
+| 玩家持久化 | p50 0.0016 ms、p95 0.0028 ms、p99 0.0030 ms、max 0.0115 ms（256 次快照） |
+| 协议 | encode p99 0.0008 ms、decode p99 0.0001 ms、45,056 bytes |
+| streaming（v23 新指标族） | loaded_chunks 296、load p50 8496.2 ms、p95 10746.1 ms、p99 10946.2 ms、max 10946.2 ms、peak RSS 1927.9 MiB |
+| 八会话服务端 | outbound 1,340,722 bytes、outbox 高水位 13、player jobs 高水位 6、player done 高水位 2、peak RSS 2,021,588,992 bytes、`remote_gpu_complete` p99 0.00006 ms（128 样本，每样本摊薄 256 次绘制） |
+
+producer 打印了两条以「性能记录:」开头的绝对阈值记录——`flying p99 17.932 ms >= 12 ms` 与 `tick p99 11.212 ms >= 10 ms`。按 `bounded-benchmark-workload` 条文，p99、FPS、RSS、tick、队列高水位与绝对阈值结果**只记录和报告**，不改变退出状态；报告结构、字段、样本完整性、身份、真实 overflow、数据丢失与 I/O 错误仍会失败，本次全部通过（退出码 0）。
+
+与 v22 时代的定性对照：① 本 change 的方块更新统一化把旧的流体/湿度/作物三相位收敛为单一 `phaseBlockUpdates`，2.1 评审记录过 `BenchmarkAdvanceEval` 微基准 ~310.6µs → ~341.4µs（约 +10%）的跨域候选扫描与间接回调开销（record-only，记入台账待本次取证）；本次 200 帧权威 tick p99 11.212 ms 中 p50 仅 1.057 ms，尾部集中于视距梯度下多会话区块装载与 Mesh 候选并发窗口，与本机（M2 / 16GiB，弱于 M5 / 24GiB）及 4489 区块固定世界的装载期重合，未见单调性恶化指向统一入队门面本身。② 2.4 已把 fluid_perf 的流体/湿度两列退役为单一 `block` 相位列（相位观察面只剩一个入口通知，逐段归因不再可观测），本报告的 tick 口径因此是含装载尾段的整相位口径。③ streaming 指标族为 v23 首次进入报告：296 个装载区块的 p50 ~8.5 s 量级与本 change 3.4 评审记档的已知瓶颈一致——存档 job 队列是单 FIFO 且 generate 排全部 load 之后、探针 Workers=1，属后续候选改进点，不在本 change 范围。
+
+provenance 说明：运行时 HEAD 即上述提交（三个收尾骑手提交之后的干净树）；`make build` 尾部的 pixel_perfection 授权文件拷贝因该可选资产包未在本机 provision 而失败（基线即如此，与本 change 无关），三个二进制与其余步骤均在失败点之前完成，benchmark 使用的是该次构建的 `bin/mornlea`。
 
 ## authoritative-hunger scenario v19 记录（record-only，非新基线）
 

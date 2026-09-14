@@ -71,6 +71,7 @@ const (
 	defaultFluidHorizontalDrag = float32(0.8)
 
 	defaultSprintSpeedMultiplier = float32(1.3)
+	defaultSneakSpeedMultiplier  = float32(0.3)
 )
 
 // State 是玩家在固定步开始时的物理状态；位置表示脚底中心。
@@ -108,6 +109,9 @@ type Input struct {
 	Yaw   float32
 	// Sprinting 为真时本步在门控全过时提升水平目标速度至 WalkSpeed*SprintSpeedMultiplier。
 	Sprinting bool
+	// Sneaking 为真且站立非浸没时，本步水平目标速度降至 WalkSpeed*SneakSpeedMultiplier，
+	// 且潜行优先于疾跑（同置时只减速不加速）。
+	Sneaking bool
 	// BodyInFluid 为真时本步走水中积分：重力衰减、垂直终端速度压低、
 	// 水平速度乘阻力、Jump 变为持续上浮。
 	BodyInFluid bool

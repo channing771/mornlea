@@ -53,16 +53,19 @@ func TestCompanionMessageIDsAreAppendOnly(t *testing.T) {
 	}
 	// v22 把 13 分配给了 TillSoil，v27 把 14 分配给了 BoneMeal，格子工作台把
 	// 15 分配给 `TakeCraftingOutput`（`MoveCraftingStack` 复用 7），v38 把
-	// 16/17 分配给水桶双命令；本表的「下一个仍未分配」上界随之推进到 18。
-	if _, ok := ClientPacketForID(StatePlay, 18); ok {
-		t.Fatal("未知 client packet ID 18 被接受")
+	// 16/17 分配给水桶双命令，v42 把 18 分配给 `EquipArmor`，v44 把 19/20
+	// 分配给分堆双命令；本表的「下一个仍未分配」上界随之推进到 21。
+	if _, ok := ClientPacketForID(StatePlay, 21); ok {
+		t.Fatal("未知 client packet ID 21 被接受")
 	}
 	// 格子工作台把 21 分配给了 `CraftingState`，夜行者把 22/23/24 分配给
 	// `HostileSpawn`/`HostileState`/`HostileDespawn`，私有战斗命中把 25 分配给
 	// `CombatHit`，被动牛把 26/27/28 分配给
-	// `PassiveSpawn`/`PassiveState`/`PassiveDespawn`；下一个仍未分配的上界推进到 29。
-	if _, ok := ServerPacketForID(StatePlay, 29); ok {
-		t.Fatal("未知 server packet ID 29 被接受")
+	// `PassiveSpawn`/`PassiveState`/`PassiveDespawn`，投射物把 29/30/31 分配给
+	// `ProjectileSpawn`/`ProjectileState`/`ProjectileDespawn`；下一个仍未分配的
+	// 上界推进到 32。
+	if _, ok := ServerPacketForID(StatePlay, 32); ok {
+		t.Fatal("未知 server packet ID 32 被接受")
 	}
 }
 

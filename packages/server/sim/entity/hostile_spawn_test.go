@@ -10,15 +10,26 @@ import (
 )
 
 // 本文件锁定夜行者的确定性夜间生成：锚点玩家按已排序 active session 与
-// `WorldTimeTicks % 会话数` 选取、splitmix64 整数派生半径与轴向（水平距离
+// `WorldTimeTicks % 会话数` 选取、`sampler.SplitMix64` 整数派生半径与轴向（水平距离
 // 24..48）、候选哈希低 8 位 <13 才尝试、双格空气/下方 solid/非流体/完整
 // loaded/局部区块光 ≤7/夜间窗口全部必要、全服 ≤64 与每玩家 48 格内 ≤8、
-// 每 tick 至多验证一个候选、相同输入重放逐位一致，以及 ID 冲突重散列。
+// 每 tick 至多验证一个候选、和平难度入口门控（不派生候选、不消耗预算）、
+// 相同输入重放逐位一致，以及 ID 冲突重散列。
 
 // spawnTestEngine 构造带一名已激活锚点玩家的引擎（世界种子可指定）。
 func spawnTestEngine(t *testing.T, seed int64) (*Engine, SessionID) {
 	t.Helper()
-	engine := NewEngine(0, 0, seed)
+	return spawnTestEngineAtDifficulty(t, seed, core.DifficultyNormal)
+}
+
+// spawnTestEngineAtDifficulty 是 `spawnTestEngine` 的难度感知变体：夹具逐字
+// 相同，只把构造难度换成入参，供难度门控用例与 normal 基线共用同一套锚点
+// 夹具。
+func spawnTestEngineAtDifficulty(
+	t *testing.T, seed int64, difficulty core.Difficulty,
+) (*Engine, SessionID) {
+	t.Helper()
+	engine := NewEngine(0, 0, seed, difficulty)
 	session := SessionID(1)
 	engine.RegisterSession(session, core.Overworld, core.ChunkPos{})
 	loadMovementChunk(t, engine.dimension(core.Overworld), movementFlatChunk(core.ChunkPos{}))
@@ -120,7 +131,7 @@ func TestHostileSpawnColumnDerivationStaysInContractWindow(t *testing.T) {
 	// 派生函数的窗口契约：半径恒在 24..48（含）、轴向是四个水平轴之一、
 	// 候选列 = 锚点 + 轴向量 × 半径，且全部输入为整数。
 	for tick := uint64(0); tick < 2000; tick++ {
-		base := splitmix64(uint64(0) ^ tick)
+		base := sampler.SplitMix64(uint64(0) ^ tick)
 		x, z, radius, axis := hostileSpawnColumn(base, 100, -40)
 		if radius < 24 || radius > 48 {
 			t.Fatalf("tick %d 派生半径 %d 越出 24..48", tick, radius)
@@ -336,10 +347,33 @@ func TestHostileSpawnRejectsAtGlobalCap(t *testing.T) {
 	}
 }
 
+// findSpawningTickOfKind 是 `findSpawningTick` 的 kind 感知变体：探得第一个
+// 生成出指定 kind 个体的 tick（近玩家上限按 kind 分别计数后，候选的 kind
+// 决定它撞上哪一档上限）。
+func findSpawningTickOfKind(
+	t *testing.T, engine *Engine, start, step uint64, limit int, kind uint8,
+) uint64 {
+	t.Helper()
+	for offset := range limit {
+		tick := start + uint64(offset)*step
+		clearHostilesForTest(engine)
+		engine.worldTime.Store(tick)
+		engine.advanceHostileSpawn()
+		if len(engine.hostiles.entries) == 1 && engine.hostiles.entries[0].kind == kind {
+			clearHostilesForTest(engine)
+			return tick
+		}
+	}
+	t.Fatalf("扫描窗口内没有生成出 kind=%d 的候选 tick", kind)
+	return 0
+}
+
 func TestHostileSpawnRejectsNinthNearAnchorPlayer(t *testing.T) {
 	engine, _ := spawnTestEngine(t, 0)
 	loadSpawnArena(t, engine, -48, 48, -48, 48)
-	tick := findSpawningTick(t, engine, 13000, 1, 400)
+	// 近玩家上限按 kind 分别计数：本用例预置的 8 只都是夜行者，必须以
+	// 夜行者候选（hash%3!=0）的 tick 考察，才能精确落在上限边界上。
+	tick := findSpawningTickOfKind(t, engine, 13000, 1, 4000, HostileKindNightwalker)
 
 	// 锚点玩家 48 格内已有 8 只：生成必须被拒绝。
 	clearHostilesForTest(engine)
@@ -465,5 +499,33 @@ func TestHostileSpawnWithoutActiveSessionsDoesNothing(t *testing.T) {
 	engine.advanceHostileSpawn()
 	if len(engine.hostiles.entries) != 0 {
 		t.Fatal("没有 active 会话仍生成了夜行者")
+	}
+}
+
+// TestHostileSpawnPeacefulGatesAtEntry 覆盖 Scenario「和平难度不生成…不消耗
+// 候选预算」：同 seed 同锚点下先用 normal 探针证明夜窗内确实存在可生成的
+// tick（夹具自证，防止「门控绿但夹具根本不生成」的假绿），再让 peaceful 与
+// hard 引擎跑同一段夜窗——peaceful 自入口短路，零生成；hard 与 normal 逐位
+// 一致，在同一 tick 首次生成。
+func TestHostileSpawnPeacefulGatesAtEntry(t *testing.T) {
+	normal, _ := spawnTestEngine(t, 0)
+	loadSpawnArena(t, normal, -48, 48, -48, 48)
+	firstTick := findSpawningTick(t, normal, 13000, 1, 400)
+
+	peaceful, _ := spawnTestEngineAtDifficulty(t, 0, core.DifficultyPeaceful)
+	loadSpawnArena(t, peaceful, -48, 48, -48, 48)
+	for offset := range 400 {
+		peaceful.worldTime.Store(13000 + uint64(offset))
+		peaceful.advanceHostileSpawn()
+		if len(peaceful.hostiles.entries) != 0 {
+			t.Fatalf("peaceful 在 tick %d 生成了夜行者，想要零生成", 13000+offset)
+		}
+	}
+
+	hard, _ := spawnTestEngineAtDifficulty(t, 0, core.DifficultyHard)
+	loadSpawnArena(t, hard, -48, 48, -48, 48)
+	hardTick := findSpawningTick(t, hard, 13000, 1, 400)
+	if hardTick != firstTick {
+		t.Fatalf("hard 首个生成 tick=%d，想要与 normal 一致 (%d)", hardTick, firstTick)
 	}
 }

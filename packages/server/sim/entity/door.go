@@ -112,11 +112,10 @@ func (engine *engineContext) tryPlaceDoor(dimensionID core.DimensionID, lower co
 		_, _, _ = dimension.SetBlock(lower, oldLower)
 		return mapSetBlockError(errUpper), true
 	}
-	// 两个半都可能在同一区块，recordChange 分别汇入 pending（同一 key 会合并）
-	engine.recordChange(dimensionID, lower, lowerID, pending)
-	engine.recordChange(dimensionID, upper, upperID, pending)
-	_ = oldLower
-	_ = oldUpper
+	// 两个半都可能在同一区块，recordChange 分别汇入 pending（同一 key 会合并）。
+	// 写前旧值恒为空气（上面的严格空气校验），仅供统一入队门面判定方块类别。
+	engine.recordChange(dimensionID, lower, oldLower, lowerID, pending)
+	engine.recordChange(dimensionID, upper, oldUpper, upperID, pending)
 	return 0, false
 }
 
@@ -154,11 +153,11 @@ func handleInteractDoor(engine *engineContext, dimensionID core.DimensionID, pos
 	}
 	open := core.IsDoorOpen(lowerID)
 	newLower := doorLowerID(dir, !open)
-	_, _, err := dimension.SetBlock(lowerPos, newLower)
+	old, _, err := dimension.SetBlock(lowerPos, newLower)
 	if err != nil {
 		return false
 	}
-	engine.recordChange(dimensionID, lowerPos, newLower, pending)
+	engine.recordChange(dimensionID, lowerPos, old, newLower, pending)
 	// upper 保持 DoorUpper，不改，但逻辑关联已通过 lower 翻转体现
 	return true
 }
@@ -192,6 +191,10 @@ func (engine *engineContext) executeInteractDoor(command Command, pending *pendi
 	}
 	if !core.IsDoor(block) {
 		return 0, false
+	}
+	// 潜行放置：潜行中不切换门，客户端应直发 PlaceBlock；服务端权威拒绝兜底。
+	if session.player.sneakingHeld {
+		return RejectInvalidInput, true
 	}
 	if !handleInteractDoor(engine, dimensionID, hit.Block, pending) {
 		return RejectNoTarget, true

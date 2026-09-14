@@ -23,7 +23,7 @@ func (a *Application) dropSelectedItem() {
 	}
 }
 
-func (a *Application) placeBlock() {
+func (a *Application) placeBlock(sneaking bool) {
 	if _, ready := a.predictor.State(); !ready {
 		return
 	}
@@ -43,7 +43,8 @@ func (a *Application) placeBlock() {
 		// 工作台与熔炉/箱子共用这条既有打开判定路径：服务端才是权威射线，
 		// 这里只按本地镜像的方块类型决定发哪种请求——工作台打开的是 3×3 合成
 		// 网格而不是容器槽位，具体语义由服务端重新判定，客户端不做任何预测。
-		if loaded && (block == core.FurnaceID || block == core.ChestID || block == core.WorkbenchID) {
+		// 潜行放置：潜行中跳过开容器，直发 PlaceBlock；服务端权威拒绝兜底。
+		if !sneaking && loaded && (block == core.FurnaceID || block == core.ChestID || block == core.WorkbenchID) {
 			if err := a.send(network.OpenContainer{
 				Sequence: a.nextSequence(), Yaw: a.camera.Yaw, Pitch: a.camera.Pitch,
 			}); err != nil {
@@ -81,6 +82,17 @@ func (a *Application) placeBlock() {
 	// 放置引用最后一个已确认的选中栏位；尚未确认时不发送。
 	hotbar, confirmed := a.inventory.Hotbar()
 	if !confirmed {
+		return
+	}
+	// 手持护甲时「使用」键上行装备互换命令而不是放置：判定与权威装备互换共用
+	// `core.ArmorSlotOf` 这同一份件→槽事实源，目标槽位由服务端按护甲件类映射
+	// 确定，客户端不携带槽位、也不预测互换结果——快捷栏与穿戴要等权威
+	// `InventoryUpdate` 广播回来才变化。护甲不可放置（`core.ItemPlacement` 为
+	// 空），不发这条的话服务端只会沉默，护甲就永远穿不上。
+	if _, isArmor := core.ArmorSlotOf(hotbar.Slots[hotbar.Selected].Item); isArmor {
+		if err := a.send(network.EquipArmor{Sequence: a.nextSequence()}); err != nil {
+			slog.Warn("发送装备护甲命令失败", "error", err)
+		}
 		return
 	}
 	// 放置判定与服务端权威放置共用 `core.ItemPlacement` 这同一份事实源：不可

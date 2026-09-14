@@ -289,6 +289,24 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 				return
 			}
 			continue
+		case network.ProjectileSpawn:
+			if err := a.projectiles.ApplySpawn(message); err != nil {
+				a.CloseClientSession(err)
+				return
+			}
+			continue
+		case network.ProjectileState:
+			if err := a.projectiles.ApplyStates(message); err != nil {
+				a.CloseClientSession(err)
+				return
+			}
+			continue
+		case network.ProjectileDespawn:
+			if err := a.projectiles.ApplyDespawn(message); err != nil {
+				a.CloseClientSession(err)
+				return
+			}
+			continue
 		case network.PassiveSpawn:
 			if err := a.passives.ApplySpawn(message); err != nil {
 				a.CloseClientSession(err)

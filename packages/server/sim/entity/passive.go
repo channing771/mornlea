@@ -338,7 +338,7 @@ func (engine *engineContext) passiveStepInput(entry *passiveState) physics.Input
 		return physics.Input{Yaw: entry.yaw}
 	}
 	segment := engine.tick.Load() / passiveWanderSegmentTicks
-	base := splitmix64(uint64(engine.seed) ^ segment ^ entry.id)
+	base := sampler.SplitMix64(uint64(engine.seed) ^ segment ^ entry.id)
 	want := normalizeYaw(float32(base&0xFFFFFF) * (2 * math.Pi / 0x1000000))
 	entry.yaw = turnYawToward(entry.yaw, want, passiveIdleLookMaxTurn)
 	return physics.Input{MoveZ: 1, Yaw: entry.yaw}

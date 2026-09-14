@@ -21,7 +21,7 @@ func TestNaturalMaterialBoundaries(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := generator.BaseBlockAt(test.pos); got != test.want {
+			if got := generator.BaseBlockAt(core.Overworld, test.pos); got != test.want {
 				t.Fatalf("BaseBlockAt(%+v) = %d，期望 %d", test.pos, got, test.want)
 			}
 		})
@@ -35,14 +35,14 @@ func TestNaturalMaterialsAppearInContinuousAreas(t *testing.T) {
 	adjacent := make(map[core.BlockID]bool)
 	for x := int32(-1024); x <= 1024; x += 4 {
 		for z := int32(-1024); z <= 1024; z += 4 {
-			height := generator.HeightAt(x, z)
+			height := generator.HeightAt(core.Overworld, x, z)
 			for _, y := range []int32{height, height - 1, height - 2, height - 4, height - 10} {
-				block := generator.BaseBlockAt(core.BlockPos{X: x, Y: y, Z: z})
+				block := generator.BaseBlockAt(core.Overworld, core.BlockPos{X: x, Y: y, Z: z})
 				seen[block]++
 				if x < 0 || z < 0 {
 					seenNegative[block] = true
 				}
-				if generator.BaseBlockAt(core.BlockPos{X: x + 1, Y: y, Z: z}) == block {
+				if generator.BaseBlockAt(core.Overworld, core.BlockPos{X: x + 1, Y: y, Z: z}) == block {
 					adjacent[block] = true
 				}
 			}

@@ -118,27 +118,36 @@ func (player *playerState) applyExhaustion(milli, thresholdMilli uint16) {
 }
 
 // advanceStarvation 推进一名玩家一个 tick 的饥饿伤害结算，与 advanceOxygen
-// 同形：固定整数运算、不分配、由调用方传入本 tick 的 tunable 快照值。
+// 同形：固定整数运算、不分配、由调用方传入难度快照与本 tick 的 tunable 快照值。
 //
-// 规则（spec authoritative-hunger「饥饿归零按固定间隔扣血但不致死」）：
-//   - 饥饿值大于零：计时清零，什么都不发生。
-//   - 饥饿值为零且生命值大于 1：每 intervalTicks 个 tick 走一次 applyDamage(1)。
-//   - 饥饿值为零但生命值不高于 1：**计时也不推进**。计时冻结而不是照推是刻意的：
-//     否则玩家在 1 点血上饿着熬过若干间隔后一吃饱、一挨打回到 2 点血，积攒的
-//     计时会立刻结算掉一次伤害，读起来像是"隔着时间打了一拳"。
+// 规则（spec authoritative-hunger「饥饿归零按固定间隔扣血且致死性由难度决定」）：
+//   - 饥饿值大于零：计时清零，什么都不发生（三档一致）。
+//   - peaceful：饥饿伤害整体跳过——不扣血、不重置回血计时（没有伤害就没有
+//     `applyDamage` 的任何副作用），伤害计时随之冻结：它在本档永远等不到结算。
+//   - 饥饿值为零：每 intervalTicks 个 tick 走一次 applyDamage(1)；normal 保留
+//     「一点生命」硬地板——生命值不高于 1 时停止扣除且**计时也不推进**。计时
+//     冻结而不是照推是刻意的：否则玩家在 1 点血上饿着熬过若干间隔后一吃饱、
+//     一挨打回到 2 点血，积攒的计时会立刻结算掉一次伤害，读起来像是"隔着
+//     时间打了一拳"。hard 无地板，伤害可把生命打到 0 并交给本 tick 稍后的
+//     死亡结算。
 //
 // 饥饿伤害必须经 applyDamage 这个既有伤害入口，不能就地扣 health：只有走那里
 // 才会重置自动回复计时（否则玩家一边饿一边回血），也才会触发客户端的确认伤害
-// 反馈。饥饿伤害**不致死**——生命值 1 点是硬地板，因此它永远不会把玩家送进
-// settleDeaths。
+// 反馈。hard 的死亡因此复用既有 settleDeaths 的死亡/重生/掉落路径，不存在
+// 饥饿专用的第二条死亡分支。
 //
 // 与氧气同理，饥饿伤害计时是纯瞬态字段，不持久化、不进入快照/哈希。
-func (player *playerState) advanceStarvation(intervalTicks uint32) {
+func (player *playerState) advanceStarvation(difficulty core.Difficulty, intervalTicks uint32) {
 	if player.hunger > 0 {
 		player.starvationTicks = 0
 		return
 	}
-	if player.health <= 1 {
+	if difficulty == core.DifficultyPeaceful {
+		return
+	}
+	// hard 之外保留硬地板；用「非 hard」而不是「等于 normal」表达，让未来
+	// 可能的新档位默认继承更安全的 normal 语义。
+	if difficulty != core.DifficultyHard && player.health <= 1 {
 		return
 	}
 	player.starvationTicks++

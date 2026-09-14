@@ -118,35 +118,42 @@ type Application struct {
 	viewmodelPrimaryBlocked bool
 	// weatherStream/weatherState 是本帧降水实例流与天气状态段的复用缓冲；
 	// 降水无跨帧跟踪表，会话重置无需清理。
-	weatherStream  []byte
-	weatherState   []byte
-	billboardBytes []byte
-	entityEncoder  render.InstanceEncoder
-	lastFrameStats render.FrameStats
-	remotePlayers  *client.RemotePlayers
-	companions     *client.Companions
-	hostiles       *client.Hostiles
-	chatEvents     *client.ChatEvents
-	chatInput      chatInput
+	weatherStream []byte
+	weatherState  []byte
+	// projectileStream 是本帧投射物实例流的复用缓冲；projectileScratch 是
+	// 镜像呈现到编码输入的复用转换缓冲。投射物无跨帧跟踪表（取向直接来
+	// 自镜像速度估计），会话重置无需清理。
+	projectileStream  []byte
+	projectileScratch []render.Projectile
+	billboardBytes    []byte
+	entityEncoder     render.InstanceEncoder
+	lastFrameStats    render.FrameStats
+	remotePlayers     *client.RemotePlayers
+	companions        *client.Companions
+	hostiles          *client.Hostiles
+	chatEvents        *client.ChatEvents
+	chatInput         chatInput
 	// chatEventBuffer 是 refreshChatLines 的复用缓冲，容量与 client.ChatEventCapacity
 	// 同源（E9/C9）：事件环最多回放 32 条，缓冲按同一常量分配保证零扩容刷新。
 	chatEventBuffer [client.ChatEventCapacity]network.ChatEvent
 	// chatLines 的 6 是 HUD 聊天显示行数：openspec companion-client-presentation
 	// 规格「HUD 显示最近最多 6 条」，与 frontend hud 组件的行槽数同值。
-	chatLines              [6]string
-	chatLineCount          int
-	formattedChatEventID   uint64
-	remotePresentations    []client.RemotePresentation
-	companionPresentations []client.CompanionPresentation
-	remoteAvatars          []render.Avatar
-	hostilePresentations   []client.HostilePresentation
-	passives               *client.Passives
-	passivePresentations   []client.PassivePresentation
-	remoteNameTags         []render.NameTag
-	nameTagRenderer        *render.NameTagRenderer
-	hotbarRenderer         *hud.HotbarRenderer
-	damageFeedback         DamageFeedback
-	damageStrength         float32
+	chatLines               [6]string
+	chatLineCount           int
+	formattedChatEventID    uint64
+	remotePresentations     []client.RemotePresentation
+	companionPresentations  []client.CompanionPresentation
+	remoteAvatars           []render.Avatar
+	hostilePresentations    []client.HostilePresentation
+	passives                *client.Passives
+	passivePresentations    []client.PassivePresentation
+	projectiles             *client.Projectiles
+	projectilePresentations []client.ProjectilePresentation
+	remoteNameTags          []render.NameTag
+	nameTagRenderer         *render.NameTagRenderer
+	hotbarRenderer          *hud.HotbarRenderer
+	damageFeedback          DamageFeedback
+	damageStrength          float32
 	// panel 是调试面板的交互状态；只在 Options.Dev 为真时创建。
 	panel *panelState
 	// panelLastFrameAt 是上一帧调试面板读数的采样时刻，用于计算 PanelReadout.FrameMillis。

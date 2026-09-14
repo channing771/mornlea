@@ -54,7 +54,7 @@ func TestProtocolTranscriptSuccessMatchesMemoryAndTCP(t *testing.T) {
 				serverDone <- err
 			}()
 
-			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(11))
+			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(11), 32)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -84,7 +84,7 @@ func TestProtocolTranscriptRejectMatchesMemoryAndTCP(t *testing.T) {
 				serverDone <- pending.Reject(context.Background(), network.LoginServerFull, "server full")
 			}()
 
-			_, err := network.LoginClient(context.Background(), clientStream, testIdentity(12))
+			_, err := network.LoginClient(context.Background(), clientStream, testIdentity(12), 32)
 			var remote *network.RemoteError
 			if !errors.As(err, &remote) || remote.State != network.StateLogin || remote.Code != uint8(network.LoginServerFull) || remote.Message != "server full" {
 				t.Fatalf("reject transcript = %#v", err)
@@ -110,7 +110,7 @@ func TestProtocolTranscriptRejectsEarlyPlayAcrossMemoryAndTCP(t *testing.T) {
 				serverDone <- server.Send(context.Background(), network.StatePlay, network.PlayerState{})
 			}()
 
-			_, err := network.LoginClient(context.Background(), client, testIdentity(13))
+			_, err := network.LoginClient(context.Background(), client, testIdentity(13), 32)
 			if err == nil || !strings.Contains(err.Error(), "protocol violation") {
 				t.Fatalf("early Play transcript error = %v", err)
 			}
@@ -127,7 +127,7 @@ func TestPlaySemanticValidationMatchesMemoryAndTCP(t *testing.T) {
 		packet network.ClientPacket
 	}{
 		{"place block slot out of range", network.PlaceBlock{Slot: core.HotbarSlots}},
-		{"resync outside overworld", network.RequestChunkResync{Dimension: core.DimensionID(1)}},
+		{"resync dimension outside overworld and depths", network.RequestChunkResync{Dimension: core.DimensionID(2)}},
 	}
 	for _, packet := range packets {
 		t.Run(packet.name, func(t *testing.T) {
@@ -177,7 +177,7 @@ func TestCommonBlockMaterialPlayTranscriptMatchesMemoryAndTCP(t *testing.T) {
 				serverDone <- err
 			}()
 
-			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(14))
+			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(14), 32)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -240,7 +240,7 @@ func TestGridCraftingTranscriptMatchesMemoryAndTCP(t *testing.T) {
 				serverDone <- err
 			}()
 
-			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(15))
+			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(15), 32)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -334,7 +334,7 @@ func TestV26ClientRejectsPriorServerAcrossTransports(t *testing.T) {
 					serverDone <- sendRawServerHello(server, legacy)
 				}()
 
-				_, err := network.LoginClient(context.Background(), client, testIdentity(23))
+				_, err := network.LoginClient(context.Background(), client, testIdentity(23), 32)
 				wantVersion := fmt.Sprintf("server protocol version %d", legacy)
 				if err == nil || !strings.Contains(err.Error(), "protocol violation") ||
 					!(strings.Contains(err.Error(), wantVersion) ||
@@ -671,7 +671,88 @@ func TestPassiveMessagesRoundTripMemoryAndTCP(t *testing.T) {
 				serverDone <- err
 			}()
 
-			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(23))
+			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(23), 32)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for index, want := range messages {
+				got, err := endpoint.Recv(context.Background())
+				if err != nil || !reflect.DeepEqual(got, want) {
+					t.Fatalf("第 %d 条消息 = (%#v, %v)，想要 %#v", index, got, err, want)
+				}
+			}
+			if err := <-serverDone; err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+// projectileSpawnFixture 返回 3 条字段各异、ID 严格升序的合法 spawn 记录：
+// 弹种 1/0/1 混排、维度覆盖两个合法维度，保证 kind 与 dimension 的搬运与
+// 丢弃可分辨。
+func projectileSpawnFixture() []network.ProjectileSpawnRecord {
+	return []network.ProjectileSpawnRecord{
+		{ID: 7, Kind: network.ProjectileKindArrow, Dimension: core.Overworld,
+			Position: mgl32.Vec3{2.5, 1, -3.25}, Velocity: mgl32.Vec3{0.5, -1.25, 0}},
+		{ID: 9, Kind: network.ProjectileKindShard, Dimension: core.Overworld,
+			Position: mgl32.Vec3{-8.5, 65.5, 12.75}, Velocity: mgl32.Vec3{0, 0.25, 3}},
+		{ID: 12, Kind: network.ProjectileKindArrow, Dimension: core.Depths,
+			Position: mgl32.Vec3{30.5, 70, -3.25}, Velocity: mgl32.Vec3{3, 0, -0.5}},
+	}
+}
+
+// projectileStateFixture 返回 2 条 ID 严格升序的合法 state 记录。
+func projectileStateFixture() []network.ProjectileStateRecord {
+	return []network.ProjectileStateRecord{
+		{ID: 7, Position: mgl32.Vec3{2.5, 1, -3.25}},
+		{ID: 9, Position: mgl32.Vec3{-8.5, 65.5, 12.75}},
+	}
+}
+
+func projectileSpawnMessage() network.ProjectileSpawn {
+	return network.ProjectileSpawn{ServerTick: 0x0102030405060708, Spawns: projectileSpawnFixture()}
+}
+
+func projectileStateMessage() network.ProjectileState {
+	return network.ProjectileState{ServerTick: 0x0102030405060708, States: projectileStateFixture()}
+}
+
+func projectileDespawnMessage() network.ProjectileDespawn {
+	return network.ProjectileDespawn{ServerTick: 0x0102030405060708, IDs: []uint64{7, 9, 12}}
+}
+
+// TestProjectileMessagesRoundTripMemoryAndTCP 对投射物三类消息做双传输往返
+// 性质测试：Memory 与 TCP 对同一消息序列给出逐字段相同的解码结果。
+func TestProjectileMessagesRoundTripMemoryAndTCP(t *testing.T) {
+	messages := []network.ServerMessage{projectileSpawnMessage(), projectileStateMessage(), projectileDespawnMessage()}
+	for _, open := range transportOpeners {
+		t.Run(open.name, func(t *testing.T) {
+			clientStream, serverStream := open.open(t)
+			t.Cleanup(func() { _ = clientStream.Close(); _ = serverStream.Close() })
+			serverDone := make(chan error, 1)
+			go func() {
+				pending, err := network.BeginServerLogin(context.Background(), serverStream, 0)
+				if err != nil {
+					serverDone <- err
+					return
+				}
+				var endpoint network.ServerEndpoint
+				err = pending.Accept(context.Background(), func(attached network.ServerEndpoint) error {
+					endpoint = attached
+					return nil
+				})
+				if err == nil {
+					for _, message := range messages {
+						if err = endpoint.Send(context.Background(), message); err != nil {
+							break
+						}
+					}
+				}
+				serverDone <- err
+			}()
+
+			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(24), 32)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -716,7 +797,7 @@ func TestHostileMessagesRoundTripMemoryAndTCP(t *testing.T) {
 				serverDone <- err
 			}()
 
-			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(21))
+			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(21), 32)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -616,3 +616,147 @@ func TestPredictorForwardsEatingOnEveryFixedStep(t *testing.T) {
 		t.Fatalf("进食污染了本地预测输入: %+v", p.history[0].input)
 	}
 }
+
+// TestPredictorForwardsSneakingOnEveryFixedStep 覆盖潜行链的上行段：
+// `Control.Sneaking` 必须逐固定步原样落进 `network.PlayerInput.Sneaking` 与
+// 历史 `physics.Input.Sneaking`。漏填任一处都会让 `stepWithSubmersion` 内的
+// 潜行钳制恒为假——客户端以为在潜行，预测却按行走积分。
+func TestPredictorForwardsSneakingOnEveryFixedStep(t *testing.T) {
+	p := readyPredictor(t)
+	var sent []network.PlayerInput
+	var sequence uint64
+	advance := func(sneaking bool) {
+		t.Helper()
+		if err := p.Advance(2*physics.FixedDelta, Control{Sneaking: sneaking}, loadedAirSource{},
+			func() uint64 { sequence++; return sequence },
+			func(input network.PlayerInput) error { sent = append(sent, input); return nil },
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	advance(true)
+	if len(sent) != 2 {
+		t.Fatalf("潜行两个固定步发送 %d 条，想要 2", len(sent))
+	}
+	for index, input := range sent {
+		if !input.Sneaking {
+			t.Fatalf("固定步 %d 丢失潜行状态: %+v", index, input)
+		}
+	}
+	for index, entry := range p.history {
+		if !entry.input.Sneaking {
+			t.Fatalf("历史 %d 丢失潜行状态: %+v", index, entry.input)
+		}
+	}
+	advance(false)
+	if len(sent) != 4 {
+		t.Fatalf("松开后共发送 %d 条，想要 4", len(sent))
+	}
+	for index, input := range sent[2:] {
+		if input.Sneaking {
+			t.Fatalf("松开后固定步 %d 仍置潜行位: %+v", index, input)
+		}
+	}
+	for index, entry := range p.history[2:] {
+		if entry.input.Sneaking {
+			t.Fatalf("松开后历史 %d 仍置潜行位: %+v", index, entry.input)
+		}
+	}
+}
+
+// TestPredictorSneakSlowsPredictionBelowWalk 证明潜行减速在预测侧真实生效：
+// 同一起点，潜行一步的水平位移必须小于行走一步（0.3x 目标速度），且大于零。
+// 起点站在平地顶面（`y=1`）：悬空且 `OnGround` 的假起点会被边缘钳制归零位移。
+func TestPredictorSneakSlowsPredictionBelowWalk(t *testing.T) {
+	step := func(sneaking bool) float32 {
+		t.Helper()
+		p := NewPredictor()
+		state := readyPlayerState()
+		state.Position = mgl32.Vec3{0.5, 1, 0.5}
+		if err := p.Begin(state); err != nil {
+			t.Fatal(err)
+		}
+		before, _ := p.State()
+		var sequence uint64
+		if err := p.Advance(physics.FixedDelta, Control{MoveZ: 1, Sneaking: sneaking}, flatClientWorld{},
+			func() uint64 { sequence++; return sequence },
+			func(network.PlayerInput) error { return nil },
+		); err != nil {
+			t.Fatal(err)
+		}
+		after, _ := p.State()
+		delta := after.Position.Sub(before.Position)
+		return mgl32.Vec3{delta.X(), 0, delta.Z()}.Len()
+	}
+	walk := step(false)
+	sneak := step(true)
+	if sneak <= 0 || sneak >= walk {
+		t.Fatalf("潜行位移=%v 行走位移=%v，想要 0<潜行<行走", sneak, walk)
+	}
+}
+
+// sneakCliffClientSource 是单格悬崖桩（复用潜行边缘测试的桩模式）：`x<0` 的
+// `y=-1` 格是满方块（顶面 `y=0`），其余格均为空气（已加载）。站在 `x=-0.2`
+// 处向 `+X` 潜行即探空，由真实 `stepWithSubmersion` 判定，不另设第二套判据。
+type sneakCliffClientSource struct{}
+
+func (sneakCliffClientSource) CollisionBoxes(position core.BlockPos) physics.CollisionBoxSet {
+	if position.Y == -1 && position.X < 0 {
+		return physics.CollisionBoxSet{Loaded: true, Count: 1,
+			Boxes: [8]core.AABB{{Max: mgl32.Vec3{1, 1, 1}}}}
+	}
+	return physics.CollisionBoxSet{Loaded: true}
+}
+
+func (sneakCliffClientSource) IsFluidAt(core.BlockPos) bool { return false }
+
+func beginCliffPredictor(t *testing.T) *Predictor {
+	t.Helper()
+	p := NewPredictor()
+	if err := p.Begin(network.PlayerState{
+		ServerTick: 1, Dimension: core.Overworld,
+		Position: mgl32.Vec3{-0.2, 0, 0.5}, Velocity: mgl32.Vec3{},
+		OnGround: true, Ready: true,
+	}); err != nil {
+		t.Fatalf("Begin cliff predictor: %v", err)
+	}
+	return p
+}
+
+// TestPredictorSneakClampsAtCliffEdge 证明预测侧边缘钳制因潜行上行而生效：
+// 同一起点同朝向，潜行向崖外一步必须原地踏步（水平钳制），不行潜行则前移。
+// 上行的 `Sneaking` 位同时断言——服务端潜行放置拒绝依赖同一位。
+func TestPredictorSneakClampsAtCliffEdge(t *testing.T) {
+	step := func(sneaking bool) (float32, network.PlayerInput) {
+		t.Helper()
+		p := beginCliffPredictor(t)
+		before, _ := p.State()
+		var sent []network.PlayerInput
+		var sequence uint64
+		if err := p.Advance(physics.FixedDelta, Control{MoveX: 1, Sneaking: sneaking}, sneakCliffClientSource{},
+			func() uint64 { sequence++; return sequence },
+			func(input network.PlayerInput) error { sent = append(sent, input); return nil },
+		); err != nil {
+			t.Fatal(err)
+		}
+		after, _ := p.State()
+		if len(sent) != 1 {
+			t.Fatalf("sneaking=%v 发送 %d 条，想要 1", sneaking, len(sent))
+		}
+		return after.Position.X() - before.Position.X(), sent[0]
+	}
+	sneakDX, sneakSent := step(true)
+	if sneakDX > 1e-6 {
+		t.Fatalf("潜行崖边前移=%v，想要钳制在边内", sneakDX)
+	}
+	if !sneakSent.Sneaking {
+		t.Fatalf("潜行上行位丢失: %+v", sneakSent)
+	}
+	walkDX, walkSent := step(false)
+	if walkDX <= 0 {
+		t.Fatalf("不行潜行崖边前移=%v，想要正常离边", walkDX)
+	}
+	if walkSent.Sneaking {
+		t.Fatalf("不行潜行误置上行位: %+v", walkSent)
+	}
+}

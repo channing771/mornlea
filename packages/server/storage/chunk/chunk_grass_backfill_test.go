@@ -23,7 +23,7 @@ import (
 // 世界,再把自然短草归一为空气——这正是升级前程序会写出的字节内容
 // (既有地形、矿石、橡树与门控关闭的空气层全部保留)。
 func preUpgradeSavedChunk(pos core.ChunkPos) *world.Chunk {
-	chunk := worldgen.New(42, false).GenerateChunk(pos)
+	chunk := worldgen.New(42, false).GenerateChunk(core.Overworld, pos)
 	for y := int32(core.MinY); y < core.MaxY; y++ {
 		for z := 0; z < core.SectionSize; z++ {
 			for x := 0; x < core.SectionSize; x++ {

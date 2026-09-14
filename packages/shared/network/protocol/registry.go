@@ -47,6 +47,13 @@ func ClientPacketID(state State, packet ClientPacket) (uint32, bool) {
 			return 16, true
 		case PlaceWater:
 			return 17, true
+		case EquipArmor:
+			return 18, true
+		// 分堆双命令：部分移动与快捷搬运依次占用 19/20（v44），下一 ID 21 仍未分配。
+		case MoveStackPartial:
+			return 19, true
+		case QuickMoveStack:
+			return 20, true
 		}
 	}
 	return 0, false
@@ -100,6 +107,13 @@ func ClientPacketForID(state State, id uint32) (ClientPacket, bool) {
 			return CollectWater{}, true
 		case 17:
 			return PlaceWater{}, true
+		case 18:
+			return EquipArmor{}, true
+		// 分堆双命令：与 `ClientPacketID` 的 19/20 对称（v44），下一 ID 21 仍未分配。
+		case 19:
+			return MoveStackPartial{}, true
+		case 20:
+			return QuickMoveStack{}, true
 		}
 	}
 	return nil, false
@@ -181,13 +195,20 @@ func ServerPacketID(state State, packet ServerPacket) (uint32, bool) {
 		// 私有战斗命中确认：固定 10-byte `CombatHit` 占用 25。
 		case CombatHit:
 			return 25, true
-		// 被动牛三类 S→C 消息：spawn/state/despawn 依次占用 26/27/28，下一 ID 29 仍未分配。
+		// 被动牛三类 S→C 消息：spawn/state/despawn 依次占用 26/27/28。
 		case PassiveSpawn:
 			return 26, true
 		case PassiveState:
 			return 27, true
 		case PassiveDespawn:
 			return 28, true
+		// 投射物三类 S→C 消息：spawn/state/despawn 依次占用 29/30/31，下一 ID 32 仍未分配。
+		case ProjectileSpawn:
+			return 29, true
+		case ProjectileState:
+			return 30, true
+		case ProjectileDespawn:
+			return 31, true
 		}
 	}
 	return 0, false
@@ -274,6 +295,13 @@ func ServerPacketForID(state State, id uint32) (ServerPacket, bool) {
 			return PassiveState{}, true
 		case 28:
 			return PassiveDespawn{}, true
+		// 投射物三类 S→C 消息：与 `ServerPacketID` 的 29/30/31 对称。
+		case 29:
+			return ProjectileSpawn{}, true
+		case 30:
+			return ProjectileState{}, true
+		case 31:
+			return ProjectileDespawn{}, true
 		}
 	}
 	return nil, false
@@ -311,6 +339,8 @@ func CommandRejectReasonID(reason RejectReason) (uint8, bool) {
 		return 13, true
 	case RejectBucketMismatch:
 		return 14, true
+	case RejectNotArmor:
+		return 15, true
 	default:
 		return 0, false
 	}
@@ -348,6 +378,8 @@ func CommandRejectReasonForID(id uint8) (RejectReason, bool) {
 		return RejectNotFluidSource, true
 	case 14:
 		return RejectBucketMismatch, true
+	case 15:
+		return RejectNotArmor, true
 	default:
 		return "", false
 	}

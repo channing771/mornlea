@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
+	"github.com/channing771/mornlea/packages/server/updates"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/world"
 )
@@ -1353,13 +1354,13 @@ func TestHarvestPotatoMature1to4(t *testing.T) {
 	if n < 1 || n > 4 {
 		t.Fatalf("PotatoStage7 mature count=%d not in [1,4] drops=%+v", n, drops)
 	}
-	expected := cropYieldRollsPotato(seed, tickBefore, core.Overworld, target)
+	expected := sampler.CropYieldRollsPotato(seed, tickBefore, core.Overworld, target)
 	if n != expected {
 		t.Fatalf("Potato yield %d != expected hash %d seed=%d tick=%d pos=%v", n, expected, seed, tickBefore, target)
 	}
 	// 重放一致
-	a := cropYieldRollsPotato(seed, tickBefore, core.Overworld, target)
-	b := cropYieldRollsPotato(seed, tickBefore, core.Overworld, target)
+	a := sampler.CropYieldRollsPotato(seed, tickBefore, core.Overworld, target)
+	b := sampler.CropYieldRollsPotato(seed, tickBefore, core.Overworld, target)
 	if a != b {
 		t.Fatalf("cropYieldRollsPotato not deterministic %d vs %d", a, b)
 	}
@@ -1398,14 +1399,14 @@ func TestHarvestCarrotMature1to4(t *testing.T) {
 	if n < 1 || n > 4 {
 		t.Fatalf("CarrotStage7 mature count=%d not in [1,4] drops=%+v", n, drops)
 	}
-	expected := cropYieldRollsCarrot(seed, tickBefore, core.Overworld, target)
+	expected := sampler.CropYieldRollsCarrot(seed, tickBefore, core.Overworld, target)
 	if n != expected {
 		t.Fatalf("Carrot yield %d != expected %d seed=%d tick=%d", n, expected, seed, tickBefore)
 	}
-	a := cropYieldRollsCarrot(seed, tickBefore, core.Overworld, target)
-	b := cropYieldRollsCarrot(seed, tickBefore, core.Overworld, target)
+	a := sampler.CropYieldRollsCarrot(seed, tickBefore, core.Overworld, target)
+	b := sampler.CropYieldRollsCarrot(seed, tickBefore, core.Overworld, target)
 	if a != b {
-		t.Fatalf("cropYieldRollsCarrot not deterministic")
+		t.Fatalf("CropYieldRollsCarrot not deterministic")
 	}
 	// 未成熟
 	engine2, _, targets2 := readyMiningPlayers(t, 1)
@@ -1427,8 +1428,8 @@ func TestPoisonousPotato2Percent(t *testing.T) {
 	total := 0
 	for x := int32(0); x < 200; x++ {
 		pos := core.BlockPos{X: x, Y: 2, Z: 5}
-		a := poisonRoll(42, 100, core.Overworld, pos)
-		b := poisonRoll(42, 100, core.Overworld, pos)
+		a := sampler.PoisonRoll(42, 100, core.Overworld, pos)
+		b := sampler.PoisonRoll(42, 100, core.Overworld, pos)
 		if a != b {
 			t.Fatalf("poisonRoll not deterministic at %v %v vs %v", pos, a, b)
 		}
@@ -1460,7 +1461,7 @@ func TestPoisonousPotato2Percent(t *testing.T) {
 			if pos.Chunk() != targets[0].Chunk() {
 				continue
 			}
-			isPoison := poisonRoll(seed, tickBefore, core.Overworld, pos)
+			isPoison := sampler.PoisonRoll(seed, tickBefore, core.Overworld, pos)
 			if isPoison && truePos == nil {
 				cp := pos
 				truePos = &cp
@@ -1487,7 +1488,7 @@ func TestPoisonousPotato2Percent(t *testing.T) {
 	player.yaw = 0
 	player.pitch = miningTestPitch
 	engine.SetBlockForTest(target, core.PotatoStage7ID)
-	wantPoison := poisonRoll(seed, tickBefore, core.Overworld, target)
+	wantPoison := sampler.PoisonRoll(seed, tickBefore, core.Overworld, target)
 	result := advanceMiningOnce(engine)
 	if len(result.Rejected) != 0 {
 		t.Fatalf("potato mature at truePos rejected=%+v", result.Rejected)
@@ -1518,7 +1519,7 @@ func TestPoisonousPotato2Percent(t *testing.T) {
 	player2.pitch = miningTestPitch
 	engine2.SetBlockForTest(target2, core.PotatoStage7ID)
 	tickBefore2 := engine2.tick.Load()
-	wantPoison2 := poisonRoll(seed2, tickBefore2, core.Overworld, target2)
+	wantPoison2 := sampler.PoisonRoll(seed2, tickBefore2, core.Overworld, target2)
 	result2 := advanceMiningOnce(engine2)
 	if len(result2.Rejected) != 0 {
 		t.Fatalf("potato mature at falsePos rejected=%+v", result2.Rejected)
@@ -1669,18 +1670,18 @@ func requireShortGrassDroppedSeeds(t *testing.T, engine *Engine, target core.Blo
 // 出现结构性相关。Rust worldgen 的短草生成 salt 在引擎侧，无法从这里比对，
 // 由 worldgen 的 native parity 测试把守。
 func TestShortGrassSeedDropSaltIsFrozenAndIndependent(t *testing.T) {
-	if shortGrassSeedDropSalt != 0x4752_4153_5353_4544 {
-		t.Fatalf("shortGrassSeedDropSalt = %#x，规格冻结为 0x4752_4153_5353_4544",
-			shortGrassSeedDropSalt)
+	if updates.ShortGrassSeedDropSalt != 0x4752_4153_5353_4544 {
+		t.Fatalf("ShortGrassSeedDropSalt = %#x，规格冻结为 0x4752_4153_5353_4544",
+			updates.ShortGrassSeedDropSalt)
 	}
 	for name, salt := range map[string]uint64{
-		"cropGrowthRollSalt":  cropGrowthRollSalt,
-		"cropYieldRollSalt":   cropYieldRollSalt,
-		"cropYieldPotatoSalt": cropYieldPotatoSalt,
-		"cropYieldCarrotSalt": cropYieldCarrotSalt,
-		"poisonPotatoSalt":    poisonPotatoSalt,
+		"cropGrowthRollSalt":  updates.CropGrowthRollSalt,
+		"cropYieldRollSalt":   updates.CropYieldRollSalt,
+		"cropYieldPotatoSalt": updates.CropYieldPotatoSalt,
+		"cropYieldCarrotSalt": updates.CropYieldCarrotSalt,
+		"poisonPotatoSalt":    updates.PoisonPotatoSalt,
 	} {
-		if salt == shortGrassSeedDropSalt {
+		if salt == updates.ShortGrassSeedDropSalt {
 			t.Fatalf("短草掉落 salt 与 %s 相同，两条哈希流必须互相独立", name)
 		}
 	}
@@ -1693,26 +1694,26 @@ func TestShortGrassSeedDropSaltIsFrozenAndIndependent(t *testing.T) {
 func TestShortGrassSeedDropRollMatchesFrozenVerdicts(t *testing.T) {
 	for _, pos := range shortGrassSeedHitPositions {
 		for replay := 0; replay < 2; replay++ {
-			if !shortGrassSeedDropRoll(0, core.Overworld, pos) {
-				t.Fatalf("shortGrassSeedDropRoll(0, Overworld, %v) = false，固定命中坐标必须恒命中", pos)
+			if !sampler.ShortGrassSeedDropRoll(0, core.Overworld, pos) {
+				t.Fatalf("ShortGrassSeedDropRoll(0, Overworld, %v) = false，固定命中坐标必须恒命中", pos)
 			}
 		}
 	}
 	for _, pos := range shortGrassSeedMissPositions {
-		if shortGrassSeedDropRoll(0, core.Overworld, pos) {
-			t.Fatalf("shortGrassSeedDropRoll(0, Overworld, %v) = true，固定未命中坐标必须恒未命中", pos)
+		if sampler.ShortGrassSeedDropRoll(0, core.Overworld, pos) {
+			t.Fatalf("ShortGrassSeedDropRoll(0, Overworld, %v) = true，固定未命中坐标必须恒未命中", pos)
 		}
 	}
 	// 维度折入：同一坐标在另一维度判定翻转。core 当前只注册 Overworld，这里只
 	// 验证纯整数链确实折叠了维度——漏折会让两个维度的同坐标草永远同判定。
-	if shortGrassSeedDropRoll(0, core.DimensionID(1), shortGrassSeedHitPositions[0]) {
+	if sampler.ShortGrassSeedDropRoll(0, core.DimensionID(1), shortGrassSeedHitPositions[0]) {
 		t.Fatal("维度未折入哈希链：另一维度的同坐标不应复用 Overworld 的命中判定")
 	}
 	// 分布 sanity：连续 4096 个坐标的命中率接近 1/8（理论 512），两侧都必须出现，
 	// 防 `& 7` 退化成恒真/恒假。
 	hits := 0
 	for x := int32(0); x < 4096; x++ {
-		if shortGrassSeedDropRoll(0, core.Overworld, core.BlockPos{X: x, Y: 1, Z: 5}) {
+		if sampler.ShortGrassSeedDropRoll(0, core.Overworld, core.BlockPos{X: x, Y: 1, Z: 5}) {
 			hits++
 		}
 	}

@@ -69,7 +69,8 @@ type naturalSeedFarmingResult struct {
 	// SpawnCell 是登录站稳后的出生方块列（X,Z）：必须就是冻结样本列，证明
 	// 脚本没有任何移动输入、短草在玩家脚边。
 	SpawnCell [2]int32
-	// InventoryAfterLogin 是登录即得的完整权威背包：材料包 14 叠、无任何种子。
+	// InventoryAfterLogin 是登录即得的完整权威背包：缺失玩家的初始背包为空
+	// （36 格全空）且不含任何种子——空初始背包是契约，不是缺省。
 	InventoryAfterLogin core.Inventory
 	// TargetAfterMine 是采除后短草格的镜像读数（必须空气）。
 	TargetAfterMine core.BlockID
@@ -114,7 +115,7 @@ type naturalSeedFarmingTools struct {
 
 // TestFarmingLoopEndToEndMemory 是从**自然取得的第一颗种子**出发的完整农业
 // 闭环集成回归：一名从未存在过的玩家在生产 Rust worldgen 生成的自然世界里
-// 登录（身上没有任何种子），原地采除脚下自然生成的短草，等权威世界掉落物过
+// 登录（初始背包 36 格全空），原地采除脚下自然生成的短草，等权威世界掉落物过
 // 完拾取延迟入包，翻地（被自然海水润湿）、种下唯一的一颗种子，靠随机 tick
 // 长到成熟、收获、再种。
 //
@@ -171,7 +172,7 @@ func TestFarmingLoopEndToEndMemory(t *testing.T) {
 
 		// —— 第 6 步：收获，哈希产量的两类产物经既有拾取路径入包 ——
 		//
-		// 成熟小麦掉多少由 `sim.cropYieldRolls` 对 (世界种子, 完成采掘的权威
+		// 成熟小麦掉多少由 `sampler.CropYieldRolls` 对 (世界种子, 完成采掘的权威
 		// tick, 维度, 坐标) 的哈希决定，小麦与种子各落在闭区间 [1,3]；两类
 		// 产物在同一完成 tick 入掉落区、共享同一拾取延迟。
 		tools.Send(func(sequence uint64) network.ClientMessage {
@@ -259,7 +260,7 @@ func naturalFarmingViewLoaded(mirror *client.Mirror) bool {
 }
 
 // runNaturalSeedFarmingScript 在一种传输上跑完整段自然种子固定脚本（设计决策
-// 6 的 1–4 步）：零种子登录 → 原地 1 tick 采除自然短草 → 权威世界掉落 → 前
+// 6 的 1–4 步）：空背包登录 → 原地 1 tick 采除自然短草 → 权威世界掉落 → 前
 // 9 个活动 tick 不拾取、第 10 个拾取 → 未翻地先种的拒绝 → 翻地（自然海水
 // 润湿）→ 种植、种子归零。continueFullLoop 非空时在种植完成后用同一套通道
 // 续跑（完整 Memory 闭环的生长、收获、再种）。
@@ -277,14 +278,14 @@ func runNaturalSeedFarmingScript(
 	// 与服务端权威 1/8 判定。夹具另在登录就绪后对已加载权威区块重读同一格。
 	// 任何一条失败都说明冻结样本失效，脚本不降级、不搜索。
 	probe := worldgen.New(naturalFarmingSeed, true)
-	if got := probe.HeightAt(naturalFarmingGrass.X, naturalFarmingGrass.Z); got != naturalFarmingFarmland.Y {
+	if got := probe.HeightAt(core.Overworld, naturalFarmingGrass.X, naturalFarmingGrass.Z); got != naturalFarmingFarmland.Y {
 		t.Fatalf("冻结样本前提失效：出生列高度 = %d，想要海平面草架 %d",
 			got, naturalFarmingFarmland.Y)
 	}
-	if got := probe.BaseBlockAt(naturalFarmingFarmland); got != core.GrassID {
+	if got := probe.BaseBlockAt(core.Overworld, naturalFarmingFarmland); got != core.GrassID {
 		t.Fatalf("冻结样本前提失效：样本格下方 = %d，想要 %d", got, core.GrassID)
 	}
-	if got := probe.BaseBlockAt(naturalFarmingGrass); got != core.ShortGrassID {
+	if got := probe.BaseBlockAt(core.Overworld, naturalFarmingGrass); got != core.ShortGrassID {
 		t.Fatalf("冻结样本前提失效：样本格 = %d，想要自然生成的 %d",
 			got, core.ShortGrassID)
 	}
@@ -295,13 +296,15 @@ func runNaturalSeedFarmingScript(
 	}
 
 	// 刻意不预存玩家：只有 LoadPlayer 返回 ErrPlayerNotFound 的路径才会构造
-	// 一次性材料包，脚本第一步要看的正是这份材料包不再携带种子。生成器用
-	// 生产 worldgen.New（流体开启 = 生产默认配置），不经任何测试生成旁路。
+	// 新玩家的空初始背包，脚本第一步要看的正是这份空背包。生成器用生产
+	// worldgen.New（流体开启 = 生产默认配置），不经任何测试生成旁路。
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion:  4,
-		Seed:           naturalFarmingSeed,
-		SpawnDimension: core.Overworld,
-		SpawnAnchor:    naturalFarmingAnchor,
+		FormatVersion:     6,
+		Seed:              naturalFarmingSeed,
+		SpawnDimension:    core.Overworld,
+		SpawnAnchor:       naturalFarmingAnchor,
+		DepthsSpawnAnchor: naturalFarmingAnchor,
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
 	config := hostTestConfig()
 	config.ViewRadius = 1
@@ -332,15 +335,19 @@ func runNaturalSeedFarmingScript(
 		return snapshot
 	}
 
-	// —— 第 1 步：零种子登录，站稳在冻结样本列 ——
-	ready, inventoryReady := false, false
+	// —— 第 1 步：空背包登录，站稳在冻结样本列 ——
+	//
+	// 就绪信号取「携带权威背包的 `network.InventoryState` 已到达」这一事实本身，
+	// 不看背包内容：新玩家的初始背包为空是契约，任何以「背包非空」为信号的判定
+	// 在空背包下都会空转到等待预算耗尽，而超时是一种读不出原因的红。
+	ready, inventoryPublished := false, false
 	waitIntegrationLoginReady(
 		t,
 		fmt.Sprintf("%s natural seed farming", transport),
-		func() bool { return ready && inventoryReady && naturalFarmingViewLoaded(mirror) },
+		func() bool { return ready && inventoryPublished && naturalFarmingViewLoaded(mirror) },
 		func() string {
 			return fmt.Sprintf("ready=%v 背包已发布=%v 视野已加载=%v",
-				ready, inventoryReady, naturalFarmingViewLoaded(mirror))
+				ready, inventoryPublished, naturalFarmingViewLoaded(mirror))
 		},
 		func() {
 			_, messages := parityStep(t, host, endpoint, mirror)
@@ -349,28 +356,21 @@ func runNaturalSeedFarmingScript(
 				case network.PlayerState:
 					ready = ready || message.Ready
 				case network.InventoryState:
-					inventoryReady = inventoryReady || message.Inventory != core.Inventory{}
+					inventoryPublished = true
 				}
 			}
 		},
 	)
 	login := authoritativeSnapshot()
 	result := naturalSeedFarmingResult{InventoryAfterLogin: login.Inventory}
-	// 零种子断言扫全部 36 格：把种子挪到任何栏位、任何数量都会红。
+	// 空背包断言扫全部 36 格：缺失玩家的初始背包是空契约，任何一格出现材料、
+	// 种子或食物都要在这里红。「顺手改发别的东西」的回归只有逐格扫描才抓得住，
+	// 只钉种子或只钉某一格都抓不住。
 	forEachStack(login.Inventory, func(slot int, stack core.ItemStack) {
-		if stack.Item == core.ItemWheatSeeds {
-			t.Fatalf("登录时统一索引 %d 已持有小麦种子 %+v，材料包不该再发种子",
-				slot, stack)
+		if stack != (core.ItemStack{}) {
+			t.Fatalf("登录时统一索引 %d = %+v，想要空槽（新玩家初始背包为空）", slot, stack)
 		}
 	})
-	// 材料包本身保持 14 叠：只看种子的断言抓不住「顺手把材料也删了」的回归。
-	if got := login.Inventory.Backpack[13]; got.Item != core.ItemMossyCobblestone ||
-		got.Count != core.MaxStackCount {
-		t.Fatalf("登录后材料包第 14 格 = %+v，想要 64 个苔石（材料清单不变）", got)
-	}
-	if got := login.Inventory.Backpack[14]; got != (core.ItemStack{}) {
-		t.Fatalf("登录后材料包第 15 格 = %+v，想要空（种子格被取消后不得顶替）", got)
-	}
 	// 免移动证据：出生列就是样本列。X/Z 用方块坐标而不是浮点全等，Y 只要求
 	// 落在海平面草架表面那一层（物理落定的微扰不参与语义）。
 	result.SpawnCell = [2]int32{

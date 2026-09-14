@@ -113,12 +113,15 @@ func newWorld(
 	shutdownGate := make(chan struct{}, 1)
 	shutdownGate <- struct{}{}
 	queueCapacity := max(1, config.Workers*2)
+	// 难度与种子、世界时间同取自这份 metadata 单次快照并在此显式注入 Engine：
+	// 构造后生命周期内只读，权威 tick 不回读 storage 或 config；Memory 与磁盘
+	// store 都实现 `storage.Store.Metadata`，两种世界因此在同一装配点收口。
 	metadata := store.Metadata()
 	server := &Server{
 		config:         config,
 		generator:      generator,
 		store:          store,
-		engine:         runtime.NewEngine(config.ViewRadius, metadata.WorldTimeTicks, metadata.Seed),
+		engine:         runtime.NewEngine(config.ViewRadius, metadata.WorldTimeTicks, metadata.Seed, metadata.Difficulty),
 		sessions:       make(map[contract.SessionID]*session),
 		playerSessions: make(map[core.PlayerID]contract.SessionID),
 		ctx:            ctx,
@@ -167,8 +170,11 @@ func newWorld(
 		records, loadedQueues := companions.Restore()
 		for _, definition := range config.Companions {
 			restore := contract.CompanionRestore{
+				// 伙伴本变更只住主世界：`SpawnDimension` 写死 `core.Overworld`，
+				// 不跟随存档 `SpawnDimension`——`Depths` 出生的伙伴快照在
+				// wire 校验（`message_companion.go` 的 `Validate`）即被拒绝。
 				ID:             definition.ID,
-				SpawnDimension: metadata.SpawnDimension,
+				SpawnDimension: core.Overworld,
 				SpawnAnchor:    metadata.SpawnAnchor,
 			}
 			for index := range records {
@@ -184,6 +190,9 @@ func newWorld(
 		// 注入在线玩家权威源：规划快照的 OnlinePlayers 填充与 follow 目标
 		// 的在线性/位置解析共用同一会话注册表读取路径。
 		server.companionManager.onlinePlayers = server.onlinePlanPlayersSnapshot
+		// 注入玩家维度权威源：follow 的跨维保持据此判定目标是否已传送到
+		// 另一维度，调用方必须持有 stepMu（与在线玩家快照同一边界）。
+		server.companionManager.playerDimension = server.onlinePlayerDimension
 		// 恢复接线：任务域载荷在首个 tick 之前回填槽位（Planning/
 		// Validating 归一为 Queued，Running 保留进度且路径留空待重算）。
 		server.companionManager.restoreQueues(loadedQueues)
@@ -346,10 +355,13 @@ func (server *Server) step(scheduled time.Time) contract.TickResult {
 	// 任务编排位于聊天 drain 之后（Accepted 指令刚入队即可同 tick 派发规划）、
 	// engine.Step 之前（伙伴移动输入必须先进 inbox 才能被本 tick 消费）。
 	taskDeliveries := server.advanceCompanionTasks(tickTunables)
-	// 夜行者编排同样先于 engine.Step：有界追逐的移动/攻击意图必须先进
-	// inbox 才能被同 tick 的夜行者阶段消费；派发绝不等待 A*。
-	server.advanceHostileChase()
+	// 敌怪编排同样先于 engine.Step：有界追逐的移动/攻击/射击意图必须先进
+	// inbox 才能被同 tick 的敌怪阶段消费；派发绝不等待 A*。
+	server.advanceHostileChase(tickTunables)
 	result := server.engine.StepWithTunables(tickTunables)
+	if observer := server.config.StreamingObserver; observer != nil {
+		observer(result.Acquire, result.Ready)
+	}
 	if server.companionManager != nil {
 		// 采掘进度只在 TickResult.Companions 发布（CompanionBodies 不含采掘
 		// 域）：tick 末回填缓存，下一 tick 的 advanceRunners 与 bodies 缓存

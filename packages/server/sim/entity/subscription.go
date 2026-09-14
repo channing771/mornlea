@@ -10,8 +10,12 @@ import (
 type SessionSubscription struct {
 	Dimension core.DimensionID
 	Center    core.ChunkPos
-	Pending   []core.ChunkKey
-	Active    bool
+	// Radius 是会话声明视距换算出的未钳制订阅半径（声明 +1）；0 表示
+	// 未声明。对引擎视界上界的钳制与缺省补齐由 runtime 在消费处单点完成
+	// （上界属于引擎构造事实，实体层无从得知）。
+	Radius  int
+	Pending []core.ChunkKey
+	Active  bool
 }
 
 // SessionSubscription 返回玩家当前中心和待出生阶段必须保留的区块。
@@ -31,6 +35,7 @@ func (state *State) SessionSubscription(id SessionID) (SessionSubscription, bool
 	value := SessionSubscription{
 		Dimension: session.dimension,
 		Center:    center,
+		Radius:    declaredViewRadius(session.viewDistance),
 		Active:    player.lifecycle == PlayerActive,
 	}
 	if player.lifecycle == PlayerPendingSpawn {
@@ -47,6 +52,16 @@ func (state *State) SessionSubscription(id SessionID) (SessionSubscription, bool
 		sortChunkKeys(value.Pending)
 	}
 	return value, true
+}
+
+// declaredViewRadius 把登录声明的期望视距换算为未钳制订阅半径：声明 +1
+// （方形视距以声明值为界、订阅循环取到 ±（声明+1））；0 表示未声明，
+// 缺省与上界的补齐由 runtime 消费处完成。
+func declaredViewRadius(declared uint8) int {
+	if declared == 0 {
+		return 0
+	}
+	return int(declared) + 1
 }
 
 // AddCompanionWanted 把伙伴生命周期需要的区块加入 runtime 的订阅并集。

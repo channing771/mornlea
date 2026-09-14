@@ -81,8 +81,8 @@ func TestPassiveMessageIDsAreFrozen(t *testing.T) {
 			t.Fatalf("Play server packet ID %d 未注册", id)
 		}
 	}
-	if _, ok := ServerPacketForID(StatePlay, 28+1); ok {
-		t.Fatal("Play server packet ID 29 必须保持未分配")
+	if _, ok := ServerPacketForID(StatePlay, 31+1); ok {
+		t.Fatal("Play server packet ID 32 必须保持未分配")
 	}
 }
 

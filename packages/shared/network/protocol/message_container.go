@@ -190,12 +190,16 @@ func validFurnaceInput(stack core.ItemStack) bool {
 }
 
 // validFurnaceOutput 报告输出格是否为空或装着固定熔炼产物。
+// 白名单 MUST 覆盖 `core.SmeltingOutput` 的全部产物：漏掉一项时，权威
+// tick 把该产物写进输出格的同一个 tick，发送侧与客户端解码都会校验
+// 失败——查看者会话被杀掉、熔炉镜像被拒绝（生牛肉熔炼产物曾长期缺失
+// 于此）。这只是校验端放宽，不改变 wire 格式与协议版本。
 func validFurnaceOutput(stack core.ItemStack) bool {
 	if !stack.Valid() {
 		return false
 	}
 	switch stack.Item {
-	case core.ItemNone, core.ItemIronIngot, core.ItemGlass, core.ItemBrick:
+	case core.ItemNone, core.ItemIronIngot, core.ItemGlass, core.ItemBrick, core.ItemCookedBeef:
 		return true
 	default:
 		return false

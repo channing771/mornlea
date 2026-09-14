@@ -36,7 +36,7 @@ func TestPlayerPlacementRemovingLastIrrigationDriesFarmlandSameTick(t *testing.T
 		}
 		engine.Step()
 	}
-	if pending := engine.realm.FarmlandMoisturePendingLen() - engine.realm.FarmlandMoistureHead(); pending != 0 {
+	if pending := engine.realm.FarmlandMoisturePendingLen(); pending != 0 {
 		t.Fatalf("放置前仍有 %d 个旧湿度候选", pending)
 	}
 
@@ -230,6 +230,42 @@ func TestWildGrassSweepRunsBeforeTorchSweep(t *testing.T) {
 	}
 	if torchDrops != 1 {
 		t.Fatalf("火把掉落=%d，想要恰好 1", torchDrops)
+	}
+	assertNoSeedDrops(t, engine)
+}
+
+// TestSaplingSweepClearsAndDropsOnSupportMined 钉住树苗支撑复核确实编排在权威
+// tick 内：玩家采掘抬高草块 G（树苗支撑）的完成 tick 内，树苗 sweep 把 G 上方
+// 树苗清为空气并掉落恰好 1 个树苗。sweep 缺席时树苗会悬空残留。随机 tick 关掉，
+// 避免树苗在采掘窗口内被判定生长（它与短草/火把用例共用同一夹具）。
+func TestSaplingSweepClearsAndDropsOnSupportMined(t *testing.T) {
+	t.Cleanup(func() { tuning.SetTunables(tuning.DefaultTunables()) })
+	tunables := tuning.DefaultTunables()
+	tunables.RandomTicksPerSection = 0
+	tuning.SetTunables(tunables)
+	engine, session := readyMovementPlayer(t)
+	support := core.BlockPos{X: 2, Y: 1, Z: 4}
+	sapling := core.BlockPos{X: 2, Y: 2, Z: 4}
+	engine.SetBlockForTest(support, core.GrassID)
+	engine.SetBlockForTest(sapling, core.SaplingID)
+
+	mineUntilBlockAir(t, engine, session, support, 40)
+
+	if got := cropBlockAt(t, engine, sapling); got != core.AirID {
+		t.Fatalf("支撑失效的树苗=%s，想要同 tick 清为空气", blockLabel(got))
+	}
+	chunk, ready := engine.dimension(core.Overworld).ReadyChunk(core.ChunkPos{})
+	if !ready {
+		t.Fatal("中心区块未就绪")
+	}
+	saplingDrops := 0
+	for slot := range core.DropsPerChunk {
+		if drop := chunk.Drop(slot); drop.Active && drop.Stack.Item == core.ItemSapling {
+			saplingDrops++
+		}
+	}
+	if saplingDrops != 1 {
+		t.Fatalf("树苗掉落=%d，想要恰好 1", saplingDrops)
 	}
 	assertNoSeedDrops(t, engine)
 }

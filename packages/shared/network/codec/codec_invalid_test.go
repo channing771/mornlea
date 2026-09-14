@@ -35,13 +35,13 @@ func TestRemotePlayerWireRejectsInvalidValues(t *testing.T) {
 	for _, packet := range []protocol.ServerPacket{
 		protocol.RemotePlayerSpawn{PlayerID: invalidID, DisplayName: "Chen"},
 		protocol.RemotePlayerSpawn{PlayerID: id, DisplayName: " Chen "},
-		protocol.RemotePlayerSpawn{PlayerID: id, DisplayName: "Chen", Dimension: core.DimensionID(1)},
+		protocol.RemotePlayerSpawn{PlayerID: id, DisplayName: "Chen", Dimension: core.DimensionID(2)},
 		protocol.RemotePlayerSpawn{PlayerID: id, DisplayName: "Chen", Position: mgl32.Vec3{float32(math.NaN()), 0, 0}},
 		protocol.RemotePlayerDespawn{PlayerID: invalidID},
 		protocol.RemotePlayerStates{},
 		protocol.RemotePlayerStates{Players: append(states, states[0])},
 		protocol.RemotePlayerStates{Players: []protocol.RemotePlayerState{{PlayerID: id, Dimension: core.Overworld}, {PlayerID: id, Dimension: core.Overworld}}},
-		protocol.RemotePlayerStates{Players: []protocol.RemotePlayerState{{PlayerID: id, Dimension: core.DimensionID(1)}}},
+		protocol.RemotePlayerStates{Players: []protocol.RemotePlayerState{{PlayerID: id, Dimension: core.DimensionID(2)}}},
 		protocol.RemotePlayerStates{Players: []protocol.RemotePlayerState{{PlayerID: id, Position: mgl32.Vec3{float32(math.Inf(1)), 0, 0}}}},
 	} {
 		if _, _, err := encodeServerControlPayload(protocol.StatePlay, packet); err == nil {
@@ -77,7 +77,7 @@ func TestRemotePlayerStatesRejectsNonCanonicalCountVarint(t *testing.T) {
 
 func TestSmallPacketRejectsMalformedPayloads(t *testing.T) {
 	validID := mustCodecPlayerID(t)
-	validClient := protocol.LoginStart{PlayerID: validID, DisplayName: "Chen"}
+	validClient := protocol.LoginStart{PlayerID: validID, DisplayName: "Chen", ViewDistance: 2}
 	_, validClientPayload, err := encodeClientPacketPayload(protocol.StateLogin, validClient)
 	if err != nil {
 		t.Fatal(err)
@@ -191,7 +191,7 @@ func TestSmallPacketRejectsMalformedPayloads(t *testing.T) {
 			return err
 		}},
 		{"invalid dimension", func() error {
-			_, err := decodeClientPacketPayload(protocol.StatePlay, 3, []byte{0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+			_, err := decodeClientPacketPayload(protocol.StatePlay, 3, []byte{0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
 			return err
 		}},
 		{"oversized block changes", func() error {
@@ -203,7 +203,8 @@ func TestSmallPacketRejectsMalformedPayloads(t *testing.T) {
 			return err
 		}},
 		{"unknown rejection reason", func() error {
-			_, err := decodeServerControlPayload(protocol.StatePlay, 4, []byte{0, 0, 0, 0, 0, 0, 0, 0, 15})
+			// 原因 ID 15 已分配给 `not_armor`，未知原因样本随之推进到 16。
+			_, err := decodeServerControlPayload(protocol.StatePlay, 4, []byte{0, 0, 0, 0, 0, 0, 0, 0, 16})
 			return err
 		}},
 	}
@@ -236,7 +237,7 @@ func TestSmallPacketRejectsInvalidSemanticPackets(t *testing.T) {
 		{"cross chunk changes", protocol.StatePlay, crossChunkChanges},
 		{"4097 changes", protocol.StatePlay, tooManyValidBlockChanges()},
 		{"4097 forget chunks", protocol.StatePlay, protocol.ForgetChunks{Dimension: core.Overworld, Chunks: tooMany}},
-		{"invalid server dimension", protocol.StatePlay, protocol.PlayerState{Dimension: core.DimensionID(1)}},
+		{"invalid server dimension", protocol.StatePlay, protocol.PlayerState{Dimension: core.DimensionID(2)}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

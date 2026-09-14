@@ -383,7 +383,7 @@ func migrateNaturalMaterials(
 				if !naturalMaterialValue(current) {
 					continue
 				}
-				generated := generator.TerrainBlockAt(core.BlockPos{
+				generated := generator.TerrainBlockAt(stored.Key.Dimension, core.BlockPos{
 					X: baseX + int32(x),
 					Y: y,
 					Z: baseZ + int32(z),

@@ -19,11 +19,11 @@ const (
 
 func TestShortGrassUsesAppendedProceduralCutoutLayer(t *testing.T) {
 	registry := NewRegistry()
-	if got := registry.LayerCount(); got != int(LayerHumanClayLeg)+8 {
-		t.Fatalf("LayerCount = %d，想要覆盖短草、裂纹、牛、物品、人物与雪层追加后的 %d", got, int(LayerHumanClayLeg)+8)
+	if got := registry.LayerCount(); got != int(LayerHumanClayLeg)+17 {
+		t.Fatalf("LayerCount = %d，想要覆盖短草、裂纹、牛、物品、人物、雪层、树苗、护甲与远程战斗图标追加后的 %d", got, int(LayerHumanClayLeg)+17)
 	}
-	if got, want := len(registry.MeshSnapshot().Blocks), 89; got != want {
-		t.Fatalf("mesh registry 条目 = %d，想要 %d", got, want)
+	if got, want := len(registry.MeshSnapshot().Blocks), int(core.BlockIDMax); got != want {
+		t.Fatalf("mesh registry 条目 = %d，想要覆盖全部已注册方块的 %d", got, want)
 	}
 	if LayerDoor != 55 || LayerWorkbenchTop != 56 || LayerWorkbenchSide != 57 ||
 		LayerWorkbenchBottom != 58 || LayerTorch != 59 ||

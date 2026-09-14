@@ -27,7 +27,7 @@ var grassTestChunks = []core.ChunkPos{
 // 目标格仍为空气的列数(空隙)。返回值:(短草数, 下方为草地的短草数, 空隙列数)。
 func scanShortGrass(t *testing.T, generator *worldgen.Generator, pos core.ChunkPos) (int, int, int) {
 	t.Helper()
-	chunk := generator.GenerateChunk(pos)
+	chunk := generator.GenerateChunk(core.Overworld, pos)
 	shortGrass := 0
 	onGrass := 0
 	gaps := 0
@@ -49,7 +49,7 @@ func scanShortGrass(t *testing.T, generator *worldgen.Generator, pos core.ChunkP
 				}
 			}
 			// 草地表面目标格为空气的列计入空隙(证明短草是稀疏散布而非全铺)。
-			height := generator.HeightAt(pos.X*core.SectionSize+int32(x), pos.Z*core.SectionSize+int32(z))
+			height := generator.HeightAt(core.Overworld, pos.X*core.SectionSize+int32(x), pos.Z*core.SectionSize+int32(z))
 			if chunk.BlockAt(x, height, z) == core.GrassID && chunk.BlockAt(x, height+1, z) == core.AirID {
 				gaps++
 			}
@@ -103,7 +103,7 @@ var shortGrassFreeBaselineDigests = map[core.ChunkPos]string{
 func TestShortGrassOnlyWritesFormerAir(t *testing.T) {
 	generator := worldgen.New(grassTestSeed, false)
 	for _, pos := range grassTestChunks {
-		chunk := generator.GenerateChunk(pos)
+		chunk := generator.GenerateChunk(core.Overworld, pos)
 		digest := sha256.New()
 		for y := int32(core.MinY); y < core.MaxY; y++ {
 			for z := 0; z < core.SectionSize; z++ {
@@ -131,7 +131,7 @@ func TestShortGrassWholeChunkAndSinglePointParity(t *testing.T) {
 	generator := worldgen.New(grassTestSeed, false)
 	seenShortGrass := 0
 	for _, pos := range grassTestChunks {
-		chunk := generator.GenerateChunk(pos)
+		chunk := generator.GenerateChunk(core.Overworld, pos)
 		for y := int32(core.MinY); y < core.MaxY; y++ {
 			for z := 0; z < core.SectionSize; z++ {
 				for x := 0; x < core.SectionSize; x++ {
@@ -140,7 +140,7 @@ func TestShortGrassWholeChunkAndSinglePointParity(t *testing.T) {
 						Y: y,
 						Z: pos.Z*core.SectionSize + int32(z),
 					}
-					if got := generator.BaseBlockAt(position); got != chunk.BlockAt(x, y, z) {
+					if got := generator.BaseBlockAt(core.Overworld, position); got != chunk.BlockAt(x, y, z) {
 						t.Fatalf("chunk(%d,%d) %+v: BaseBlockAt=%d，GenerateChunk=%d",
 							pos.X, pos.Z, position, got, chunk.BlockAt(x, y, z))
 					}
@@ -173,18 +173,18 @@ func TestShortGrassFixedHitAndMissSamples(t *testing.T) {
 		{wx: -32, wz: -31, wantAt: core.AirID, description: "未命中列"},
 	}
 	for _, sample := range samples {
-		height := generator.HeightAt(sample.wx, sample.wz)
-		if got := generator.BaseBlockAt(core.BlockPos{X: sample.wx, Y: height, Z: sample.wz}); got != core.GrassID {
+		height := generator.HeightAt(core.Overworld, sample.wx, sample.wz)
+		if got := generator.BaseBlockAt(core.Overworld, core.BlockPos{X: sample.wx, Y: height, Z: sample.wz}); got != core.GrassID {
 			t.Fatalf("%s (%d,%d) 地表=%d，想要 GrassID(样本前提失效)",
 				sample.description, sample.wx, sample.wz, got)
 		}
-		got := generator.BaseBlockAt(core.BlockPos{X: sample.wx, Y: height + 1, Z: sample.wz})
+		got := generator.BaseBlockAt(core.Overworld, core.BlockPos{X: sample.wx, Y: height + 1, Z: sample.wz})
 		if got != sample.wantAt {
 			t.Fatalf("%s (%d,%d) surface+1=%d，想要 %d",
 				sample.description, sample.wx, sample.wz, got, sample.wantAt)
 		}
 		// 整块出口与单点出口对同一样本必须一致。
-		chunk := generator.GenerateChunk(core.ChunkPos{
+		chunk := generator.GenerateChunk(core.Overworld, core.ChunkPos{
 			X: sample.wx >> core.SectionShift, Z: sample.wz >> core.SectionShift,
 		})
 		if block := chunk.BlockAt(int(sample.wx&core.SectionMask), height+1, int(sample.wz&core.SectionMask)); block != got {
@@ -202,8 +202,8 @@ func TestShortGrassKeepsTreeAndWaterPriority(t *testing.T) {
 	dry := worldgen.New(grassTestSeed, false)
 	wet := worldgen.New(grassTestSeed, true)
 	for _, pos := range grassTestChunks {
-		dryChunk := dry.GenerateChunk(pos)
-		wetChunk := wet.GenerateChunk(pos)
+		dryChunk := dry.GenerateChunk(core.Overworld, pos)
+		wetChunk := wet.GenerateChunk(core.Overworld, pos)
 		for y := int32(core.MinY); y < core.MaxY; y++ {
 			for z := 0; z < core.SectionSize; z++ {
 				for x := 0; x < core.SectionSize; x++ {

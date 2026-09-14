@@ -84,7 +84,11 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 				if session.player != nil {
 					session.player.miningHeld = false
 					session.player.eatingHeld = false
+					session.player.sneakingHeld = false
 					session.player.mining = miningState{}
+					// 待出生/未激活的玩家不该残留拉弓进度：与采掘同形的防御
+					// 清零，正常路径下 `beginReset` 已经清过。
+					session.player.bow = bowState{}
 				}
 				result.Rejected = append(result.Rejected, Rejection{
 					Session:  command.Session,
@@ -95,11 +99,17 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 			}
 			player := session.player
 			player.lastInputSequence = command.Sequence
+			player.sneakingHeld = command.Sneaking
 			if !validPlayerInput(command) {
 				player.input = physics.Input{Yaw: player.yaw}
 				player.miningHeld = false
 				player.eatingHeld = false
+				player.sneakingHeld = false
 				player.mining = miningState{}
+				// 整包被拒的非法输入把主输入位一并作废：拉弓进度随之清零且
+				// 不得结算发射——被拒绝的输入不是玩家松手，若只清位不清状态，
+				// 同一 tick 稍后的拉弓推进会把它当成发射判定点凭空放出一箭。
+				player.bow = bowState{}
 				result.Rejected = append(result.Rejected, Rejection{
 					Session:  command.Session,
 					Sequence: command.Sequence,
@@ -114,6 +124,7 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 				Jump:      command.Jump,
 				Yaw:       yaw,
 				Sprinting: command.Sprinting,
+				Sneaking:  command.Sneaking,
 			}
 			player.miningHeld = command.Mining
 			player.eatingHeld = command.Eating
@@ -172,6 +183,16 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 			}
 			player.inventory = next
 			player.inventoryDirty = true
+		case CommandEquipArmor:
+			// 装备互换只读写玩家自身的快捷栏格与护甲槽，不触碰区块，直接在
+			// 命令阶段结算（与背包移动同族）；拒绝沿既有稳定拒绝路径。
+			if reason, rejected := engine.executeEquipArmor(command); rejected {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   reason,
+				})
+			}
 		case CommandTillSoil:
 			// 与放置同形的两段式：命令阶段只做玩家与朝向的廉价校验，真正的
 			// 射线、目标判定与写方块推迟到 interactions 循环——阶段顺序契约
@@ -281,6 +302,191 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 		case CommandMoveFurnaceStack:
 			// 跨容器移动会改动区块，必须与其他交互共享同一批 pending 变化。
 			tick.containerMoves = append(tick.containerMoves, command)
+		case CommandMoveStackPartial:
+			// 半组/单件移动按视图域分派结算相位：背包与合成域只读写玩家自身
+			// 状态，命令阶段内联结算；容器域会写区块，与整堆跨容器移动共享
+			// 延迟相位。数量一律由服务端按结算时点的权威来源栈推导
+			//（`stackSplitAmount`），空源整单拒绝。
+			if session.player == nil || session.player.lifecycle != PlayerActive {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectPlayerNotReady,
+				})
+				continue
+			}
+			switch command.StackView {
+			case StackViewInventory:
+				if command.Furnace != (core.FurnaceRef{}) {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidInput,
+					})
+					continue
+				}
+				if command.Slot >= core.InventorySlots || command.ToSlot >= core.InventorySlots {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidSlot,
+					})
+					continue
+				}
+				player := session.player
+				source, _ := player.inventory.Slot(command.Slot)
+				amount, ok := stackSplitAmount(source, command.Single)
+				if !ok {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidInput,
+					})
+					continue
+				}
+				next, ok := player.inventory.MoveStackAmount(command.Slot, command.ToSlot, amount)
+				if !ok {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidInput,
+					})
+					continue
+				}
+				player.inventory = next
+				player.inventoryDirty = true
+			case StackViewCrafting:
+				if command.Furnace != (core.FurnaceRef{}) {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidInput,
+					})
+					continue
+				}
+				player := session.player
+				if reason, ok := craftingMoveCommandReasons(
+					player.crafting.Size, command.Slot, command.ToSlot,
+				); !ok {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   reason,
+					})
+					continue
+				}
+				source := craftingViewSlot(player.inventory, player.crafting, command.Slot)
+				amount, ok := stackSplitAmount(source, command.Single)
+				if !ok {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidInput,
+					})
+					continue
+				}
+				if !player.applyMoveCraftingStack(command.Slot, command.ToSlot, amount) {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidInput,
+					})
+				}
+			case StackViewContainer:
+				// 跨容器移动会改动区块，与整堆移动共享同一延迟结算相位；
+				// 查看关系、容器引用与槽位约束在 `applyContainerMove` 统一校验。
+				tick.containerMoves = append(tick.containerMoves, command)
+			default:
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectInvalidInput,
+				})
+			}
+		case CommandQuickMoveStack:
+			// 快捷搬运与部分移动同族按视图域分派结算相位：背包与合成域只读写
+			// 玩家自身状态，命令阶段内联结算；容器域会写区块，与跨容器移动
+			// 共享延迟相位。命令不携带目标——目标序是服务端权威推导的固定
+			// 确定性契约（拾取四相位序 / 统一索引升序 / 熔炉输入优先燃料 /
+			// 对侧区域受限两相位序），对侧零吸收或源空整单拒绝。
+			if session.player == nil || session.player.lifecycle != PlayerActive {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectPlayerNotReady,
+				})
+				continue
+			}
+			switch command.StackView {
+			case StackViewInventory:
+				if command.Furnace != (core.FurnaceRef{}) {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidInput,
+					})
+					continue
+				}
+				if command.Slot >= core.InventorySlots {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidSlot,
+					})
+					continue
+				}
+				if !session.player.applyQuickMoveInventory(command.Slot) {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidInput,
+					})
+				}
+			case StackViewCrafting:
+				if command.Furnace != (core.FurnaceRef{}) {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidInput,
+					})
+					continue
+				}
+				player := session.player
+				if command.Slot >= craftingViewSlots {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidSlot,
+					})
+					continue
+				}
+				if command.Slot < core.CraftingGridSlots &&
+					command.Slot >= player.crafting.Size*player.crafting.Size {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidSlot,
+					})
+					continue
+				}
+				if !player.applyQuickMoveCrafting(command.Slot) {
+					result.Rejected = append(result.Rejected, Rejection{
+						Session:  command.Session,
+						Sequence: command.Sequence,
+						Reason:   RejectInvalidInput,
+					})
+				}
+			case StackViewContainer:
+				// 与部分移动的容器域同路径：查看关系、容器引用与槽位约束在
+				// `applyContainerMove` 统一校验，区块写相位结算。
+				tick.containerMoves = append(tick.containerMoves, command)
+			default:
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectInvalidInput,
+				})
+			}
 		case CommandCloseFurnace:
 			// 关闭容器对玩家永远成功；关闭工作台要先按关闭规则回收格 4..8，
 			// 无法完整回收时拒绝关闭请求且状态不变（正常路径下回收不变量
@@ -316,7 +522,11 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 				})
 				continue
 			}
-			if !session.player.applyMoveCraftingStack(command.Slot, command.ToSlot) {
+			// 整堆移动的 amount 就是来源当前数量：移动入口按「至多 amount」
+			// 泛化后，既有整堆语义按位不变。
+			player := session.player
+			source := craftingViewSlot(player.inventory, player.crafting, command.Slot)
+			if !player.applyMoveCraftingStack(command.Slot, command.ToSlot, source.Count) {
 				result.Rejected = append(result.Rejected, Rejection{
 					Session:  command.Session,
 					Sequence: command.Sequence,
@@ -402,7 +612,7 @@ func (tick *TickContext) SetViews(views ViewSnapshot) {
 	tick.engine.views = views
 }
 
-// AdvanceHostiles 推进夜行者、战斗、灼烧和死亡生命周期。
+// AdvanceHostiles 推进夜行者、战斗、灼烧、投射物和死亡生命周期。
 func (tick *TickContext) AdvanceHostiles(actions []HostileAction, result *TickResult) {
 	engine := &tick.engine
 	pending := tick.mutation
@@ -411,8 +621,14 @@ func (tick *TickContext) AdvanceHostiles(actions []HostileAction, result *TickRe
 	engine.advanceHostiles(actions)
 	engine.advanceCombat(result)
 	engine.advanceHostileBurn(engine.worldTime.Load())
-	engine.settleHostileDeaths(pending)
 	engine.advanceHostileDistant()
+	// 投射物阶段在远离消失之后、两个死亡结算之前推进：弹击致死必须与近战
+	// 致死同 tick 完成掉落与移除，任何 0 血实体不得存活到下一权威 tick。远离
+	// 消失与夜行者死亡结算的相对对调（distant 先于结算）不产生观察差异——
+	// distant 对 0 血个体整体跳过（见 advanceHostileDistant），仍只影响健康
+	// 成员的集合成员与计数，死亡个体的掉落统一归结算处理。
+	engine.advanceProjectiles(result)
+	engine.settleHostileDeaths(pending)
 	// 死亡产生的订阅脏位顺延到下一 tick，避免已经开始写区块后收缩订阅。
 	engine.settleDeaths(pending)
 }

@@ -24,9 +24,10 @@ func TestProtocolV9PlayerStateCarriesWorldTime(t *testing.T) {
 	}
 
 	// 绝对世界时间恰好追加在既有固定 payload 末尾（v36 起其后还有 1 字节天气、
-	// v37 起再有季节三字节，此处夹具后四者均为零值故后缀多四个 00）。
+	// v37 起再有季节三字节、v42 起再有 1 字节护甲点数，此处夹具后五者均为
+	// 零值故后缀多五个 00）。
 	got := hex.EncodeToString(payload)
-	const wantSuffix = "0807060504030201" + "00" + "00" + "00" + "00"
+	const wantSuffix = "0807060504030201" + "00" + "00" + "00" + "00" + "00"
 	if len(got) < len(wantSuffix) || got[len(got)-len(wantSuffix):] != wantSuffix {
 		t.Fatalf("payload = %s，想要以 %s 结尾", got, wantSuffix)
 	}
@@ -199,10 +200,11 @@ func TestProtocolV31PlayerStateCarriesDayPhaseOffset(t *testing.T) {
 		}
 
 		// 偏移恰好落在 `SaturationZero` 与 `WorldTimeTicks` 之间：载荷末尾依次
-		// 是偏移的低/高字节，再接 8 字节小端绝对世界时间、v36 起的 1 字节天气与
-		// v37 起的季节三字节（此处夹具后四者均为零值故是四个 00）。
+		// 是偏移的低/高字节，再接 8 字节小端绝对世界时间、v36 起的 1 字节天气、
+		// v37 起的季节三字节与 v42 起的 1 字节护甲点数（此处夹具后五者均为
+		// 零值故是五个 00）。
 		got := hex.EncodeToString(payload)
-		wantSuffix := fmt.Sprintf("%02x%02x", offset&0xFF, offset>>8) + "0807060504030201" + "00" + "00" + "00" + "00"
+		wantSuffix := fmt.Sprintf("%02x%02x", offset&0xFF, offset>>8) + "0807060504030201" + "00" + "00" + "00" + "00" + "00"
 		if len(got) < len(wantSuffix) || got[len(got)-len(wantSuffix):] != wantSuffix {
 			t.Fatalf("偏移 %d 的 payload = %s，想要以 %s 结尾", offset, got, wantSuffix)
 		}
@@ -286,9 +288,9 @@ func TestProtocolV10DropSelectedItemRegistryIsFrozen(t *testing.T) {
 	}
 }
 
-// protocol.PlayerState wire 载荷尾部各字段的字节宽度（v37 起）：
+// protocol.PlayerState wire 载荷尾部各字段的字节宽度（v42 起）：
 //
-//	… | Health u8 | Oxygen u16 | Hunger u8 | SaturationZero u8 | DayPhaseOffset u16 | WorldTimeTicks u64 | WeatherKind u8 | Season u8 | SeasonProgress u8 | Temperature i8
+//	… | Health u8 | Oxygen u16 | Hunger u8 | SaturationZero u8 | DayPhaseOffset u16 | WorldTimeTicks u64 | WeatherKind u8 | Season u8 | SeasonProgress u8 | Temperature i8 | ArmorPoints u8
 //
 // 下面这些 helper 由末尾向前**链式**求偏移，而不是各写一串 `len(payload)-8-2-1`
 // 这样的裸算式。理由是血的教训：v21 追加 `Oxygen` 时，`playerStateHealthOffset`
@@ -296,6 +298,7 @@ func TestProtocolV10DropSelectedItemRegistryIsFrozen(t *testing.T) {
 // 仍然发生）；v24 追加 `Hunger` 时同一个坑会再来一次。链式表达让「尾部又多了
 // 一个字段」只需要改最外层一处，其余偏移自动跟上。
 const (
+	playerStateArmorPointsBytes    = 1
 	playerStateTemperatureBytes    = 1
 	playerStateSeasonProgressBytes = 1
 	playerStateSeasonBytes         = 1
@@ -308,12 +311,18 @@ const (
 	playerStateHealthBytes         = 1
 )
 
+// playerStateArmorPointsOffset 返回护甲点数字节在 `protocol.PlayerState` 载荷
+// 中的下标。点数是载荷最末一字节（v42 起紧跟 `Temperature` 之后），它是整条
+// 偏移链的最外层：后续再向尾部追加字段时只改这里，其余偏移经它自动跟上。
+func playerStateArmorPointsOffset(payloadLen int) int {
+	return payloadLen - playerStateArmorPointsBytes
+}
+
 // playerStateTemperatureOffset 返回玩家位置温度字节在 `protocol.PlayerState`
-// 载荷中的下标。温度是载荷最末一字节（v37 起紧跟 `SeasonProgress` 之后），
-// 它是整条偏移链的最外层：后续再向尾部追加字段时只改这里，其余偏移经它
-// 自动跟上。
+// 载荷中的下标。v37 起温度紧跟 `SeasonProgress` 之后（曾是载荷最末一字节，
+// v42 起其后还有 1 字节护甲点数，改经点数偏移链式求值）。
 func playerStateTemperatureOffset(payloadLen int) int {
-	return payloadLen - playerStateTemperatureBytes
+	return playerStateArmorPointsOffset(payloadLen) - playerStateTemperatureBytes
 }
 
 // playerStateSeasonProgressOffset 返回季内进度字节在 `protocol.PlayerState`

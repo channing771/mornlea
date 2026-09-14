@@ -6,7 +6,7 @@ type RecipeID uint8
 const (
 	// RecipeStoneBricks 用 2×2 石头合成 4 个石砖。
 	RecipeStoneBricks RecipeID = iota + 1
-	// RecipeFurnace 用 3×3 圆石圆环（中格为空）合成 1 个熔炉。
+	// RecipeFurnace 用 3×3 石料圆环（中格为空）合成 1 个熔炉。
 	RecipeFurnace
 	// RecipeIronBlock 用 3×3 铁锭合成 1 个铁块。
 	RecipeIronBlock
@@ -59,12 +59,26 @@ const (
 	RecipeBed
 	// RecipeWoodenSword 用两块橡木木板纵列加一根木棍合成满耐久木剑。
 	RecipeWoodenSword
-	// RecipeStoneSword 用两块圆石纵列加一根木棍合成满耐久石剑。
+	// RecipeStoneSword 用两块石料纵列加一根木棍合成满耐久石剑。
 	RecipeStoneSword
 	// RecipeIronSword 用两块铁锭纵列加一根木棍合成满耐久铁剑。
 	RecipeIronSword
 	// RecipeBucket 左中/右中/底中 3 铁锭合成 1 空桶。
 	RecipeBucket
+	// RecipeIronHelmet 顶排 3 铁锭、次排左右各 1（5 件）合成满耐久铁头盔。
+	RecipeIronHelmet
+	// RecipeIronChestplate 次排左右各 1、下两排其余六格满（8 件）合成满耐久铁胸甲。
+	RecipeIronChestplate
+	// RecipeIronLeggings 顶排 3 铁锭、下两排左右各 1（7 件）合成满耐久铁护腿。
+	RecipeIronLeggings
+	// RecipeIronBoots 上两排左右各 1（4 件）合成满耐久铁靴子。
+	RecipeIronBoots
+	// RecipeArrow 上格砾石、下格木棍的纵向两格合成 2 支箭。
+	//
+	// 它是远程战斗的弹药前置：砾石走采掘线、木棍走 RecipeStick，形状宽 1
+	// 高 2，2×2 个人网格即可合成（无需先造工作台）。镜像与自身相同；倒置
+	// （木棍在砾石上方）是垂直翻转，永不匹配。
+	RecipeArrow
 )
 
 // Recipe 返回 id 的固定形状配方；未知 ID 返回 false。
@@ -110,13 +124,18 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 			},
 			Output: ItemStack{Item: ItemStoneBrick, Count: 4},
 		}, true
+	// 熔炉与石剑以石料而非圆石为原料：配方原料必须具有自然来源，而
+	// `CobblestoneID` 不参与世界生成（材料表无圆石、无岩浆、无结构生成）；
+	// 圆石过去只来自一次性初始发放，该发放取消后已无任何来源，空背包起家
+	// 的世界里以圆石为原料的配方会连带熔炼链与铁制工具一起永久不可达。
+	// 石料是徒手采掘即可采收的规范石材，石砖、石镐与石锄早已以它作原料。
 	case RecipeFurnace:
 		return RecipePattern{
 			Width: 3, Height: 3, Mirror: true,
 			Cells: [CraftingGridSlots]ItemID{
-				ItemCobblestone, ItemCobblestone, ItemCobblestone,
-				ItemCobblestone, ItemNone, ItemCobblestone,
-				ItemCobblestone, ItemCobblestone, ItemCobblestone,
+				ItemStone, ItemStone, ItemStone,
+				ItemStone, ItemNone, ItemStone,
+				ItemStone, ItemStone, ItemStone,
 			},
 			Output: ItemStack{Item: ItemFurnace, Count: 1},
 		}, true
@@ -269,12 +288,13 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 			},
 			Output: ItemStack{Item: ItemWoodenSword, Count: 1, Durability: 59},
 		}, true
+	// 石剑的原料约束与熔炉相同：石料徒手可采，圆石不参与世界生成。
 	case RecipeStoneSword:
 		return RecipePattern{
 			Width: 1, Height: 3, Mirror: true,
 			Cells: [CraftingGridSlots]ItemID{
-				ItemCobblestone, ItemNone, ItemNone,
-				ItemCobblestone, ItemNone, ItemNone,
+				ItemStone, ItemNone, ItemNone,
+				ItemStone, ItemNone, ItemNone,
 				ItemStick, ItemNone, ItemNone,
 			},
 			Output: ItemStack{Item: ItemStoneSword, Count: 1, Durability: 131},
@@ -299,6 +319,60 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 			},
 			Output: ItemStack{Item: ItemEmptyBucket, Count: 1},
 		}, true
+	// 四条铁质护甲配方：产物耐久引用 armor 域单一真源常量，合成是护甲耐久
+	// 的唯一来源。四条形状全部左右对称，镜像与自身相同（与熔炉圆环、床的
+	// 声明方式同形）。
+	case RecipeIronHelmet:
+		return RecipePattern{
+			Width: 3, Height: 2, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemIronIngot, ItemIronIngot, ItemIronIngot,
+				ItemIronIngot, ItemNone, ItemIronIngot,
+				ItemNone, ItemNone, ItemNone,
+			},
+			Output: ItemStack{Item: ItemIronHelmet, Count: 1, Durability: ironHelmetMaxDurability},
+		}, true
+	case RecipeIronChestplate:
+		return RecipePattern{
+			Width: 3, Height: 3, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemIronIngot, ItemNone, ItemIronIngot,
+				ItemIronIngot, ItemIronIngot, ItemIronIngot,
+				ItemIronIngot, ItemIronIngot, ItemIronIngot,
+			},
+			Output: ItemStack{Item: ItemIronChestplate, Count: 1, Durability: ironChestplateMaxDurability},
+		}, true
+	case RecipeIronLeggings:
+		return RecipePattern{
+			Width: 3, Height: 3, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemIronIngot, ItemIronIngot, ItemIronIngot,
+				ItemIronIngot, ItemNone, ItemIronIngot,
+				ItemIronIngot, ItemNone, ItemIronIngot,
+			},
+			Output: ItemStack{Item: ItemIronLeggings, Count: 1, Durability: ironLeggingsMaxDurability},
+		}, true
+	case RecipeIronBoots:
+		return RecipePattern{
+			Width: 3, Height: 2, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemIronIngot, ItemNone, ItemIronIngot,
+				ItemIronIngot, ItemNone, ItemIronIngot,
+				ItemNone, ItemNone, ItemNone,
+			},
+			Output: ItemStack{Item: ItemIronBoots, Count: 1, Durability: ironBootsMaxDurability},
+		}, true
+	// 箭：砾石位于木棍正上方的纵向两格，产出 2 支箭。箭没有耐久概念，产物
+	// 耐久保持零值，否则同物品的两个栈会因无意义字段拒绝合并。
+	case RecipeArrow:
+		return RecipePattern{
+			Width: 1, Height: 2, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemGravel, ItemNone, ItemNone,
+				ItemStick, ItemNone, ItemNone,
+			},
+			Output: ItemStack{Item: ItemArrow, Count: 2},
+		}, true
 	default:
 		return RecipePattern{}, false
 	}
@@ -317,9 +391,10 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 // 或有效尺寸之外的格（个人网格的格 4..8）残留物品时，一律判定无匹配——
 // 正常权威路径不会构造出这两种输入，这里是防御层。
 //
-// 实现是固定 20 条 × 至多 9 格的纯值循环，无 map/slice 分配，不建通用矩阵包
-// （design.md D3）。循环上界用命名常量 RecipeBucket 而非字面量：追加新配方时
-// 它随注册表自然延伸（与 BlockIDMax 同形的哨兵纪律）。
+// 实现是固定 25 条 × 至多 9 格的纯值循环，无 map/slice 分配，不建通用矩阵包
+// （design.md D3）。循环上界用命名常量而非字面量、恒取注册表当前末项
+// （现为 `RecipeArrow`）：追加新配方时把上界推进到新末项即可，与
+// `BlockIDMax` 同形的哨兵纪律。
 func MatchCraftingGrid(size uint8, slots [CraftingGridSlots]ItemStack) (RecipeID, ItemStack, bool) {
 	if size != 2 && size != 3 {
 		return 0, ItemStack{}, false
@@ -341,7 +416,7 @@ func MatchCraftingGrid(size uint8, slots [CraftingGridSlots]ItemStack) (RecipeID
 	if !ok {
 		return 0, ItemStack{}, false
 	}
-	for id := RecipeStoneBricks; id <= RecipeBucket; id++ {
+	for id := RecipeStoneBricks; id <= RecipeArrow; id++ {
 		pattern, registered := recipePattern(id)
 		if !registered {
 			continue

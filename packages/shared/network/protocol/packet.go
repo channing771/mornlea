@@ -7,7 +7,36 @@ import (
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-// ProtocolVersion 是当前唯一支持的协议版本；v38 在 Play C→S 尾部追加
+// ProtocolVersion 是当前唯一支持的协议版本；v44 在 Play C→S 尾部追加
+// ID 19/20 的分堆双命令 `MoveStackPartial`/`QuickMoveStack`（u64 序号 +
+// 18 字节容器引用 + u8 视图域 + u8 来源统一索引；部分移动再追加 u8 目标
+// 与 u8 单件标志，共固定 30 字节，快捷搬运固定 28 字节。视图域 {0,1,2} =
+// 背包/合成/容器，越界整包拒绝；容器视图必须携带合法容器引用、非容器
+// 视图的引用字段必须为零值；索引上界按视图分派 35/44/62|38（箱子|熔炉）；
+// 部分移动来源等于目标整包拒绝。移动数量由服务端按来源栈推导，wire 上
+// 不携带数量字段）；v43 在 Play S→C 尾部追加
+// ID 29/30/31 的三类投射物消息 `ProjectileSpawn`/`ProjectileState`/
+// `ProjectileDespawn`（每类 `ServerTick` u64 + count u8 + ≤128 条按 ID 严格
+// 升序的 record；spawn 携带 ID/弹种 kind/dimension/position/velocity，state
+// 携带 ID/position，despawn 只携带 ID；弹种值域 {0,1}，0=骨刺、1=箭，越界
+// 拒绝），并在敌怪 `HostileSpawn`/`HostileState` record 尾部（`Health` 之后）
+// pure-append 1 字节敌怪 kind（u8，仅 0/1 合法，0=夜行者、1=掷骨者，越界
+// 拒绝），spawn record 由 29 变为 30 字节、state record 由 37 变为 38 字节，
+// despawn record 不变；v42 在 `PlayerState` 载荷尾部
+// （`Temperature` 之后）追加 1 字节护甲点数 `ArmorPoints`（u8，合法域
+// 0..`core.MaxArmorPoints`，越界拒绝），在 Play C→S 尾部新增 ID 18 的装备
+// 互换命令 `EquipArmor`（u64 序号，与 `DropSelectedItem` 同形：目标槽位由
+// 护甲件类经权威映射唯一决定，互换成功经既有 `InventoryUpdate` 广播覆盖），
+// 并新增 `RejectReason` 15（非护甲件）；v41 在 `PlayerInput` 尾部追加
+// `Sneaking` 潜行位（紧跟 `Sprinting` 之后）；v40 在 `LoginStart` 载荷尾部
+// （`DisplayName` 之后）追加 1 字节期望视距（u8，闭区间 2..64 合法：越界值
+// 由服务端登录驱动以 `LoginProtocolViolation` 回 `LoginReject` 拒绝登录，
+// 不钳制、也不以默认视距静默建会话），供每会话视距经登录协商；v39 放行
+// `Depths`（维度 1）：
+// 玩家与区块类消息（`ChunkSnapshot`、`BlockChanges`、`ForgetChunks`、
+// `RequestChunkResync`、`PlayerState`、远端玩家系列）的 `Dimension` 接受
+// `Overworld` 与 `Depths`，`Dimension >= 2` 仍被拒绝，伙伴/敌怪/被动生物类
+// 消息继续只接受 `Overworld`；v38 在 Play C→S 尾部追加
 // ID 16/17 的水桶双命令 `CollectWater`/`PlaceWater`（u64 序号 + 两个 f32
 // 朝向，与 `TillSoil` 同形：目标与栏位由服务端权威决定），并新增
 // `RejectReason` 13/14（非流体源/桶态错配）；v37 在 `PlayerState` 载荷尾部
@@ -35,8 +64,27 @@ import (
 // `ServerTick` u64 + count u8 + ≤64 条按 ID 严格升序的 record；spawn 携带
 // ID/dimension/position/yaw/health，state 携带 ID/position/velocity/yaw/health，
 // despawn 只携带 ID），并维护旧客户端握手拒绝语义；v29 在 `PlayerState` 尾部追加
-// `SaturationZero` 饱和度归零提示位（紧跟 `Hunger` 之后、`WorldTimeTicks` 之前）；v28 在 `PlayerInput` 尾部追加 `Sprinting` 疾跑位（紧跟 `Eating` 之后）；v27 新增 Play C→S ID 14 `BoneMeal`，v26 新增 Play S→C ID 20 `PlaceBlockSucceeded`，v25 只扩展既有 `Mining` 位语义不新增字段，v24 上线权威饥饿 Eating/Hunger 并拒绝 v23 及更早登录。
+// `SaturationZero` 饱和度归零提示位（紧跟 `Hunger` 之后、`WorldTimeTicks` 之前）；v28 在 `PlayerInput` 尾部追加 `Sprinting` 疾跑位（紧跟 `Eating` 之后），v41 在 `PlayerInput` 尾部追加 `Sneaking` 潜行位（紧跟 `Sprinting` 之后）；v27 新增 Play C→S ID 14 `BoneMeal`，v26 新增 Play S→C ID 20 `PlaceBlockSucceeded`，v25 只扩展既有 `Mining` 位语义不新增字段，v24 上线权威饥饿 Eating/Hunger 并拒绝 v23 及更早登录。
 //
+// v44 是纯追加：只在 Play C→S 尾部新增 ID 19/20 的分堆双命令，不改动
+// 既有 packet 的 wire 形状与全部长度上限、不新增 `RejectReason`（分堆拒绝
+// 复用既有拒绝原因枚举）；旧版握手拒绝是既有语义。
+// v43 是纯追加：只在 Play S→C 尾部新增 ID 29/30/31 的投射物三类消息，只在
+// 敌怪 spawn/state record 尾部新增 1 字节 kind（既有字段的位置与语义不变），
+// 不新增 C→S 消息、不改动既有包 ID、不新增 `RejectReason`；旧版握手
+// 拒绝是既有语义。
+// v42 是纯追加：只在 `PlayerState` 载荷尾部（`Temperature` 之后）新增 1 字节
+// 护甲点数、只在 Play C→S 尾部新增 ID 18 的 `EquipArmor`，不改动既有 packet
+// 的 wire 形状与全部长度上限；新增的 `RejectReason` 15 只扩拒绝原因枚举，
+// 不改动既有编号；旧版握手拒绝是既有语义。
+// v41 是纯追加：只在 `PlayerInput` 载荷尾部新增 1 字节潜行位，不新增
+// packet、不改动既有包 ID、不改动既有 packet 的 wire 形状与全部长度上限、
+// 不新增 `RejectReason`（潜行放置分流复用既有 `RejectInvalidInput` 编号）；
+// 旧版握手拒绝是既有语义。
+// v40 是纯追加：只在 `LoginStart` 载荷尾部新增 1 字节期望视距，不新增
+// packet、不改动既有包 ID、不改动既有 packet 的 wire 形状与全部长度上限、
+// 不新增 `RejectReason`（域外视距复用既有 `LoginProtocolViolation` 编号）；
+// 旧版握手拒绝是既有语义。
 // v38 是纯追加：只在 Play C→S 尾部新增 ID 16/17 的水桶双命令，不改动
 // 既有 packet 的 wire 形状与全部长度上限；新增的 `RejectReason` 13/14 只扩
 // 拒绝原因枚举，不改动既有编号；旧版握手拒绝是既有语义。
@@ -58,9 +106,10 @@ import (
 // 不新增 `RejectReason`。v30 新增三类 S→C 消息；v29/v28/v24 同为既有 packet
 // 尾部追加：
 //
-//   - `PlayerInput`（Play/C→S ID 0）末尾追加 1 字节 `Sprinting`，紧跟 `Eating` 之后。
-//     三者同形：客户端只声明按键意图，权威结算全在服务端。
-//   - `PlayerState`（Play/S→C ID 3）在 v24 已追加 1 字节 `Hunger`，在 v29 再追加 1 字节 `SaturationZero`，在 v31 再追加 2 字节 `DayPhaseOffset`（u16，值域 0..23999，越界拒绝），均落在 `WorldTimeTicks` 之前；v36 在 `WorldTimeTicks` 之后再追加 1 字节 `WeatherKind`（u8，值域 0..2，越界拒绝）；v37 在 `WeatherKind` 之后追加 3 字节 `Season`/`SeasonProgress`/`Temperature`（u8/u8/i8，季节值域 0..3 越界拒绝，进度与温度全域合法）。三层饥饿状态里只有饥饿值与零提示位上线，饱和度与疲劳值是纯服务端量、不占 wire 字段（design.md D6）；相位偏移只平移显示相位，绝对世界时间的推进语义不变；天气是服务端权威三态，客户端只消费最新有效值；季节与温度同为权威派生量，客户端按 ServerTick 门控镜像。
+//   - `PlayerInput`（Play/C→S ID 0）末尾追加 1 字节 `Sprinting`，紧跟 `Eating` 之后；
+//     v41 在其后（`Sprinting` 之后）再追加 1 字节 `Sneaking`。
+//     四者同形：客户端只声明按键意图，权威结算全在服务端。
+//   - `PlayerState`（Play/S→C ID 3）在 v24 已追加 1 字节 `Hunger`，在 v29 再追加 1 字节 `SaturationZero`，在 v31 再追加 2 字节 `DayPhaseOffset`（u16，值域 0..23999，越界拒绝），均落在 `WorldTimeTicks` 之前；v36 在 `WorldTimeTicks` 之后再追加 1 字节 `WeatherKind`（u8，值域 0..2，越界拒绝）；v37 在 `WeatherKind` 之后追加 3 字节 `Season`/`SeasonProgress`/`Temperature`（u8/u8/i8，季节值域 0..3 越界拒绝，进度与温度全域合法）；v42 在 `Temperature` 之后再追加 1 字节 `ArmorPoints`（u8，值域 0..`core.MaxArmorPoints`，越界拒绝）。三层饥饿状态里只有饥饿值与零提示位上线，饱和度与疲劳值是纯服务端量、不占 wire 字段（design.md D6）；相位偏移只平移显示相位，绝对世界时间的推进语义不变；天气是服务端权威三态，客户端只消费最新有效值；季节与温度同为权威派生量，客户端按 ServerTick 门控镜像；护甲点数同为服务端权威派生量，客户端只消费最新有效值。
 //
 // 历史：v23 在 `LoginSuccess` 追加 `WorldSeed`（u64，wire 上紧跟 `PlayerID` 之后），
 // 供客户端确定性生成远环壳——该段在旧基线上原编号 v18，main 合并 fluid 系列
@@ -70,7 +119,7 @@ import (
 // v21 在 `PlayerState` 末尾追加 2 字节权威氧气（只发给玩家本人的权威
 // 值）；v20 追加 8 个流体方块编号（只扩方块 ID 集合，wire 形状不变），流体
 // 变更走既有区块变更通道（design.md D8）。
-const ProtocolVersion uint32 = 38
+const ProtocolVersion uint32 = 44
 
 // State 标识连接当前允许交换的 packet 集合。
 type State uint8
@@ -117,9 +166,29 @@ type HandshakeReject struct {
 
 func (HandshakeReject) serverPacket() {}
 
+// `LoginStart.ViewDistance` 的合法闭区间：v40 登录协商契约的一部分，wire
+// 层双侧（发送校验与服务端登录驱动）都只接受该区间内的值；区间外的钳制
+// 语义（服务端上界）属于上层兴趣管理，不在此处。
+const (
+	LoginViewDistanceMin uint8 = 2
+	LoginViewDistanceMax uint8 = 64
+)
+
+// ValidLoginViewDistance 报告 v 是否落在 `LoginStart.ViewDistance` 的合法
+// 闭区间。它是登录视距域判定的唯一谓词：wire 发送校验
+// （`ValidateClientPacket`）与服务端登录驱动（`BeginServerLogin`）都经由
+// 它拒绝域外值，两处范围比较不得再各写一份，避免域定义漂移。
+func ValidLoginViewDistance(v uint8) bool {
+	return v >= LoginViewDistanceMin && v <= LoginViewDistanceMax
+}
+
+// LoginStart 是客户端登录发起。`ViewDistance` 是客户端声明的期望视距
+// （v40 在 `DisplayName` 之后尾部追加的 1 字节 u8），编码为载荷最末一字节；
+// 取值域见 `LoginViewDistanceMin`/`LoginViewDistanceMax`。
 type LoginStart struct {
-	PlayerID    core.PlayerID
-	DisplayName string
+	PlayerID     core.PlayerID
+	DisplayName  string
+	ViewDistance uint8
 }
 
 func (LoginStart) clientPacket() {}
@@ -209,6 +278,10 @@ func ValidateClientPacket(state State, packet ClientPacket) error {
 		if _, err := core.NormalizeDisplayName(loginStart.DisplayName); err != nil {
 			return fmt.Errorf("network: invalid login display name: %w", err)
 		}
+		if !ValidLoginViewDistance(loginStart.ViewDistance) {
+			return fmt.Errorf("network: login view distance %d outside range %d..%d",
+				loginStart.ViewDistance, LoginViewDistanceMin, LoginViewDistanceMax)
+		}
 		return nil
 	case StatePlay:
 		switch clientPacket := packet.(type) {
@@ -237,6 +310,12 @@ func ValidateClientPacket(state State, packet ClientPacket) error {
 		case CollectWater:
 			return clientPacket.Validate()
 		case PlaceWater:
+			return clientPacket.Validate()
+		case EquipArmor:
+			return clientPacket.Validate()
+		case MoveStackPartial:
+			return clientPacket.Validate()
+		case QuickMoveStack:
 			return clientPacket.Validate()
 		case MoveCraftingStack:
 			return clientPacket.Validate()
@@ -356,6 +435,12 @@ func ValidateServerPacket(state State, packet ServerPacket) error {
 			return serverPacket.Validate()
 		case PassiveDespawn:
 			return serverPacket.Validate()
+		case ProjectileSpawn:
+			return serverPacket.Validate()
+		case ProjectileState:
+			return serverPacket.Validate()
+		case ProjectileDespawn:
+			return serverPacket.Validate()
 		default:
 			return InvalidServerPacket(state, packet)
 		}
@@ -404,9 +489,9 @@ func InvalidServerPacket(state State, packet ServerPacket) error {
 // ValidateDecodedClientWirePacket 是解码侧的协议级校验入口：在主校验
 // `ValidateClientPacket` 之前放行 Handshake 的 `ClientHello` 与 Login 的
 // `LoginStart`，让登录状态机能对结构完整的握手/登录消息返回冻结的
-// `HandshakeVersionMismatch`/`LoginInvalidIdentity` 拒绝路径；其余 packet
-// 原样转发主校验，不接触任何字节层细节。导出供根包 Memory transport 与
-// 编解码层解码路径共用。
+// `HandshakeVersionMismatch`/`LoginInvalidIdentity`/`LoginProtocolViolation`
+// 拒绝路径（域外视距走后者）；其余 packet 原样转发主校验，不接触任何
+// 字节层细节。导出供根包 Memory transport 与编解码层解码路径共用。
 func ValidateDecodedClientWirePacket(state State, packet ClientPacket) error {
 	// The login state machine must observe every structurally valid hello in
 	// order to return the frozen HandshakeVersionMismatch response. Outbound
@@ -417,7 +502,9 @@ func ValidateDecodedClientWirePacket(state State, packet ClientPacket) error {
 		}
 	}
 	// A structurally complete LoginStart must reach the login driver so it can
-	// return the frozen LoginInvalidIdentity code for semantic identity errors.
+	// return the frozen LoginInvalidIdentity code for semantic identity errors
+	// and the frozen LoginProtocolViolation code for out-of-domain view
+	// distance, instead of a bare decode failure closing the connection.
 	if state == StateLogin {
 		if _, ok := packet.(LoginStart); ok {
 			return nil

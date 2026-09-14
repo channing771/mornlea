@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
+	"github.com/channing771/mornlea/packages/client/client"
 	"github.com/channing771/mornlea/packages/shared/config"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
@@ -215,6 +216,69 @@ func TestHUDStateAssemblesContainerAndMarkerFlags(t *testing.T) {
 	app.ResetCombatFeedback()
 	if state := app.assembleHUDState(); state.Marker {
 		t.Fatalf("marker 复位后分节=%+v，想要未武装", state)
+	}
+}
+
+// TestHUDStateAssemblesArmorFromPredictorMirror 锁定护甲分节的组装语义：镜像
+// 未确认时分节缺席（前端据此不呈现），确认后按权威点数下行——点数为 0 时分节
+// 照常携带（零渲染由前端组件裁决），越界权威点数在镜像入口被拒绝。
+func TestHUDStateAssemblesArmorFromPredictorMirror(t *testing.T) {
+	app, _ := newHUDPushTestApplication(t)
+	app.SetMenuPhase(MenuPhaseGame)
+
+	if state := app.assembleHUDState(); state.Armor != nil {
+		t.Fatalf("镜像未确认时不应携带护甲分节: %+v", state.Armor)
+	}
+	if err := app.predictor.Begin(network.PlayerState{
+		ServerTick: 1, Dimension: core.Overworld,
+		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true, Ready: true,
+		ArmorPoints: 7,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if state := app.assembleHUDState(); state.Armor == nil || state.Armor.Points != 7 {
+		t.Fatalf("确认后护甲分节=%+v，想要 7 点", state.Armor)
+	}
+
+	tick := uint64(2)
+	advance := func(points uint8) {
+		t.Helper()
+		tick++
+		state := network.PlayerState{
+			ServerTick:  tick,
+			Dimension:   core.Overworld,
+			Position:    mgl32.Vec3{0.5, 10, 0.5},
+			OnGround:    true,
+			Ready:       true,
+			ArmorPoints: points,
+		}
+		source := client.MirrorCollisionSource{Mirror: app.mirror, Dimension: core.Overworld}
+		if _, err := app.predictor.ApplyPlayerState(state, source); err != nil {
+			t.Fatalf("ApplyPlayerState(armor=%d): %v", points, err)
+		}
+	}
+	advance(0)
+	if state := app.assembleHUDState(); state.Armor == nil || state.Armor.Points != 0 {
+		t.Fatalf("零点数护甲分节=%+v，想要携带 points=0（零渲染在前端）", state.Armor)
+	}
+	// 越界权威点数在镜像侧被原子拒绝（协议 Validate 之外的纵深校验），分节
+	// 保持最近一次确认值；组装配的钳制是绕过镜像直构时的最后一道兜底，已在
+	// packages/client/client 的组装钉值测试单独覆盖。
+	tick++
+	rejected := network.PlayerState{
+		ServerTick:  tick,
+		Dimension:   core.Overworld,
+		Position:    mgl32.Vec3{0.5, 10, 0.5},
+		OnGround:    true,
+		Ready:       true,
+		ArmorPoints: core.MaxArmorPoints + 1,
+	}
+	source := client.MirrorCollisionSource{Mirror: app.mirror, Dimension: core.Overworld}
+	if _, err := app.predictor.ApplyPlayerState(rejected, source); err == nil {
+		t.Fatal("ApplyPlayerState 接受了越界护甲点数")
+	}
+	if state := app.assembleHUDState(); state.Armor == nil || state.Armor.Points != 0 {
+		t.Fatalf("越界拒绝后护甲分节应保持最近确认值 0: %+v", state.Armor)
 	}
 }
 

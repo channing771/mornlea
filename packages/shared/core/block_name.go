@@ -35,6 +35,9 @@ var blockDisplayNames = [...]string{
 	// 四档雪层紧随短草追加，显示名同步补齐，否则 RegisteredBlock 扩容后
 	// BlockDisplayName 会索引越界 panic。
 	"雪层1档", "雪层2档", "雪层3档", "雪层4档",
+	// 橡树树苗紧随四档雪层追加，显示名同步补齐，否则 RegisteredBlock 扩容后
+	// BlockDisplayName 会索引越界 panic。
+	"橡树树苗",
 }
 
 // BlockDisplayName 返回已注册方块的中文显示名。

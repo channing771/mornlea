@@ -148,6 +148,9 @@ type (
 	CollectWater = protocol.CollectWater
 	// PlaceWater 是客户端放置流体源命令。
 	PlaceWater = protocol.PlaceWater
+	// EquipArmor 是客户端装备互换命令：请求把权威选中快捷栏格中的护甲件
+	// 穿到对应槽位，载荷仅序号，目标槽位由件类映射唯一确定。
+	EquipArmor = protocol.EquipArmor
 	// PlayerState 是服务端发给玩家本人的完整权威状态。
 	PlayerState = protocol.PlayerState
 	// RemotePlayerSpawn 是其他玩家进入同步范围的出生通知。
@@ -194,6 +197,19 @@ const (
 	RejectNotFluidSource = protocol.RejectNotFluidSource
 	// RejectBucketMismatch 表示手持桶态与命令不匹配。
 	RejectBucketMismatch = protocol.RejectBucketMismatch
+	// RejectNotArmor 表示装备互换命令的权威选中快捷栏格未持有可穿戴的护甲件。
+	RejectNotArmor = protocol.RejectNotArmor
+)
+
+// 分堆双命令的视图域枚举定义在 protocol 包；再导出供服务端 ingress 显式
+// 映射与测试夹具共用同一组取值（语义见 protocol 侧注释）。
+const (
+	// StackViewInventory 是背包视图：统一索引 0..35。
+	StackViewInventory = protocol.StackViewInventory
+	// StackViewCrafting 是合成统一视图：网格 0..8、背包 9..44。
+	StackViewCrafting = protocol.StackViewCrafting
+	// StackViewContainer 是容器统一视图：熔炉 0..38、箱子 0..62。
+	StackViewContainer = protocol.StackViewContainer
 )
 
 // 物品栏与容器消息 DTO 定义在 protocol 包；再导出保持既有 network.X 引用。
@@ -212,6 +228,12 @@ type (
 	OpenContainer = protocol.OpenContainer
 	// MoveContainerStack 是容器统一栏位间的整堆移动命令。
 	MoveContainerStack = protocol.MoveContainerStack
+	// MoveStackPartial 是分堆部分移动命令：半组（向上取整）或单件两档，
+	// 数量由服务端按来源栈推导。
+	MoveStackPartial = protocol.MoveStackPartial
+	// QuickMoveStack 是快捷搬运命令：来源格整堆移到对侧区域首个可容纳
+	// 位置，目标序由服务端权威推导。
+	QuickMoveStack = protocol.QuickMoveStack
 	// CloseContainer 是关闭容器命令。
 	CloseContainer = protocol.CloseContainer
 	// FurnaceState 是服务端发给当前查看者的完整熔炉状态。
@@ -347,6 +369,38 @@ const (
 	PassiveDespawnVanished = protocol.PassiveDespawnVanished
 	// PassiveDespawnDied 表示死亡移除。
 	PassiveDespawnDied = protocol.PassiveDespawnDied
+)
+
+// 投射物消息 DTO 与弹种 kind 定义在 protocol 包；再导出保持既有 network.X
+// 引用。
+type (
+	// ProjectileSpawnRecord 是一条投射物的出生事实。
+	ProjectileSpawnRecord = protocol.ProjectileSpawnRecord
+	// ProjectileSpawn 是投射物出生批次通知。
+	ProjectileSpawn = protocol.ProjectileSpawn
+	// ProjectileStateRecord 是一条投射物在一个权威 tick 的飞行位置。
+	ProjectileStateRecord = protocol.ProjectileStateRecord
+	// ProjectileState 是投射物位置批次通知。
+	ProjectileState = protocol.ProjectileState
+	// ProjectileDespawn 是投射物移除批次通知。
+	ProjectileDespawn = protocol.ProjectileDespawn
+)
+
+// 弹种 kind 字节定义在 protocol 包，再导出保持既有 network.X 引用。
+const (
+	// ProjectileKindShard 表示骨刺（远程敌怪发射）。
+	ProjectileKindShard = protocol.ProjectileKindShard
+	// ProjectileKindArrow 表示箭（玩家弓发射）。
+	ProjectileKindArrow = protocol.ProjectileKindArrow
+)
+
+// 敌怪 kind 字节同样定义在 protocol 包；客户端镜像与呈现层按同一数值
+// 消费，再导出保持 network.X 单一引用面。
+const (
+	// HostileKindNightwalker 表示夜行者（近战追击）。
+	HostileKindNightwalker = protocol.HostileKindNightwalker
+	// HostileKindBoneThrower 表示掷骨者（远程投掷骨刺）。
+	HostileKindBoneThrower = protocol.HostileKindBoneThrower
 )
 
 // 区块快照值类型定义在 protocol 包（密封接口与 Validate 同包）；再导出保持

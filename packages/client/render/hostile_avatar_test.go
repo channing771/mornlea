@@ -151,3 +151,73 @@ func TestHostileAvatarColorIsStableAcrossIDs(t *testing.T) {
 		t.Fatal("夜行者颜色与相同 bytes 的玩家颜色重合")
 	}
 }
+
+// TestBoneThrowerAvatarBranchBuildsDistinctParts 锁定掷骨者的呈现分支：
+// `EntityKind` 不增值（仍在 Hostile 身份域内按类别字节分支），6 部件预算
+// 不变；骨白躯干 + 深灰头部 + 更细的手臂与夜行者一眼可辨，零值类别（夜
+// 行者）与显式常量产出逐字节相同的部件。
+func TestBoneThrowerAvatarBranchBuildsDistinctParts(t *testing.T) {
+	if EntityHostile != 4 {
+		t.Fatalf("EntityHostile=%d，想要 4（类别分支不增值身份域）", EntityHostile)
+	}
+	key := HostileEntityKey(11)
+	hurler := buildAvatarParts(nil, []Avatar{{
+		Key: key, Position: mgl32.Vec3{1, 0, 1}, HostileKind: HostileKindBoneThrower,
+	}})
+	if got, want := len(hurler), avatarPartsPerBody; got != want {
+		t.Fatalf("掷骨者部件=%d，想要 %d（6 部件预算不变）", got, want)
+	}
+	nightwalker := buildAvatarParts(nil, []Avatar{{Key: key, Position: mgl32.Vec3{1, 0, 1}}})
+	explicit := buildAvatarParts(nil, []Avatar{{
+		Key: key, Position: mgl32.Vec3{1, 0, 1}, HostileKind: HostileKindNightwalker,
+	}})
+	for index := range nightwalker {
+		if nightwalker[index] != explicit[index] {
+			t.Fatalf("零值类别与显式夜行者的部件 %d 不同", index)
+		}
+		if hurler[index] == nightwalker[index] {
+			t.Fatalf("掷骨者部件 %d 与夜行者逐字节相同，类别分支未生效", index)
+		}
+	}
+
+	// 躯干骨白：三通道明亮且明显高于夜行者暗青躯干。
+	hurlerTorso, nightwalkerTorso := hurler[1].color, nightwalker[1].color
+	if hurlerTorso[0] < 0.7 || hurlerTorso[1] < 0.65 {
+		t.Fatalf("掷骨者躯干 %v 不是骨白", hurlerTorso)
+	}
+	if hurlerTorso[0] <= nightwalkerTorso[0] {
+		t.Fatalf("掷骨者躯干 %v 未亮于夜行者 %v", hurlerTorso, nightwalkerTorso)
+	}
+	// 头部深灰：三通道接近且暗。
+	hurlerHead := hurler[0].color
+	if hurlerHead[0] > 0.45 || hurlerHead[0] < 0.2 {
+		t.Fatalf("掷骨者头部 %v 不是深灰", hurlerHead)
+	}
+	if math.Abs(float64(hurlerHead[0]-hurlerHead[1])) > 0.08 ||
+		math.Abs(float64(hurlerHead[1]-hurlerHead[2])) > 0.08 {
+		t.Fatalf("掷骨者头部 %v 通道差异过大，不是中性灰", hurlerHead)
+	}
+	// 手臂更细：掷骨者手臂宽度小于夜行者手臂宽度。
+	hurlerArm := transformedUnitCubeBounds(hurler[2].transform)
+	nightwalkerArm := transformedUnitCubeBounds(nightwalker[2].transform)
+	if hurlerArm.max[0]-hurlerArm.min[0] >= nightwalkerArm.max[0]-nightwalkerArm.min[0] {
+		t.Fatalf("掷骨者手臂宽 %v 未细于夜行者 %v",
+			hurlerArm.max[0]-hurlerArm.min[0], nightwalkerArm.max[0]-nightwalkerArm.min[0])
+	}
+	// 掷骨者取色与玩家/伙伴共用调色板及夜行者调色全部不重合。
+	for _, paletteColor := range avatarPalette {
+		if hurlerTorso == paletteColor || hurlerHead == paletteColor {
+			t.Fatalf("掷骨者调色 %v/%v 与共用调色板槽位重合", hurlerTorso, hurlerHead)
+		}
+	}
+	// 仍然锚定脚底并全部走纯色哨兵材质。
+	bounds := avatarPartsBounds(hurler)
+	if bounds.min[1] < -1e-4 || bounds.min[1] > 1e-4 {
+		t.Fatalf("掷骨者包围盒下缘=%v，想要站位 Y=0", bounds.min[1])
+	}
+	for index, part := range hurler {
+		if part.material != avatarMaterialSolid {
+			t.Fatalf("掷骨者部件 %d 材质=%d，想要纯色哨兵", index, part.material)
+		}
+	}
+}

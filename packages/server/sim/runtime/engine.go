@@ -30,10 +30,17 @@ type subscriptionState struct {
 	hasView                     bool
 	dimension                   core.DimensionID
 	center                      core.ChunkPos
-	wanted                      map[core.ChunkKey]struct{}
+	// radius 是该会话的生效订阅半径（方形视距循环边界）：注册时由声明
+	// 视距换算并按引擎视界钳制，对账时随实体派生值刷新。trusted observer
+	// 与未声明路径恒为引擎视界（缺省即上界）。
+	radius int
+	wanted map[core.ChunkKey]struct{}
 }
 
 type Engine struct {
+	// viewRadius 是引擎视界：会话订阅半径的缺省值与钳制上界。声明视距的
+	// 会话按 min(声明+1, viewRadius) 生效；trusted observer 与未声明路径
+	// 直接沿用它（含 ViewRadius=0 的探针服务端——两类路径同得 0）。
 	viewRadius         int
 	seed               int64
 	subscriptions      map[SessionID]*subscriptionState
@@ -84,18 +91,23 @@ type Engine struct {
 }
 
 // NewEngine 创建权威引擎。worldTime 是从 metadata 恢复的绝对世界时间，
-// seed 是世界种子（与 worldgen.New 同值，见 Engine.seed 的说明）。
-func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
+// seed 是世界种子（与 worldgen.New 同值，见 Engine.seed 的说明）。difficulty
+// 是可选尾参：缺省表达 normal 档（既有调用点与测试夹具零改动），生产装配
+// 显式传 `storage.Metadata.Difficulty`；归一与非法值拒绝由 entity 构造边界
+// 统一完成（见 `entity.NewState`），难度在生命周期内只读，权威 tick 不读
+// storage/config。
+func NewEngine(viewRadius int, worldTime uint64, seed int64, difficulty ...core.Difficulty) *Engine {
 	if viewRadius < 0 {
 		panic("sim: negative view radius")
 	}
 	realmState := realm.NewState(core.Overworld)
+	realmState.EnsureDimension(core.Depths)
 	engine := &Engine{
 		viewRadius:    viewRadius,
 		seed:          seed,
 		seasonOffset:  core.SeasonOffsetFromSeed(seed),
 		realm:         realmState,
-		entities:      entity.NewState(seed),
+		entities:      entity.NewState(seed, difficulty...),
 		subscriptions: make(map[SessionID]*subscriptionState),
 		wanted:        make(map[core.ChunkKey]struct{}),
 	}

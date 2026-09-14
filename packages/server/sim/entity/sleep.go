@@ -49,6 +49,10 @@ func (engine *engineContext) executeInteractBed(command Command) (RejectReason, 
 		// 非床目标与门交互同构：静默成功，客户端不等待任何结果。
 		return 0, false
 	}
+	// 潜行放置：潜行中不入睡，客户端应直发 PlaceBlock；服务端权威拒绝兜底。
+	if session.player.sneakingHeld {
+		return RejectInvalidInput, true
+	}
 	if !core.IsDisplayNightPhase(engine.effectiveDayPhase()) {
 		// 白天用床拒绝且零状态变化。拒绝原因沿用冻结枚举里「命中方块不接受
 		// 该交互」的既有语义（翻地/骨粉同款），不为时间窗新增 wire 值。
@@ -138,7 +142,9 @@ func respawnBlockFromPosition(position [3]float32) core.BlockPos {
 var bedStandHeight = physics.BlockCollisionBoxes(core.BedFootSouthID, true).Boxes[0].Max.Y()
 
 // bedRespawnCandidate 在死亡结算时对个人重生点做延迟校验（「两格仍为同一张
-// 床的床尾与床头」才可用）。返回 nil 表示回落世界出生锚点：
+// 床的床尾与床头」才可用）。返回 nil 表示回落死亡所在维度的出生锚点：
+//   - 重生点维度与死亡维度不同——床不跨维生效，本次死亡回落本维锚点，记录
+//     保留到返回旧维后仍可用（多维传送不带走床）
 //   - 无重生点，或床尾/床头所在区块未就绪——后一种是「无法证明床已失效」：
 //     本次死亡先回落锚点（重生不得因等待远处区块而停摆），记录保留给下一次
 //     死亡再验；
@@ -149,8 +155,12 @@ var bedStandHeight = physics.BlockCollisionBoxes(core.BedFootSouthID, true).Boxe
 // 校验通过时返回一个指向床尾格的出生候选（站立在床顶面），经既有的
 // restoreCandidate 路径复用区块就绪等待、落点校验与 `activate`，不另写重生
 // 位置赋值。校验只读世界，不影响其他玩家的重生点。
-func (engine *engineContext) bedRespawnCandidate(player *playerState) *restoreCandidate {
+func (engine *engineContext) bedRespawnCandidate(session *sessionState) *restoreCandidate {
+	player := session.player
 	if !player.respawnPresent {
+		return nil
+	}
+	if player.respawnDim != session.dimension {
 		return nil
 	}
 	dimension := engine.dimension(player.respawnDim)

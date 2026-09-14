@@ -76,13 +76,13 @@ func TestMirrorMissingChunkDeltaRequestsOneResync(t *testing.T) {
 	mirror := client.NewMirror()
 	chunk := core.ChunkPos{X: 8, Z: -3}
 	position := core.BlockPos{X: chunk.X << core.SectionShift, Y: core.MinY, Z: chunk.Z << core.SectionShift}
-	delta := blockChanges(core.DimensionID(2), chunk, 1, position, core.StoneID)
+	delta := blockChanges(core.Depths, chunk, 1, position, core.StoneID)
 
 	first, err := mirror.Apply(delta)
 	if err != nil {
 		t.Fatalf("处理缺失区块增量: %v", err)
 	}
-	want := &network.RequestChunkResync{Dimension: 2, Chunk: chunk, HaveRevision: 0}
+	want := &network.RequestChunkResync{Dimension: core.Depths, Chunk: chunk, HaveRevision: 0}
 	if !reflect.DeepEqual(first.Resync, want) {
 		t.Fatalf("Resync = %+v，想要 %+v", first.Resync, want)
 	}
@@ -194,6 +194,22 @@ func TestMirrorSurfacesCommandRejectionAndRejectsUnsupportedData(t *testing.T) {
 	}
 }
 
+// TestMirrorSurfacesNotArmorRejection 锁定装备互换拒绝的上报语义：手持非护甲
+// 发出的 `EquipArmor` 会被服务端以 `not_armor` 拒绝，白名单缺登记会让真实
+// 客户端把这条合法拒绝当协议违规断连——拒绝通路必须与占格/容量拒绝逐语义
+// 一致：原样上抛（含序号）、不改写镜像。
+func TestMirrorSurfacesNotArmorRejection(t *testing.T) {
+	mirror := client.NewMirror()
+	rejected := network.CommandRejected{Sequence: 7, Reason: network.RejectNotArmor}
+	update, err := mirror.Apply(rejected)
+	if err != nil || !reflect.DeepEqual(update.Rejected, &rejected) {
+		t.Fatalf("RejectNotArmor update=%+v err=%v", update, err)
+	}
+	if update.Rejected.Sequence != 7 {
+		t.Fatalf("RejectNotArmor 被改写序号: %+v", update.Rejected)
+	}
+}
+
 func TestMirrorDoesNotConsumePlayerState(t *testing.T) {
 	_, err := client.NewMirror().Apply(network.PlayerState{Ready: false})
 	if err == nil || !strings.Contains(err.Error(), "unsupported server message") {
@@ -255,4 +271,26 @@ func sortSectionKeys(keys []core.SectionKey) {
 		}
 		return keys[i].Pos.Z < keys[j].Pos.Z
 	})
+}
+
+// TestMirrorSurfacesSequenceZeroChatRejection 锁定聊天触发拒绝的上报语义：
+// 聊天没有输入序号，服务端以序号 0 下发 `CommandRejected`（传送拒绝即此形状）。
+// 镜像不对序号做匹配或过滤——已知原因一律原样上抛（含序号），反馈通路与
+// 带序号拒绝完全一致；未知原因才报错。
+func TestMirrorSurfacesSequenceZeroChatRejection(t *testing.T) {
+	mirror := client.NewMirror()
+	for _, reason := range []network.RejectReason{
+		network.RejectInvalidInput,
+		network.RejectPlayerNotReady,
+		network.RejectChunkNotReady,
+	} {
+		rejected := network.CommandRejected{Sequence: 0, Reason: reason}
+		update, err := mirror.Apply(rejected)
+		if err != nil || !reflect.DeepEqual(update.Rejected, &rejected) {
+			t.Fatalf("序号 0 拒绝(%q) update=%+v err=%v", reason, update, err)
+		}
+		if update.Rejected.Sequence != 0 {
+			t.Fatalf("序号 0 拒绝(%q)被改写序号: %+v", reason, update.Rejected)
+		}
+	}
 }

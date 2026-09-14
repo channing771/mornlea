@@ -62,7 +62,7 @@ func TestHostMalformedSessionCleanupIsIsolated(t *testing.T) {
 			err:                errors.New("malformed play packet"),
 		})
 	}()
-	client, err := network.LoginClient(context.Background(), clientStream, identity)
+	client, err := network.LoginClient(context.Background(), clientStream, identity, 32)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestHostListenerContinuesAfterBadConnection(t *testing.T) {
 	listener.streams <- server
 	loginCtx, cancelLogin := context.WithTimeout(context.Background(), waitDeadline)
 	defer cancelLogin()
-	endpoint, err := network.LoginClient(loginCtx, client, playerIdentity(7))
+	endpoint, err := network.LoginClient(loginCtx, client, playerIdentity(7), 32)
 	if err != nil {
 		t.Fatalf("valid login after bad connection: %v", err)
 	}
@@ -488,7 +488,7 @@ func startMemoryLoginWithCapacity(t *testing.T, host *Host, identity network.Ide
 	clientStream, serverStream := network.NewMemoryStreamPair(capacity)
 	done := make(chan error, 1)
 	go func() { done <- host.AcceptStream(context.Background(), serverStream) }()
-	client, err := network.LoginClient(context.Background(), clientStream, identity)
+	client, err := network.LoginClient(context.Background(), clientStream, identity, 32)
 	if err != nil {
 		t.Fatalf("LoginClient: %v", err)
 	}

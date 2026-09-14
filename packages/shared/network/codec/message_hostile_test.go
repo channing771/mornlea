@@ -14,12 +14,13 @@ import (
 )
 
 // hostileSpawnFixture 返回 3 条字段各异、ID 严格升序的合法 spawn 记录：
-// 生命取非零非满的中间值，保证「字段根本没搬运」与默认值不可分辨。
+// 生命取非零非满的中间值，kind 两值混排（首条取非零值，golden 的 kind 字节
+// 与零填充可分辨），保证「字段根本没搬运」与默认值不可分辨。
 func hostileSpawnFixture() []protocol.HostileSpawnRecord {
 	return []protocol.HostileSpawnRecord{
-		{ID: 7, Dimension: core.Overworld, Position: mgl32.Vec3{2.5, 1, -3.25}, Yaw: 1.25, Health: 14},
-		{ID: 9, Dimension: core.Overworld, Position: mgl32.Vec3{-8.5, 65.5, 12.75}, Yaw: -2.5, Health: core.MaxHealth},
-		{ID: 12, Dimension: core.Overworld, Position: mgl32.Vec3{30.5, 70, -3.25}, Yaw: 3, Health: 1},
+		{ID: 7, Dimension: core.Overworld, Position: mgl32.Vec3{2.5, 1, -3.25}, Yaw: 1.25, Health: 14, Kind: protocol.HostileKindBoneThrower},
+		{ID: 9, Dimension: core.Overworld, Position: mgl32.Vec3{-8.5, 65.5, 12.75}, Yaw: -2.5, Health: core.MaxHealth, Kind: protocol.HostileKindNightwalker},
+		{ID: 12, Dimension: core.Overworld, Position: mgl32.Vec3{30.5, 70, -3.25}, Yaw: 3, Health: 1, Kind: protocol.HostileKindBoneThrower},
 	}
 }
 
@@ -27,8 +28,8 @@ func hostileSpawnFixture() []protocol.HostileSpawnRecord {
 // 保证速度分量的搬运与丢弃可分辨。
 func hostileStateFixture() []protocol.HostileStateRecord {
 	return []protocol.HostileStateRecord{
-		{ID: 7, Position: mgl32.Vec3{2.5, 1, -3.25}, Velocity: mgl32.Vec3{0.5, -1.25, 0}, Yaw: 1.25, Health: 13},
-		{ID: 9, Position: mgl32.Vec3{-8.5, 65.5, 12.75}, Velocity: mgl32.Vec3{0, 0.25, 3}, Yaw: -2.5, Health: 7},
+		{ID: 7, Position: mgl32.Vec3{2.5, 1, -3.25}, Velocity: mgl32.Vec3{0.5, -1.25, 0}, Yaw: 1.25, Health: 13, Kind: protocol.HostileKindBoneThrower},
+		{ID: 9, Position: mgl32.Vec3{-8.5, 65.5, 12.75}, Velocity: mgl32.Vec3{0, 0.25, 3}, Yaw: -2.5, Health: 7, Kind: protocol.HostileKindNightwalker},
 	}
 }
 
@@ -45,7 +46,8 @@ func hostileDespawnMessage() protocol.HostileDespawn {
 }
 
 // TestHostileMessagesWireLayoutIsFrozen 用 golden hex 钉死三类消息的 wire
-// 布局：record 字段次序、维度 i32、生命 u8 与 count u8 的位置一变即红。
+// 布局：record 字段次序、维度 i32、生命 u8、kind u8（record 尾部）与 count
+// u8 的位置一变即红。
 func TestHostileMessagesWireLayoutIsFrozen(t *testing.T) {
 	spawn := hostileSpawnMessage()
 	spawn.Spawns = spawn.Spawns[:1]
@@ -60,16 +62,16 @@ func TestHostileMessagesWireLayoutIsFrozen(t *testing.T) {
 		wantHex string
 	}{
 		// u64 tick + count 1 + [u64 ID + i32 dimension + 3×f32 position +
-		// f32 yaw + u8 health]，全部 little-endian。
+		// f32 yaw + u8 health + u8 kind]，全部 little-endian。
 		{"spawn", spawn, 22, "0807060504030201" + "01" +
 			"0700000000000000" + "00000000" +
-			"000020400000803f000050c0" + "0000a03f" + "0e"},
+			"000020400000803f000050c0" + "0000a03f" + "0e" + "01"},
 		// u64 tick + count 1 + [u64 ID + 3×f32 position + 3×f32 velocity +
-		// f32 yaw + u8 health]。
+		// f32 yaw + u8 health + u8 kind]。
 		{"state", state, 23, "0807060504030201" + "01" +
 			"0700000000000000" +
 			"000020400000803f000050c0" +
-			"0000003f0000a0bf00000000" + "0000a03f" + "0d"},
+			"0000003f0000a0bf00000000" + "0000a03f" + "0d" + "01"},
 		// u64 tick + count 1 + u64 ID。
 		{"despawn", despawn, 24, "0807060504030201" + "01" + "0700000000000000"},
 	}
@@ -101,9 +103,9 @@ func TestHostileMessagesDecodeRejectsInvalidWire(t *testing.T) {
 	stateBase := encode(hostileStateMessage())
 	despawnBase := encode(hostileDespawnMessage())
 
-	// recordSize 分别为 spawn 29（8+4+12+4+1）、state 37（8+12+12+4+1）、
+	// recordSize 分别为 spawn 30（8+4+12+4+1+1）、state 38（8+12+12+4+1+1）、
 	// despawn 8；头部固定 9 字节（u64 tick + u8 count）。
-	spawnRecord, stateRecord, despawnRecord := 29, 37, 8
+	spawnRecord, stateRecord, despawnRecord := 30, 38, 8
 	mutateID := func(payload []byte, recordSize, index int, id uint64) {
 		offset := 9 + index*recordSize
 		for byteIndex := 0; byteIndex < 8; byteIndex++ {
@@ -125,8 +127,11 @@ func TestHostileMessagesDecodeRejectsInvalidWire(t *testing.T) {
 	// 第一条记录 position.X 的偏移：9 + 8(ID) + 4(dimension) = 21。
 	binary.LittleEndian.PutUint32(spawnNaN[21:], math.Float32bits(float32(math.NaN())))
 	spawnHealth := append([]byte(nil), spawnBase...)
-	// 第一条记录 health 的偏移：9 + 29 - 1 = 37。
-	spawnHealth[9+spawnRecord-1] = 0
+	// 第一条记录 health 的偏移：record 倒数第二字节（末字节是 kind）。
+	spawnHealth[9+spawnRecord-2] = 0
+	spawnKind := append([]byte(nil), spawnBase...)
+	// 第一条记录 kind 的偏移：record 末字节（尾部 pure-append）。
+	spawnKind[9+spawnRecord-1] = 2
 	spawnDimension := append([]byte(nil), spawnBase...)
 	// 第一条记录 dimension 的偏移：9 + 8 = 17。
 	binary.LittleEndian.PutUint32(spawnDimension[17:], 5)
@@ -141,7 +146,11 @@ func TestHostileMessagesDecodeRejectsInvalidWire(t *testing.T) {
 	// 第一条记录 yaw 的偏移：9 + 8 + 12 + 12 = 41。
 	binary.LittleEndian.PutUint32(stateNaNYaw[41:], math.Float32bits(float32(math.NaN())))
 	stateHealth21 := append([]byte(nil), stateBase...)
-	stateHealth21[9+stateRecord-1] = core.MaxHealth + 1
+	// 第一条记录 health 的偏移：record 倒数第二字节（末字节是 kind）。
+	stateHealth21[9+stateRecord-2] = core.MaxHealth + 1
+	stateKind := append([]byte(nil), stateBase...)
+	// 第一条记录 kind 的偏移：record 末字节（尾部 pure-append）。
+	stateKind[9+stateRecord-1] = 2
 	despawnCount65 := append([]byte(nil), despawnBase...)
 	mutateCount(despawnCount65, 65)
 	// 尾随字节：在合法 despawn 载荷后多补 1 字节。
@@ -158,12 +167,14 @@ func TestHostileMessagesDecodeRejectsInvalidWire(t *testing.T) {
 		{"spawn NaN position", 22, spawnNaN},
 		{"spawn health 0", 22, spawnHealth},
 		{"spawn 非法维度", 22, spawnDimension},
+		{"spawn kind 2", 22, spawnKind},
 		{"spawn count 65", 22, spawnCount65},
 		{"spawn count 0", 22, spawnCount0},
 		{"spawn 截断", 22, spawnBase[:len(spawnBase)-1]},
 		{"state Inf velocity", 23, stateInfVelocity},
 		{"state NaN yaw", 23, stateNaNYaw},
 		{"state health 超上限", 23, stateHealth21},
+		{"state kind 2", 23, stateKind},
 		{"state 截断", 23, stateBase[:len(stateBase)-1]},
 		{"despawn 逆序 ID", 24, despawnDescending},
 		{"despawn count 65", 24, despawnCount65},
@@ -190,10 +201,10 @@ func TestHostileMessagesWireLimitsAreFrozen(t *testing.T) {
 		recordBytes int
 		wantMax     int
 	}{
-		// 8 tick + 1 count + 64×[8 ID + 4 dimension + 12 position + 4 yaw + 1 health] = 1865。
-		{"spawn", 29, 1865},
-		// 8 tick + 1 count + 64×[8 ID + 12 position + 12 velocity + 4 yaw + 1 health] = 2377。
-		{"state", 37, 2377},
+		// 8 tick + 1 count + 64×[8 ID + 4 dimension + 12 position + 4 yaw + 1 health + 1 kind] = 1929。
+		{"spawn", 30, 1929},
+		// 8 tick + 1 count + 64×[8 ID + 12 position + 12 velocity + 4 yaw + 1 health + 1 kind] = 2441。
+		{"state", 38, 2441},
 		// 8 tick + 1 count + 64×8 ID = 521。
 		{"despawn", 8, 521},
 	}
@@ -208,8 +219,8 @@ func TestHostileMessagesWireLimitsAreFrozen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(spawnPayload) != 9+3*29 {
-		t.Fatalf("spawn 载荷=%d 字节，想要 %d", len(spawnPayload), 9+3*29)
+	if len(spawnPayload) != 9+3*30 {
+		t.Fatalf("spawn 载荷=%d 字节，想要 %d", len(spawnPayload), 9+3*30)
 	}
 }
 

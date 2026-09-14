@@ -12,7 +12,7 @@
 packages/server/storage/
 ├── AGENTS.md                # 本总纲
 ├── types.go                 # Store/WorldStore/PlayerStore/CompanionStore/HostileMobStore/PassiveMobStore 接口家族、Metadata、域符号别名再导出
-├── disk.go                  # DiskStore：region 容器缓存编排、批量保存排序与聚合文件原子替换
+├── disk.go                  # DiskStore：region 句柄缓存 LRU 治理（引用计数 + 按类别拆锁）、批量保存排序与聚合文件原子替换
 ├── memory.go                # MemoryStore：无磁盘 I/O 的同构内存 Store（规范化编码字节 + revision 语义）
 ├── world_files.go           # 世界目录装配：metadata 路径编排与 world.lock 文件锁
 ├── metadata.go              # world metadata 编解码与旧版迁移

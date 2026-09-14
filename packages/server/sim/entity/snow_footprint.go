@@ -95,8 +95,8 @@ func (engine *engineContext) settleSnowFootprints(pending *pendingChunkChanges) 
 }
 
 // settleSnowFootprintCell 结算单个脚印候选格：读判雪层、削一档（1 档→空气）
-// 并经 `recordChange` 汇入本 tick 变更批次（吃草先例：先写块成功再登记，
-// `EnqueueFluidUpdate` 随之让邻接流体获得重估机会）。非雪层（含已被本 tick
+// 并经 `recordChange` 汇入本 tick 变更批次（吃草先例：先写块成功再登记，统一
+// 入队门面随之让邻接流体获得重估机会）。非雪层（含已被本 tick
 // 更早候选削低的格之外的任何方块）、未加载区块与写入失败一律静默跳过——脚印
 // 没有拒绝通道，放弃即可观察（雪层还在）且无信息丢失；多实体同格时各自至多
 // 一次登记，读判永远基于最新方块状态，结果与结算次序无关。
@@ -120,8 +120,9 @@ func (engine *engineContext) settleSnowFootprintCell(
 	if tier > 1 {
 		next = block - 1
 	}
-	if _, changed, err := dimension.SetBlock(cell.position, next); err != nil || !changed {
+	old, changed, err := dimension.SetBlock(cell.position, next)
+	if err != nil || !changed {
 		return
 	}
-	engine.recordChange(cell.dimension, cell.position, next, pending)
+	engine.recordChange(cell.dimension, cell.position, old, next, pending)
 }

@@ -45,19 +45,19 @@ func (f Face) Axis() int { return int(f) >> 1 }
 // Positive 返回该面法线是否指向轴的正方向。仅对轴向面有意义。
 func (f Face) Positive() bool { return f&1 == 1 }
 
-// PlantMaterialFirst..PlantMaterialLast 与 PlantMaterialShortGrass 共同构成
-// 植物材质层集合 `[31..54] ∪ {68}`。
+// PlantMaterialFirst..PlantMaterialLast 与离散的 PlantMaterialShortGrass、
+// PlantMaterialSapling 共同构成植物材质层集合 `[31..54] ∪ {68, 164}`。
 //
 // 「一格是不是植物」以 **material 为准**（design D8）：判别不占 quad 位，而 quad
 // 位已经只剩 bit 63 一个且必须留空。三处必须一起对齐：
 //
-//   - Go：本组常量，由 packages/client/assets 的 LayerWheat0..LayerCarrot7 与
-//     LayerShortGrass 提供数值，
+//   - Go：本组常量，由 packages/client/assets 的 LayerWheat0..LayerCarrot7、
+//     LayerShortGrass 与 LayerSapling 提供数值，
 //     两者相等由 assets 的 TestPlantMaterialLayersMatchMeshContract 钉住
 //     （assets 依赖 mesh，反向不成立，所以常量住在这里、断言写在那边）；
-//   - Rust engine：`quad.rs` 的 PLANT_MATERIAL_FIRST / PLANT_MATERIAL_LAST，
-//     它据此决定哪些格跳过轴向面、改出 4 条交叉斜面；跨语言一致性由真的喂一次
-//     Rust mesher 的真实植物交叉斜面测试兜底；
+//   - Rust engine：`quad.rs` 的 PLANT_MATERIAL_FIRST / PLANT_MATERIAL_LAST 与
+//     两个离散常量，它据此决定哪些格跳过轴向面、改出 4 条交叉斜面；跨语言
+//     一致性由真的喂一次 Rust mesher 的真实植物交叉斜面测试兜底；
 //   - 着色器：terrain.wgsl 与 cull.wgsl **不**复制这段数值，改按 `face >= 6`
 //     判别。二者等价——本文件的 Pack 与 UnpackQuad **单向**强制「植物区间的
 //     material 只允许出现在 face 6/7 上」；反方向不设限（face 6/7 可携带非
@@ -67,6 +67,9 @@ const (
 	PlantMaterialFirst      uint16 = 31
 	PlantMaterialLast       uint16 = 54
 	PlantMaterialShortGrass uint16 = 68
+	// PlantMaterialSapling 是树苗的离散材质层：追加在物品与人物/雪层之后的
+	// 原创内部区，与短草同形的第二个单点。
+	PlantMaterialSapling uint16 = 164
 )
 
 // DoorMaterial 是门的单值材质层，紧接植物区间之后。
@@ -77,7 +80,8 @@ func IsDoorMaterial(mat uint16) bool { return mat == DoorMaterial }
 
 // PlantMaterial 报告某个材质层是否属于植物集合。
 func PlantMaterial(mat uint16) bool {
-	return mat >= PlantMaterialFirst && mat <= PlantMaterialLast || mat == PlantMaterialShortGrass
+	return mat >= PlantMaterialFirst && mat <= PlantMaterialLast ||
+		mat == PlantMaterialShortGrass || mat == PlantMaterialSapling
 }
 
 // Quad 是一个贪心合并后的矩形面，也是 GPU 的一条实例数据。

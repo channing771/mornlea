@@ -134,8 +134,13 @@ type ChunkSnapshot struct {
 func (ChunkSnapshot) serverMessage() {}
 func (ChunkSnapshot) serverPacket()  {}
 
-// Validate 检查快照的 revision 与全部 24 个有序区段。
+// Validate 检查维度值域、revision 与全部 24 个有序区段。
 func (snapshot ChunkSnapshot) Validate() error {
+	// 区块快照与变更同值域：双维放行，`Dimension >= 2` 在协议层直接拒绝，
+	// 保证 Memory 与 TCP 两条传输得出同一结论，不依赖编解码镜像。
+	if snapshot.Dimension != core.Overworld && snapshot.Dimension != core.Depths {
+		return errors.New("network: chunk snapshot dimension is not overworld or depths")
+	}
 	if snapshot.Revision == 0 {
 		return errors.New("network: chunk snapshot revision is zero")
 	}
@@ -185,8 +190,11 @@ type BlockChanges struct {
 func (BlockChanges) serverMessage() {}
 func (BlockChanges) serverPacket()  {}
 
-// Validate 检查 revision 连续性、区块归属和严格递增的 block index。
+// Validate 检查维度值域、revision 连续性、区块归属和严格递增的 block index。
 func (changes BlockChanges) Validate() error {
+	if changes.Dimension != core.Overworld && changes.Dimension != core.Depths {
+		return errors.New("network: block changes dimension is not overworld or depths")
+	}
 	if changes.BaseRevision == 0 || changes.BaseRevision == math.MaxUint64 ||
 		changes.NewRevision != changes.BaseRevision+1 {
 		return fmt.Errorf(

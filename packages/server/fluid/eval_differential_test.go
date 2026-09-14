@@ -114,6 +114,13 @@ func evalDifferentialCases() []evalDifferentialCase {
 			w.SetBlock(at(-1, 10, 0), core.GrassID)
 			w.SetBlock(at(0, 10, -1), core.ShortGrassID)
 		}),
+		newCase("树苗邻格可替换-水平写入树苗支撑方块挡水", at(0, 10, 0), func(w *memWorld) {
+			w.SetBlock(at(0, 10, 0), core.WaterSourceID)
+			w.SetBlock(at(0, 9, 0), core.StoneID)
+			w.SetBlock(at(1, 10, 0), core.SaplingID)
+			w.SetBlock(at(-1, 10, 0), core.DirtID)
+			w.SetBlock(at(0, 10, -1), core.SaplingID)
+		}),
 		newCase("无限水-空气双源自格升源", at(0, 10, 0), func(w *memWorld) {
 			// 自格空气（不写入即空气），+x/−x 双源，其余石头：自格升源。
 			w.SetBlock(at(1, 10, 0), core.WaterSourceID)

@@ -229,8 +229,8 @@ type delayedReplayResult struct {
 // 避免自然刷牛和吃草向玩家回放注入无关方块变化。共享夹具仍保留真实草地。
 type delayedPlayerGenerator struct{}
 
-func (delayedPlayerGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
-	chunk := flatTestGenerator{}.GenerateChunk(position)
+func (delayedPlayerGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
+	chunk := flatTestGenerator{}.GenerateChunk(core.Overworld, position)
 	for z := 0; z < core.SectionSize; z++ {
 		for x := 0; x < core.SectionSize; x++ {
 			chunk.SetBlock(x, 0, z, core.DirtID)

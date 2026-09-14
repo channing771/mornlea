@@ -38,8 +38,8 @@ func TestFarmingBlockIDsAppendAfterFluids(t *testing.T) {
 }
 
 // TestBlockIDMaxGuardsExhaustiveEnumeration 锁定 BlockIDMax 独占哨兵与枚举末项
-// 的关系（与 ItemIDMax 同形）：当前最后一个合法方块必须是 SnowLayer4BlockID
-// （四档雪层紧随短草追加，`BlockIDMax` 恒居末）。
+// 的关系（与 ItemIDMax 同形）：当前最后一个合法方块必须是 SaplingID
+// （橡树树苗紧随四档雪层追加，`BlockIDMax` 恒居末）。
 // 方块演进纪律是只能在哨兵之前追加；将来追加新编号时这条位次断言变红，迫使开发者
 // 同步审视全部以「id < BlockIDMax」为穷举界的测试与哨兵，而不是让它们静默退化
 // 成子集——历史上以 MossyCobblestoneID、WaterLevel7ID 为界写死的循环上界正是这
@@ -51,8 +51,8 @@ func TestFarmingBlockIDsAppendAfterFluids(t *testing.T) {
 // 计数比对抓住；追加但不登记显示名的方块完全惰性、一用就在别处炸开，不值得
 // 为这种自毁式误用另建守卫。
 func TestBlockIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
-	if core.SnowLayer4BlockID != core.BlockIDMax-1 {
-		t.Fatalf("BlockID 枚举末项不再是 SnowLayer4BlockID（BlockIDMax-1 = %d）；"+
+	if core.SaplingID != core.BlockIDMax-1 {
+		t.Fatalf("BlockID 枚举末项不再是 SaplingID（BlockIDMax-1 = %d）；"+
 			"新增方块必须同步审视全部以 BlockIDMax 为穷举界的测试与哨兵", core.BlockIDMax-1)
 	}
 }
@@ -155,16 +155,16 @@ func TestIsCropCoversPotatoAndCarrot(t *testing.T) {
 }
 
 func TestBlockIDMaxIsSentinel(t *testing.T) {
-	if core.BlockIDMax != core.SnowLayer4BlockID+1 {
-		t.Fatalf("BlockIDMax must follow snow layers, got %d", core.BlockIDMax)
+	if core.BlockIDMax != core.SaplingID+1 {
+		t.Fatalf("BlockIDMax must follow the sapling, got %d", core.BlockIDMax)
 	}
 }
 
 func TestDoorIntervalOrdered(t *testing.T) {
-	// 门占 62..70，火把五形态（71..75）、床八形态（76..83）、短草（84）与
-	// 四档雪层（85..88）先后追加，哨兵后移至 89。
-	if !(core.DoorLowerSouthClosed == 62 && core.DoorUpper == 70 && core.BlockIDMax == 89) {
-		t.Fatalf("door IDs not 62..70 with sentinel 89")
+	// 门占 62..70，火把五形态（71..75）、床八形态（76..83）、短草（84）、
+	// 四档雪层（85..88）与橡树树苗（89）先后追加，哨兵后移至 90。
+	if !(core.DoorLowerSouthClosed == 62 && core.DoorUpper == 70 && core.BlockIDMax == 90) {
+		t.Fatalf("door IDs not 62..70 with sentinel 90")
 	}
 	if !core.IsDoor(core.DoorLowerSouthClosed) || !core.IsDoor(core.DoorUpper) || core.IsDoor(core.BlockIDMax) {
 		t.Fatal("IsDoor interval")

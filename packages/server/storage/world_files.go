@@ -10,8 +10,15 @@ import (
 	"github.com/gofrs/flock"
 )
 
+// DefaultRegionHandleCacheCap 是磁盘存档层 region 句柄缓存的默认上限；
+// OpenOptions.RegionHandleCacheCap 为零或负值时 OpenDisk 回落到该默认。
+const DefaultRegionHandleCacheCap = 256
+
 type OpenOptions struct {
 	Create Metadata
+	// RegionHandleCacheCap 限制同时保持打开的 region 文件句柄数；超限时按
+	// LRU 淘汰没有在途 I/O 引用的句柄，被淘汰的 region 再次访问时重新打开。
+	RegionHandleCacheCap int
 }
 
 type worldFiles struct {

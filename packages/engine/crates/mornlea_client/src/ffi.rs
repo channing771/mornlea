@@ -58,7 +58,11 @@ use crate::window::ClientWindow;
 /// v18:帧新增天气状态段(tag 12,4 字节灰度 f32)与降水实例段(tag 13,定长
 /// 降水实例流,与 avatar 同 96 字节/实例布局);空段不编码,晴天帧与 v17 逐字
 /// 节一致;v18 surface 完整保留 v17 的全部 versioned exports 与语义。
-pub const CLIENT_ABI_VERSION: u32 = 18;
+/// v19:桥下行 uiState 的 hud 分节新增 armor 子分节(护甲点数)。Rust 中继对该
+/// 分节零行为:下行状态仍只做相位浅校验,不反序列化 hud 字段;版本槽位随桥
+/// schema 演进同步推进。v19 surface 完整保留 v18 的全部 versioned exports
+/// 与语义。
+pub const CLIENT_ABI_VERSION: u32 = 19;
 
 /// 调用成功。
 pub const MORNLEA_CLIENT_STATUS_OK: u32 = 0;
@@ -486,13 +490,14 @@ mod tests {
     // 校验拒绝路径:ABI 版本、参数校验与无效句柄。
 
     #[test]
-    fn abi_version_is_eighteen() {
+    fn abi_version_is_nineteen() {
         // v15 在 v14 render world update 表面上叠加 avatar 贴图实例布局与
         // 相机可见性两段式出口；v16 与 v15 同表面，仅版本号提升；v17 在 v16
         // 表面上叠加帧 viewmodel TLV 段(tag 11)；v18 在 v17 表面上叠加帧天气
-        // 状态段(tag 12)与降水实例段(tag 13)；
+        // 状态段(tag 12)与降水实例段(tag 13)；v19 在 v18 表面上叠加桥下行
+        // hud 分节的 armor 子分节(Rust 中继零行为，版本槽位随桥 schema 演进)；
         // identity 必须与完整 31 个 versioned exports 同步切换。
-        assert_eq!(mornlea_client_abi_version(), 18);
+        assert_eq!(mornlea_client_abi_version(), 19);
     }
 
     #[test]
@@ -989,10 +994,15 @@ const FRAME_TAG_WEATHER: u32 = 12;
 /// 选形)。取天气段之后的下一个空闲值 13;晴天恒为空,晴天帧与 v17 逐字节
 /// 一致。client ABI v18 起新增。
 const FRAME_TAG_PRECIP: u32 = 13;
+/// 权威投射物实例段(96 字节/实例:与 avatar 同布局,取向与配色已由 Go 侧
+/// 按速度估计与弹种烘焙)。取降水段之后的下一个空闲值 14,帧内追加、不升
+/// client ABI(先例 tag 10/11/12/13);无投射物时不编码该段,无段帧与引入
+/// 前逐字节一致。
+const FRAME_TAG_PROJECTILE: u32 = 14;
 /// 白名单内的最高 TLV tag。client ABI v12 退役了 v8–v11 的 tag 9 UI 段:
-/// 白名单区间虽覆盖到 tag 13,携带 tag 9 段的帧仍由 match 分支与未知 tag
+/// 白名单区间虽覆盖到 tag 14,携带 tag 9 段的帧仍由 match 分支与未知 tag
 /// 同一路径拒绝,不触碰渲染器状态。
-const FRAME_TAG_MAX: u32 = 13;
+const FRAME_TAG_MAX: u32 = 14;
 
 /// 解析 render_frame 输入;违约返回 None。
 ///
@@ -1044,10 +1054,11 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
     let mut viewmodel_instances = Vec::new();
     let mut weather_gray = 0.0f32;
     let mut precip_instances = Vec::new();
+    let mut projectile_instances = Vec::new();
     if layout == 2 {
         let mut cursor = sections_end;
-        // seen 以 tag 为下标,长度覆盖白名单 1..=13(tag 0 不存在,浪费一格)。
-        let mut seen = [false; 14];
+        // seen 以 tag 为下标,长度覆盖白名单 1..=14(tag 0 不存在,浪费一格)。
+        let mut seen = [false; 15];
         while cursor < bytes.len() {
             if bytes.len() - cursor < 8 {
                 return None;
@@ -1056,7 +1067,7 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
             let length = read_u32(cursor + 4) as usize;
             cursor += 8;
             // 各 pass 段均为定长实例数组(长度天然 4 对齐),对齐检查统一;
-            // tag 白名单 1..=11,已退役的 tag 9 与未知 tag 同路径拒绝。
+            // tag 白名单 1..=14,已退役的 tag 9 与未知 tag 同路径拒绝。
             if !length.is_multiple_of(4) || bytes.len() - cursor < length {
                 return None;
             }
@@ -1101,6 +1112,7 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
                     weather_gray = f32::from_le_bytes(payload.try_into().unwrap());
                 }
                 FRAME_TAG_PRECIP => precip_instances = payload.to_vec(),
+                FRAME_TAG_PROJECTILE => projectile_instances = payload.to_vec(),
                 _ => return None,
             }
         }
@@ -1128,6 +1140,7 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
         viewmodel_instances,
         weather_gray,
         precip_instances,
+        projectile_instances,
     })
 }
 
@@ -1253,8 +1266,8 @@ mod render_ffi_tests {
                 assert_eq!($call, MORNLEA_CLIENT_STATUS_ABI_VERSION)
             }};
         }
-        let bad = 17;
-        assert_eq!(CLIENT_ABI_VERSION, bad + 1, "被测版本必须是 v18 的直接前代");
+        let bad = 18;
+        assert_eq!(CLIENT_ABI_VERSION, bad + 1, "被测版本必须是 v19 的直接前代");
 
         assert_bad_abi!(unsafe {
             mornlea_client_window_create(bad, 0, 0, std::ptr::null(), 0, std::ptr::null_mut())
@@ -2029,9 +2042,9 @@ mod frame_v2_tests {
         // 空 pass 段序列同样合法(v2 允许零段)。
         assert_eq!(parse_status(&v2_frame(&[])), MORNLEA_CLIENT_STATUS_WINDOW);
 
-        // 未知 tag(14 超出白名单 1..=13)。
+        // 未知 tag(15 超出白名单 1..=14)。
         assert_eq!(
-            parse_status(&v2_frame(&tlv(14, &[0u8; 4]))),
+            parse_status(&v2_frame(&tlv(15, &[0u8; 4]))),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
         // 已退役 tag 9(v8–v11 的菜单 UI 段):与未知 tag 同路径拒绝,
@@ -2174,10 +2187,11 @@ mod weather_ffi_tests {
     #[test]
     fn weather_tags_are_next_free_values() {
         // tag 1..11 已占用(tag 9 退役仍保留拒绝语义),天气状态取下一个空闲
-        // 值 12,降水实例取 13,白名单上界同步覆盖到 13。
+        // 值 12,降水实例取 13,投射物实例跟进 14,白名单上界同步覆盖到 14。
         assert_eq!(FRAME_TAG_WEATHER, 12);
         assert_eq!(FRAME_TAG_PRECIP, 13);
-        assert_eq!(FRAME_TAG_MAX, 13);
+        assert_eq!(FRAME_TAG_PROJECTILE, 14);
+        assert_eq!(FRAME_TAG_MAX, 14);
     }
 
     #[test]
@@ -2233,9 +2247,9 @@ mod weather_ffi_tests {
             weather_parse_status(&weather_v2_frame(&dup)),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
-        // 白名单上界之外(14)拒绝。
+        // 白名单上界之外(15)拒绝。
         assert_eq!(
-            weather_parse_status(&weather_v2_frame(&weather_tlv(14, &[0u8; 4]))),
+            weather_parse_status(&weather_v2_frame(&weather_tlv(15, &[0u8; 4]))),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
         // 状态段长度非 4、灰度非有限或越界拒绝。
@@ -2267,7 +2281,7 @@ mod weather_ffi_tests {
         // 错误 ABI 优先于天气内容检查:版本错即回 ABI_VERSION,不读天气输入、
         // 不改变渲染器状态(此处负载长度非法也须先报版本错)。
         let old = CLIENT_ABI_VERSION - 1;
-        assert_eq!(old, 17, "被测旧版本必须是 v18 的直接前代");
+        assert_eq!(old, 18, "被测旧版本必须是 v19 的直接前代");
         let frame = weather_v2_frame(&weather_tlv(FRAME_TAG_WEATHER, &[0u8; 6]));
         // SAFETY: 指针来自有效切片;ABI 校验先于一切解析。
         let status =
@@ -2308,9 +2322,10 @@ mod viewmodel_ffi_tests {
     #[test]
     fn viewmodel_tag_is_next_free_value() {
         // tag 1..10 已占用(tag 9 退役仍保留拒绝语义),viewmodel 取下一个
-        // 空闲值 11;其后天气状态 12、降水 13 跟进,白名单上界同步覆盖到 13。
+        // 空闲值 11;其后天气状态 12、降水 13、投射物 14 跟进,白名单上界
+        // 同步覆盖到 14。
         assert_eq!(FRAME_TAG_VIEWMODEL, 11);
-        assert_eq!(FRAME_TAG_MAX, 13);
+        assert_eq!(FRAME_TAG_MAX, 14);
     }
 
     #[test]
@@ -2356,9 +2371,9 @@ mod viewmodel_ffi_tests {
             viewmodel_parse_status(&viewmodel_v2_frame(&dup)),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
-        // 白名单上界之外(14)拒绝。
+        // 白名单上界之外(15)拒绝。
         assert_eq!(
-            viewmodel_parse_status(&viewmodel_v2_frame(&viewmodel_tlv(14, &[0u8; 4]))),
+            viewmodel_parse_status(&viewmodel_v2_frame(&viewmodel_tlv(15, &[0u8; 4]))),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
     }
@@ -2367,13 +2382,107 @@ mod viewmodel_ffi_tests {
     fn viewmodel_wrong_abi_wins_over_bad_content() {
         // 错误 ABI 优先于 viewmodel 内容检查:版本错即回 ABI_VERSION,不读
         // viewmodel 输入、不改变渲染器状态(此处负载长度非法也须先报版本错)。
-        let v17 = CLIENT_ABI_VERSION - 1;
-        assert_eq!(v17, 17, "被测旧版本必须是 v18 的直接前代");
+        let v18 = CLIENT_ABI_VERSION - 1;
+        assert_eq!(v18, 18, "被测旧版本必须是 v19 的直接前代");
         let frame = viewmodel_v2_frame(&viewmodel_tlv(FRAME_TAG_VIEWMODEL, &[0u8; 6]));
         // SAFETY: 指针来自有效切片;ABI 校验先于一切解析。
         let status =
-            unsafe { mornlea_client_render_frame(v17, 0xF00D, frame.as_ptr(), frame.len()) };
+            unsafe { mornlea_client_render_frame(v18, 0xF00D, frame.as_ptr(), frame.len()) };
         assert_eq!(status, MORNLEA_CLIENT_STATUS_ABI_VERSION);
+    }
+}
+
+#[cfg(test)]
+mod projectile_ffi_tests {
+    use super::*;
+
+    /// 构造 layout v2 帧:头 + 零可见 section + 给定 TLV 段字节。
+    fn projectile_v2_frame(passes: &[u8]) -> Vec<u8> {
+        let mut frame = vec![0u8; FRAME_HEADER_BYTES];
+        frame[188..192].copy_from_slice(&2u32.to_le_bytes());
+        frame.extend_from_slice(passes);
+        frame
+    }
+
+    fn projectile_tlv(tag: u32, payload: &[u8]) -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(&tag.to_le_bytes());
+        out.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        out.extend_from_slice(payload);
+        out
+    }
+
+    /// 经 render_frame 入口驱动解析:解析成功但句柄未知返回 WINDOW——以此
+    /// 区分接受与拒绝,无需 GPU。
+    fn projectile_parse_status(frame: &[u8]) -> u32 {
+        // SAFETY: 指针来自有效切片。
+        unsafe {
+            mornlea_client_render_frame(CLIENT_ABI_VERSION, 0xF00D, frame.as_ptr(), frame.len())
+        }
+    }
+
+    #[test]
+    fn projectile_tag_is_next_free_value() {
+        // tag 1..13 已占用(tag 9 退役仍保留拒绝语义),投射物实例段取下一个
+        // 空闲值 14;白名单上界同步覆盖到 14,client ABI 保持 v19 不变。
+        assert_eq!(FRAME_TAG_PROJECTILE, 14);
+        assert_eq!(FRAME_TAG_MAX, 14);
+    }
+
+    #[test]
+    fn projectile_segment_decodes_into_struct() {
+        // 定长投射物实例流(96 字节/实例,与 avatar 同布局)原样解码入结构。
+        let payload = vec![0x5Au8; 192];
+        let frame = projectile_v2_frame(&projectile_tlv(FRAME_TAG_PROJECTILE, &payload));
+        let input = parse_frame(&frame).expect("合法投射物段必须解析成功");
+        assert_eq!(input.projectile_instances, payload);
+        assert!(input.precip_instances.is_empty());
+        assert!(input.avatar_instances.is_empty());
+    }
+
+    #[test]
+    fn projectile_segment_absent_leaves_struct_empty() {
+        // 无段帧的结构字段为空:无投射物输入的帧与旧版本逐字节一致的前提。
+        let mut passes = Vec::new();
+        passes.extend(projectile_tlv(FRAME_TAG_AVATAR, &[0u8; 8]));
+        passes.extend(projectile_tlv(FRAME_TAG_PRECIP, &[0u8; 96]));
+        let input = parse_frame(&projectile_v2_frame(&passes)).expect("既有段组合必须解析成功");
+        assert!(input.projectile_instances.is_empty());
+    }
+
+    #[test]
+    fn projectile_segment_coexists_with_existing_segments() {
+        let mut passes = Vec::new();
+        passes.extend(projectile_tlv(FRAME_TAG_AVATAR, &[0u8; 8]));
+        passes.extend(projectile_tlv(FRAME_TAG_VIEWMODEL, &[0xA5u8; 96]));
+        passes.extend(projectile_tlv(FRAME_TAG_WEATHER, &0.5f32.to_le_bytes()));
+        passes.extend(projectile_tlv(FRAME_TAG_PRECIP, &[0xA5u8; 96]));
+        passes.extend(projectile_tlv(FRAME_TAG_PROJECTILE, &[0xA5u8; 96]));
+        assert_eq!(
+            projectile_parse_status(&projectile_v2_frame(&passes)),
+            MORNLEA_CLIENT_STATUS_WINDOW,
+            "合法投射物组合帧应通过解析并因句柄未知被拒"
+        );
+    }
+
+    #[test]
+    fn projectile_segment_duplicate_and_unknown_tag_rejected() {
+        // 每类段至多出现一次。
+        let mut dup = projectile_tlv(FRAME_TAG_PROJECTILE, &[0u8; 96]);
+        dup.extend(projectile_tlv(FRAME_TAG_PROJECTILE, &[0u8; 96]));
+        assert_eq!(
+            projectile_parse_status(&projectile_v2_frame(&dup)),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        // 白名单上界之外(15)拒绝;tag 9 的退役拒绝语义保持不变。
+        assert_eq!(
+            projectile_parse_status(&projectile_v2_frame(&projectile_tlv(15, &[0u8; 4]))),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            projectile_parse_status(&projectile_v2_frame(&projectile_tlv(9, &[0u8; 4]))),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
     }
 }
 

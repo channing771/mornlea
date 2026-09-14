@@ -48,6 +48,13 @@ func Encode(save ChunkSave) ([]byte, error) {
 	if save.Chunk.Pos != save.Key.Pos {
 		return nil, fmt.Errorf("%w: chunk position does not match key", storagedef.ErrCorrupt)
 	}
+	// 维度值域只放行主世界与 `Depths`：越界维度的保存请求在编码前拒绝，
+	// 磁盘既有数据逐字节不变。
+	if save.Key.Dimension != core.Overworld && save.Key.Dimension != core.Depths {
+		return nil, fmt.Errorf(
+			"%w: unsupported chunk dimension %d", storagedef.ErrCorrupt, save.Key.Dimension,
+		)
+	}
 
 	logical, err := encodeLogicalChunk(save)
 	if err != nil {

@@ -3,6 +3,7 @@ package realm
 import (
 	"testing"
 
+	"github.com/channing771/mornlea/packages/server/updates"
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
@@ -48,8 +49,8 @@ func TestCropYieldPotatoRange(t *testing.T) {
 		for tick := uint64(0); tick < 64; tick++ {
 			for _, p := range positions {
 				// 重放一致性
-				a := cropYieldRollsPotato(seed, tick, p.dim, p.pos)
-				b := cropYieldRollsPotato(seed, tick, p.dim, p.pos)
+				a := sampler.CropYieldRollsPotato(seed, tick, p.dim, p.pos)
+				b := sampler.CropYieldRollsPotato(seed, tick, p.dim, p.pos)
 				if a != b {
 					t.Fatalf("potato yield 不可重放 seed=%d tick=%d dim=%d pos=%v %d vs %d", seed, tick, p.dim, p.pos, a, b)
 				}
@@ -84,8 +85,8 @@ func TestCropYieldCarrotRange(t *testing.T) {
 	for seed := int64(-2); seed <= 2; seed++ {
 		for tick := uint64(0); tick < 64; tick++ {
 			for _, p := range positions {
-				a := cropYieldRollsCarrot(seed, tick, p.dim, p.pos)
-				b := cropYieldRollsCarrot(seed, tick, p.dim, p.pos)
+				a := sampler.CropYieldRollsCarrot(seed, tick, p.dim, p.pos)
+				b := sampler.CropYieldRollsCarrot(seed, tick, p.dim, p.pos)
 				if a != b {
 					t.Fatalf("carrot yield 不可重放 seed=%d tick=%d %d vs %d", seed, tick, a, b)
 				}
@@ -105,10 +106,10 @@ func TestCropYieldCarrotRange(t *testing.T) {
 
 // TestCropYieldPotatoCarrotIndependent 覆盖两作物产量流独立（不同 salt）。
 func TestCropYieldPotatoCarrotIndependent(t *testing.T) {
-	if cropYieldPotatoSalt == cropYieldCarrotSalt {
+	if updates.CropYieldPotatoSalt == updates.CropYieldCarrotSalt {
 		t.Fatal("potato 与 carrot salt 相同，两流同源")
 	}
-	if cropYieldPotatoSalt == cropYieldRollSalt || cropYieldCarrotSalt == cropYieldRollSalt {
+	if updates.CropYieldPotatoSalt == updates.CropYieldRollSalt || updates.CropYieldCarrotSalt == updates.CropYieldRollSalt {
 		t.Fatal("新作物 salt 与小麦同源")
 	}
 	// 至少在固定样本上两流不完全同步
@@ -126,8 +127,8 @@ func TestCropYieldPotatoCarrotIndependent(t *testing.T) {
 		{12345, 1 << 40, core.DimensionID(7), core.BlockPos{X: 1023, Y: 319, Z: -1024}},
 	}
 	for _, s := range samples {
-		p := cropYieldRollsPotato(s.seed, s.tick, s.dim, s.pos)
-		c := cropYieldRollsCarrot(s.seed, s.tick, s.dim, s.pos)
+		p := sampler.CropYieldRollsPotato(s.seed, s.tick, s.dim, s.pos)
+		c := sampler.CropYieldRollsCarrot(s.seed, s.tick, s.dim, s.pos)
 		if p != c {
 			divergences++
 		}
@@ -141,8 +142,8 @@ func TestCropYieldPotatoCarrotIndependent(t *testing.T) {
 func TestPoisonRollRangeAndDeterminism(t *testing.T) {
 	// 重放一致性
 	pos := core.BlockPos{X: 8, Y: 2, Z: 8}
-	a := poisonRoll(42, 100, core.Overworld, pos)
-	b := poisonRoll(42, 100, core.Overworld, pos)
+	a := sampler.PoisonRoll(42, 100, core.Overworld, pos)
+	b := sampler.PoisonRoll(42, 100, core.Overworld, pos)
 	if a != b {
 		t.Fatalf("poisonRoll 不可重放 %v vs %v", a, b)
 	}
@@ -153,7 +154,7 @@ func TestPoisonRollRangeAndDeterminism(t *testing.T) {
 		for tick := uint64(0); tick < 200; tick++ {
 			for x := int32(-2); x <= 2; x++ {
 				p := core.BlockPos{X: x, Y: 1, Z: 0}
-				if poisonRoll(seed, tick, core.Overworld, p) {
+				if sampler.PoisonRoll(seed, tick, core.Overworld, p) {
 					trues++
 				}
 				total++
@@ -168,7 +169,7 @@ func TestPoisonRollRangeAndDeterminism(t *testing.T) {
 	if ratio < 0.005 || ratio > 0.05 {
 		t.Fatalf("poisonRoll 比例异常 %d/%d=%.3f 想要约 0.02", trues, total, ratio)
 	}
-	if poisonPotatoSalt == cropYieldPotatoSalt || poisonPotatoSalt == cropYieldCarrotSalt {
+	if updates.PoisonPotatoSalt == updates.CropYieldPotatoSalt || updates.PoisonPotatoSalt == updates.CropYieldCarrotSalt {
 		t.Fatal("poison salt 与产量 salt 相同")
 	}
 }

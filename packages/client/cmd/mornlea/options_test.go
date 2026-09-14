@@ -33,6 +33,34 @@ func TestParseMainOptionsAllowsRemoteWithDefaultWorld(t *testing.T) {
 	}
 }
 
+func TestParseMainOptionsRejectsDifficultyFlag(t *testing.T) {
+	// 难度是世界身份，由服务端权威持有；图形客户端不提供难度覆盖入口。
+	// 四条启动路径共用同一处 flag 解析，这里逐路径钉住 `--difficulty` 在
+	// 解析阶段被拒绝：断言错误必须是「flag 未定义」而非某个取值校验——
+	// 若未来有人注册了该旗标，即便随后另有拒绝逻辑，本测试也要失败，
+	// 防止难度入口悄悄混入客户端。
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"普通本地路径", []string{"--difficulty", "normal"}},
+		{"远程联机路径", []string{"--connect", "127.0.0.1:25565", "--difficulty", "normal"}},
+		{"benchmark 路径", []string{"--benchmark", "--perf-output", "x.json", "--difficulty", "normal"}},
+		{"capture 路径", []string{"--capture", "/tmp/shots", "--difficulty", "normal"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseMainOptions(tc.args)
+			if err == nil {
+				t.Fatalf("accepted %v", tc.args)
+			}
+			if !strings.Contains(err.Error(), "not defined") {
+				t.Fatalf("错误 %q 想要 flag 未定义拒绝，实际来自其他校验", err.Error())
+			}
+		})
+	}
+}
+
 func TestParseMainOptionsBenchmarkTransport(t *testing.T) {
 	defaults, err := parseMainOptions([]string{"--benchmark", "--perf-output", "x.json"})
 	if err != nil {

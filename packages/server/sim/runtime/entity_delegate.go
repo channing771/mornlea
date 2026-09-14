@@ -53,6 +53,7 @@ func (engine *Engine) EntitySessionView(id SessionID) entity.SessionView {
 	return entity.SessionView{
 		Ready:  session.hasView,
 		Center: session.center,
+		Radius: session.radius,
 	}
 }
 
@@ -67,7 +68,7 @@ func (engine *Engine) entityViewSnapshot() entity.ViewSnapshot {
 		entries = append(entries, entity.TickSessionView{
 			Session: id,
 			View: entity.SessionView{
-				Ready: session.hasView, Center: session.center,
+				Ready: session.hasView, Center: session.center, Radius: session.radius,
 			},
 			Origin: origin, OriginWanted: originWanted,
 		})
@@ -76,16 +77,23 @@ func (engine *Engine) entityViewSnapshot() entity.ViewSnapshot {
 	return entity.NewViewSnapshot(entries)
 }
 
-// RegisterPlayer 同时建立 runtime 订阅记录与唯一的实体权威状态。
+// RegisterPlayer 同时建立 runtime 订阅记录与唯一的实体权威状态。声明视距
+// 随 `restore` 进入：换算与上界钳制经实体派生半径统一完成（读回注册后的
+// `SessionSubscription`，与对账路径同源），未声明路径沿用引擎视界缺省。
 func (engine *Engine) RegisterPlayer(id SessionID, restore PlayerRestore) {
 	if engine.subscriptions[id] != nil {
 		panic("sim: duplicate registered session")
 	}
 	engine.entities.RegisterPlayer(id, restore, engine.realm, engine.tunables)
+	radius := engine.viewRadius
+	if subscription, ok := engine.entities.SessionSubscription(id); ok {
+		radius = engine.boundedSessionViewRadius(subscription.Radius)
+	}
 	engine.subscriptions[id] = &subscriptionState{
 		hasView:   true,
 		dimension: restore.SpawnDimension,
 		center:    restore.SpawnAnchor,
+		radius:    radius,
 		wanted:    make(map[core.ChunkKey]struct{}),
 	}
 	engine.subscriptionsDirty = true
@@ -124,6 +132,13 @@ func (engine *Engine) PlayerSnapshot(id SessionID) (PlayerSnapshot, bool) {
 	return engine.entities.PlayerSnapshot(id)
 }
 
+// DifficultyForTest 读出构造时注入的世界难度，仅供测试断言宿主装配是否把
+// `storage.Metadata.Difficulty` 原样传给了 `NewEngine`（与 `SeedForTest`
+// 同形）。难度是构造期快照、生命周期内只读，规则分档全部在 entity 侧完成。
+func (engine *Engine) DifficultyForTest() core.Difficulty {
+	return engine.entities.Difficulty()
+}
+
 func (engine *Engine) PlayerHash(id SessionID) ([32]byte, bool) {
 	return engine.entities.PlayerHash(id)
 }
@@ -142,6 +157,38 @@ func (engine *Engine) UnregisterSession(id SessionID) (PlayerSnapshot, bool) {
 	return snapshot, ok
 }
 
+// InputSequenceHighWater 返回会话已见的最大输入序号：已消费的订阅水位与
+// 仍在 inbox 里排队的在途命令取大。传送在 `UnregisterSession` 之前调用它，
+// 重建后经 `RestoreInputSequence` 垫高新订阅——同 tick 在途的旧维输入随即
+// 在序号过滤中被丢弃，不再跨维生效；传送后客户端的新序号恒大于水位，
+// 不受影响。调用方须与 `Step` 及会话生命周期串行（服务端即持有 `stepMu`）。
+func (engine *Engine) InputSequenceHighWater(id SessionID) uint64 {
+	high := uint64(0)
+	if session := engine.subscriptions[id]; session != nil {
+		high = session.lastSequence
+	}
+	engine.inboxMu.Lock()
+	for _, command := range engine.commands {
+		if command.Session == id && command.Sequence > high {
+			high = command.Sequence
+		}
+	}
+	engine.inboxMu.Unlock()
+	return high
+}
+
+// RestoreInputSequence 把重建订阅的 `lastSequence` 垫高到传送前水位：只升
+// 不降，新订阅本就更高时保持不动。调用边界与 `InputSequenceHighWater` 相同。
+func (engine *Engine) RestoreInputSequence(id SessionID, highWater uint64) {
+	session := engine.subscriptions[id]
+	if session == nil {
+		return
+	}
+	if highWater > session.lastSequence {
+		session.lastSequence = highWater
+	}
+}
+
 func (engine *Engine) RegisterCompanion(restore CompanionRestore) {
 	engine.entities.RegisterCompanion(restore, engine.realm)
 	engine.subscriptionsDirty = true
@@ -157,6 +204,19 @@ func (engine *Engine) RestoreHostile(mob HostileMob) error {
 
 func (engine *Engine) HostileMobs() []HostileMob {
 	return engine.entities.HostileMobs()
+}
+
+// ProjectilesForTest 返回在飞投射物的全量值快照，仅供 server 侧测试断言
+// 射击与弹道结果；生产路径不经本入口。
+func (engine *Engine) ProjectilesForTest() []ProjectileSnapshot {
+	return engine.entities.ProjectilesForTest()
+}
+
+// Projectiles 返回按 ID 升序的全量在飞投射物值快照（瞬态实体，不进存档）：
+// 供发布侧每 tick 取一次共享快照，组装按会话订阅的 spawn/state 批次；despawn
+// 由发布侧「镜像有而截面无」的差异判据派生。调用方只读消费。
+func (engine *Engine) Projectiles() []ProjectileSnapshot {
+	return engine.entities.Projectiles()
 }
 
 // RestorePassive 把一条被动牛身体记录恢复为权威事实：与 `RestoreHostile`

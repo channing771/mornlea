@@ -79,7 +79,7 @@ func startMemoryLogin(t *testing.T, host *Host, identity network.Identity) testL
 	clientStream, serverStream := network.NewMemoryStreamPair(256)
 	done := make(chan error, 1)
 	go func() { done <- host.AcceptStream(context.Background(), serverStream) }()
-	client, err := network.LoginClient(context.Background(), clientStream, identity)
+	client, err := network.LoginClient(context.Background(), clientStream, identity, 32)
 	if err != nil {
 		t.Fatalf("LoginClient: %v", err)
 	}
@@ -99,10 +99,12 @@ func playerID(value byte) core.PlayerID {
 
 func testMetadata() storage.Metadata {
 	return storage.Metadata{
-		FormatVersion:  4,
-		Seed:           42,
-		SpawnDimension: core.Overworld,
-		SpawnAnchor:    core.ChunkPos{X: 2, Z: -3},
+		FormatVersion:     6,
+		Seed:              42,
+		SpawnDimension:    core.Overworld,
+		SpawnAnchor:       core.ChunkPos{X: 2, Z: -3},
+		DepthsSpawnAnchor: core.ChunkPos{X: 2, Z: -3},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	}
 }
 
@@ -331,9 +333,11 @@ func (store *hostTestStore) Close() error {
 
 func newHostTestStore() *hostTestStore {
 	return &hostTestStore{MemoryStore: storage.NewMemory(storage.Metadata{
-		FormatVersion:  4,
-		Seed:           42,
-		SpawnDimension: core.Overworld,
+		FormatVersion:     6,
+		Seed:              42,
+		SpawnDimension:    core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})}
 }
 

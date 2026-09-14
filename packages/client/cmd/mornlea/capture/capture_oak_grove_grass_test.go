@@ -90,7 +90,7 @@ func prepareOakGroveWithoutShortGrass(app SceneApplication) error {
 	generator := worldgen.New(captureOakGroveSeed, config.Defaults().FluidEnabled)
 	for z := int32(-1); z <= 1; z++ {
 		for x := int32(-1); x <= 1; x++ {
-			chunk := generator.GenerateChunk(core.ChunkPos{X: x, Z: z})
+			chunk := generator.GenerateChunk(core.Overworld, core.ChunkPos{X: x, Z: z})
 			for y := int32(core.MinY); y < core.MaxY; y++ {
 				for localZ := int32(0); localZ < core.SectionSize; localZ++ {
 					for localX := int32(0); localX < core.SectionSize; localX++ {
@@ -249,11 +249,12 @@ func TestOakGroveSceneShowsIdentifiableNaturalShortGrass(t *testing.T) {
 // TestCaptureOfficialSceneListMatchesWorldRouting 钉住正式场景清单在 HUD 三场景
 // 退役、mining-crack 对、`grass-closeup`、牛群 `passive-herd` 与吃草
 // `passive-graze`、雨天 `rain-noon`、双机位 `camera-third-back/front`、雪景
-// `snow-cover` 与水桶 `bucket-pond` 加入后恰好 29 项；完整数量与冻结顺序断言由
+// `snow-cover`、水桶 `bucket-pond`、树苗生长 `sapling-growth` 与远程敌怪
+// `ranged-mob` 加入后恰好 31 项；完整数量与冻结顺序断言由
 // capture_scene_order_test.go 的清单守卫承担。
 func TestCaptureOfficialSceneListMatchesWorldRouting(t *testing.T) {
-	if len(captureScenes) != 29 {
-		t.Fatalf("正式 capture 场景数=%d，想要恰好 29", len(captureScenes))
+	if len(captureScenes) != 31 {
+		t.Fatalf("正式 capture 场景数=%d，想要恰好 31", len(captureScenes))
 	}
 }
 

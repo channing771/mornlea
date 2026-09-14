@@ -63,10 +63,17 @@ type PlayerState struct {
 	// 越界拒绝。
 	SeasonProgress uint8
 	// Temperature 是玩家所在位置按共享温度公式（`core.TemperatureAt`）求得
-	// 的权威观察值（摄氏度，协议 v37 起随玩家状态同步，wire 上是载荷最末
-	// 1 字节 i8）。域由 `core.TemperatureMin`/`core.TemperatureMax` 在源头
-	// clamp 到 [-40,45]，落在 int8 容量内，wire 层不再做二次裁剪或越界拒绝。
+	// 的权威观察值（摄氏度，协议 v37 起随玩家状态同步，wire 上紧跟
+	// `SeasonProgress` 之后，v42 起其后还有 1 字节护甲点数）。域由
+	// `core.TemperatureMin`/`core.TemperatureMax` 在源头 clamp 到 [-40,45]，
+	// 落在 int8 容量内，wire 层不再做二次裁剪或越界拒绝。
 	Temperature int8
+	// ArmorPoints 是四槽穿戴护甲按 `core.ArmorPoints` 求和的权威点数，协议
+	// v42 起随玩家状态同步（wire 上紧跟 `Temperature` 之后，是载荷最末
+	// 1 字节 u8）；合法区间是 0..`core.MaxArmorPoints`，越界值在 Validate、
+	// 编码与解码三处都被拒绝，模式与 v36 的 `WeatherKind` 相同。它与
+	// `Health`、`Hunger` 一样只发给玩家本人，装备本体经玩家存档持久化。
+	ArmorPoints uint8
 }
 
 type RemotePlayerSpawn struct {
@@ -84,7 +91,7 @@ func (RemotePlayerSpawn) serverPacket()  {}
 func (spawn RemotePlayerSpawn) Validate() error {
 	name, err := core.NormalizeDisplayName(spawn.DisplayName)
 	if err != nil || name != spawn.DisplayName || !spawn.PlayerID.Valid() ||
-		spawn.Dimension != core.Overworld || !finiteVec3(spawn.Position) ||
+		(spawn.Dimension != core.Overworld && spawn.Dimension != core.Depths) || !finiteVec3(spawn.Position) ||
 		!finite32(spawn.Yaw) || !finite32(spawn.Pitch) {
 		return errors.New("network: invalid remote player spawn")
 	}
@@ -135,7 +142,7 @@ func (states RemotePlayerStates) Validate() error {
 }
 
 func (state RemotePlayerState) validate() error {
-	if !state.PlayerID.Valid() || state.Dimension != core.Overworld || !finiteVec3(state.Position) ||
+	if !state.PlayerID.Valid() || (state.Dimension != core.Overworld && state.Dimension != core.Depths) || !finiteVec3(state.Position) ||
 		!finite32(state.Yaw) || !finite32(state.Pitch) {
 		return errors.New("invalid remote player state")
 	}
@@ -146,6 +153,11 @@ func (PlayerState) serverMessage() {}
 func (PlayerState) serverPacket()  {}
 
 func (state PlayerState) Validate() error {
+	// 玩家状态与远端玩家同值域：双维放行，`Dimension >= 2` 在协议层直接
+	// 拒绝，保证 Memory 与 TCP 两条传输得出同一结论，不依赖编解码镜像。
+	if state.Dimension != core.Overworld && state.Dimension != core.Depths {
+		return errors.New("network: player state dimension is not overworld or depths")
+	}
 	for _, value := range state.Position {
 		if !finite32(value) {
 			return errors.New("network: player state has non-finite position")
@@ -183,6 +195,12 @@ func (state PlayerState) Validate() error {
 	if state.Season > core.SeasonWinter {
 		return errors.New("network: player state has out-of-range season")
 	}
+	// 护甲点数是服务端权威派生量（wire 上 `Temperature` 之后 1 字节 u8）：
+	// 合法值域是 0..`core.MaxArmorPoints`，越界值在 Validate、编码与解码
+	// 三处都被拒绝，不得静默截断——与天气/季节同为从严拒绝的 wire 单值。
+	if state.ArmorPoints > core.MaxArmorPoints {
+		return errors.New("network: player state has out-of-range armor points")
+	}
 	if !state.MiningActive {
 		if state.MiningTarget != (core.BlockPos{}) || state.MiningProgressTicks != 0 ||
 			state.MiningRequiredTicks != 0 || state.MiningHarvestable {
@@ -213,6 +231,9 @@ const (
 	RejectContainerCapacity RejectReason = "container_capacity"
 	RejectNotFluidSource    RejectReason = "not_fluid_source"
 	RejectBucketMismatch    RejectReason = "bucket_mismatch"
+	// RejectNotArmor 表示 `EquipArmor` 的权威选中快捷栏格未持有护甲件，
+	// 装备互换未发生，快捷栏与护甲槽位逐位不变。
+	RejectNotArmor RejectReason = "not_armor"
 )
 
 type CommandRejected struct {

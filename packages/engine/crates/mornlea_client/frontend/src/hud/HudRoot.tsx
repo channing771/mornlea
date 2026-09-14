@@ -5,10 +5,11 @@
 // 不会按两份比例绘制而破坏左右缘对齐）。
 //
 // 构图（自下而上）：快捷栏贴条 → `--hud-status-hotbar-gap` 净空 → 主状态行
-// → `--hud-status-bar-gap` 行距 → 氧气行 → `--hud-progress-track-gap` →
+// → `--hud-status-bar-gap` 行距 → 护甲行（点数为 0 时不产生） →
+// `--hud-status-bar-gap` 行距 → 氧气行 → `--hud-progress-track-gap` →
 // 进度轨道（进食条；采掘进度条已退役，采掘反馈由世界空间裂纹承载） →
 // `--hud-popup-track-gap` → 物品名弹条，整体底部锚定、水平居中，
-// 与迁移前 `closedHUDHeight` 的自下而上记账逐项同序。容器打开态把两条状态行
+// 与迁移前 `closedHUDHeight` 的自下而上记账逐项同序。容器打开态把状态行
 // 翻转到快捷栏下方并向外堆叠（氧气继续向下），快捷栏贴条转为占位（空间
 // 保留，不与 GPU 容器面板下段的快捷栏行重复呈现），底部改由
 // `--hud-hotbar-bottom-margin` 预留——两份预留与偏移逐项抵消，状态栈的绝对
@@ -48,7 +49,13 @@ export function HudRoot({ hud, onSelect }: HudRootProps) {
   // 关闭态弹条/轨道在最上、贴条收底；容器打开态只交换「贴条」与「状态行」
   // 两段，行栈翻到贴条下方，氧气行继续向下堆叠。
   const statusRows = (
-    <StatusRow health={hud.health} hunger={hud.hunger} oxygen={hud.oxygen} open={open} />
+    <StatusRow
+      health={hud.health}
+      armor={hud.armor}
+      hunger={hud.hunger}
+      oxygen={hud.oxygen}
+      open={open}
+    />
   );
   const hotbar = <Hotbar slots={hud.hotbar?.slots} selectedIndex={hud.hotbar?.selectedIndex} onSelect={onSelect} />;
   return (

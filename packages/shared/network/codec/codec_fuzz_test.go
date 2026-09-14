@@ -21,11 +21,25 @@ func FuzzSmallPacketCodec(f *testing.F) {
 		0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
 		0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,
 	})
+	// v40 protocol.LoginStart：16 字节 UUIDv4 + 长度前缀昵称 + 尾部 1 字节
+	// 视距（u8，域 2..64）。种子由编码器现算，视距取非零非满的 32——域外值
+	// 在编码前的域校验即被拒绝，进不了合法语料，解码侧对域外值的冻结拒绝
+	// 由根包登录驱动测试钉住。
+	if id, payload, err := encodeClientPacketPayload(protocol.StateLogin, protocol.LoginStart{
+		PlayerID: core.PlayerID{
+			0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77,
+			0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+		},
+		DisplayName:  "Chen",
+		ViewDistance: 32,
+	}); err == nil {
+		f.Add(uint8(protocol.StateLogin), id, payload)
+	}
 	f.Add(uint8(protocol.StatePlay), uint32(0), []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
 	f.Add(uint8(protocol.StatePlay), uint32(5), []byte{1, 0, 0, 0, 0, 0, 0, 0})
-	// protocol.PlayerState 的种子由编码器现算，尾部字段（v21 起含 Oxygen、v24 起含 Hunger）
-	// 一变就自动跟上，不会像手写字节那样悄悄退化成"截断的旧版载荷"。饥饿值取
-	// 非零非满的中间值：满值样本进不了"越界饥饿必须被拒"的邻域。
+	// protocol.PlayerState 的种子由编码器现算，尾部字段（v21 起含 Oxygen、v24 起含 Hunger、
+	// v42 起含护甲点数）一变就自动跟上，不会像手写字节那样悄悄退化成"截断的旧版载荷"。
+	// 饥饿值取非零非满的中间值：满值样本进不了"越界饥饿必须被拒"的邻域。
 	if id, payload, err := encodeServerControlPayload(protocol.StatePlay, protocol.PlayerState{
 		Dimension: 0, Health: 15, Oxygen: 0x0101, Hunger: 12, WorldTimeTicks: 24000,
 	}); err == nil {
@@ -53,6 +67,12 @@ func FuzzSmallPacketCodec(f *testing.F) {
 	}
 	if id, payload, err := encodeClientPacketPayload(protocol.StatePlay, protocol.PlaceWater{
 		Sequence: 0x0102030405060708, Yaw: 1.5, Pitch: -0.5,
+	}); err == nil {
+		f.Add(uint8(protocol.StatePlay), id, payload)
+	}
+	// v42 装备互换命令与 DropSelectedItem 同形：种子同样由编码器现算。
+	if id, payload, err := encodeClientPacketPayload(protocol.StatePlay, protocol.EquipArmor{
+		Sequence: 0x0102030405060708,
 	}); err == nil {
 		f.Add(uint8(protocol.StatePlay), id, payload)
 	}

@@ -49,6 +49,8 @@ func completeV9ComparableReport(transport string) client.PerfReport {
 // 包括该场景要求的 remote_gpu_complete 样本数与批次数量。
 func scenarioComparableReport(version int, transport string) client.PerfReport {
 	switch version {
+	case 23:
+		return completeV23ComparableReport(transport)
 	case 22:
 		return completeV22ComparableReport(transport)
 	case 21:
@@ -84,6 +86,23 @@ func scenarioComparableReport(version int, transport string) client.PerfReport {
 		report.ScenarioVersion = version
 		return report
 	}
+}
+
+// validStreamingComparable 是 v23 报告的完整 streaming 指标族夹具：分位
+// 为正且单调，样本数超过任何完整性下界。
+func validStreamingComparable() client.StreamingSummary {
+	return client.StreamingSummary{
+		LoadedChunks: 361,
+		LoadLatency:  client.LatencySummary{Samples: 361, P50MS: 100, P95MS: 300, P99MS: 600, MaxMS: 900},
+		PeakRSSBytes: 1 << 20,
+	}
+}
+
+func completeV23ComparableReport(transport string) client.PerfReport {
+	report := completeV22ComparableReport(transport)
+	report.ScenarioVersion = 23
+	report.Streaming = validStreamingComparable()
+	return report
 }
 
 func completeV22ComparableReport(transport string) client.PerfReport {

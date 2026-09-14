@@ -111,6 +111,23 @@ func TestItemIconMaterialsAndBrokenFormsStayDistinct(t *testing.T) {
 		{core.ItemPotato, core.ItemPoisonousPotato},
 		{core.ItemRawBeef, core.ItemCookedBeef},
 		{core.ItemEmptyBucket, core.ItemWaterBucket},
+		// 远程战斗四件两两互不相同：弓与损坏弓形状互异（断口残段剪影 vs 完好
+		// 浅弧，同一木弓调色），箭与骨头另有独立剪影——一张通用剪影盖四件的
+		// 话这组配对即红（与护甲四件同形）。
+		{core.ItemBow, core.ItemBrokenBow},
+		{core.ItemBow, core.ItemArrow},
+		{core.ItemBow, core.ItemBone},
+		{core.ItemArrow, core.ItemBrokenBow},
+		{core.ItemArrow, core.ItemBone},
+		{core.ItemBone, core.ItemBrokenBow},
+		// 护甲四件互不相同：形状是四件的唯一区分面（同一铁灰调色板），
+		// 一张通用剪影盖四件的话这组配对即红。
+		{core.ItemIronHelmet, core.ItemIronChestplate},
+		{core.ItemIronHelmet, core.ItemIronLeggings},
+		{core.ItemIronHelmet, core.ItemIronBoots},
+		{core.ItemIronChestplate, core.ItemIronLeggings},
+		{core.ItemIronChestplate, core.ItemIronBoots},
+		{core.ItemIronLeggings, core.ItemIronBoots},
 	}
 	for _, pair := range pairs {
 		left, _ := registry.ItemIconRGBA(pair[0])

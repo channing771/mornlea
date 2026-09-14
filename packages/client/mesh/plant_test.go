@@ -176,11 +176,49 @@ func TestNativeOracleParityShortGrassCrossPlanes(t *testing.T) {
 	}
 }
 
-func TestPlantMaterialSetIsCropRangePlusShortGrass(t *testing.T) {
+// TestNativeOracleParitySaplingCrossPlanes 是树苗交叉斜面的跨语言门禁：真实
+// registry 的树苗材质层（= 164）喂进 Rust mesher，必须与 Go oracle 逐条逐位一致，
+// 且每格恰好四条 1×1 实例。Rust 侧的植物集合若漏掉该层，这格一条 quad 都取不到。
+func TestNativeOracleParitySaplingCrossPlanes(t *testing.T) {
+	registry := assets.NewRegistry()
+	quads := assertNativeOracleParity(t, plantWorld(t, core.SaplingID, false), registry)
+	plant := plantQuads(quads)
+	if len(plant) != 4 {
+		t.Fatalf("树苗产生了 %d 条交叉斜面，想要 4；若为 0，多半是 assets 的 "+
+			"LayerSapling 与 Rust 的 PLANT_MATERIAL_SAPLING 已经错位", len(plant))
+	}
+	wantMat := registry.Material(core.SaplingID, mesh.FaceNegX)
+	if wantMat != mesh.PlantMaterialSapling {
+		t.Fatalf("树苗材质层 = %d，想要 %d", wantMat, mesh.PlantMaterialSapling)
+	}
+	for _, quad := range plant {
+		if quad.Mat != wantMat || quad.W != 1 || quad.H != 1 ||
+			!quad.Face.Plant() || quad.Corners != ([4]uint8{}) {
+			t.Fatalf("树苗 quad 形状错误: %+v", quad)
+		}
+	}
+	// 树苗与作物一样没有轴向面：六个面在 assets.FaceVisible 里一律不可见。
+	for _, quad := range quads {
+		if quad.Mat == wantMat && !quad.Face.Plant() {
+			t.Fatalf("树苗出了轴向面 %+v", quad)
+		}
+	}
+}
+
+func TestPlantMaterialSetIsCropRangePlusDiscreteLayers(t *testing.T) {
 	for material := uint16(0); material <= 69; material++ {
 		want := material >= 31 && material <= 54 || material == expectedShortGrassMaterial
 		if got := mesh.PlantMaterial(material); got != want {
 			t.Fatalf("PlantMaterial(%d) = %v，想要 %v", material, got, want)
+		}
+	}
+	// 树苗层是集合里的第二个离散单点，位于物品层之后的原创内部区。
+	if !mesh.PlantMaterial(mesh.PlantMaterialSapling) {
+		t.Fatalf("树苗材质层 %d 未进入植物集合", mesh.PlantMaterialSapling)
+	}
+	for _, material := range []uint16{mesh.PlantMaterialSapling - 1, mesh.PlantMaterialSapling + 1} {
+		if mesh.PlantMaterial(material) {
+			t.Fatalf("树苗层相邻材质 %d 被误判为植物", material)
 		}
 	}
 	if mesh.PlantMaterial(^uint16(0)) {

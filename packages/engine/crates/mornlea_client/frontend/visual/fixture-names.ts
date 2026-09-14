@@ -29,6 +29,7 @@ export const fixtureNames = [
   "error-line",
   "hud-hotbar",
   "hud-status",
+  "hud-armor",
   "hud-progress",
   "hud-popup-crosshair",
   "hud-chat",

@@ -21,7 +21,7 @@ func BenchmarkChunkEncode(b *testing.B) {
 	key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: -2, Z: 3}}
 	save := ChunkSave{
 		Key: key, Revision: 1,
-		Chunk: worldgen.New(42, false).GenerateChunk(key.Pos),
+		Chunk: worldgen.New(42, false).GenerateChunk(core.Overworld, key.Pos),
 	}
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -38,7 +38,7 @@ func BenchmarkChunkDecode(b *testing.B) {
 	key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: -2, Z: 3}}
 	save := ChunkSave{
 		Key: key, Revision: 1,
-		Chunk: worldgen.New(42, false).GenerateChunk(key.Pos),
+		Chunk: worldgen.New(42, false).GenerateChunk(core.Overworld, key.Pos),
 	}
 	payload, err := Encode(save)
 	if err != nil {
@@ -71,7 +71,7 @@ func BenchmarkDiskStoreSave32(b *testing.B) {
 			Dimension: core.Overworld,
 			Pos:       core.ChunkPos{X: int32(index), Z: 0},
 		}
-		saves[index] = ChunkSave{Key: key, Chunk: generator.GenerateChunk(key.Pos)}
+		saves[index] = ChunkSave{Key: key, Chunk: generator.GenerateChunk(core.Overworld, key.Pos)}
 	}
 	regionKey, _ := region.RegionFor(saves[0].Key)
 	path := filepath.Join(
@@ -124,7 +124,7 @@ func BenchmarkDiskStoreColdLoad(b *testing.B) {
 	}
 	if _, err := created.Save(ctx, []ChunkSave{{
 		Key: key, Revision: 1,
-		Chunk: worldgen.New(42, false).GenerateChunk(key.Pos),
+		Chunk: worldgen.New(42, false).GenerateChunk(core.Overworld, key.Pos),
 	}}); err != nil {
 		b.Fatal(err)
 	}

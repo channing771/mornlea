@@ -334,6 +334,34 @@ func TestDoorInteractViaRaycast(t *testing.T) {
 	}
 }
 
+// TestDoorSneakRefusesInteract 覆盖潜行放置分流的门半边：潜行中对门右键必须
+// 被拒绝且门形态不变（handler 层直测；门尚无客户端上行触发，属预留路径）。
+func TestDoorSneakRefusesInteract(t *testing.T) {
+	engine, session, _ := doorTestReadyEngine(t, hotbarWithDoor(0))
+	lower := core.BlockPos{X: 0, Y: 2, Z: 5}
+	upper := core.BlockPos{X: 0, Y: 3, Z: 5}
+	engine.SetBlockForTest(core.BlockPos{X: 0, Y: 1, Z: 5}, core.StoneID)
+	engine.SetBlockForTest(lower, core.DoorLowerSouthClosed)
+	engine.SetBlockForTest(upper, core.DoorUpper)
+	player := engine.sessions[session].player
+	player.state.Position = mgl32.Vec3{0.5, 1, 8.5}
+	eye := player.state.Position.Add(mgl32.Vec3{0, engine.physicsTunables.EyeHeight, 0})
+	targetCenter := mgl32.Vec3{0.5, 2.5, 5.5}
+	dir := targetCenter.Sub(eye).Normalize()
+	yaw := float32(math.Atan2(float64(-dir[0]), float64(-dir[2])))
+	pitch := float32(math.Asin(float64(dir[1])))
+	player.sneakingHeld = true
+	result := settlePlayerInteractionsTick(engine, []Command{{
+		Session: session, Sequence: 100, Kind: CommandInteractDoor, Yaw: yaw, Pitch: pitch,
+	}})
+	if len(result.Rejected) != 1 || result.Rejected[0].Reason != RejectInvalidInput {
+		t.Fatalf("潜行门交互=%+v，想要恰好一次 RejectInvalidInput", result.Rejected)
+	}
+	if got, _ := engine.dimension(core.Overworld).BlockAt(lower); got != core.DoorLowerSouthClosed {
+		t.Fatalf("潜行拒绝后门应保持关闭，got %d", got)
+	}
+}
+
 func TestDoorUpperInteractDirPreserved(t *testing.T) {
 	for dir, closed := range map[int]core.BlockID{
 		0: core.DoorLowerSouthClosed,

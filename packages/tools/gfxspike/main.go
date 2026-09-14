@@ -87,7 +87,7 @@ func generateTerrain() map[core.ChunkPos]*world.Chunk {
 	for cx := int32(0); cx < 8; cx++ {
 		for cz := int32(0); cz < 8; cz++ {
 			pos := core.ChunkPos{X: cx, Z: cz}
-			chunks[pos] = gen.GenerateChunk(pos)
+			chunks[pos] = gen.GenerateChunk(core.Overworld, pos)
 		}
 	}
 	return chunks

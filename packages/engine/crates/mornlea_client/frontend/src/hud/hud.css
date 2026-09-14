@@ -31,8 +31,9 @@
   flex-direction: column;
   align-items: center;
   width: calc(var(--hud-design-width) * var(--hud-scale));
-  /* 缩放分母对栈高的上界约束：栈内容（贴条 + 两行状态 + 轨道 + 弹条）在
-   * design 基准内不越界，防御后续新增栈层时悄悄突破「完全位于视口内」。 */
+  /* 缩放分母对栈高的上界约束：栈内容（贴条 + 主行/护甲行/氧气行 + 轨道 +
+   * 弹条）在 design 基准内不越界，防御后续新增栈层时悄悄突破「完全位于
+   * 视口内」。护甲行只随穿戴出现，未穿戴时的差额是缩放余量。 */
   max-height: calc(var(--hud-design-height) * var(--hud-scale));
 }
 
@@ -42,6 +43,14 @@
 
 .hud-status-row--oxygen {
   margin-top: calc(var(--hud-progress-track-gap) * var(--hud-scale));
+}
+
+/* 护甲行紧贴心形行上方（行距同状态行堆叠行距）；点数为 0 时整行不产生，
+ * 布局回落为两行状态栈，既有零穿戴场景逐像素零漂移。 */
+.hud-status-row--armor {
+  margin-top: calc(var(--hud-status-bar-gap) * var(--hud-scale));
+  justify-content: flex-start;
+  gap: calc(var(--hud-status-icon-gap) * var(--hud-scale));
 }
 
 .hud-status-row--primary {
@@ -54,7 +63,10 @@
 
 /* 容器打开态避让：贴条让出像素（空间保留），主行贴到贴条外沿之下一个
  * 「净空 + 行距」（statusHotbarGap + statusBarGap），氧气沿饥饿右缘继续
- * 向下堆叠；底部预留贴条下沿内边距，状态栈绝对位置不因翻转记账移动。 */
+ * 向下堆叠；底部预留贴条下沿内边距，状态栈绝对位置不因翻转记账移动。
+ * 护甲行随行栈翻转：打开态护甲行贴到贴条外沿之下承担「净空 + 行距」，
+ * 紧随其后的主行回落为一个行距（相邻兄弟选择器表达「护甲行在场」），
+ * 护甲行缺席时主行保持既有净空不变。 */
 .hud-root--open .hud-stack {
   padding-bottom: calc(var(--hud-hotbar-bottom-margin) * var(--hud-scale));
 }
@@ -67,6 +79,16 @@
   margin-top: calc(
     (var(--hud-status-hotbar-gap) + var(--hud-status-bar-gap)) * var(--hud-scale)
   );
+}
+
+.hud-root--open .hud-status-row--armor {
+  margin-top: calc(
+    (var(--hud-status-hotbar-gap) + var(--hud-status-bar-gap)) * var(--hud-scale)
+  );
+}
+
+.hud-status-row--armor + .hud-status-row--primary {
+  margin-top: calc(var(--hud-status-bar-gap) * var(--hud-scale));
 }
 
 /* 氧气行翻到主行下方后，与主行之间只隔一个状态行堆叠行距。 */

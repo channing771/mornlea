@@ -9,7 +9,7 @@ import (
 	"github.com/channing771/mornlea/packages/shared/physics"
 )
 
-// 本文件锁定被动牛的权威吃草事件：`splitmix64` 确定性抽选命中 + 站草 +
+// 本文件锁定被动牛的权威吃草事件：`sampler` 确定性抽选命中 + 站草 +
 // `chunk` 就绪才触发，持续 20 `tick` 低头后把触发格草变为泥土；事件期间
 // 受击、移动或脚下方块变化立即中断且不写块；事件态为瞬态，重启不恢复。
 
@@ -61,7 +61,7 @@ func triggerGraze(t *testing.T, engine *Engine, id uint64) (uint64, core.BlockPo
 func firstGrazeHitTick(t *testing.T, seed int64, id uint64) uint64 {
 	t.Helper()
 	for tick := uint64(0); tick < 20000; tick++ {
-		if passiveGrazeHit(seed, tick, id) {
+		if sampler.PassiveGrazeHit(seed, tick, id) {
 			return tick
 		}
 	}

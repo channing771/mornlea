@@ -8,7 +8,8 @@ import (
 )
 
 // 本文件是 Queue 在大规模与预算受限场景下的结构性行为测试，全部使用白盒
-// 断言（`q.order`、`q.lastAdvanceExamined` 等）。跨测试文件共用的助手
+// 断言（`q.lastAdvanceExamined`、`heapRecords`/`queuedDueTick` 等表示层助手，
+// 待办存储迁入统一调度器后经其只读查询口读取）。跨测试文件共用的助手
 // （`sortItems`、`queuedDueTick`、`newMemWorld`、`newBasin` 等）在
 // helpers_test.go；本文件私有的 `boundedPos` 只在此处使用，留在原地。
 
@@ -189,8 +190,9 @@ func TestAdvanceTakesGloballySmallestDueItemsAtScale(t *testing.T) {
 //     budget+1。惰性删除堆在旧 dueTick 到期后会连续多个 tick 只弹过时条目，
 //     探视数顶到探视上界 2*budget。
 //
-// 循环条件刻意用 len(q.order)>0 而不是 q.Len()>0：前者才能把「队列已空但堆里还
-// 压着一堆记录」这种状态暴露出来，后者会在那之前就退出，让断言空转。
+// 循环条件刻意用 heapRecords(q)>0（底层统一调度器堆里的记录数）而不是
+// q.Len()>0：前者才能把「队列已空但堆里还压着一堆记录」这种状态暴露出来，
+// 后者会在那之前就退出，让断言空转。
 func TestAdvanceExaminedBoundedWhenDelayLowered(t *testing.T) {
 	const positions = 50_000
 	const budget = 8
@@ -204,20 +206,20 @@ func TestAdvanceExaminedBoundedWhenDelayLowered(t *testing.T) {
 		q.Enqueue(boundedPos(i), 0, 1) // delay 被调小的那一刻：dueTick 改到 1
 	}
 
-	if heapEntries, queued := len(q.order), q.Len(); heapEntries != queued {
+	if heapEntries, queued := heapRecords(q), q.Len(); heapEntries != queued {
 		t.Fatalf("下调 delay 在堆里留下了多余记录：堆 %d 条、队列 %d 项——过时条目又回来了",
 			heapEntries, queued)
 	}
 
 	worst, ticks := 0, 0
-	for len(q.order) > 0 {
+	for heapRecords(q) > 0 {
 		q.Advance(uint64(1+ticks), w, budget, 1)
 		if q.lastAdvanceExamined > worst {
 			worst = q.lastAdvanceExamined
 		}
 		ticks++
 		if ticks > 4*positions {
-			t.Fatalf("队列在 %d 个 tick 内没有排空，堆里还剩 %d 条", ticks, len(q.order))
+			t.Fatalf("队列在 %d 个 tick 内没有排空，堆里还剩 %d 条", ticks, heapRecords(q))
 		}
 	}
 	if limit := budget + 1; worst > limit {

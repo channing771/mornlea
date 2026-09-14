@@ -94,6 +94,7 @@ func NewOffscreenRenderApplicationForTest(
 		remotePlayers:   client.NewRemotePlayers(),
 		companions:      &client.Companions{},
 		passives:        &client.Passives{},
+		projectiles:     &client.Projectiles{},
 		// 聊天事件环是 capture 共享清理闭包的必查呈现件（空环即关闭态聊天
 		// HUD），离屏装配补齐它，capture 场景闭包才能在本装配上原样运行。
 		chatEvents:     &client.ChatEvents{},
@@ -178,7 +179,7 @@ func NewConnectionTestDependencies(t *testing.T) Dependencies {
 			unexpected("DialTCP")
 			return nil, nil
 		},
-		LoginClient: func(context.Context, network.ClientPacketStream, network.Identity) (network.ClientEndpoint, uint64, error) {
+		LoginClient: func(context.Context, network.ClientPacketStream, network.Identity, uint8) (network.ClientEndpoint, uint64, error) {
 			unexpected("LoginClient")
 			return nil, 0, nil
 		},
@@ -235,8 +236,10 @@ type ConnectionTestStore struct {
 // NewConnectionTestStore 是测试装配入口：按给定种子构造连接测试用内存存档。
 func NewConnectionTestStore(seed int64) *ConnectionTestStore {
 	return &ConnectionTestStore{MemoryStore: storage.NewMemory(storage.Metadata{
-		FormatVersion: 4,
-		Seed:          seed,
+		FormatVersion:     6,
+		Seed:              seed,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    core.DepthsSeedSalt,
 	})}
 }
 

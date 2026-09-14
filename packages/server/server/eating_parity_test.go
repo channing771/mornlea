@@ -31,10 +31,10 @@ const (
 	// 而本脚本要验的是"两种传输下进食结算一致"，不是农业本身——农业闭环由
 	// farming_loop_e2e_test.go 覆盖。
 	//
-	// 也不能指望缺失玩家的一次性材料包（见 `starterMaterialInventory`）：
-	// 它既不含 `core.ItemWheatSeeds`，也不含小麦，更不含面包；第一颗种子
-	// 现在来自采除自然生成的短草，种子 → 小麦的链路由自然种子闭环 E2E
-	// （farming_loop_e2e_test.go）覆盖。
+	// 也不能指望登录时的初始背包（新玩家的初始背包为空，即 `core.Inventory`
+	// 零值）：它既不含 `core.ItemWheatSeeds`，也不含小麦，更不含面包，本脚本
+	// 因此必须自备这份面包原料的存档夹具；第一颗种子来自采除自然生成的短草，
+	// 种子 → 小麦的链路由自然种子闭环 E2E（farming_loop_e2e_test.go）覆盖。
 	eatingParityWheatPerSlot uint8 = 1
 	// eatingParityEatTicks 是脚本按住进食输入推进的 tick 数，必须等于权威
 	// 默认的 `EatingTicks`。sim 的默认值不导出（archcheck 的禁导出清单），
@@ -79,7 +79,9 @@ func runEatingParityScript(t *testing.T, transport string) eatingParityResult {
 	t.Helper()
 	identity := integrationIdentity(0x74, "EatingParity")
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 4, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 6, Seed: 42, SpawnDimension: core.Overworld,
+		DepthsSpawnAnchor: core.ChunkPos{},
+		DepthsSeedSalt:    0x9E3779B97F4A7C15,
 	})
 	var inventory core.Inventory
 	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemWheat, Count: eatingParityWheatPerSlot}

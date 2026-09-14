@@ -752,6 +752,12 @@ func resetCapturePresentation(app SceneApplication) error {
 	if app.Passives() != nil {
 		app.Passives().Reset()
 	}
+	// 投射物镜像是场景夹具的一部分：ranged-mob 注入的飞行骨刺必须在这里
+	// 一并恢复，否则后续场景会带着夜战弹道出图。镜像可能为 nil（最小测试
+	// 装配），nil 时无从谈起夹具残留，跳过即可。
+	if app.Projectiles() != nil {
+		app.Projectiles().Reset()
+	}
 	app.SetMiningOverlay(hud.MiningOverlay{})
 	app.SetDamageFeedback(application.DamageFeedback{})
 	app.SetDamageStrength(0)

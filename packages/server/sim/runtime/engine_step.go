@@ -17,9 +17,13 @@ const (
 	phaseCompanionActions
 	phasePhysicsAdvance
 	phaseHostileAdvance
-	phaseFluidAdvance
-	phaseFarmlandMoistureAdvance
-	phaseCropAdvance
+	// phaseBlockUpdates 是方块更新相位：由旧的流体/湿度/作物三个相位收敛而来
+	// （change unified-block-updates-world-streaming），内部保持固定子序——
+	// AdvanceFluids（内部：边界重扫 → 流体域推进）→ AdvanceFarmlandMoisture
+	//（scope 重扫登记 → 湿度域结算 → 尾部全块重扫）→ 随机面（踩踏/雪印结算 →
+	// 作物抽样）。这是观测面与代码组织的收敛，不是行为重排：被调函数与调用
+	// 顺序逐语句保持，子序由 engine_step_phase_test.go 的源序守卫钉死。
+	phaseBlockUpdates
 )
 
 func (engine *Engine) notifyStepPhase(phase stepPhase) {
@@ -137,12 +141,13 @@ func (engine *Engine) StepWithTunables(tickTunables TickTunables) TickResult {
 
 	engine.activeChunkScratch = tick.AppendActiveInterestKeys(engine.activeChunkScratch[:0])
 	active := engine.activeChunkScratch
-	engine.notifyStepPhase(phaseFluidAdvance)
+	// 方块更新相位（旧流体/湿度/作物三相位的收敛）：相位通知只在入口挂一次，
+	// 相位内子序固定——AdvanceFluids → AdvanceFarmlandMoisture → 踩踏/雪印结算
+	// → AdvanceCrops，与收敛前三段各自的通知点之后的调用序逐语句一致。
+	engine.notifyStepPhase(phaseBlockUpdates)
 	engine.realm.AdvanceFluids(active, pending)
-	engine.notifyStepPhase(phaseFarmlandMoistureAdvance)
 	environment := engine.realm.NewEnvironmentMutation(pending, currentTick, config)
 	engine.realm.AdvanceFarmlandMoisture(active, environment)
-	engine.notifyStepPhase(phaseCropAdvance)
 	tick.SettleTramples()
 	// 雪层脚印与耕地踩踏同域结算：两类收集都发生在更早的阶段（玩家物理、被
 	// 动牛推进），统一在随机 tick 之前落块，本 tick 被削低的雪层不再参与抽样。
@@ -150,10 +155,12 @@ func (engine *Engine) StepWithTunables(tickTunables TickTunables) TickResult {
 	engine.realm.AdvanceCrops(active, pending)
 
 	tick.FinishWorld(&result)
-	// 支撑复核的固定顺序：wild grass → torch → bed。wild plant sweep 先清
-	// 失去草皮支撑的短草（同 mutation 零掉落），火把与床复核随后在自己的
-	// 稳定快照里看到这些新变更——顺序颠倒会让落在短草上的火把/床悬空残留。
+	// 支撑复核的固定顺序：wild grass → sapling → torch → bed。wild plant sweep
+	// 先清失去草皮支撑的短草（同 mutation 零掉落），树苗 sweep 随后清失去泥土/
+	// 草地支撑的树苗（同 mutation 掉落 1 个树苗），火把与床复核最后在自己的稳定
+	// 快照里看到这些新变更——顺序颠倒会让落在短草上的火把/床悬空残留。
 	engine.realm.SweepUnsupportedWildPlants(pending)
+	engine.realm.SweepUnsupportedSaplings(pending)
 	engine.realm.SweepUnsupportedTorches(pending)
 	engine.realm.SweepUnsupportedBeds(pending)
 	finishRealmMutation(pending, &result)

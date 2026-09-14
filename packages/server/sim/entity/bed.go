@@ -52,21 +52,22 @@ func (engine *engineContext) tryPlaceBed(dimensionID core.DimensionID, foot core
 	if !isSolidSupport(footBelow) || !isSolidSupport(headBelow) {
 		return RejectInvalidBlock, true
 	}
-	// 原子双格写入：床头失败时回滚床尾。
+	// 原子双格写入：床头失败时回滚床尾。写前旧值恒为空气（上面的严格空气
+	// 校验），仅供统一入队门面判定方块类别。
 	footID := core.BedFootID(dir)
 	headID := core.BedHeadID(dir)
 	oldFoot, _, errFoot := dimension.SetBlock(foot, footID)
 	if errFoot != nil {
 		return mapSetBlockError(errFoot), true
 	}
-	_, _, errHead := dimension.SetBlock(head, headID)
+	oldHead, _, errHead := dimension.SetBlock(head, headID)
 	if errHead != nil {
 		_, _, _ = dimension.SetBlock(foot, oldFoot)
 		return mapSetBlockError(errHead), true
 	}
 	// 两格变化分别汇入 pending；同区块时同一 key 自然合并为一批。
-	engine.recordChange(dimensionID, foot, footID, pending)
-	engine.recordChange(dimensionID, head, headID, pending)
+	engine.recordChange(dimensionID, foot, oldFoot, footID, pending)
+	engine.recordChange(dimensionID, head, oldHead, headID, pending)
 	return 0, false
 }
 
@@ -106,18 +107,18 @@ func (engine *engineContext) clearBedPair(
 	pending *pendingChunkChanges,
 ) (RejectReason, bool) {
 	dimension := engine.dimension(dimensionID)
-	oldFoot, _ := dimension.BlockAt(footPos)
-	_, _, errFoot := dimension.SetBlock(footPos, core.AirID)
+	oldFoot, _, errFoot := dimension.SetBlock(footPos, core.AirID)
 	if errFoot != nil {
 		return mapSetBlockError(errFoot), true
 	}
-	if _, _, errHead := dimension.SetBlock(headPos, core.AirID); errHead != nil {
+	oldHead, _, errHead := dimension.SetBlock(headPos, core.AirID)
+	if errHead != nil {
 		// 回滚床尾，保持「拒绝 = 零半结算」。
 		_, _, _ = dimension.SetBlock(footPos, oldFoot)
 		return mapSetBlockError(errHead), true
 	}
-	engine.recordChange(dimensionID, footPos, core.AirID, pending)
-	engine.recordChange(dimensionID, headPos, core.AirID, pending)
+	engine.recordChange(dimensionID, footPos, oldFoot, core.AirID, pending)
+	engine.recordChange(dimensionID, headPos, oldHead, core.AirID, pending)
 	return 0, false
 }
 

@@ -290,7 +290,7 @@ func TestTrampleEdgeSemantics(t *testing.T) {
 //  2. 掉落恰好一批——两类产物数量都在 [1,3] 内；
 //  3. 结果与单玩家落地同一格完全一致——对照引擎用同一世界种子、在同一个
 //     权威 tick 上结算（激活第二名玩家消耗的步数在对照侧空转补齐，下落物理
-//     逐 tick 相同，落地 tick 相等断言钉死对齐），`cropYieldRolls` 的哈希输入
+//     逐 tick 相同，落地 tick 相等断言钉死对齐），`sampler.CropYieldRolls` 的哈希输入
 //     逐项相同，掉落计数必须逐件相等；任何双重结算都会以计数翻倍在这里暴露。
 func TestTrampleDualPlayerLandingSameCellIsIdempotent(t *testing.T) {
 	engine, first := readyMovementPlayer(t)

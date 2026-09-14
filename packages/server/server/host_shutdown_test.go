@@ -65,7 +65,7 @@ func TestHostShutdownPendingLoginCancelsBlockedReservationLoad(t *testing.T) {
 	go func() { serverDone <- host.AcceptStream(context.Background(), server) }()
 	clientDone := make(chan error, 1)
 	go func() {
-		_, err := network.LoginClient(context.Background(), client, playerIdentity(1))
+		_, err := network.LoginClient(context.Background(), client, playerIdentity(1), 32)
 		clientDone <- err
 	}()
 	store.waitLoadStarted(t)

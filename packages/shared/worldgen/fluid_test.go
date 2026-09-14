@@ -34,7 +34,7 @@ const seaLevelY int32 = 64
 func TestFluidGateOffProducesNoFluid(t *testing.T) {
 	airBelowSeaLevel := 0
 	for _, pos := range fluidTestChunks {
-		chunk := worldgen.New(fluidTestSeed, false).GenerateChunk(pos)
+		chunk := worldgen.New(fluidTestSeed, false).GenerateChunk(core.Overworld, pos)
 		for y := int32(core.MinY); y < core.MaxY; y++ {
 			for z := 0; z < core.SectionSize; z++ {
 				for x := 0; x < core.SectionSize; x++ {
@@ -63,8 +63,8 @@ func TestFluidGateOffProducesNoFluid(t *testing.T) {
 func TestFluidGateOnFillsSeaLevel(t *testing.T) {
 	filled := 0
 	for _, pos := range fluidTestChunks {
-		dry := worldgen.New(fluidTestSeed, false).GenerateChunk(pos)
-		wet := worldgen.New(fluidTestSeed, true).GenerateChunk(pos)
+		dry := worldgen.New(fluidTestSeed, false).GenerateChunk(core.Overworld, pos)
+		wet := worldgen.New(fluidTestSeed, true).GenerateChunk(core.Overworld, pos)
 		for y := int32(core.MinY); y < core.MaxY; y++ {
 			for z := 0; z < core.SectionSize; z++ {
 				for x := 0; x < core.SectionSize; x++ {
@@ -110,8 +110,8 @@ func TestFluidGateOnFillsSeaLevel(t *testing.T) {
 func TestFluidGateKeepsNonFluidCells(t *testing.T) {
 	var terrain, ores, trees int
 	for _, pos := range fluidTestChunks {
-		dry := worldgen.New(fluidTestSeed, false).GenerateChunk(pos)
-		wet := worldgen.New(fluidTestSeed, true).GenerateChunk(pos)
+		dry := worldgen.New(fluidTestSeed, false).GenerateChunk(core.Overworld, pos)
+		wet := worldgen.New(fluidTestSeed, true).GenerateChunk(core.Overworld, pos)
 		for y := int32(core.MinY); y < core.MaxY; y++ {
 			for z := 0; z < core.SectionSize; z++ {
 				for x := 0; x < core.SectionSize; x++ {

@@ -197,6 +197,75 @@ func moveFurnaceStack(
 	return nextInventory, nextFurnace, true
 }
 
+// moveFurnaceStackAmount 在玩家物品与熔炉的值副本上计算一次半组/单件部分
+// 移动：值域、输出槽拒收、熔炉槽位物品约束（经 `setFurnaceViewSlot` 逐字
+// 复用：输入仅熔炼表内物品且换物品重置进度、燃料仅煤、输出白名单）与区域
+// 路由和 `moveFurnaceStack` 相同，合并换成 `mergeStacksAmount`（异类非空
+// 目标拒绝而非交换），数量由结算时点的权威来源栈按 single 档位经
+// `stackSplitAmount` 推导。输出槽（38）只可作为来源，作为目标一律拒绝——
+// 协议层按熔炉统一视图上界放行 0..38，sim 层 MUST 用这条规则兜底。任何
+// 一步失败都返回原值和 false。
+func moveFurnaceStackAmount(
+	inventory core.Inventory,
+	furnace world.FurnaceSlot,
+	from, to uint8,
+	single bool,
+) (core.Inventory, world.FurnaceSlot, bool) {
+	if from >= core.FurnaceViewSlots || to >= core.FurnaceViewSlots || from == to {
+		return inventory, furnace, false
+	}
+	if to == core.FurnaceOutputSlot {
+		return inventory, furnace, false
+	}
+	if !inventory.Valid() || !furnace.Valid() || !furnace.Active {
+		return inventory, furnace, false
+	}
+	// 两侧都在玩家物品栏内时复用部分移动原语。
+	if from < core.InventorySlots && to < core.InventorySlots {
+		source, _ := inventory.Slot(from)
+		amount, ok := stackSplitAmount(source, single)
+		if !ok {
+			return inventory, furnace, false
+		}
+		next, ok := inventory.MoveStackAmount(from, to, amount)
+		return next, furnace, ok
+	}
+
+	source, ok := furnaceViewSlot(inventory, furnace, from)
+	if !ok || source.Item == core.ItemNone {
+		return inventory, furnace, false
+	}
+	amount, ok := stackSplitAmount(source, single)
+	if !ok {
+		return inventory, furnace, false
+	}
+	target, ok := furnaceViewSlot(inventory, furnace, to)
+	if !ok {
+		return inventory, furnace, false
+	}
+
+	nextSource, nextTarget, ok := mergeStacksAmount(source, target, amount)
+	if !ok {
+		return inventory, furnace, false
+	}
+
+	nextInventory, nextFurnace := inventory, furnace
+	if nextInventory, nextFurnace, ok = setFurnaceViewSlot(
+		nextInventory, nextFurnace, from, nextSource,
+	); !ok {
+		return inventory, furnace, false
+	}
+	if nextInventory, nextFurnace, ok = setFurnaceViewSlot(
+		nextInventory, nextFurnace, to, nextTarget,
+	); !ok {
+		return inventory, furnace, false
+	}
+	if !nextFurnace.Valid() || !nextInventory.Valid() {
+		return inventory, furnace, false
+	}
+	return nextInventory, nextFurnace, true
+}
+
 // furnaceViewSlot 读取统一栏位 0..38 中的一格。
 func furnaceViewSlot(
 	inventory core.Inventory,
@@ -246,8 +315,11 @@ func setFurnaceViewSlot(
 		if !stack.Valid() {
 			return inventory, furnace, false
 		}
+		// 输出白名单 MUST 覆盖 `core.SmeltingOutput` 的全部产物：漏掉一项时
+		// 从输出格取回该产物的余量无法写回，整条移动命令被拒收，熔炉界面
+		// 被冻结（生牛肉熔炼产物曾长期缺失于此）。
 		switch stack.Item {
-		case core.ItemNone, core.ItemIronIngot, core.ItemGlass, core.ItemBrick:
+		case core.ItemNone, core.ItemIronIngot, core.ItemGlass, core.ItemBrick, core.ItemCookedBeef:
 			furnace.Output = stack
 		default:
 			return inventory, furnace, false

@@ -59,8 +59,13 @@ func (p *Predictor) Advance(
 		}
 		// 疾跑饥饿门控与服务端同阈值：镜像饥饿<6 时不触发加速，客户端预测与
 		// 服务端权威因此同向，避免“客户端以为在跑、服务端按走”的持续纠偏。
+		// 潜行优先于疾跑：潜行置位即压住疾跑（潜行减速本身不受饥饿影响）。
 		sprinting := control.Sprinting
+		sneaking := control.Sneaking
 		if p.hunger < 6 {
+			sprinting = false
+		}
+		if sneaking {
 			sprinting = false
 		}
 		message := network.PlayerInput{
@@ -73,6 +78,7 @@ func (p *Predictor) Advance(
 			Mining:    control.Mining,
 			Eating:    control.Eating,
 			Sprinting: sprinting,
+			Sneaking:  sneaking,
 		}
 		if err := send(message); err != nil {
 			return err
@@ -86,6 +92,7 @@ func (p *Predictor) Advance(
 				Jump:      message.Jump,
 				Yaw:       message.Yaw,
 				Sprinting: sprinting,
+				Sneaking:  sneaking,
 			},
 		})
 		p.previous = p.current
@@ -161,5 +168,12 @@ func (p *Predictor) stepWithSubmersion(
 ) physics.State {
 	input.BodyInFluid, input.EyeInFluid = physics.SubmersionFlags(state.Position, source)
 	p.eyeInFluid = input.EyeInFluid
+	// 潜行边缘保护：与服务端同序的输入侧钳制，复用本步已算出的浸没标志，
+	// 不另算一遍。`Advance` 与和解重放都经这里，钳制位置恒与积分位置同源。
+	if input.Sneaking && !input.Jump && (input.MoveX != 0 || input.MoveZ != 0) &&
+		state.OnGround && !input.BodyInFluid &&
+		!physics.SneakEdgeHolds(state, input.MoveX, input.MoveZ, input.Yaw, source) {
+		input.MoveX, input.MoveZ = 0, 0
+	}
 	return physics.Step(state, input, source).State
 }

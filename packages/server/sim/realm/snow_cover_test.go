@@ -102,7 +102,7 @@ func snowBlockAt(t *testing.T, state *State, position core.BlockPos) core.BlockI
 }
 
 // snowHittingTicks 预解前 count 个「随机 tick 抽样命中 ground 格」的 tick。与
-// `AdvanceCrops` 用同一 `sampleCells` 纯函数（同 seed、同区块键、同区段、同样本
+// `AdvanceCrops` 用同一 `sampler.SampleCells` 纯函数（同 seed、同区块键、同区段、同样本
 // 数），因此推进这些 tick 必然命中夹具格；跳过的中间 tick 不会改变世界（夹具
 // 里没有别的可写机制），等价于连续推进。
 func snowHittingTicks(t *testing.T, ground core.BlockPos, samples, count int) []uint64 {
@@ -113,7 +113,7 @@ func snowHittingTicks(t *testing.T, ground core.BlockPos, samples, count int) []
 	ticks := make([]uint64, 0, count)
 	var scratch []int
 	for tick := uint64(0); tick < 1<<20; tick++ {
-		scratch = sampleCells(snowTestSeed, tick, key, ground.SectionIndex(), samples, scratch)
+		scratch = sampler.SampleCells(snowTestSeed, tick, key, ground.SectionIndex(), samples, scratch)
 		for _, sampled := range scratch {
 			if sampled == cell {
 				ticks = append(ticks, tick)

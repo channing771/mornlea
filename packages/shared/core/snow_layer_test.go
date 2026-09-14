@@ -15,7 +15,7 @@ var snowLayerIDs = [...]core.BlockID{
 }
 
 // TestSnowLayerBlockIDsAppendAfterShortGrass 锁定四档雪层的稳定编号：必须紧随
-// ShortGrassID 连续追加（85..88）、独占哨兵 BlockIDMax 后移到 89、全部已注册。
+// ShortGrassID 连续追加（85..88）、后续批次的橡树树苗接在其后，全部已注册。
 // 编号是协议稳定值：插入或重排会平移后续编号，破坏既有存档与线上字节；既有
 // ID 不被扰动这一点由 TestCanonicalBlockIDsStayStable 与各批次位次守护测试覆盖。
 func TestSnowLayerBlockIDsAppendAfterShortGrass(t *testing.T) {
@@ -27,12 +27,12 @@ func TestSnowLayerBlockIDsAppendAfterShortGrass(t *testing.T) {
 			t.Fatalf("雪层档位 %d 未注册", i+1)
 		}
 	}
-	if core.BlockIDMax != core.SnowLayer4BlockID+1 {
-		t.Fatalf("BlockIDMax = %d，必须紧随 SnowLayer4BlockID(%d) 之后",
-			core.BlockIDMax, core.SnowLayer4BlockID)
+	if core.BlockIDMax != core.SaplingID+1 {
+		t.Fatalf("BlockIDMax = %d，必须紧随后续批次的 SaplingID(%d) 之后",
+			core.BlockIDMax, core.SaplingID)
 	}
-	if got, want := core.BlockIDMax, core.BlockID(89); got != want {
-		t.Fatalf("BlockIDMax = %d，想要只追加四档雪层后的 %d", got, want)
+	if got, want := core.BlockIDMax, core.BlockID(90); got != want {
+		t.Fatalf("BlockIDMax = %d，想要追加四档雪层与树苗后的 %d", got, want)
 	}
 	// 编号两两不同：四个档位必须解析为四个不同的方块。
 	seen := map[core.BlockID]bool{}

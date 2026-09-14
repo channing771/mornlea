@@ -23,13 +23,14 @@ const (
 )
 
 func TestABIValuesMatchEngineContract(t *testing.T) {
-	// 显式钉住 v10：上面的相等断言在 header 与 dylib 同源时恒真（二者一起停在
+	// 显式钉住 v11：上面的相等断言在 header 与 dylib 同源时恒真（二者一起停在
 	// 旧版本不会被发现），本条把「本次布局扩容确实升了版」变成可执行契约。
-	// v10 承载 worldgen `MGW1` 材料表 14 → 15 项(末项 short_grass)与
-	// layout 2 → 3 的带内帧扩容——natural-grass-seeds 变更；既有入口签名
-	// 与语义不变。
-	if ABIVersion != 10 {
-		t.Fatalf("engine ABI=%d，想要 10", ABIVersion)
+	// v11 承载运行时树形几何出口 `mornlea_tree_blocks`——输入 28 字节
+	// (`MTB1` + layout u32 + 世界种子 i64 + 根坐标 x/y/z i32)、输出
+	// `count u32` + 每条 8 字节记录(上限 128)的 oak-sapling-regrowth 变更；
+	// 既有入口签名与语义不变。
+	if ABIVersion != 11 {
+		t.Fatalf("engine ABI=%d，想要 11", ABIVersion)
 	}
 	if got := EngineABIVersion(); got != ABIVersion {
 		t.Fatalf("engine ABI version=%d，想要 %d", got, ABIVersion)
@@ -109,6 +110,8 @@ func TestEngineCgoDirectivesArePresent(t *testing.T) {
 		"#cgo nocallback mornlea_fluid_eval_batch",
 		"#cgo noescape mornlea_fluid_rescan",
 		"#cgo nocallback mornlea_fluid_rescan",
+		"#cgo noescape mornlea_tree_blocks",
+		"#cgo nocallback mornlea_tree_blocks",
 	} {
 		if !strings.Contains(string(contents), directive) {
 			t.Errorf("缺少 %s", directive)
@@ -694,6 +697,129 @@ func TestWorldgenStatusPanicTextIsStable(t *testing.T) {
 	}
 	if got := worldgenStatusPanicText("probe", StatusInput); got != "nativeabi: worldgen probe 输入非法" {
 		t.Fatalf("probe 文案=%q", got)
+	}
+}
+
+// treeBlocksInputBytes 是 `mornlea_tree_blocks` 入口输入字节数,必须与
+// engine `worldgen.rs` 的 TREE_BLOCKS_INPUT_BYTES 一致。
+const treeBlocksInputBytes = 28
+
+// treeBlocksMaxOutputBytes 是输出的静态上界:count u32 + 128 条 8 字节记录,
+// 与 engine `TREE_BLOCKS_MAX_OUTPUT_BYTES` 一致。
+const treeBlocksMaxOutputBytes = 4 + 128*8
+
+// testValidTreeBlocksInput 构造合法 `MTB1` 请求:layout 1、seed 42、
+// 根坐标 (7,64,-9)。
+func testValidTreeBlocksInput() []byte {
+	rootY := int32(-9)
+	input := make([]byte, 0, treeBlocksInputBytes)
+	input = append(input, "MTB1"...)
+	input = binary.LittleEndian.AppendUint32(input, 1)
+	input = binary.LittleEndian.AppendUint64(input, 42)
+	input = binary.LittleEndian.AppendUint32(input, 7)
+	input = binary.LittleEndian.AppendUint32(input, 64)
+	input = binary.LittleEndian.AppendUint32(input, uint32(rootY))
+	return input
+}
+
+func TestTreeBlocksRawFailureAtomicity(t *testing.T) {
+	validInput := testValidTreeBlocksInput()
+	badMagic := slices.Clone(validInput)
+	badMagic[0] = 'X'
+	badLayout := slices.Clone(validInput)
+	binary.LittleEndian.PutUint32(badLayout[4:8], 2)
+	belowWorldY := int32(-65)
+	rootBelowWorld := slices.Clone(validInput)
+	binary.LittleEndian.PutUint32(rootBelowWorld[20:24], uint32(belowWorldY))
+	rootAboveWorld := slices.Clone(validInput)
+	binary.LittleEndian.PutUint32(rootAboveWorld[20:24], 312)
+	longInput := append(slices.Clone(validInput), 0)
+	for _, test := range []struct {
+		name    string
+		version uint32
+		input   []byte
+		output  []byte
+		want    Status
+	}{
+		{name: "ABI version", version: ABIVersion + 1, input: validInput, output: make([]byte, treeBlocksMaxOutputBytes), want: StatusABIVersion},
+		{name: "nil input", version: ABIVersion, output: make([]byte, treeBlocksMaxOutputBytes), want: StatusInvalidArgument},
+		{name: "bad magic", version: ABIVersion, input: badMagic, output: make([]byte, treeBlocksMaxOutputBytes), want: StatusInput},
+		{name: "bad layout", version: ABIVersion, input: badLayout, output: make([]byte, treeBlocksMaxOutputBytes), want: StatusInput},
+		{name: "root below world", version: ABIVersion, input: rootBelowWorld, output: make([]byte, treeBlocksMaxOutputBytes), want: StatusInput},
+		{name: "root above world", version: ABIVersion, input: rootAboveWorld, output: make([]byte, treeBlocksMaxOutputBytes), want: StatusInput},
+		{name: "short input", version: ABIVersion, input: validInput[:len(validInput)-1], output: make([]byte, treeBlocksMaxOutputBytes), want: StatusInput},
+		{name: "long input", version: ABIVersion, input: longInput, output: make([]byte, treeBlocksMaxOutputBytes), want: StatusInput},
+		{name: "output below header", version: ABIVersion, input: validInput, output: make([]byte, 3), want: StatusOutputOverflow},
+		{name: "short output", version: ABIVersion, input: validInput, output: make([]byte, 7), want: StatusOutputOverflow},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			output := slices.Clone(test.output)
+			status, count := treeBlocksVersion(test.version, test.input, output)
+			if status != test.want {
+				t.Fatalf("status=%d，想要 %d", status, test.want)
+			}
+			if count != 0 {
+				t.Fatalf("失败路径 count=%d，想要 0", count)
+			}
+			if !slices.Equal(output, test.output) {
+				t.Fatal("失败调用修改了 caller-owned output")
+			}
+		})
+	}
+}
+
+func TestTreeBlocksHappyPathIsDeterministic(t *testing.T) {
+	input := testValidTreeBlocksInput()
+	first := make([]byte, treeBlocksMaxOutputBytes)
+	second := make([]byte, treeBlocksMaxOutputBytes)
+	firstCount := TreeBlocks(input, first)
+	secondCount := TreeBlocks(input, second)
+	if firstCount != secondCount {
+		t.Fatalf("两次调用记录数不同: %d vs %d", firstCount, secondCount)
+	}
+	if firstCount <= 0 || firstCount > 128 {
+		t.Fatalf("记录数=%d，想要 1..128", firstCount)
+	}
+	if !slices.Equal(first, second) {
+		t.Fatal("同输入两次几何不同")
+	}
+	// 根格自身是第一条记录,恒为树干底原木(编号 17)。
+	if got := first[4:12]; !slices.Equal(got, []byte{0, 0, 0, 0, 17, 0, 0, 0}) {
+		t.Fatalf("根记录=%v，想要偏移全零的原木", got)
+	}
+	// 每条记录的保留字节必须为 0,方块只可能是原木 17 或树叶 19。
+	for index := 0; index < firstCount; index++ {
+		record := first[4+index*8 : 4+index*8+8]
+		if record[3] != 0 || record[6] != 0 || record[7] != 0 {
+			t.Fatalf("记录 %d 的保留字节非零: %v", index, record)
+		}
+		if block := binary.LittleEndian.Uint16(record[4:6]); block != 17 && block != 19 {
+			t.Fatalf("记录 %d 的方块=%d，想要 17 或 19", index, block)
+		}
+	}
+	// 成功路径只写 count 条记录,尾部保持调用前内容(此处全零)。
+	for _, value := range first[4+firstCount*8:] {
+		if value != 0 {
+			t.Fatal("成功路径写入了记录区之外的字节")
+		}
+	}
+}
+
+func TestTreeBlocksStatusPanicTextIsStable(t *testing.T) {
+	for _, test := range []struct {
+		status Status
+		want   string
+	}{
+		{StatusABIVersion, "nativeabi: tree blocks ABI 版本不匹配"},
+		{StatusInvalidArgument, "nativeabi: tree blocks 参数非法"},
+		{StatusInput, "nativeabi: tree blocks 输入非法"},
+		{StatusOutputOverflow, "nativeabi: tree blocks output 过短"},
+		{StatusPanic, "nativeabi: tree blocks Rust panic"},
+		{Status(200), "nativeabi: tree blocks 未知状态"},
+	} {
+		if got := treeBlocksStatusPanicText(test.status); got != test.want {
+			t.Fatalf("status %d 文案=%q，想要 %q", test.status, got, test.want)
+		}
 	}
 }
 

@@ -76,7 +76,7 @@ func dialAndLoginTCP(address string, identity network.Identity) (network.ClientE
 	if err != nil {
 		return nil, err
 	}
-	endpoint, err := network.LoginClient(ctx, stream, identity)
+	endpoint, err := network.LoginClient(ctx, stream, identity, 32)
 	if err != nil {
 		_ = stream.Close()
 		return nil, err

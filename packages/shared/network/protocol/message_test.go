@@ -38,6 +38,7 @@ func TestProtocolMessageShapesImplementSealedInterfaces(t *testing.T) {
 		},
 		protocol.KeepAliveReply{Token: 1},
 		protocol.ChatCommand{Text: "@A x"},
+		protocol.EquipArmor{Sequence: 2},
 	}
 	serverMessages := []protocol.ServerMessage{
 		protocol.ChunkSnapshot{},
@@ -78,7 +79,7 @@ func TestProtocolMessageShapesImplementSealedInterfaces(t *testing.T) {
 		protocol.CompanionDespawn{ID: companion.ID{}},
 		protocol.PlaceBlockSucceeded{Sequence: 1},
 	}
-	if len(clientMessages) != 8 || len(serverMessages) != 18 {
+	if len(clientMessages) != 9 || len(serverMessages) != 18 {
 		t.Fatal("消息集合不完整")
 	}
 }
@@ -120,6 +121,56 @@ func TestHotbarMessagesValidateFixedBounds(t *testing.T) {
 	}
 }
 
+func TestPlayerChunkMessagesAcceptDepths(t *testing.T) {
+	// 玩家与区块类消息的 `Dimension` 接受主世界与 `Depths`（0 与 1），
+	// `Dimension >= 2` 一律拒绝；伙伴/敌怪/被动生物类消息不在此列，
+	// 它们继续只接受主世界（由既有拒绝矩阵覆盖）。
+	validID := core.PlayerID{0, 1, 2, 3, 4, 5, 0x46, 7, 0x88, 9, 10, 11, 12, 13, 14, 15}
+	depthsSections := make([]protocol.SectionData, core.SectionsPerChunk)
+	for index := range depthsSections {
+		depthsSections[index] = protocol.SectionData{Y: int32(index), Storage: protocol.SectionSingle, Single: core.AirID}
+	}
+	valid := []struct {
+		name    string
+		message interface{ Validate() error }
+	}{
+		{"resync", protocol.RequestChunkResync{Dimension: core.Depths}},
+		{"snapshot", protocol.ChunkSnapshot{Dimension: core.Depths, Revision: 1, Sections: depthsSections}},
+		{"block changes", protocol.BlockChanges{Dimension: core.Depths, BaseRevision: 1, NewRevision: 2}},
+		{"forget chunks", protocol.ForgetChunks{Dimension: core.Depths, Chunks: []core.ChunkPos{{}}}},
+		{"player state", protocol.PlayerState{Dimension: core.Depths}},
+		{"remote spawn", protocol.RemotePlayerSpawn{PlayerID: validID, DisplayName: "Chen", Dimension: core.Depths}},
+		{"remote states", protocol.RemotePlayerStates{Players: []protocol.RemotePlayerState{{PlayerID: validID, Dimension: core.Depths}}}},
+	}
+	for _, tc := range valid {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.message.Validate(); err != nil {
+				t.Fatalf("depths %s 被拒绝: %v", tc.name, err)
+			}
+		})
+	}
+
+	rejected := []struct {
+		name    string
+		message interface{ Validate() error }
+	}{
+		{"resync", protocol.RequestChunkResync{Dimension: core.DimensionID(2)}},
+		{"snapshot", protocol.ChunkSnapshot{Dimension: core.DimensionID(2), Revision: 1, Sections: depthsSections}},
+		{"block changes", protocol.BlockChanges{Dimension: core.DimensionID(2), BaseRevision: 1, NewRevision: 2}},
+		{"forget chunks", protocol.ForgetChunks{Dimension: core.DimensionID(2), Chunks: []core.ChunkPos{{}}}},
+		{"player state", protocol.PlayerState{Dimension: core.DimensionID(2)}},
+		{"remote spawn", protocol.RemotePlayerSpawn{PlayerID: validID, DisplayName: "Chen", Dimension: core.DimensionID(2)}},
+		{"remote states", protocol.RemotePlayerStates{Players: []protocol.RemotePlayerState{{PlayerID: validID, Dimension: core.DimensionID(2)}}}},
+	}
+	for _, tc := range rejected {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.message.Validate(); err == nil {
+				t.Fatalf("dimension 2 %s 被接受", tc.name)
+			}
+		})
+	}
+}
+
 func TestBucketCommandIDsAppendOnly(t *testing.T) {
 	if id, ok := protocol.ClientPacketID(protocol.StatePlay, protocol.CollectWater{}); !ok || id != 16 {
 		t.Fatalf("CollectWater ID = (%d,%v)，想要 (16,true)", id, ok)
@@ -127,8 +178,8 @@ func TestBucketCommandIDsAppendOnly(t *testing.T) {
 	if id, ok := protocol.ClientPacketID(protocol.StatePlay, protocol.PlaceWater{}); !ok || id != 17 {
 		t.Fatalf("PlaceWater ID = (%d,%v)，想要 (17,true)", id, ok)
 	}
-	if protocol.ProtocolVersion != 38 {
-		t.Fatalf("ProtocolVersion = %d，想要 38", protocol.ProtocolVersion)
+	if protocol.ProtocolVersion != 44 {
+		t.Fatalf("ProtocolVersion = %d，想要 44", protocol.ProtocolVersion)
 	}
 }
 
@@ -151,6 +202,7 @@ func TestRejectReasonsAreStableProtocolValues(t *testing.T) {
 		{protocol.RejectContainerCapacity, "container_capacity"},
 		{protocol.RejectNotFluidSource, "not_fluid_source"},
 		{protocol.RejectBucketMismatch, "bucket_mismatch"},
+		{protocol.RejectNotArmor, "not_armor"},
 	}
 	for _, tc := range tests {
 		if string(tc.got) != tc.want {

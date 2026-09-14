@@ -10,7 +10,8 @@ import (
 // 本文件是 `Replaceable` 谓词里「短草」主题的一支（natural-grass-seeds 引入的
 // 流体规则语义变更）：短草格对流动水可替换，水淹即清除且零掉落。与
 // rules_replaceable_crop_test.go 的关系是植物语义的第二名成员——判定面按
-// `core.IsPlant` 收口（作物 ∪ 短草），这里钉住短草的完整边界与「短草脚下
+// `core.IsPlant` 收口（作物 ∪ 短草 ∪ 树苗，树苗一支见
+// rules_replaceable_sapling_test.go），这里钉住短草的完整边界与「短草脚下
 // 的草方块仍然挡水」这条直接对照。
 
 // TestReplaceable_ShortGrassReplaceableAtAllLevels 断言 `ShortGrassID` 对全部

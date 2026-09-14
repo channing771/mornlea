@@ -32,6 +32,10 @@ type Tunables struct {
 
 	// SprintSpeedMultiplier 是疾跑时水平目标速度的倍率（仅地面+前移+非浸没+饥饿≥6 时生效）。
 	SprintSpeedMultiplier float32 `json:"sprintSpeedMultiplier"`
+
+	// SneakSpeedMultiplier 是潜行时水平目标速度的倍率（仅地面+非浸没时生效，
+	// 与疾跑同置时潜行优先）。
+	SneakSpeedMultiplier float32 `json:"sneakSpeedMultiplier"`
 }
 
 // DefaultTunables 返回编译期默认参数。它是配置文件缺省时的取值，
@@ -53,6 +57,7 @@ func DefaultTunables() Tunables {
 		FluidAscendSpeed:      defaultFluidAscendSpeed,
 		FluidHorizontalDrag:   defaultFluidHorizontalDrag,
 		SprintSpeedMultiplier: defaultSprintSpeedMultiplier,
+		SneakSpeedMultiplier:  defaultSneakSpeedMultiplier,
 	}
 }
 

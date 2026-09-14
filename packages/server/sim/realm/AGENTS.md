@@ -6,12 +6,13 @@
 
 - `State`/`Dimension` 拥有维度记录、revision、持久化与环境 scratch，由权威 tick 单写者独占。
 - `Mutation` 收集单 tick 内全部 `pendingChunkChanges`，`Record`/`Touch` 汇入变更，`Commit` 一次性推进 revision、压缩 section 并产出有序 `ChunkChangeBatch`。
-- 环境推进（流体、耕地湿度、作物、干耕地退化、火把/床支撑复核）仅通过同一 `*Mutation` 写入，预算、重扫与确定性排序由本包持有，不另设平行通道。
+- 环境推进（流体、耕地湿度、作物、树苗生长、干耕地退化、树苗/火把/床支撑复核）仅通过同一 `*Mutation` 写入，预算、重扫与确定性排序由本包持有，不另设平行通道。
 - 环境配置由 runtime 从当前 tick 的 simulation 值投影后按值传入；realm 不读取全局 tunables，也不感知独立的 physics 快照。
 
 ## 依赖方向
 
-- 允许：`packages/shared/core`、`packages/shared/world`、`packages/server/fluid`。
+- 允许：`packages/shared/core`、`packages/shared/world`、`packages/shared/worldgen`、`packages/server/fluid`。
+- 树苗生长的树形几何来自 `packages/shared/worldgen` 的 engine ABI 桥（生产数值只在 Rust），realm 只做空间校验、跨区块原子写入与变更登记。
 - 禁止：依赖 `packages/server/sim/contract`/`tuning`/`entity`/`runtime` 或 `packages/server/server`/`packages/client/client`；`realm` 不反向依赖上层结算或编排。
 - 方向由 `packages/audit` 强制，校验 `TestSimSubpackageDependencyDirections` 的真实树扫描与 `TestSimDependencyViolationsDetectDrift` 的合成 `realm → entity/runtime` 注入。
 

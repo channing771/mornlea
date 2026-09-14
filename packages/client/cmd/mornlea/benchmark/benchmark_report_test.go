@@ -124,3 +124,62 @@ func TestScenarioV13BenchmarkReportReusesV12GPUCompletionDefinition(t *testing.T
 		t.Fatalf("v13 批量分摊样本数被拒绝: %v", err)
 	}
 }
+
+func validStreamingSummary() client.StreamingSummary {
+	return client.StreamingSummary{
+		LoadedChunks: 49,
+		LoadLatency:  client.LatencySummary{Samples: 49, P50MS: 5, P95MS: 20, P99MS: 40, MaxMS: 60},
+		PeakRSSBytes: 1 << 20,
+	}
+}
+
+func TestScenarioV23BenchmarkReportRequiresStreamingFamily(t *testing.T) {
+	report := completeBenchmarkReport()
+	report.ScenarioVersion = 22
+	if err := validateBenchmarkReport(report); err != nil {
+		t.Fatalf("v22 报告不应被要求携带 streaming 指标族: %v", err)
+	}
+	report.ScenarioVersion = 23
+	if err := validateBenchmarkReport(report); err == nil ||
+		!strings.Contains(err.Error(), "streaming") {
+		t.Fatalf("v23 报告缺失 streaming 指标族未被拒绝: %v", err)
+	}
+	report.Streaming = validStreamingSummary()
+	if err := validateBenchmarkReport(report); err != nil {
+		t.Fatalf("完整 v23 streaming 指标族被拒绝: %v", err)
+	}
+}
+
+func TestScenarioV23BenchmarkReportRejectsBrokenStreamingPercentiles(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mutate func(*client.PerfReport)
+	}{
+		{name: "loaded zero", mutate: func(report *client.PerfReport) {
+			report.Streaming.LoadedChunks = 0
+		}},
+		{name: "samples zero", mutate: func(report *client.PerfReport) {
+			report.Streaming.LoadLatency.Samples = 0
+		}},
+		{name: "p50 zero", mutate: func(report *client.PerfReport) {
+			report.Streaming.LoadLatency.P50MS = 0
+		}},
+		{name: "non-monotonic", mutate: func(report *client.PerfReport) {
+			report.Streaming.LoadLatency.P95MS = report.Streaming.LoadLatency.P99MS + 1
+		}},
+		{name: "peak rss zero", mutate: func(report *client.PerfReport) {
+			report.Streaming.PeakRSSBytes = 0
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			report := completeBenchmarkReport()
+			report.ScenarioVersion = 23
+			report.Streaming = validStreamingSummary()
+			test.mutate(&report)
+			if err := validateBenchmarkReport(report); err == nil ||
+				!strings.Contains(err.Error(), "streaming") {
+				t.Fatalf("%s 未被拒绝: %v", test.name, err)
+			}
+		})
+	}
+}

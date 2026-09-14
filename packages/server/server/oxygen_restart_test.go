@@ -30,7 +30,7 @@ var drownedColumn = core.BlockPos{X: 0, Y: 1, Z: 0}
 type drownedSpawnGenerator struct{}
 
 // GenerateChunk 实现 Generator。
-func (drownedSpawnGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (drownedSpawnGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	chunk := integrationChunk(position, core.DirtID)
 	if position != drownedColumn.Chunk() {
 		return chunk

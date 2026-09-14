@@ -64,14 +64,18 @@ var expectedRuntimeSubscriptionFields = map[string]string{
 	"hasView":                     "bool",
 	"dimension":                   "core.DimensionID",
 	"center":                      "core.ChunkPos",
-	"wanted":                      "map[core.ChunkKey]struct{}",
+	// radius 是每会话生效订阅半径（登录声明视距 +1 后按引擎视界钳制；
+	// trusted observer 与未声明路径即引擎视界）：纯标量镜像，不持有 owner。
+	"radius": "int",
+	"wanted": "map[core.ChunkKey]struct{}",
 }
 
 var requiredEntityStateFields = map[string]string{
-	"sessions":   "map[SessionID]*sessionState",
-	"companions": "map[companion.ID]*companionState",
-	"hostiles":   "hostileSet",
-	"passives":   "passiveSet",
+	"sessions":    "map[SessionID]*sessionState",
+	"companions":  "map[companion.ID]*companionState",
+	"hostiles":    "hostileSet",
+	"passives":    "passiveSet",
+	"projectiles": "projectileSet",
 }
 
 var requiredEntitySessionFields = map[string]string{
@@ -125,6 +129,7 @@ type subscriptionState struct {
 	hasView bool
 	dimension core.DimensionID
 	center core.ChunkPos
+	radius int
 	wanted map[core.ChunkKey]struct{}
 }
 type Engine struct {
@@ -173,6 +178,7 @@ type playerState struct{}
 type companionState struct{}
 type hostileSet struct{}
 type passiveSet struct{}
+type projectileSet struct{}
 type sessionState struct {
 	id SessionID
 	dimension core.DimensionID
@@ -185,6 +191,7 @@ type State struct {
 	companions map[companion.ID]*companionState
 	hostiles hostileSet
 	passives passiveSet
+	projectiles projectileSet
 }
 `
 
@@ -403,6 +410,13 @@ type State struct {
 				return runtimeSource, strings.Replace(entitySource, "\tpassives passiveSet\n", "", 1)
 			},
 			wants: []string{"entity.State 缺少字段 passives passiveSet"},
+		},
+		{
+			name: "entity 丢失 projectile owner",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return runtimeSource, strings.Replace(entitySource, "\tprojectiles projectileSet\n", "", 1)
+			},
+			wants: []string{"entity.State 缺少字段 projectiles projectileSet"},
 		},
 		{
 			name: "runtime 重复 mutation commit",

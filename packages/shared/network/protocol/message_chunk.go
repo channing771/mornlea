@@ -15,6 +15,9 @@ func (ForgetChunks) serverMessage() {}
 func (ForgetChunks) serverPacket()  {}
 
 func (forget ForgetChunks) Validate() error {
+	if forget.Dimension != core.Overworld && forget.Dimension != core.Depths {
+		return errors.New("network: forget chunks dimension is not overworld or depths")
+	}
 	if len(forget.Chunks) < 1 || len(forget.Chunks) > 4096 {
 		return errors.New("network: forget chunks count is outside 1..4096")
 	}

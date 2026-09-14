@@ -9,8 +9,8 @@ import (
 )
 
 // TestProtocolV36PlayerStateCarriesWeather 覆盖 v36 追加的权威天气：它按 u8
-// 紧跟在 `WorldTimeTicks` 之后（v37 起其后还有季节三字节），全合法值域往返
-// 保值。
+// 紧跟在 `WorldTimeTicks` 之后（v37 起其后还有季节三字节，v42 起再往后是
+// 1 字节护甲点数），全合法值域往返保值。
 //
 // 样本覆盖晴/雨/雷暴三态：0 与「编码器漏写该字段、解码器读出零值」不可分辨，
 // 故必须带上 1 与 2 才能锁住字段确实在搬运。
@@ -29,9 +29,10 @@ func TestProtocolV36PlayerStateCarriesWeather(t *testing.T) {
 		}
 
 		// 天气恰好接在世界时间之后：末尾依次是 8 字节小端绝对世界时间、
-		// 1 字节天气值，再接 v37 起的季节三字节（此处夹具为零值故三个 00）。
+		// 1 字节天气值，再接 v37 起的季节三字节与 v42 起的 1 字节护甲点数
+		// （此处夹具均为零值故后缀是四个 00）。
 		got := hex.EncodeToString(payload)
-		wantSuffix := "0807060504030201" + hex.EncodeToString([]byte{byte(kind)}) + "00" + "00" + "00"
+		wantSuffix := "0807060504030201" + hex.EncodeToString([]byte{byte(kind)}) + "00" + "00" + "00" + "00"
 		if len(got) < len(wantSuffix) || got[len(got)-len(wantSuffix):] != wantSuffix {
 			t.Fatalf("天气 %d 的 payload = %s，想要以 %s 结尾", kind, got, wantSuffix)
 		}

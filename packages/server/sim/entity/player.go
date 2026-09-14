@@ -103,6 +103,26 @@ type playerState struct {
 	// 它同样留在 playerState 而不是上移 actorState：伙伴不进食。
 	eating eatingState
 
+	// bow 是权威拉弓进度状态机（见 bow.go）：主输入位在持弓时的权威语义。
+	// 与 `eating` 同为瞬态字段，不持久化、不进入快照/哈希，也不上线协议；
+	// 伙伴不持弓拉射，因此与 `eating` 同理留在 playerState。
+	bow bowState
+
+	// armor 是四槽已装备护甲（按 `core.ArmorSlot` 槽位顺序）。装备区唯一写者
+	// 是权威 sim：恢复路径从存档装载、装备互换原子写槽、受击减免时扣耐久、
+	// 死亡与背包一并掉落。槽内只允许「空」或「恰好一件」的护甲件栈（堆叠
+	// 上限 1）；损坏形态以「数量 1、耐久 0」原地表达，不换物品编号。它随
+	// 快照进存档、随 `PlayerHash` 进 parity 断言，但不必置 inventoryDirty：
+	// 点数投影随每 tick 的 `PlayerUpdate` 下发，背包广播不承载装备槽。
+	armor [core.ArmorSlotCount]core.ItemStack
+
+	// sneakingHeld 是玩家本 tick 的持续潜行意图，来自 `Command.Sneaking`
+	// （协议 v41 的 `PlayerInput.Sneaking`），语义与 `miningHeld`/`eatingHeld`
+	// 对称：每 `CommandPlayerInput` 更新一次，供开容器/门床交互分流。
+	//
+	// 它留在 playerState 而不是上移到 actorState：伙伴不潜行。
+	sneakingHeld bool
+
 	// sleeping 是该玩家的入睡位（每玩家一个布尔位，跳夜结算与取消路径的唯一
 	// 权威状态）。置位只发生在夜间对床右键的命令路径；移动输入、受击与跳夜
 	// 完成都会清零。它不持久化：重连即清醒，且跳夜只看当期活跃玩家。
@@ -154,6 +174,12 @@ func (engine *engineContext) RegisterPlayer(id SessionID, restore PlayerRestore)
 	if !restore.Inventory.Valid() {
 		panic("sim: register session with invalid inventory")
 	}
+	// 装备区与背包同界：恢复输入是装备槽唯一的跨重启来源，结构非法（多件栈、
+	// 错槽、非护甲物品、越界耐久）在这里 fail fast，绝不静默降级——静默丢装备
+	// 会破坏「重启后装备与点数保值」的 MUST 且无任何报错。
+	if !armorRestoreValid(restore.Armor) {
+		panic("sim: register session with invalid armor")
+	}
 	candidates := spawnCandidates(restore.SpawnAnchor, engine.tunables.SpawnRadius)
 	health := restore.Health
 	if health == 0 {
@@ -170,6 +196,8 @@ func (engine *engineContext) RegisterPlayer(id SessionID, restore PlayerRestore)
 			yaw: restore.Yaw, pitch: restore.Pitch,
 			inventory:      restore.Inventory,
 			inventoryDirty: true},
+		// 装备区随存档恢复；缺失路径（新玩家、只给锚点的注册）为零值即全空。
+		armor: restore.Armor,
 		// 网格不跨重启保留（spec「网格不入存档」）：注册一律得到空的个人 2×2。
 		// 与 inventoryDirty 同理置初始真，首个 Active tick 发布完整初始状态。
 		crafting:      CraftingGrid{Size: CraftingGridSizePersonal},
@@ -215,9 +243,10 @@ func (engine *engineContext) RegisterPlayer(id SessionID, restore PlayerRestore)
 	}
 	player.spawnWanted[restore.SpawnAnchor] = struct{}{}
 	engine.sessions[id] = &sessionState{
-		id:        id,
-		dimension: restore.SpawnDimension,
-		player:    player,
+		id:           id,
+		dimension:    restore.SpawnDimension,
+		viewDistance: restore.ViewDistance,
+		player:       player,
 	}
 	engine.subscriptionsDirty = true
 }
@@ -311,7 +340,10 @@ func (player *playerState) snapshot(
 		Yaw:       player.yaw,
 		Pitch:     player.pitch,
 		Inventory: player.inventory,
-		Health:    player.health,
+		// 装备四槽原样进快照：持久化路径是它跨重启保留的唯一通道，与背包
+		// 同理，任何一个槽漏进快照都会在重登时静默落回空装备。
+		Armor:  player.armor,
+		Health: player.health,
 		// 三层饥饿状态原样进快照：持久化路径（internal/server 的 save/restore）
 		// 是它跨重启保留的唯一通道，任何一个字段漏进快照都会在重登时静默落回初值。
 		Hunger:          player.hunger,
@@ -336,8 +368,12 @@ func (engine *engineContext) PlayerHash(id SessionID) ([32]byte, bool) {
 		return [32]byte{}, false
 	}
 	player := session.player
-	// 54 字节玩家状态（含 1 字节生命值）+ 1 字节选中栏位 + 每个物品栏位 3 字节。
-	var encoded [54 + 1 + core.InventorySlots*3]byte
+	// 54 字节玩家状态（含 1 字节生命值）+ 1 字节选中栏位 + 每个物品栏位 3 字节
+	// + 每个护甲槽位 5 字节。护甲槽比物品栏位多出的 2 字节是耐久：护甲耐久
+	// 直接参与减免点数与损坏形态，Memory/TCP 的 parity 断言 MUST 覆盖它，
+	// 因此装备区不沿用物品栏位省略耐久的紧凑形态；这里的字节排布是本函数
+	// 自有的哈希前置编码，与存档 codec 无关，也没有解码方。
+	var encoded [54 + 1 + core.InventorySlots*3 + core.ArmorSlotCount*5]byte
 	offset := 0
 	putUint32 := func(value uint32) {
 		binary.LittleEndian.PutUint32(encoded[offset:], value)
@@ -389,6 +425,14 @@ func (engine *engineContext) PlayerHash(id SessionID) ([32]byte, bool) {
 		encoded[offset] = stack.Count
 		offset++
 	}
+	for _, stack := range player.armor {
+		binary.LittleEndian.PutUint16(encoded[offset:], uint16(stack.Item))
+		offset += 2
+		encoded[offset] = stack.Count
+		offset++
+		binary.LittleEndian.PutUint16(encoded[offset:], stack.Durability)
+		offset += 2
+	}
 	return sha256.Sum256(encoded[:]), true
 }
 
@@ -421,6 +465,9 @@ func (player *playerState) update(
 		Oxygen:            player.oxygen,
 		Hunger:            player.hunger,
 		SaturationZero:    player.saturationZero,
+		// 点数投影每次发布时从四槽装备现算：装备区写者分散在恢复/互换/耐久
+		// 各路径，投影处不缓存任何派生值，天然不会出现失效遗漏。
+		ArmorPoints: core.ArmorPoints(player.armor),
 	}
 }
 
@@ -489,17 +536,26 @@ func (engine *engineContext) advanceActivePlayers() {
 		if player.advanceHealthRegen(
 			engine.tunables.RegenDelayTicks,
 			engine.tunables.RegenIntervalTicks,
-			engine.tunables.RegenHungerThreshold,
+			engine.regenHungerThreshold(),
 		) {
 			// 疲劳表：自然回血每回 1 点生命值累积固定疲劳（见 hunger.go）。
-			// 它是全表最大的一项，一次调用会跨过多个阈值。
+			// 它是全表最大的一项，一次调用会跨过多个阈值。三档难度共用同一次
+			// 累积，peaceful 的恢复排在它之后覆盖其消耗效果。
 			player.applyExhaustion(
 				exhaustionRegenPerHealthMilli, engine.tunables.ExhaustionThresholdMilli,
 			)
+			// peaceful 的整数恢复只在**实际回复之后**执行：满血或计时未到时
+			// `advanceHealthRegen` 返回 false，不会走到这里，饥饿状态原样保持。
+			if engine.difficulty == core.DifficultyPeaceful {
+				player.restoreFullHunger()
+			}
 		}
 		// 饥饿伤害与回血计时同处：它同样只在 Active 期间推进，也同样放在 reset
-		// 短路之前——reset 只是位置跳变的当 tick 标记，玩家仍在世界里挨饿。
-		player.advanceStarvation(engine.tunables.StarvationDamageIntervalTicks)
+		// 短路之前——reset 只是位置跳变的当 tick 标记，玩家仍在世界里挨饿。致死性
+		// 由难度分档（peaceful 跳过、normal 硬地板、hard 可致死），见 hunger.go。
+		player.advanceStarvation(
+			engine.difficulty, engine.tunables.StarvationDamageIntervalTicks,
+		)
 		// 进食推进排在饥饿伤害之后：饥饿伤害走 `applyDamage`，而 `applyDamage` 会
 		// 中断进食。反过来排的话，"饿到零的玩家在挨这一拳的同一 tick 吃完面包"
 		// 会先结算进食、再被同一 tick 的伤害打断一个已经不存在的进度——读起来
@@ -508,6 +564,13 @@ func (engine *engineContext) advanceActivePlayers() {
 		// 判据表达，不靠这里的短路代劳。
 		player.advanceEating(
 			engine.tunables.EatingTicks,
+			session.viewContainer || !engine.sessionView(session).Ready,
+		)
+		// 拉弓与进食同相位推进（进食之后、物理步之前）：箭在这一刻生成，第一
+		// 步弹道推进发生在同 tick 稍后的投射物阶段。挂起求值与进食同源，两个
+		// 持续输入状态机对"容器打开/视野未就绪"的中断必须永远一致。
+		engine.advanceBowDraw(
+			session,
 			session.viewContainer || !engine.sessionView(session).Ready,
 		)
 		if player.reset {
@@ -534,6 +597,16 @@ func (engine *engineContext) advanceActivePlayers() {
 		// 后 physics 侧的地面/前移/浸没复核仍各做一遍，保证 sweep bounds 自检一致。
 		if player.hunger < 6 {
 			input.Sprinting = false
+		}
+		// 潜行优先：潜行意图有效时疾跑加速与疲劳都不触发（疾跑互斥的 sim 侧一半）。
+		if input.Sneaking {
+			input.Sprinting = false
+		}
+		// 潜行边缘保护：输入侧钳制意图，sweep bounds 与 Rust 积分天然一致。
+		if input.Sneaking && !input.Jump && (input.MoveX != 0 || input.MoveZ != 0) &&
+			player.state.OnGround && !input.BodyInFluid &&
+			!physics.SneakEdgeHolds(player.state, input.MoveX, input.MoveZ, input.Yaw, source) {
+			input.MoveX, input.MoveZ = 0, 0
 		}
 		// 氧气按「本 tick 开始时的眼睛浸没标志」结算，与传给物理步的是同一个值：
 		// 水下视觉、水中积分与溺水三处共用这一份判定，不存在第二套。
@@ -578,6 +651,7 @@ func (engine *engineContext) advanceActivePlayers() {
 			)
 		}
 		// 疾跑：仅当本 tick 实际按 1.3× 加速时（门控全过）按固定表计费，未加速不计费。
+		// 潜行压制点在上游（饥饿门控后的潜行清零），此处判据无需重复设防。
 		if input.Sprinting && input.MoveZ > 0 && wasOnGround && !input.BodyInFluid {
 			player.applyExhaustion(exhaustionSprintMilli, engine.tunables.ExhaustionThresholdMilli)
 		}
@@ -635,6 +709,9 @@ func (player *playerState) applyDamage(damage int32) {
 	// 因此都必须排在非正伤害的短路**之后**——摔落曲线在安全高度每次落地都会
 	// 算出负值，写在函数第一行会让"跳一下"打断进食。清空只丢进度，不碰背包。
 	player.eating = eatingState{}
+	// 受伤同样中断拉弓（spec「受伤与死亡 MUST 清零拉弓状态且不发射」）：排在
+	// 非正伤害短路之后的理由同上，清空只丢进度，不碰背包与弓耐久。
+	player.bow = bowState{}
 	// 真正挨一下会惊醒入睡的玩家（spec「受到伤害 SHALL 取消其入睡状态」）；
 	// 同样排在非正伤害短路之后。重生点刻意保留：受击只打断睡觉，不否定床。
 	player.sleeping = false
@@ -760,6 +837,9 @@ func (player *playerState) beginReset() {
 	// 死亡与位置跳变都经这里，进食进度随之作废：重生后站在出生点继续吃完
 	// 死前那半块面包没有任何语义，与 `mining` 上一行同理。
 	player.eating = eatingState{}
+	// 死亡与位置跳变同样作废拉弓进度（spec「死亡 MUST 清零拉弓状态且不发射」）：
+	// 重生后补完死前那一箭没有任何语义，与 `eating` 上一行同理。
+	player.bow = bowState{}
 	// 重生一律清醒：入睡位不跨「待重生」窗口保留，否则重生即睡会让下一次
 	// 全员跳夜判定混入一个不在世界里的玩家。
 	player.sleeping = false

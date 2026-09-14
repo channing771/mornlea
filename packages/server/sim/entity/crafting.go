@@ -96,20 +96,23 @@ func setCraftingViewSlot(
 	return next, grid, true
 }
 
-// applyMoveCraftingStack 在网格与背包之间执行一次两次点击整堆移动。
+// applyMoveCraftingStack 在网格与背包之间执行一次至多 amount 个物品的移动；
+// 整堆调用方传来源数量，因此既有整堆语义按位不变。
 //
-// 移动语义（spec「网格移动复用既有整堆移动语义」）：目标为空接收整堆、
-// 同类目标按栈上限合并并把余量留在源格、异类目标 MUST 拒绝（与箱子/熔炉的
-// 交换语义不同——网格不是容器，spec 场景「不同物品不合并」写死了拒绝）。
-// 空源或同格由调用方的值域检查与本函数的空源短路共同拒绝。
+// 移动语义（spec「网格移动复用既有整堆移动语义」）：目标为空按
+// min(amount, 来源数量) 迁移、同类目标按栈上限合并并把余量留在源格、异类
+// 目标 MUST 拒绝（与箱子/熔炉的交换语义不同——网格不是容器，spec 场景
+// 「不同物品不合并」写死了拒绝，部分移动更不做交换）。空源或 amount 为零
+// 由开头的短路共同拒绝；同格与值域由调用方的 `craftingMoveCommandReasons`
+// 拒绝。
 //
 // 全部计算先在局部副本上试算，最后一次性预演回收不变量（`canRepackCrafting`）
 // ——玩家主动移动不得制造「网格无法完整装回背包」的状态，会破坏不变量的
 // 移动整体拒绝且逐格不变。成功后原子写回并置 `inventoryDirty`/`craftingDirty`。
-func (player *playerState) applyMoveCraftingStack(from, to uint8) bool {
+func (player *playerState) applyMoveCraftingStack(from, to, amount uint8) bool {
 	grid, inventory := player.crafting, player.inventory
 	source := craftingViewSlot(inventory, grid, from)
-	if source.Item == core.ItemNone {
+	if source.Item == core.ItemNone || amount == 0 {
 		return false
 	}
 	target := craftingViewSlot(inventory, grid, to)
@@ -117,13 +120,18 @@ func (player *playerState) applyMoveCraftingStack(from, to uint8) bool {
 	nextTarget := core.ItemStack{}
 	switch {
 	case target.Item == core.ItemNone:
-		nextSource, nextTarget = core.ItemStack{}, source
+		// 空目标继承来源的物品与耐久字段，只截断数量。
+		nextTarget = source
+		nextTarget.Count = min(amount, source.Count)
+		if source.Count > nextTarget.Count {
+			nextSource = core.ItemStack{Item: source.Item, Count: source.Count - nextTarget.Count}
+		}
 	case target.Item == source.Item:
 		limit, hasLimit := core.ItemStackLimit(source.Item)
 		if !hasLimit || target.Count >= limit {
 			return false
 		}
-		moved := min(limit-target.Count, source.Count)
+		moved := min(min(amount, source.Count), limit-target.Count)
 		nextTarget = target
 		nextTarget.Count += moved
 		if source.Count > moved {

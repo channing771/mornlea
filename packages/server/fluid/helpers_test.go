@@ -5,6 +5,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/channing771/mornlea/packages/server/updates"
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
@@ -141,24 +142,17 @@ func rescanEnqueue(w *memWorld, q *Queue, now, delay uint64) int {
 // 项数。只供测试判定「预算是否真的成为了约束」，避免用 len(changed) 做代理
 // （变更数远小于处理数）。
 //
-// 遍历 q.order 而不是从前的 q.pending：任务组 10b 修复轮 2 把队列内容的存放处
-// 从 map[BlockPos]uint64 换成了索引最小堆，order 就是队列内容本身（每个排队位置
-// 恰好一条记录），因此这个计数与从前逐字等价——问的仍是「有多少项到期」。
+// 待办存储迁入统一调度器后，这个计数经 `queue.DueCount(KindFluidFlow, now)`
+// 问底层堆，问的问题与从前逐字等价——「有多少项到期」。
 func dueCount(q *Queue, now uint64) int {
-	n := 0
-	for _, it := range q.order {
-		if it.dueTick <= now {
-			n++
-		}
-	}
-	return n
+	return q.queue.DueCount(updates.KindFluidFlow, now)
 }
 
 // requireNoExamineLimitHits 断言 q 从构造到现在，Advance 里那条探视上界守卫
-// （advanceExamineLimit）一次都没触发过。
+// 一次都没触发过（计数镜像自底层统一调度器）。
 //
-// 索引堆下它**应当恒为 0**：每次弹出都消耗一格预算，探视数天然封在 budget+1
-// 以内。这条断言存在的意义不是「验证现在是 0」，而是给那条守卫一个**信号**——
+// 分域堆下它**应当恒为 0**：每次弹出都消耗一格预算，探视数天然封在预算同阶
+// 常数内。这条断言存在的意义不是「验证现在是 0」，而是给那条守卫一个**信号**——
 // 守卫本身在生产路径上只 break 不 panic（权威 tick 上硬失败比轻微吞吐下降糟得多），
 // 若没有人断言这个计数，它触发时现场只会表现为一声不响的吞吐损失。放在大场景
 // 测试里而不是只放在新写的小用例里，是为了让真实规模的推进路径也覆盖到。
@@ -373,14 +367,38 @@ const (
 // 跨测试文件共用的队列断言助手
 // ---------------------------------------------------------------------------
 
+// item 是全序 oracle 的一条记录：位置与到期 tick。
+//
+// 生产队列的条目自统一调度器迁移起由 `packages/server/updates` 承载；本类型与
+// lessItem 是**测试侧**保留的独立第二实现（与 updates 的堆实现零共享），供
+// queue_test.go 检查全序本身、queue_bounded_test.go 当「Advance 到底该取哪
+// budget 项」的 oracle——两条独立实现互相对照，比让 Advance 自己跟自己对照
+// 有意义得多。
+type item struct {
+	pos     core.BlockPos
+	dueTick uint64
+}
+
+// lessItem 实现测试侧 oracle 的全序 (dueTick, ChunkKey 近似, y, z, x)——即
+// 统一调度器全局全序去掉 kind 断尾后的前缀。
+//
+// core.BlockPos 不携带维度，调用方按维度各持独立队列，同一队列内坐标天然
+// 同维，这里用区块坐标 (X, Z) 近似排序键里的 ChunkKey。
+func lessItem(a, b item) bool {
+	if a.dueTick != b.dueTick {
+		return a.dueTick < b.dueTick
+	}
+	return lessPos(a.pos, b.pos)
+}
+
 // sortItems 就地按全序排序 items。
 //
 // 它曾经是 Queue.Advance 的生产实现（每 tick 遍历整张队列内容、收集全部到期项
 // 再整体排序），任务组 10b 把取批换成最小堆之后，生产路径不再需要它。这里刻意
-// 把它保留在**测试侧**：它是 lessItem 全序的一份与最小堆完全独立的第二实现，
-// queue_test.go 用它检查 lessItem 本身，queue_bounded_test.go 用它当「Advance
-// 到底该取哪 budget 项」的 oracle——两条独立实现互相对照，比让 Advance 自己
-// 跟自己对照有意义得多。
+// 把它保留在**测试侧**：它是 lessItem 全序的一份与调度器堆实现完全独立的第二
+// 实现，queue_test.go 用它检查 lessItem 本身，queue_bounded_test.go 用它当
+// 「Advance 到底该取哪 budget 项」的 oracle——两条独立实现互相对照，比让
+// Advance 自己跟自己对照有意义得多。
 func sortItems(items []item) {
 	sort.Slice(items, func(i, j int) bool { return lessItem(items[i], items[j]) })
 }
@@ -389,12 +407,19 @@ func sortItems(items []item) {
 //
 // 任务组 10b 修复轮 2 之前，队列内容存放在 Queue.pending（map[BlockPos]uint64），
 // 测试直接写 q.pending[pos] 就能拿到 dueTick。改成索引最小堆之后，dueTick 的唯一
-// 存放处变成 q.order[q.index[pos]].dueTick——所有既有白盒断言想问的还是同一个问题
-// 「这个位置排定在哪个 tick」，只是问法要跟着表示走，故统一收敛到这个助手。
+// 存放处变成 q.order[q.index[pos]].dueTick；待办存储迁入统一调度器之后，同一
+// 问题经 `queue.DueTick(pos, KindFluidFlow)` 问底层堆。所有既有白盒断言想问的
+// 还是同一件事「这个位置排定在哪个 tick」，只是问法要跟着表示走，故统一收敛到
+// 这个助手。
 func queuedDueTick(q *Queue, pos core.BlockPos) (uint64, bool) {
-	i, ok := q.index[pos]
-	if !ok {
-		return 0, false
-	}
-	return q.order[i].dueTick, true
+	return q.queue.DueTick(pos, updates.KindFluidFlow)
+}
+
+// heapRecords 返回底层统一调度器 FluidFlow 域堆里的记录数。迁移前 fluid 自持
+// 索引堆时白盒测试直接读 len(q.order)；迁移后同一问题经
+// `queue.LenOf(KindFluidFlow)` 问统一调度器——它与 `Queue.Len()`（待办计数）
+// 的口径差正是「堆里每条待办恰好一条记录、无过时残留」这条双射不变量的
+// 可观测量。
+func heapRecords(q *Queue) int {
+	return q.queue.LenOf(updates.KindFluidFlow)
 }

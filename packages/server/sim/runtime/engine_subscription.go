@@ -39,8 +39,20 @@ func (engine *Engine) RegisterObserverSession(id SessionID) {
 	}
 	engine.subscriptions[id] = &subscriptionState{
 		trustedObserver: true,
-		wanted:          make(map[core.ChunkKey]struct{}),
+		// trusted observer 不参与登录协商，订阅范围恒为引擎视界上界。
+		radius: engine.viewRadius,
+		wanted: make(map[core.ChunkKey]struct{}),
 	}
+}
+
+// boundedSessionViewRadius 把会话派生半径钳制到引擎视界：未声明（0）沿用
+// 引擎缺省即上界，声明路径按 min(声明视距+1, 引擎上界) 生效。上界为 0 的
+// 服务端（多人探针现状）两条路径都得到 0，行为与缺省视界时代一致。
+func (engine *Engine) boundedSessionViewRadius(radius int) int {
+	if radius == 0 {
+		return engine.viewRadius
+	}
+	return min(radius, engine.viewRadius)
 }
 
 // WantsChunk reports whether the current union subscription still needs key.
@@ -69,6 +81,7 @@ func (engine *Engine) reconcileSubscriptions(result *TickResult) {
 				session.hasView = true
 				session.dimension = subscription.Dimension
 				session.center = subscription.Center
+				session.radius = engine.boundedSessionViewRadius(subscription.Radius)
 			}
 		}
 		next := engine.sessionWantedSnapshot(sessionID, session)
@@ -142,8 +155,10 @@ func (engine *Engine) sessionWantedSnapshot(
 ) map[core.ChunkKey]struct{} {
 	wanted := make(map[core.ChunkKey]struct{})
 	if session.hasView && engine.dimension(session.dimension) != nil {
-		for dz := -engine.viewRadius; dz <= engine.viewRadius; dz++ {
-			for dx := -engine.viewRadius; dx <= engine.viewRadius; dx++ {
+		// 循环边界是该会话的生效半径：声明视距的会话只订阅自己的方形，
+		// 并集、距离排序与卸载判定都在各自半径的输入集合之上进行。
+		for dz := -session.radius; dz <= session.radius; dz++ {
+			for dx := -session.radius; dx <= session.radius; dx++ {
 				key := core.ChunkKey{
 					Dimension: session.dimension,
 					Pos: core.ChunkPos{

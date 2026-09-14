@@ -496,7 +496,7 @@ func newAudioPlacementApplication(t *testing.T) (*Application, network.ServerEnd
 	if err := app.inventory.Apply(network.InventoryState{Inventory: audioInventory(core.ItemDirt, 2)}); err != nil {
 		t.Fatal(err)
 	}
-	app.placeBlock()
+	app.placeBlock(false)
 	if _, ok := receiveInteractiveClientMessage(t, endpoint).(network.PlaceBlock); !ok {
 		t.Fatal("放置请求未发送")
 	}

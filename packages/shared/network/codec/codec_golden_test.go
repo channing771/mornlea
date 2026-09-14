@@ -20,13 +20,24 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		wantID  uint32
 		wantHex string
 	}{
-		{"hello", protocol.StateHandshake, protocol.ClientHello{ProtocolVersion: 38}, 0, "26"},
-		{"login start", protocol.StateLogin, protocol.LoginStart{PlayerID: id, DisplayName: "Chen"}, 0, "00112233445546778899aabbccddeeff044368656e"},
-		{"input", protocol.StatePlay, protocol.PlayerInput{Sequence: 1, MoveX: -1, MoveZ: 1, Jump: true, Yaw: 1.5, Pitch: -0.5, Mining: true}, 0, "0100000000000000ff01010000c03f000000bf" + "01" + "00" + "00"},
+		{"hello", protocol.StateHandshake, protocol.ClientHello{ProtocolVersion: 44}, 0, "2c"},
+		// v40 新增：`LoginStart` 载荷尾部（`DisplayName` 之后）追加 1 字节
+		// `ViewDistance`（u8，合法域 2..64）。样本取 32（0x20）这个非零非满
+		// 值：取 0 会因域外值连编码都被拒绝，取 64 又与「恰好越界 +1」只差
+		// 一位，任何换位或漏写都会改变尾字节。
+		{"login start", protocol.StateLogin, protocol.LoginStart{PlayerID: id, DisplayName: "Chen", ViewDistance: 32}, 0, "00112233445546778899aabbccddeeff044368656e20"},
+		{"input", protocol.StatePlay, protocol.PlayerInput{Sequence: 1, MoveX: -1, MoveZ: 1, Jump: true, Yaw: 1.5, Pitch: -0.5, Mining: true}, 0, "0100000000000000ff01010000c03f000000bf" + "01" + "00" + "00" + "00"},
 		// v24 新增：进食位是载荷最末一字节。夹具刻意取 Mining=false、
 		// Eating=true——同真同假的样本无法分辨「两个布尔字节写反」的实现。
 		// v28 追加 Sprinting 位（最末字节），此处取 Sprinting=false 以锁死尾部追加语义。
-		{"input eating", protocol.StatePlay, protocol.PlayerInput{Sequence: 2, Eating: true}, 0, "0200000000000000" + "00" + "00" + "00" + "00000000" + "00000000" + "00" + "01" + "00"},
+		// v41 追加 Sneaking 位（最末字节），此处取 Sneaking=false 以锁死尾部追加语义。
+		{"input eating", protocol.StatePlay, protocol.PlayerInput{Sequence: 2, Eating: true}, 0, "0200000000000000" + "00" + "00" + "00" + "00000000" + "00000000" + "00" + "01" + "00" + "00"},
+		// v41 新增：潜行位是载荷最末一字节。两组夹具刻意取 (Sprinting,Sneaking)
+		// 为 (false,true) 与 (true,false)——同真同假的样本无法分辨「末尾两个
+		// 布尔字节写反」的实现。旧版 v40 的 22 字节流在新解码下是截断，必须
+		// 被拒（本表每组夹具的逐长度截断循环已覆盖该拒绝）。
+		{"input sneaking", protocol.StatePlay, protocol.PlayerInput{Sequence: 3, Sneaking: true}, 0, "0300000000000000" + "00" + "00" + "00" + "00000000" + "00000000" + "00" + "00" + "00" + "01"},
+		{"input sprinting", protocol.StatePlay, protocol.PlayerInput{Sequence: 4, Sprinting: true}, 0, "0400000000000000" + "00" + "00" + "00" + "00000000" + "00000000" + "00" + "00" + "01" + "00"},
 		{"place", protocol.StatePlay, protocol.PlaceBlock{Sequence: 3, Yaw: 2, Pitch: -1, Slot: 4}, 2, "030000000000000000000040000080bf04"},
 		{"resync", protocol.StatePlay, protocol.RequestChunkResync{Sequence: 4, Dimension: core.Overworld, Chunk: core.ChunkPos{X: -2, Z: 3}, HaveRevision: 5}, 3, "040000000000000000000000feffffff030000000500000000000000"},
 		{"keep alive reply", protocol.StatePlay, protocol.KeepAliveReply{Token: 6}, 4, "0600000000000000"},
@@ -44,6 +55,9 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 			"100000000000000000000040000080bf"},
 		{"place water", protocol.StatePlay, protocol.PlaceWater{Sequence: 17, Yaw: 2, Pitch: -1}, 17,
 			"110000000000000000000040000080bf"},
+		// v42 新增：装备互换命令与 DropSelectedItem 同形，只携带 u64 序号。
+		{"equip armor", protocol.StatePlay, protocol.EquipArmor{Sequence: 18}, 18,
+			"1200000000000000"},
 	}
 	for _, tc := range clients {
 		t.Run(tc.name, func(t *testing.T) {
@@ -70,8 +84,8 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		wantID  uint32
 		wantHex string
 	}{
-		{"server hello", protocol.StateHandshake, protocol.ServerHello{ProtocolVersion: 38}, 0, "26"},
-		{"handshake reject", protocol.StateHandshake, protocol.HandshakeReject{ServerProtocolVersion: 38, Code: protocol.HandshakeVersionMismatch, Message: "no"}, 1, "2601026e6f"},
+		{"server hello", protocol.StateHandshake, protocol.ServerHello{ProtocolVersion: 44}, 0, "2c"},
+		{"handshake reject", protocol.StateHandshake, protocol.HandshakeReject{ServerProtocolVersion: 42, Code: protocol.HandshakeVersionMismatch, Message: "no"}, 1, "2a01026e6f"},
 		{"login success", protocol.StateLogin, protocol.LoginSuccess{PlayerID: id, WorldSeed: 0x1122334455667788}, 0, "00112233445546778899aabbccddeeff8877665544332211"},
 		{"login reject", protocol.StateLogin, protocol.LoginReject{Code: protocol.LoginInvalidIdentity, Message: "no"}, 1, "02026e6f"},
 		{"block changes", protocol.StatePlay, protocol.BlockChanges{Dimension: core.Overworld, Chunk: core.ChunkPos{X: 1, Z: -1}, BaseRevision: 1, NewRevision: 2, Changes: []protocol.BlockChange{{Position: core.BlockPos{X: 16, Y: -64, Z: -1}, Block: core.StoneID}}}, 1, "0000000001000000ffffffff010000000000000002000000000000000110000000c0ffffffffffffff0200"},
@@ -80,13 +94,15 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		// 零值（晴）时是 0x00。
 		// v37 新增：`Season`/`SeasonProgress`/`Temperature` 尾部 3 字节在
 		// `WeatherKind` 之后，零值（春/季首/0℃）时是三个 0x00。
-		{"inactive player state", protocol.StatePlay, protocol.PlayerState{}, 3, "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" + "00" + "0000" + "00" + "00" + "0000" + "0000000000000000" + "00" + "00" + "00" + "00"},
-		{"active player state", protocol.StatePlay, protocol.PlayerState{Dimension: core.Overworld, MiningActive: true, MiningTarget: core.BlockPos{X: 1, Y: 2, Z: 3}, MiningProgressTicks: 6, MiningRequiredTicks: 15, MiningHarvestable: true, Health: 15, Oxygen: core.MaxOxygenTicks, WorldTimeTicks: 24000}, 3, "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000101000000020000000300000006000f0001" + "0f" + "2c01" + "00" + "00" + "0000" + "c05d000000000000" + "00" + "00" + "00" + "00"},
+		// v42 新增：`ArmorPoints` 尾部 1 字节 u8 在 `Temperature` 之后，
+		// 零值（未穿戴）时是 0x00。
+		{"inactive player state", protocol.StatePlay, protocol.PlayerState{}, 3, "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" + "00" + "0000" + "00" + "00" + "0000" + "0000000000000000" + "00" + "00" + "00" + "00" + "00"},
+		{"active player state", protocol.StatePlay, protocol.PlayerState{Dimension: core.Overworld, MiningActive: true, MiningTarget: core.BlockPos{X: 1, Y: 2, Z: 3}, MiningProgressTicks: 6, MiningRequiredTicks: 15, MiningHarvestable: true, Health: 15, Oxygen: core.MaxOxygenTicks, WorldTimeTicks: 24000}, 3, "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000101000000020000000300000006000f0001" + "0f" + "2c01" + "00" + "00" + "0000" + "c05d000000000000" + "00" + "00" + "00" + "00" + "00"},
 		// 氧气取一个既非 0 也非满值的中间值，锁死它确实按 u16 小端落在 Health 之后：
 		// 取 0 会与相邻字节的零值混淆，取满值又会与"未初始化即满"的实现巧合重合。
 		// v31 起这份夹具同时携带 0x0101 的中间值相位偏移，锁死它按 u16 小端
 		// 落在 `SaturationZero` 之后、`WorldTimeTicks` 之前。
-		{"partially drowned player state", protocol.StatePlay, protocol.PlayerState{Dimension: core.Overworld, Health: 15, Oxygen: 0x0101, DayPhaseOffset: 0x0101, WorldTimeTicks: 24000}, 3, "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" + "0f" + "0101" + "00" + "00" + "0101" + "c05d000000000000" + "00" + "00" + "00" + "00"},
+		{"partially drowned player state", protocol.StatePlay, protocol.PlayerState{Dimension: core.Overworld, Health: 15, Oxygen: 0x0101, DayPhaseOffset: 0x0101, WorldTimeTicks: 24000}, 3, "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" + "0f" + "0101" + "00" + "00" + "0101" + "c05d000000000000" + "00" + "00" + "00" + "00" + "00"},
 		// v24 新增：饥饿值取 12（0x0c）这个既非 0 也非满值的中间值，锁死它确实
 		// 按 u8 落在 Oxygen 之后、WorldTimeTicks 之前。取 0 与「编码器根本没写
 		// 这个字段」不可分辨，取满值又与「未初始化即吃饱」的实现巧合重合。
@@ -95,11 +111,15 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		// 零值时是两个 0x00。
 		// v36 新增：`WeatherKind` 尾部 1 字节 u8 在 `WorldTimeTicks` 之后，
 		// 零值（晴）时是 0x00。
-		{"hungry player state", protocol.StatePlay, protocol.PlayerState{Dimension: core.Overworld, Health: 15, Oxygen: core.MaxOxygenTicks, Hunger: 12, WorldTimeTicks: 24000}, 3, "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" + "0f" + "2c01" + "0c" + "00" + "0000" + "c05d000000000000" + "00" + "00" + "00" + "00"},
+		{"hungry player state", protocol.StatePlay, protocol.PlayerState{Dimension: core.Overworld, Health: 15, Oxygen: core.MaxOxygenTicks, Hunger: 12, WorldTimeTicks: 24000}, 3, "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" + "0f" + "2c01" + "0c" + "00" + "0000" + "c05d000000000000" + "00" + "00" + "00" + "00" + "00"},
 		// v37 新增：`Season`/`SeasonProgress`/`Temperature` 尾部 3 字节在
 		// `WeatherKind` 之后；样本取秋/128/−8（0x02/0x80/0xf8）三个中间值，
 		// 任一换位或漏写都会改变尾部字节，零值样本则与「字段未搬运」不可分辨。
-		{"seasonal player state", protocol.StatePlay, protocol.PlayerState{Dimension: core.Overworld, Health: 15, Oxygen: core.MaxOxygenTicks, Hunger: 12, WorldTimeTicks: 24000, WeatherKind: core.WeatherRain, Season: core.SeasonAutumn, SeasonProgress: 128, Temperature: -8}, 3, "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" + "0f" + "2c01" + "0c" + "00" + "0000" + "c05d000000000000" + "01" + "02" + "80" + "f8"},
+		{"seasonal player state", protocol.StatePlay, protocol.PlayerState{Dimension: core.Overworld, Health: 15, Oxygen: core.MaxOxygenTicks, Hunger: 12, WorldTimeTicks: 24000, WeatherKind: core.WeatherRain, Season: core.SeasonAutumn, SeasonProgress: 128, Temperature: -8}, 3, "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" + "0f" + "2c01" + "0c" + "00" + "0000" + "c05d000000000000" + "01" + "02" + "80" + "f8" + "00"},
+		// v42 新增：护甲点数取铁质满套 15（0x0f）这个非零中间值，锁死它确实
+		// 按载荷最末 1 字节落在 `Temperature` 之后：取 0 会与相邻零值字节混淆，
+		// 任何换位或漏写都会改变尾字节。
+		{"armored player state", protocol.StatePlay, protocol.PlayerState{Dimension: core.Overworld, Health: 15, Oxygen: core.MaxOxygenTicks, Hunger: 12, WorldTimeTicks: 24000, WeatherKind: core.WeatherRain, Season: core.SeasonAutumn, SeasonProgress: 128, Temperature: -8, ArmorPoints: 15}, 3, "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" + "0f" + "2c01" + "0c" + "00" + "0000" + "c05d000000000000" + "01" + "02" + "80" + "f8" + "0f"},
 		{"command rejected", protocol.StatePlay, protocol.CommandRejected{Sequence: 7, Reason: protocol.RejectOccupied}, 4, "070000000000000006"},
 		{"place block succeeded", protocol.StatePlay, protocol.PlaceBlockSucceeded{Sequence: 0x1122334455667788}, 20, "8877665544332211"},
 		{"keep alive", protocol.StatePlay, protocol.KeepAlive{Token: 8}, 5, "0800000000000000"},
@@ -195,6 +215,7 @@ func TestSmallPacketCommandRejectedReasonWireValues(t *testing.T) {
 		{"occupied", protocol.RejectOccupied, "010000000000000006"},
 		{"invalid input", protocol.RejectInvalidInput, "010000000000000007"},
 		{"player not ready", protocol.RejectPlayerNotReady, "010000000000000008"},
+		{"not armor", protocol.RejectNotArmor, "01000000000000000f"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

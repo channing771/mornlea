@@ -131,6 +131,8 @@ func networkRejectReason(reason contract.RejectReason) (network.RejectReason, bo
 		return network.RejectNotFluidSource, true
 	case contract.RejectBucketMismatch:
 		return network.RejectBucketMismatch, true
+	case contract.RejectNotArmor:
+		return network.RejectNotArmor, true
 	default:
 		return "", false
 	}

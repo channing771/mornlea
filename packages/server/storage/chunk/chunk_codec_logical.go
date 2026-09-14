@@ -220,6 +220,11 @@ func decodeKey(d *byteDecoder) (core.ChunkKey, error) {
 	if err != nil {
 		return core.ChunkKey{}, err
 	}
+	// 维度值域只放行主世界与 `Depths`：越界维度以损坏拒绝，调用方经 `corrupt`
+	// 包装后既不落盘也不覆盖既有数据。
+	if dimension > uint32(core.Depths) {
+		return core.ChunkKey{}, fmt.Errorf("unsupported dimension %d", dimension)
+	}
 	x, err := d.u32()
 	if err != nil {
 		return core.ChunkKey{}, err

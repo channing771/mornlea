@@ -47,6 +47,7 @@ type (
 	HostileMob          = contract.HostileMob
 	HostileAction       = contract.HostileAction
 	PassiveMob          = contract.PassiveMob
+	ProjectileSnapshot  = contract.ProjectileSnapshot
 )
 
 const (
@@ -68,6 +69,12 @@ const (
 	CommandInteractBed           = contract.CommandInteractBed
 	CommandCollectWater          = contract.CommandCollectWater
 	CommandPlaceWater            = contract.CommandPlaceWater
+	CommandEquipArmor            = contract.CommandEquipArmor
+	CommandMoveStackPartial      = contract.CommandMoveStackPartial
+	CommandQuickMoveStack        = contract.CommandQuickMoveStack
+	StackViewInventory           = contract.StackViewInventory
+	StackViewCrafting            = contract.StackViewCrafting
+	StackViewContainer           = contract.StackViewContainer
 	RejectInvalidRay             = contract.RejectInvalidRay
 	RejectNoTarget               = contract.RejectNoTarget
 	RejectChunkNotReady          = contract.RejectChunkNotReady
@@ -82,6 +89,7 @@ const (
 	RejectContainerCapacity      = contract.RejectContainerCapacity
 	RejectNotFluidSource         = contract.RejectNotFluidSource
 	RejectBucketMismatch         = contract.RejectBucketMismatch
+	RejectNotArmor               = contract.RejectNotArmor
 	CompanionActionMove          = contract.CompanionActionMove
 	CompanionActionMineHold      = contract.CompanionActionMineHold
 	CompanionActionMineRelease   = contract.CompanionActionMineRelease
@@ -96,6 +104,8 @@ const (
 	ChunkFailed                  = contract.ChunkFailed
 	ChunkUnloading               = contract.ChunkUnloading
 	HostileAttackRange           = contract.HostileAttackRange
+	HostileKindNightwalker       = contract.HostileKindNightwalker
+	HostileKindBoneThrower       = contract.HostileKindBoneThrower
 )
 
 func LookDirection(yaw, pitch float32) mgl32.Vec3 {

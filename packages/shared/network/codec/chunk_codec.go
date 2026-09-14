@@ -294,8 +294,8 @@ func decodeLogicalSnapshot(data []byte) (protocol.ChunkSnapshot, error) {
 }
 
 func validateSnapshotDimension(dimension core.DimensionID) error {
-	if dimension != core.Overworld {
-		return fmt.Errorf("snapshot dimension %d is not overworld", dimension)
+	if dimension != core.Overworld && dimension != core.Depths {
+		return fmt.Errorf("snapshot dimension %d is not overworld or depths", dimension)
 	}
 	return nil
 }

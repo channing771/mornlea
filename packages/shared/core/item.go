@@ -111,6 +111,31 @@ const (
 	// 不经 `ItemPlacement` 放置（取水/倒水走流体交互窗口），只能追加在哨兵前。
 	ItemEmptyBucket
 	ItemWaterBucket
+	// ItemSapling 是橡树树苗物品：放置成 SaplingID，堆叠 64、无耐久，不参与
+	// 任何合成配方。获取途径只有树苗方块的移除（采掘、支撑消失、被流体冲毁）
+	// 与完成采掘树叶时的独立概率判定，两者都走既有权威掉落物系统。同样只能
+	// 追加在 `ItemIDMax` 哨兵之前。
+	ItemSapling
+	// 四件铁质护甲是可穿戴物品：堆叠上限 1、不经 `ItemPlacement` 放置、
+	// 不出现在任何 `BlockDrop` 表（唯一来源是护甲配方）；耐久上限登记在
+	// `ItemMaxDurability`，数值单一真源在 armor 域。损坏形态沿耐久原地表达
+	// （耐久归零的护甲件保留在槽内贡献 0 点，见 armor 域 `ArmorPoints`），
+	// 不新增损坏物品编号。同样只能追加在 `ItemIDMax` 哨兵之前。
+	ItemIronHelmet
+	ItemIronChestplate
+	ItemIronLeggings
+	ItemIronBoots
+	// 弓箭四件沿远程战斗批次追加在哨兵之前：`ItemBow` 是玩家可拉弓的远程
+	// 武器，堆叠上限 1，耐久上限登记在 `ItemMaxDurability`，耐久归零沿工具
+	// 同款机制换成损坏形态 `ItemBrokenBow`；`ItemArrow` 是弓的弹药，`ItemBone`
+	// 是掷骨者死亡掉落的战利品，两者都可堆叠 64、没有耐久。四件都不出现在
+	// 任何 `BlockDrop` 表（箭的唯一来源是合成，骨头与弓来自权威模拟的敌怪
+	// 掉落路径）、不经 `ItemPlacement` 放置。同样只能追加在 `ItemIDMax`
+	// 哨兵之前。
+	ItemBow
+	ItemArrow
+	ItemBone
+	ItemBrokenBow
 	// ItemIDMax 是合法物品编号的独占上界（最后一个合法 ItemID + 1），本身不是
 	// 物品枚举成员。它供测试以「item < ItemIDMax」穷举全部物品，替代依赖
 	//「某个具体物品恰为枚举末项」的脆弱写法；放在 core 是因为物品注册表归属
@@ -304,6 +329,11 @@ func BlockDrop(block BlockID) (ItemID, bool) {
 	case BedFootSouthID, BedFootWestID, BedFootNorthID, BedFootEastID,
 		BedHeadSouthID, BedHeadWestID, BedHeadNorthID, BedHeadEastID:
 		return ItemBed, true
+	// 树苗采掘与环境移除（支撑被移除、被流体冲毁）都掉回恰好 1 个树苗物品。
+	// 树叶的树苗掉落刻意不登记在这里：那是完成采掘时按世界种子、维度与坐标
+	// 冻结的独立概率判定，本表只表达确定性的单产物映射。
+	case SaplingID:
+		return ItemSapling, true
 	default:
 		return ItemNone, false
 	}
@@ -320,7 +350,10 @@ func ItemStackLimit(item ItemID) (uint8, bool) {
 		ItemWheatSeeds, ItemWheat, ItemBread,
 		ItemStick, ItemWorkbench, ItemBoneMeal,
 		ItemPotato, ItemCarrot, ItemPoisonousPotato, ItemDoor,
-		ItemTorch, ItemRottenFlesh, ItemBed, ItemRawBeef, ItemCookedBeef:
+		ItemTorch, ItemRottenFlesh, ItemBed, ItemRawBeef, ItemCookedBeef, ItemSapling,
+		// 箭与骨头是可堆叠的消耗材料：箭由砾石加木棍合成，骨头来自掷骨者
+		// 掉落，两者都没有耐久概念。
+		ItemArrow, ItemBone:
 		return MaxStackCount, true
 	case ItemStonePickaxe, ItemIronPickaxe,
 		ItemBrokenStonePickaxe, ItemBrokenIronPickaxe,
@@ -329,6 +362,12 @@ func ItemStackLimit(item ItemID) (uint8, bool) {
 		ItemWoodenSword, ItemStoneSword, ItemIronSword,
 		ItemBrokenWoodenSword, ItemBrokenStoneSword, ItemBrokenIronSword,
 		ItemEmptyBucket, ItemWaterBucket:
+		return 1, true
+	// 护甲件与工具同形：单件穿戴、不可堆叠。
+	case ItemIronHelmet, ItemIronChestplate, ItemIronLeggings, ItemIronBoots:
+		return 1, true
+	// 弓与损坏的弓沿工具先例：单件持有、不可堆叠，耐久状态由字段表达。
+	case ItemBow, ItemBrokenBow:
 		return 1, true
 	default:
 		return 0, false
@@ -348,6 +387,10 @@ func ItemMaxDurability(item ItemID) (uint16, bool) {
 		return 131, true
 	case ItemIronSword:
 		return 250, true
+	// 弓的耐久上限数值只登记在这一张表里：发射结算每次成功射击恰扣 1 点，
+	// 与镐/锄的「每次成功动作恰扣 1 点」节奏同形。
+	case ItemBow:
+		return 120, true
 	// 锄头取与同材质镐相同的耐久：两者都是「每次成功动作恰好扣 1 点」的工具
 	// （采掘破坏方块扣 1、翻地成功扣 1），同一材质给两种工具不同数值只会制造
 	// 第二套没有来源的数字，也会让「石器换代到铁器」的手感在采掘与耕种两条线
@@ -356,6 +399,16 @@ func ItemMaxDurability(item ItemID) (uint16, bool) {
 		return 131, true
 	case ItemIronHoe:
 		return 250, true
+	// 铁质护甲的耐久上限数值单一真源在 armor 域：本表只登记「这些物品有
+	// 耐久上限」，不复制数值。
+	case ItemIronHelmet:
+		return ironHelmetMaxDurability, true
+	case ItemIronChestplate:
+		return ironChestplateMaxDurability, true
+	case ItemIronLeggings:
+		return ironLeggingsMaxDurability, true
+	case ItemIronBoots:
+		return ironBootsMaxDurability, true
 	default:
 		return 0, false
 	}
@@ -378,6 +431,9 @@ func ItemBrokenForm(item ItemID) (ItemID, bool) {
 		return ItemBrokenStoneSword, true
 	case ItemIronSword:
 		return ItemBrokenIronSword, true
+	// 弓沿工具先例：耐久归零原地换成损坏形态，损坏的弓不可再拉弓。
+	case ItemBow:
+		return ItemBrokenBow, true
 	default:
 		return ItemNone, false
 	}
@@ -478,6 +534,10 @@ func ItemPlacement(item ItemID) (BlockID, bool) {
 	// 由放置执行方经 BedHeadID/BedHeadNeighbor 原子完成。
 	case ItemBed:
 		return BedFootSouthID, true
+	// 树苗与床同形：单值映射给出方块编号，「只能种在泥土或草地上方」的支撑
+	// 约束由放置执行方校验——本窗口只回答写哪个编号，不回答能不能写。
+	case ItemSapling:
+		return SaplingID, true
 	default:
 		return AirID, false
 	}

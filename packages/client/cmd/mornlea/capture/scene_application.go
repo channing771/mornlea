@@ -95,6 +95,10 @@ type SceneApplication interface {
 	Hostiles() *client.Hostiles
 	HostilePresentations() []client.HostilePresentation
 	SetHostilePresentations(presentations []client.HostilePresentation)
+	// 权威投射物镜像：capture 场景经与权威消息相同的 Apply 入口注入飞行
+	// 夹具（骨刺/箭），公共清理经 Reset 恢复；未装配时为 nil，调用方需先
+	// 判空。
+	Projectiles() *client.Projectiles
 	// 被动牛镜像：capture 场景经与权威消息相同的 Apply 入口注入夹具牛群，
 	// 公共清理经 Reset 恢复；未装配时为 nil，调用方需先判空。
 	Passives() *client.Passives

@@ -3,6 +3,7 @@ package entity
 import (
 	"github.com/go-gl/mathgl/mgl32"
 
+	"github.com/channing771/mornlea/packages/server/sim/contract"
 	"github.com/channing771/mornlea/packages/server/sim/realm"
 	"github.com/channing771/mornlea/packages/shared/companion"
 	"github.com/channing771/mornlea/packages/shared/core"
@@ -51,6 +52,13 @@ func (state *State) PlayerSnapshot(id SessionID) (PlayerSnapshot, bool) {
 	return (&engineContext{State: state}).PlayerSnapshot(id)
 }
 
+// Difficulty 读出构造期注入的世界难度快照。它只读：供宿主装配断言接线是否
+// 把 metadata 的难度原样传进模拟，规则消费全部在包内分档点完成，不提供任何
+// 写入口。
+func (state *State) Difficulty() core.Difficulty {
+	return state.difficulty
+}
+
 func (state *State) PlayerHash(id SessionID) ([32]byte, bool) {
 	return (&engineContext{State: state}).PlayerHash(id)
 }
@@ -85,6 +93,19 @@ func (state *State) RestoreHostile(
 
 func (state *State) HostileMobs() []HostileMob {
 	return (&engineContext{State: state}).HostileMobs()
+}
+
+// ProjectilesForTest 返回在飞投射物的全量值快照（ID 升序），供 server 侧
+// 集成测试断言射击结果；生产消费走 TickResult 投影与发布路径，不经本入口。
+func (state *State) ProjectilesForTest() []ProjectileSnapshot {
+	return (&engineContext{State: state}).projectilesSnapshot()
+}
+
+// Projectiles 返回按 ID 升序的全量在飞投射物投影，供发布侧组装按会话订阅的
+// spawn/state 批次（despawn 由「镜像有而截面无」差异派生）。投射物是瞬态
+// 实体：不进快照或存档，重启后投影为空。
+func (state *State) Projectiles() []contract.ProjectileSnapshot {
+	return (&engineContext{State: state}).projectilesSnapshot()
 }
 
 func (state *State) PlanHostileChase(

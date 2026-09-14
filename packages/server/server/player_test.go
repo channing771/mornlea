@@ -204,6 +204,16 @@ func TestTranslatePlayerMessage(t *testing.T) {
 			},
 		},
 		{
+			name:    "input carries sneaking bit",
+			message: network.PlayerInput{Sequence: 7, Sneaking: true},
+			want: contract.Command{
+				Session:  testSessionID,
+				Sequence: 7,
+				Kind:     contract.CommandPlayerInput,
+				Sneaking: true,
+			},
+		},
+		{
 			name: "place block uses only player look",
 			message: network.PlaceBlock{
 				Sequence: 13,
@@ -371,6 +381,80 @@ func TestTranslatePlayerMessage(t *testing.T) {
 				Pitch:    0.15,
 			},
 		},
+		{
+			// 分堆部分移动必须逐字段搬运：`View` 经显式映射进 `StackView`、
+			// `Container`→`Furnace`、`From`→`Slot`、`To`→`ToSlot`、`Single`
+			// 直传——容器视图下的引用与两档数量位缺一都会让权威结算走错域。
+			name: "move stack partial carries view, ref, slots and single bit",
+			message: network.MoveStackPartial{
+				Sequence: 28,
+				Container: core.ContainerRef{
+					Dimension: core.Overworld, Chunk: core.ChunkPos{X: -1, Z: 4},
+					Kind: core.ContainerKindFurnace, Slot: 2, Generation: 7,
+				},
+				View:   network.StackViewContainer,
+				From:   5,
+				To:     36,
+				Single: true,
+			},
+			want: contract.Command{
+				Session:  testSessionID,
+				Sequence: 28,
+				Kind:     contract.CommandMoveStackPartial,
+				Furnace: core.ContainerRef{
+					Dimension: core.Overworld, Chunk: core.ChunkPos{X: -1, Z: 4},
+					Kind: core.ContainerKindFurnace, Slot: 2, Generation: 7,
+				},
+				StackView: contract.StackViewContainer,
+				Slot:      5,
+				ToSlot:    36,
+				Single:    true,
+			},
+		},
+		{
+			// 快捷搬运没有目标格：视图域、容器引用与来源格之外不得携带
+			// 任何目标字段，目标序完全由服务端权威推导。
+			name: "quick move stack carries view, ref and source slot only",
+			message: network.QuickMoveStack{
+				Sequence: 29,
+				Container: core.ContainerRef{
+					Dimension: core.Overworld, Chunk: core.ChunkPos{X: 2, Z: -3},
+					Kind: core.ContainerKindChest, Slot: 1, Generation: 4,
+				},
+				View: network.StackViewContainer,
+				From: 40,
+			},
+			want: contract.Command{
+				Session:  testSessionID,
+				Sequence: 29,
+				Kind:     contract.CommandQuickMoveStack,
+				Furnace: core.ContainerRef{
+					Dimension: core.Overworld, Chunk: core.ChunkPos{X: 2, Z: -3},
+					Kind: core.ContainerKindChest, Slot: 1, Generation: 4,
+				},
+				StackView: contract.StackViewContainer,
+				Slot:      40,
+			},
+		},
+		{
+			// 背包视图的分堆命令不携带容器引用：非容器视图的零值引用约束
+			// 在协议校验层钉住，ingress 只需按零值引用原样搬运。
+			name: "inventory view partial carries no container ref",
+			message: network.MoveStackPartial{
+				Sequence: 30,
+				View:     network.StackViewInventory,
+				From:     0,
+				To:       9,
+			},
+			want: contract.Command{
+				Session:   testSessionID,
+				Sequence:  30,
+				Kind:      contract.CommandMoveStackPartial,
+				StackView: contract.StackViewInventory,
+				Slot:      0,
+				ToSlot:    9,
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -395,6 +479,21 @@ func TestTranslatePlayerMessage(t *testing.T) {
 		if !ok || got != reason.network {
 			t.Fatalf("networkRejectReason(%v) = %q,%v，想要 %q,true", reason.sim, got, ok, reason.network)
 		}
+	}
+}
+
+// TestTranslateStackSplitRejectsUnnamedView 锁定 ingress 对视图域字节的显式
+// 映射纪律：协议与 sim 契约的常量等值由 contract 钉值测试担保，但 ingress
+// 绝不盲目透传 wire 字节——值域之外（协议侧将来扩视图而 sim 未跟进）的
+// 视图必须按未知消息失败，而不是把未定义值漏进权威结算。
+func TestTranslateStackSplitRejectsUnnamedView(t *testing.T) {
+	unknown := network.MoveStackPartial{Sequence: 1, View: 3, From: 0, To: 9}
+	if _, ok := translateClientMessage(testSessionID, unknown); ok {
+		t.Fatal("未知视图的部分移动被翻译成功，想要按未知消息失败")
+	}
+	unknownQuick := network.QuickMoveStack{Sequence: 2, View: 200, From: 0}
+	if _, ok := translateClientMessage(testSessionID, unknownQuick); ok {
+		t.Fatal("未知视图的快捷搬运被翻译成功，想要按未知消息失败")
 	}
 }
 
@@ -672,7 +771,7 @@ func containsChunk(keys []core.ChunkKey, pos core.ChunkPos) bool {
 	return false
 }
 
-func (playerTestGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (playerTestGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	chunk := world.NewChunk(position)
 	for z := 0; z < core.SectionSize; z++ {
 		for x := 0; x < core.SectionSize; x++ {

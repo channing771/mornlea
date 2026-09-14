@@ -26,7 +26,7 @@ import (
 // # 确定性
 //
 // 收集序固定：`advanceActivePlayers` 按 SessionID 升序处理玩家，每名玩家的
-// 覆盖格按 X 后 Z 的行序枚举，暂存只做追加。掉落数量完全复用 `cropYieldRolls`
+// 覆盖格按 X 后 Z 的行序枚举，暂存只做追加。掉落数量完全复用 `CropYieldRolls`
 // 且 tick 取值点与 `completeMining` 同一读取路径（`engine.tick.Load()`），同一株
 // 作物在同一权威 tick 上无论被踩掉还是被挖掉，产物逐件相同，重放一致。
 
@@ -119,17 +119,17 @@ func (engine *engineContext) settleTrampleCell(
 	if !hasCrop {
 		// 上方无作物：耕地转泥土是方块转换而非破坏，本身不掉落任何物品
 		//（spec：耕地转泥土本身 MUST NOT 产生掉落物）。
-		_, changed, err := dimension.SetBlock(cell.position, core.DirtID)
+		old, changed, err := dimension.SetBlock(cell.position, core.DirtID)
 		if err != nil || !changed {
 			return
 		}
-		engine.recordChange(cell.dimension, cell.position, core.DirtID, pending)
+		engine.recordChange(cell.dimension, cell.position, old, core.DirtID, pending)
 		return
 	}
 
-	// 上方有作物：按采掘同形规则准备掉落——成熟小麦走 `cropYieldRolls` 确定性
-	// 双产物，未成熟作物走 `core.BlockDrop` 的单产物（1 颗种子）。掉落预演
-	// （容量前验）必须先于任何方块写入，整格原子性由它保证。
+	// 上方有作物：按采掘同形规则准备掉落——成熟小麦走 `updates.Sampler` 的
+	// `CropYieldRolls` 确定性双产物，未成熟作物走 `core.BlockDrop` 的单产物
+	// （1 颗种子）。掉落预演（容量前验）必须先于任何方块写入，整格原子性由它保证。
 	chunk, recordOK := dimension.ReadyChunk(crop.Chunk())
 	blockIndex, indexOK := world.ChunkBlockIndex(crop)
 	if !recordOK || !indexOK {
@@ -140,7 +140,7 @@ func (engine *engineContext) settleTrampleCell(
 		return
 	}
 	if cropBlock == core.WheatStage7ID {
-		wheatCount, seedCount := cropYieldRolls(
+		wheatCount, seedCount := sampler.CropYieldRolls(
 			engine.seed, engine.tick.Load(), cell.dimension, crop,
 		)
 		stacks := [2]core.ItemStack{
@@ -189,14 +189,15 @@ func (engine *engineContext) commitTrample(
 	crop core.BlockPos,
 	pending *pendingChunkChanges,
 ) bool {
-	if _, changed, err := dimension.SetBlock(cell.position, core.DirtID); err != nil || !changed {
-		return false
-	}
-	engine.recordChange(cell.dimension, cell.position, core.DirtID, pending)
-	_, changed, err := dimension.SetBlock(crop, core.AirID)
+	groundOld, changed, err := dimension.SetBlock(cell.position, core.DirtID)
 	if err != nil || !changed {
 		return false
 	}
-	engine.recordChange(cell.dimension, crop, core.AirID, pending)
+	engine.recordChange(cell.dimension, cell.position, groundOld, core.DirtID, pending)
+	cropOld, changed, err := dimension.SetBlock(crop, core.AirID)
+	if err != nil || !changed {
+		return false
+	}
+	engine.recordChange(cell.dimension, crop, cropOld, core.AirID, pending)
 	return true
 }

@@ -203,7 +203,7 @@ func celestialTestEndpoints(t *testing.T, transport string) (network.ClientEndpo
 	}
 	clientEndpoint, err := network.LoginClient(context.Background(), clientStream.stream, network.Identity{
 		PlayerID: integrationPlayerID(9), DisplayName: "Celestial",
-	})
+	}, 32)
 	if err != nil {
 		t.Fatal(err)
 	}

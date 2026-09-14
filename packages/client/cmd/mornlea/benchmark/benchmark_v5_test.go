@@ -16,9 +16,9 @@ import (
 	application "github.com/channing771/mornlea/packages/client/cmd/mornlea/app"
 )
 
-func TestBenchmarkScenarioVersionIncludesNaturalGrassWorkload(t *testing.T) {
-	if scenarioVersion != 22 {
-		t.Fatalf("scenarioVersion=%d，想要叠加在 v21（常显 HUD 迁出）之上的自然短草 v22", scenarioVersion)
+func TestBenchmarkScenarioVersionIncludesUnifiedSchedulerAndWorldStreaming(t *testing.T) {
+	if scenarioVersion != 23 {
+		t.Fatalf("scenarioVersion=%d，想要叠加在 v22（自然短草）之上的统一调度器与世界流式 v23", scenarioVersion)
 	}
 }
 

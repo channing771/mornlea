@@ -174,11 +174,14 @@ type fluidTickSample struct {
 	// 对照；测量代码一行未改，改的只是这段说明。
 	scan     time.Duration
 	scanSort time.Duration
-	// `fluid` 是 `phaseFluidAdvance` 到 `phaseFarmlandMoistureAdvance` 的净耗时；
-	// `moisture` 是湿度阶段到 `phaseCropAdvance` 的净耗时。两个阶段必须分开记录，
-	// 否则恢复重扫的固定预算成本会被误算进流体。
-	fluid    time.Duration
-	moisture time.Duration
+	// `block` 是 `phaseBlockUpdates` 相位入口到本 tick `Step` 返回的净耗时。旧的
+	// 流体/湿度/作物三个相位收敛为单一方块更新相位（change
+	// unified-block-updates-world-streaming）后，相位观察面只剩一个入口通知，
+	// 「流体段」「湿度段」的内部边界不再可观测，逐段测量退役；该口径因此还
+	// 包含相位之后的固定尾段（FinishWorld 与四个支撑 sweep、发布）。要归因
+	// 流体域自身的成本，用 `scan` / `scanSort` 的隔离探针读数与 `step` 总时长
+	// 对照。
+	block time.Duration
 	// step 是整个权威 tick 的墙钟时间，与 20 TPS 的 50 ms 预算直接可比。
 	step time.Duration
 }
@@ -204,15 +207,10 @@ func measureFluidTicks(t *testing.T, engine *Engine, ticks int) []fluidTickSampl
 	}
 	adapter := fluidPerfAdapter(engine)
 
-	var fluidAt, moistureAt, cropAt time.Time
+	var blockAt time.Time
 	engine.stepPhaseObserver = func(phase stepPhase) {
-		switch phase {
-		case phaseFluidAdvance:
-			fluidAt = time.Now()
-		case phaseFarmlandMoistureAdvance:
-			moistureAt = time.Now()
-		case phaseCropAdvance:
-			cropAt = time.Now()
+		if phase == phaseBlockUpdates {
+			blockAt = time.Now()
 		}
 	}
 	defer func() { engine.stepPhaseObserver = nil }()
@@ -236,18 +234,13 @@ func measureFluidTicks(t *testing.T, engine *Engine, ticks int) []fluidTickSampl
 			t.Fatalf("排序探针改变了状态: changed=%d, Len %d→%d", len(changed), before, queue.Len())
 		}
 
-		fluidAt = time.Time{}
-		moistureAt = time.Time{}
-		cropAt = time.Time{}
+		blockAt = time.Time{}
 		start = time.Now()
 		engine.Step()
 		step := time.Since(start)
-		var fluidDuration, moistureDuration time.Duration
-		if !fluidAt.IsZero() && !moistureAt.IsZero() {
-			fluidDuration = moistureAt.Sub(fluidAt)
-		}
-		if !moistureAt.IsZero() && !cropAt.IsZero() {
-			moistureDuration = cropAt.Sub(moistureAt)
+		var blockDuration time.Duration
+		if !blockAt.IsZero() {
+			blockDuration = time.Since(blockAt)
 		}
 
 		samples = append(samples, fluidTickSample{
@@ -256,8 +249,7 @@ func measureFluidTicks(t *testing.T, engine *Engine, ticks int) []fluidTickSampl
 			queueAfter:  queue.Len(),
 			scan:        scan,
 			scanSort:    scanSort,
-			fluid:       fluidDuration,
-			moisture:    moistureDuration,
+			block:       blockDuration,
 			step:        step,
 		})
 	}
@@ -267,24 +259,20 @@ func measureFluidTicks(t *testing.T, engine *Engine, ticks int) []fluidTickSampl
 // reportFluidSamples 打印场景的规模坐标与最坏 tick 的耗时构成，并返回队列规模
 // 最大的那条样本，供调用方做夹具有效性守卫。
 //
-// 报告四条不同口径的「最坏」：整 tick 最慢、流体段最慢、湿度段最慢、队列最大。
-// 四者常常不是同一个 tick，只报其中一条会掩盖另外三条——本次复测里「整 tick
-// 最慢」与「队列最大」就落在相差近两千 tick 的两个位置上。
+// 报告三条不同口径的「最坏」：整 tick 最慢、方块更新段最慢、队列最大。三者
+// 常常不是同一个 tick，只报其中一条会掩盖另外几条。
 func reportFluidSamples(t *testing.T, name string, samples []fluidTickSample) fluidTickSample {
 	t.Helper()
 	if len(samples) == 0 {
 		t.Fatalf("%s: 没有采到任何样本", name)
 	}
-	worstStep, worstFluid, worstMoisture, peakQueue := samples[0], samples[0], samples[0], samples[0]
+	worstStep, worstBlock, peakQueue := samples[0], samples[0], samples[0]
 	for _, sample := range samples[1:] {
 		if sample.step > worstStep.step {
 			worstStep = sample
 		}
-		if sample.fluid > worstFluid.fluid {
-			worstFluid = sample
-		}
-		if sample.moisture > worstMoisture.moisture {
-			worstMoisture = sample
+		if sample.block > worstBlock.block {
+			worstBlock = sample
 		}
 		if sample.queueBefore > peakQueue.queueBefore {
 			peakQueue = sample
@@ -298,17 +286,16 @@ func reportFluidSamples(t *testing.T, name string, samples []fluidTickSample) fl
 		sample fluidTickSample
 	}{
 		{"整 tick 最慢", worstStep},
-		{"流体段最慢", worstFluid},
-		{"湿度段最慢", worstMoisture},
+		{"方块更新段最慢", worstBlock},
 		{"队列最大", peakQueue},
 	} {
 		s := item.sample
 		// 两个只读探针与真实 Advance 是三次独立的墙钟测量，差值在处理成本
 		// 低于测量噪声时可能为负；按 0 记并如实标注，不倒填一个好看的正数。
-		t.Logf("[%s] %s: tick=%d 队列 %d→%d 项 | Step=%v 流体段=%v 湿度段=%v | 遍历 map=%v 排序=%v 流体处理及其余=%v",
+		t.Logf("[%s] %s: tick=%d 队列 %d→%d 项 | Step=%v 方块更新段=%v | 遍历 map=%v 排序=%v",
 			name, item.label, s.tick, s.queueBefore, s.queueAfter,
-			s.step, s.fluid, s.moisture, s.scan,
-			clampNonNegative(s.scanSort-s.scan), clampNonNegative(s.fluid-s.scanSort))
+			s.step, s.block, s.scan,
+			clampNonNegative(s.scanSort-s.scan))
 	}
 	return peakQueue
 }

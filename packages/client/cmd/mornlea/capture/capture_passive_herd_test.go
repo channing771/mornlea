@@ -21,8 +21,10 @@ import (
 )
 
 // TestPassiveHerdCaptureScenePosition 锁住 passive-herd 的表内位置：夹在
-// `hostile-mob` 与 `passive-graze` 之间，同时确认既有尾段不变量未被
-// 本场景移动——`far-horizon` 仍为倒数第二、`water-underwater` 仍为唯一末场景。
+// `ranged-mob`（远程敌怪夜景，紧随 hostile-mob，由
+// TestRangedMobCaptureScenePosition 兜底）与 `passive-graze` 之间，同时确认
+// 既有尾段不变量未被本场景移动——`far-horizon` 仍为倒数第二、
+// `water-underwater` 仍为唯一末场景。
 func TestPassiveHerdCaptureScenePosition(t *testing.T) {
 	indexOf := func(name string) int {
 		for index, scene := range captureScenes {
@@ -37,9 +39,9 @@ func TestPassiveHerdCaptureScenePosition(t *testing.T) {
 	if scene.Prepare == nil || scene.Apply == nil || scene.PinVolatile == nil || scene.WarmupFrames != 8 {
 		t.Fatalf("passive-herd 场景不完整: %+v", scene)
 	}
-	if indexOf("passive-herd") != indexOf("hostile-mob")+1 {
-		t.Fatalf("passive-herd=%d 必须紧随 hostile-mob=%d",
-			indexOf("passive-herd"), indexOf("hostile-mob"))
+	if indexOf("passive-herd") != indexOf("ranged-mob")+1 {
+		t.Fatalf("passive-herd=%d 必须紧随 ranged-mob=%d",
+			indexOf("passive-herd"), indexOf("ranged-mob"))
 	}
 	if indexOf("passive-graze") != indexOf("passive-herd")+1 {
 		t.Fatalf("passive-graze=%d 必须紧随 passive-herd=%d",

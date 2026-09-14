@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"os"
 
+	"github.com/channing771/mornlea/packages/server/storage/storagedef"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/world"
 )
@@ -65,13 +66,21 @@ type SaveResult struct {
 }
 
 // ValidateChunkSave 校验单条 chunk 保存的基础约束：非 nil 区块、键位一致、
-// 修订号非零。根包的内存与磁盘编排都经它做入口校验。
+// 维度值域为主世界或 `Depths`、修订号非零。根包的内存与磁盘编排都经它做入口校验。
 func ValidateChunkSave(save ChunkSave) error {
 	if save.Chunk == nil {
 		return fmt.Errorf("storage: chunk save for %v has nil chunk", save.Key)
 	}
 	if save.Chunk.Pos != save.Key.Pos {
 		return fmt.Errorf("storage: chunk save key %v does not match chunk position %v", save.Key, save.Chunk.Pos)
+	}
+	if save.Key.Dimension != core.Overworld && save.Key.Dimension != core.Depths {
+		return fmt.Errorf(
+			"%w: chunk save for %v has unsupported dimension %d",
+			storagedef.ErrCorrupt,
+			save.Key,
+			save.Key.Dimension,
+		)
 	}
 	if save.Revision == 0 {
 		return fmt.Errorf("storage: chunk save for %v has zero revision", save.Key)

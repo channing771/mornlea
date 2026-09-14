@@ -41,7 +41,7 @@ func newMenuWindowedTestDeps(t *testing.T, renderer *client.Renderer) Dependenci
 			unexpected("DialTCP")
 			return nil, nil
 		},
-		LoginClient: func(context.Context, network.ClientPacketStream, network.Identity) (network.ClientEndpoint, uint64, error) {
+		LoginClient: func(context.Context, network.ClientPacketStream, network.Identity, uint8) (network.ClientEndpoint, uint64, error) {
 			unexpected("LoginClient")
 			return nil, 0, nil
 		},
@@ -187,7 +187,7 @@ func startWorldSuccessDeps(t *testing.T) Dependencies {
 			clientStream, serverStream := network.NewMemoryStreamPair(capacity)
 			return clientStream, serverStream, nil
 		},
-		LoginClient: func(context.Context, network.ClientPacketStream, network.Identity) (network.ClientEndpoint, uint64, error) {
+		LoginClient: func(context.Context, network.ClientPacketStream, network.Identity, uint8) (network.ClientEndpoint, uint64, error) {
 			clientEndpoint, serverEndpoint := network.NewMemoryPair(1)
 			t.Cleanup(func() { _ = serverEndpoint.Close() })
 			return clientEndpoint, 42, nil

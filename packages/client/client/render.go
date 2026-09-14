@@ -118,6 +118,10 @@ type RenderFrame struct {
 	// PrecipInstances 是降水实例流（96 字节/实例，与 avatar 同布局，render
 	// 包按高度相对雪线选形编码）；晴天恒为空，帧字节与本字段引入前逐位一致。
 	PrecipInstances []byte
+	// ProjectileInstances 是权威投射物实例流（96 字节/实例，与 avatar 同
+	// 布局，render 包沿速度取向编码）；无投射物时恒为空，帧字节与本字段
+	// 引入前逐位一致。
+	ProjectileInstances []byte
 	// OverlayStrength 是伤害红边强度(>0 才绘制)。
 	OverlayStrength float32
 	// WaterTint 是相机浸没时的全屏水色叠加(RGBA)。A <= 0 表示本帧不叠加,
@@ -367,6 +371,11 @@ const (
 	// v18 新增):取天气段之后的下一个空闲值 13。段按条件追加:晴天恒为空,
 	// 晴天帧与 v17 逐位一致。
 	frameTagPrecip = 13
+	// frameTagProjectile 是权威投射物实例段(96 字节/实例,与 avatar 同布
+	// 局):取降水段之后的下一个空闲值 14,帧内追加、不升 client ABI(先例
+	// tag 10/11/12/13)。段按条件追加:流为空时不写任何字节,无投射物帧与
+	// 引入前逐位一致。
+	frameTagProjectile = 14
 )
 
 // hasPassSegments 报告本帧是否携带任一 pass 段(决定 layout 版本)。
@@ -374,7 +383,7 @@ func (frame RenderFrame) hasPassSegments() bool {
 	return len(frame.AvatarInstances) > 0 || len(frame.DropInstances) > 0 ||
 		len(frame.OutlineInstances) > 0 || len(frame.CrackInstances) > 0 ||
 		len(frame.ViewmodelInstances) > 0 || len(frame.WeatherSegment) > 0 ||
-		len(frame.PrecipInstances) > 0 ||
+		len(frame.PrecipInstances) > 0 || len(frame.ProjectileInstances) > 0 ||
 		frame.OverlayStrength > 0 || frame.WaterTint[3] > 0 ||
 		len(frame.NameTagSegment) > 0 || len(frame.HUDSegment) > 0 ||
 		len(frame.DebugSegment) > 0
@@ -450,6 +459,9 @@ func EncodeRenderFrame(frame RenderFrame) []byte {
 	// 帧与 v17 逐位一致(既有 golden 的根基)。
 	appendTLV(frameTagWeather, frame.WeatherSegment)
 	appendTLV(frameTagPrecip, frame.PrecipInstances)
+	// 投射物段按条件追加并落在降水段之后:流为空时不写任何字节,保证无投
+	// 射物帧与引入前逐位一致。
+	appendTLV(frameTagProjectile, frame.ProjectileInstances)
 	return out
 }
 

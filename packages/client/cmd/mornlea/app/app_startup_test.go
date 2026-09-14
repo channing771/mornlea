@@ -19,6 +19,7 @@ import (
 	"github.com/channing771/mornlea/packages/client/client"
 	"github.com/channing771/mornlea/packages/server/server"
 	"github.com/channing771/mornlea/packages/server/storage"
+	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
 )
 
@@ -42,7 +43,7 @@ func TestNewApplicationCreatesAudioOnlyForWindowedMode(t *testing.T) {
 				dependencies.DialTCP = func(context.Context, string) (network.ClientPacketStream, error) {
 					return stream, nil
 				}
-				dependencies.LoginClient = func(context.Context, network.ClientPacketStream, network.Identity) (network.ClientEndpoint, uint64, error) {
+				dependencies.LoginClient = func(context.Context, network.ClientPacketStream, network.Identity, uint8) (network.ClientEndpoint, uint64, error) {
 					return endpoint, 0, nil
 				}
 				dependencies.NewWindow = func(int, int, string) (Window, error) {
@@ -81,7 +82,7 @@ func TestNewApplicationCreatesAudioOnlyForWindowedMode(t *testing.T) {
 				dependencies.DialTCP = func(context.Context, string) (network.ClientPacketStream, error) {
 					return stream, nil
 				}
-				dependencies.LoginClient = func(context.Context, network.ClientPacketStream, network.Identity) (network.ClientEndpoint, uint64, error) {
+				dependencies.LoginClient = func(context.Context, network.ClientPacketStream, network.Identity, uint8) (network.ClientEndpoint, uint64, error) {
 					return endpoint, 0, nil
 				}
 				dependencies.NewOffscreenRenderer = func(int, int) (*client.Renderer, error) {
@@ -153,7 +154,7 @@ func TestNewApplicationReturnsRegistryErrorBeforeClientSideEffects(t *testing.T)
 			configure: func(dependencies *Dependencies, called func(string)) {
 				dependencies.OpenStore = func(context.Context, Options) (storage.WorldStore, error) {
 					called("OpenStore")
-					return storage.NewMemory(storage.Metadata{FormatVersion: 4, Seed: 42}), nil
+					return storage.NewMemory(storage.Metadata{FormatVersion: 6, Seed: 42, DepthsSpawnAnchor: core.ChunkPos{}, DepthsSeedSalt: 0x9E3779B97F4A7C15}), nil
 				}
 			},
 		},
@@ -176,7 +177,7 @@ func TestNewApplicationReturnsRegistryErrorBeforeClientSideEffects(t *testing.T)
 				called("DialTCP")
 				return nil, sideEffectErr
 			}
-			dependencies.LoginClient = func(context.Context, network.ClientPacketStream, network.Identity) (network.ClientEndpoint, uint64, error) {
+			dependencies.LoginClient = func(context.Context, network.ClientPacketStream, network.Identity, uint8) (network.ClientEndpoint, uint64, error) {
 				called("LoginClient")
 				return nil, 0, sideEffectErr
 			}

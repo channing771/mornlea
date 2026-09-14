@@ -103,6 +103,10 @@ func encodeServerControlPayload(state protocol.State, packet protocol.ServerPack
 			e.u8(uint8(message.Season))
 			e.u8(message.SeasonProgress)
 			e.u8(uint8(message.Temperature))
+			// v42：护甲点数追加在温度之后，是载荷最末 1 字节（u8，仅
+			// 0..core.MaxArmorPoints 合法，越界由 `Validate` 在编码前置拒绝），
+			// 既有字段的位置与字节序保持不变。
+			e.u8(message.ArmorPoints)
 		case protocol.CommandRejected:
 			reason, _ := protocol.CommandRejectReasonID(message.Reason)
 			e.u64(message.Sequence)
@@ -205,6 +209,12 @@ func encodeServerControlPayload(state protocol.State, packet protocol.ServerPack
 			encodePassiveState(&e, message)
 		case protocol.PassiveDespawn:
 			encodePassiveDespawn(&e, message)
+		case protocol.ProjectileSpawn:
+			encodeProjectileSpawn(&e, message)
+		case protocol.ProjectileState:
+			encodeProjectileState(&e, message)
+		case protocol.ProjectileDespawn:
+			encodeProjectileDespawn(&e, message)
 		case protocol.CombatHit:
 			e.u64(message.ServerTick)
 			e.u8(message.Damage)
@@ -245,6 +255,12 @@ func decodeServerControlPayload(state protocol.State, packetID uint32, payload [
 			max = protocol.PassiveStateMaxWireBytes
 		case 28:
 			max = protocol.PassiveDespawnMaxWireBytes
+		case 29:
+			max = protocol.ProjectileSpawnMaxWireBytes
+		case 30:
+			max = protocol.ProjectileStateMaxWireBytes
+		case 31:
+			max = protocol.ProjectileDespawnMaxWireBytes
 		case 25:
 			max = 10
 		}
@@ -397,9 +413,9 @@ func decodeServerControlPayload(state protocol.State, packetID uint32, payload [
 				weather, err = d.u8()
 				statePacket.WeatherKind = core.WeatherKind(weather)
 			}
-			// v37：季节、季内进度与温度依次追加在天气之后，温度是载荷最末 1 字节
-			// （i8）；季节越界同样统一由尾部 `validateServerWirePacket` 拒绝，
-			// 进度与温度全域合法不做分支判断。
+			// v37：季节、季内进度与温度依次追加在天气之后（v42 起其后还有
+			// 1 字节护甲点数）；季节越界统一由尾部 `validateServerWirePacket`
+			// 拒绝，进度与温度全域合法不做分支判断。
 			if err == nil {
 				var season uint8
 				season, err = d.u8()
@@ -412,6 +428,12 @@ func decodeServerControlPayload(state protocol.State, packetID uint32, payload [
 				var temperature uint8
 				temperature, err = d.u8()
 				statePacket.Temperature = int8(temperature)
+			}
+			// v42：护甲点数是载荷最末 1 字节（u8）；越界值同样统一由尾部的
+			// `validateServerWirePacket` 经 `Validate` 拒绝，不在此做分支判断，
+			// 保证编解码两侧与 `Memory` 传输共用同一值域结论。
+			if err == nil {
+				statePacket.ArmorPoints, err = d.u8()
 			}
 			packet = statePacket
 		case 4:
@@ -548,6 +570,12 @@ func decodeServerControlPayload(state protocol.State, packetID uint32, payload [
 			packet, err = decodePassiveState(&d)
 		case 28:
 			packet, err = decodePassiveDespawn(&d)
+		case 29:
+			packet, err = decodeProjectileSpawn(&d)
+		case 30:
+			packet, err = decodeProjectileState(&d)
+		case 31:
+			packet, err = decodeProjectileDespawn(&d)
 		case 25:
 			if len(payload) != 10 {
 				err = errors.New("network: combat hit payload must be exactly 10 bytes")
@@ -588,15 +616,15 @@ func validateServerWirePacket(state protocol.State, packet protocol.ServerPacket
 	}
 	switch message := packet.(type) {
 	case protocol.BlockChanges:
-		if message.Dimension != core.Overworld {
+		if message.Dimension != core.Overworld && message.Dimension != core.Depths {
 			return errInvalidDimension
 		}
 	case protocol.ForgetChunks:
-		if message.Dimension != core.Overworld {
+		if message.Dimension != core.Overworld && message.Dimension != core.Depths {
 			return errInvalidDimension
 		}
 	case protocol.PlayerState:
-		if message.Dimension != core.Overworld {
+		if message.Dimension != core.Overworld && message.Dimension != core.Depths {
 			return errInvalidDimension
 		}
 	}

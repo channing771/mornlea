@@ -11,18 +11,19 @@ import (
 )
 
 const (
-	// stepHeaderBytes 是 StepInput header v3 的长度：v1 128，v2 160（浸没标志+
+	// stepHeaderBytes 是 StepInput header v4 的长度：v1 128，v2 160（浸没标志+
 	// 水中 tunable），v3 复用 v2 保留区承载疾跑位与倍率（129 位 + 148..152
-	// multiplier），总长保持 160（32 整数倍），仍是同一 engine ABI v5 内的
+	// multiplier），v4 在 130 置潜行位、152..156 置潜行倍率，156..160 继续保留零，
+	// 总长保持 160（32 整数倍），仍是同一 engine ABI v5 内的
 	// header 扩展，不再升 ABI 版本。
 	stepHeaderBytes  = 160
 	stepOutputBytes  = 32
 	stepRegularCells = 135
 	stepRegularBytes = stepHeaderBytes + stepRegularCells*collisionCellBytes
 
-	// stepLayoutVersion 是 StepInput header 的布局版本。v2 → v3 追加疾跑位与
-	// SprintSpeedMultiplier；Rust 侧只接受当前版本，混装立即报错。
-	stepLayoutVersion = 3
+	// stepLayoutVersion 是 StepInput header 的布局版本。v3 → v4 追加潜行位与
+	// SneakSpeedMultiplier；Rust 侧只接受当前版本，混装立即报错。
+	stepLayoutVersion = 4
 )
 
 // Step 推进一个固定步：校验与编码在 Go，积分 + 碰撞解析 + 速度裁剪在 Rust engine。
@@ -80,7 +81,10 @@ func movementTargetFromYaw(moveX, moveZ int8, walkSpeed, yawSin, yawCos float32)
 // 由 step 级差分测试锁定。
 func stepSweepBounds(state State, input Input, tunables Tunables, yawSin, yawCos float32) (mgl32.Vec3, mgl32.Vec3) {
 	walkSpeed := tunables.WalkSpeed
-	if input.Sprinting && input.MoveZ > 0 && state.OnGround && !input.BodyInFluid {
+	sneaking := input.Sneaking && state.OnGround && !input.BodyInFluid
+	if sneaking {
+		walkSpeed *= tunables.SneakSpeedMultiplier
+	} else if input.Sprinting && input.MoveZ > 0 && state.OnGround && !input.BodyInFluid {
 		walkSpeed *= tunables.SprintSpeedMultiplier
 	}
 	target := movementTargetFromYaw(input.MoveX, input.MoveZ, walkSpeed, yawSin, yawCos)
@@ -185,8 +189,9 @@ func encodeStepInput(
 	for index, value := range prism.dimensions {
 		binary.LittleEndian.PutUint32(bytes[116+index*4:120+index*4], value)
 	}
-	// v3 新增区：128 是身体浸没标志，129 是疾跑位，130..132 保留为 0；
-	// 132..148 是四个水中 tunable；148..152 是疾跑倍率，152..160 保留为 0。
+	// v4 新增区：128 是身体浸没标志，129 是疾跑位，130 是潜行位，131 保留为 0；
+	// 132..148 是四个水中 tunable；148..152 是疾跑倍率，152..156 是潜行倍率，
+	// 156..160 保留为 0。
 	// 保留字节由上面的 clear 置零，Rust 侧逐字节要求为 0，未来扩字段时会
 	// 立刻暴露版本不匹配。
 	if input.BodyInFluid {
@@ -195,6 +200,9 @@ func encodeStepInput(
 	if input.Sprinting {
 		bytes[129] = 1
 	}
+	if input.Sneaking {
+		bytes[130] = 1
+	}
 	for index, value := range [...]float32{
 		tunables.FluidGravity, tunables.FluidSinkSpeed,
 		tunables.FluidAscendSpeed, tunables.FluidHorizontalDrag,
@@ -202,6 +210,7 @@ func encodeStepInput(
 		putCollisionFloat(bytes[132+index*4:136+index*4], value)
 	}
 	putCollisionFloat(bytes[148:152], tunables.SprintSpeedMultiplier)
+	putCollisionFloat(bytes[152:156], tunables.SneakSpeedMultiplier)
 
 	offset := stepHeaderBytes
 	for y := uint32(0); y < prism.dimensions[1]; y++ {

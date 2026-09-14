@@ -1,36 +1,42 @@
-// 状态行：生命/饥饿主行锚定快捷栏两缘，耗损氧气沿饥饿右缘向外堆叠。
-// 生命起点对齐快捷栏左缘（`flex-start`），饥饿终点对齐右缘并自右向左排列
-// （`row-reverse`），氧气行沿同一右缘从右向左堆叠——三者共用快捷栏内容行宽，
-// 与迁移前 `statusBarBounds` 的共享锚点一致。
+// 状态行：生命/饥饿主行锚定快捷栏两缘，耗损氧气沿饥饿右缘向外堆叠，
+// 护甲行紧贴心形行上方（点数为 0 或镜像未确认时整行不产生——空护甲条
+// 不是常驻刻度，既有零穿戴场景不得多出任何像素）。生命起点对齐快捷栏
+// 左缘（`flex-start`），饥饿终点对齐右缘并自右向左排列（`row-reverse`），
+// 氧气行沿同一右缘从右向左堆叠，护甲行与生命同向自左向右推进——四者
+// 共用快捷栏内容行宽，与迁移前 `statusBarBounds` 的共享锚点一致。
 //
 // 未确认/满值隐藏：生命与饥饿缺席（镜像未确认）时不产生任何格；氧气未确认
 // 或满值时整行不产生气泡，但行容器恒在（固定行高），保证周边元素不随氧气
 // 显隐跳动。行自身不绘制任何背景面板。
-import type { HudHealth, HudHunger, HudOxygen } from "../bridge/client";
+import type { HudArmor, HudHealth, HudHunger, HudOxygen } from "../bridge/client";
 import {
+  MAX_ARMOR,
   MAX_HEALTH,
   MAX_HUNGER,
   MAX_OXYGEN_TICKS,
   STATUS_SEGMENTS,
+  resolveArmorFill,
   resolveBubbleFill,
   resolveHeartFill,
   resolveHungerFill,
   type CellFill,
 } from "./geometry";
-import { HeartIcon, HungerIcon, OxygenIcon } from "./icons";
+import { ArmorIcon, HeartIcon, HungerIcon, OxygenIcon } from "./icons";
 
 export interface StatusRowProps {
   readonly health: HudHealth | undefined;
+  readonly armor: HudArmor | undefined;
   readonly hunger: HudHunger | undefined;
   readonly oxygen: HudOxygen | undefined;
   /** 容器打开态：行栈向快捷栏下方避让，主行先于氧气行（氧气向下堆叠）。 */
   readonly open: boolean;
 }
 
-export function StatusRow({ health, hunger, oxygen, open }: StatusRowProps) {
+export function StatusRow({ health, armor, hunger, oxygen, open }: StatusRowProps) {
   const oxygenRow = (
     <div className="hud-status-row hud-status-row--oxygen">{oxygenCells(oxygen)}</div>
   );
+  const armorRow = armorCells(armor);
   const primaryRow = (
     <div className="hud-status-row hud-status-row--primary">
       <div className="hud-status-group hud-status-group--health">{heartCells(health)}</div>
@@ -41,12 +47,14 @@ export function StatusRow({ health, hunger, oxygen, open }: StatusRowProps) {
     <>
       {open ? (
         <>
+          {armorRow}
           {primaryRow}
           {oxygenRow}
         </>
       ) : (
         <>
           {oxygenRow}
+          {armorRow}
           {primaryRow}
         </>
       )}
@@ -91,6 +99,28 @@ function hungerCells(hunger: HudHunger | undefined) {
       </span>
     );
   });
+}
+
+/** 护甲：十档、每档两点、奇数点数收半档；点数为 0 或镜像未确认时整行
+ * 不产生任何 DOM 节点——护甲条没有常驻空刻度，这是零穿戴场景逐像素零
+ * 漂移的硬前提（与氧气的「行容器恒在」不同形）。 */
+function armorCells(armor: HudArmor | undefined) {
+  if (armor === undefined || armor.points <= 0) {
+    return null;
+  }
+  const value = Math.min(armor.points, MAX_ARMOR);
+  return (
+    <div className="hud-status-row hud-status-row--armor">
+      {sequence().map((segment) => {
+        const fill = resolveArmorFill(segment, value);
+        return (
+          <span key={segment} className={`hud-cell hud-cell--armor-${fill}`}>
+            <ArmorIcon fill={fill} />
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 /** 氧气：满氧/未确认整行不呈现，耗损时按向上取整分段解析十段气泡。 */

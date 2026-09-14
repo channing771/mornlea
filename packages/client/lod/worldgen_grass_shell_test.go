@@ -24,12 +24,12 @@ func TestHeightTerrainAndLodIgnoreShortGrass(t *testing.T) {
 	for _, pos := range []core.ChunkPos{
 		{X: 0, Z: 0}, {X: 1, Z: 0}, {X: -1, Z: -1}, {X: 37, Z: -104},
 	} {
-		chunk := generator.GenerateChunk(pos)
+		chunk := generator.GenerateChunk(core.Overworld, pos)
 		for x := 0; x < core.SectionSize; x++ {
 			for z := 0; z < core.SectionSize; z++ {
 				wx := pos.X*core.SectionSize + int32(x)
 				wz := pos.Z*core.SectionSize + int32(z)
-				height := generator.HeightAt(wx, wz)
+				height := generator.HeightAt(core.Overworld, wx, wz)
 				if chunk.BlockAt(x, height, z) == core.ShortGrassID {
 					t.Fatalf("chunk(%d,%d) (%d,%d) 高度图指向短草，HeightAt 不得被装饰抬高",
 						pos.X, pos.Z, wx, wz)
@@ -38,13 +38,13 @@ func TestHeightTerrainAndLodIgnoreShortGrass(t *testing.T) {
 					continue
 				}
 				checked++
-				if got := generator.TerrainBlockAt(core.BlockPos{X: wx, Y: height + 1, Z: wz}); got != core.AirID {
+				if got := generator.TerrainBlockAt(core.Overworld, core.BlockPos{X: wx, Y: height + 1, Z: wz}); got != core.AirID {
 					t.Fatalf("TerrainBlockAt(%d,%d,%d)=%d，想要 AirID(地形语义忽略短草)",
 						wx, height+1, wz, got)
 				}
 				// 短草不向上生长:装饰格上方允许有树叶等既有内容,但不得
 				// 再出现短草。
-				if got := generator.BaseBlockAt(core.BlockPos{X: wx, Y: height + 2, Z: wz}); got == core.ShortGrassID {
+				if got := generator.BaseBlockAt(core.Overworld, core.BlockPos{X: wx, Y: height + 2, Z: wz}); got == core.ShortGrassID {
 					t.Fatalf("短草上方 (%d,%d,%d) 又叠短草:短草只有单格",
 						wx, height+2, wz)
 				}

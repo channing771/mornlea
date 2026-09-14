@@ -27,11 +27,11 @@ const deathDropStoneCount = 10
 // 锚点 (0,0) 的候选列因此落在 |X| ≤ 1、|Z| ≤ 1 的九个区块里。
 type airSpawnGenerator struct{}
 
-func (airSpawnGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+func (airSpawnGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	if position.X >= -1 && position.X <= 1 && position.Z >= -1 && position.Z <= 1 {
 		return world.NewChunk(position)
 	}
-	return changedGenerator{}.GenerateChunk(position)
+	return changedGenerator{}.GenerateChunk(core.Overworld, position)
 }
 
 // TestDeathBeforeRespawnDisconnectDoesNotDuplicateInventory 覆盖

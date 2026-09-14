@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -335,11 +336,12 @@ func TestValidateAndNormalizeSavesReturnsDeterministicChunkKeyOrder(t *testing.T
 func TestDiskStoreSaveBatchOrdersRegionGroups(t *testing.T) {
 	store := openTestDiskStore(t)
 	defer store.Close()
+	// 维度值域只放行 0/1，跨维排序用 `Depths`（1）覆盖，不再借用非法维度。
 	keys := []core.ChunkKey{
 		{Dimension: 1, Pos: core.ChunkPos{X: -64, Z: 96}},
 		{Dimension: 0, Pos: core.ChunkPos{X: 64, Z: -96}},
 		{Dimension: 0, Pos: core.ChunkPos{X: -32, Z: 160}},
-		{Dimension: -1, Pos: core.ChunkPos{X: 288, Z: 64}},
+		{Dimension: 1, Pos: core.ChunkPos{X: 288, Z: 64}},
 		{Dimension: 0, Pos: core.ChunkPos{X: -32, Z: -64}},
 	}
 	if _, err := store.SaveBatch(context.Background(), diskSavesFor(keys, 1)); err != nil {
@@ -358,8 +360,6 @@ func TestDiskStoreSaveBatchOrdersRegionGroups(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []RegionKey{
-		{Dimension: -1, X: 9, Z: 2},
-		{Dimension: -1, X: 9, Z: 2},
 		{Dimension: 0, X: -1, Z: -2},
 		{Dimension: 0, X: -1, Z: -2},
 		{Dimension: 0, X: -1, Z: 5},
@@ -368,9 +368,86 @@ func TestDiskStoreSaveBatchOrdersRegionGroups(t *testing.T) {
 		{Dimension: 0, X: 2, Z: -3},
 		{Dimension: 1, X: -2, Z: 3},
 		{Dimension: 1, X: -2, Z: 3},
+		{Dimension: 1, X: 9, Z: 2},
+		{Dimension: 1, X: 9, Z: 2},
 	}
 	if !reflect.DeepEqual(events, want) {
 		t.Fatalf("region save sync order = %+v, want %+v", events, want)
+	}
+}
+
+// TestDiskStorePersistsDepthsChunksAlongsideOverworld 覆盖「双维保存与重载」在
+// 存储层的一半：双维脏区块同批提交后按维度分目录落盘，重启后双维均可加载；维度
+// 2 的保存请求整批拒绝且磁盘既有数据逐字节不变。
+func TestDiskStorePersistsDepthsChunksAlongsideOverworld(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	store, err := OpenDisk(ctx, root, OpenOptions{
+		Create: Metadata{FormatVersion: currentMetadataVersion, Seed: 42},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	overworldKey := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: 1, Z: 1}}
+	depthsKey := core.ChunkKey{Dimension: core.Depths, Pos: core.ChunkPos{X: 1, Z: 1}}
+	if _, err := store.SaveBatch(ctx, diskSavesFor([]core.ChunkKey{overworldKey, depthsKey}, 1)); err != nil {
+		t.Fatal(err)
+	}
+	for _, dimension := range []core.DimensionID{core.Overworld, core.Depths} {
+		regionKey, _ := RegionFor(core.ChunkKey{Dimension: dimension, Pos: core.ChunkPos{X: 1, Z: 1}})
+		if _, err := os.Stat(store.regionPath(regionKey)); err != nil {
+			t.Fatalf("维度 %d 的 region 文件缺失：%v", dimension, err)
+		}
+	}
+
+	// 越界维度与合法保存同批提交时整批拒绝：合法键不得前进，磁盘文件逐字节不变。
+	overworldRegion, _ := RegionFor(overworldKey)
+	depthsRegion, _ := RegionFor(depthsKey)
+	beforeOverworld, err := os.ReadFile(store.regionPath(overworldRegion))
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeDepths, err := os.ReadFile(store.regionPath(depthsRegion))
+	if err != nil {
+		t.Fatal(err)
+	}
+	beyond := core.ChunkKey{Dimension: core.DimensionID(2), Pos: core.ChunkPos{X: 1, Z: 1}}
+	rejected := append(
+		diskSavesFor([]core.ChunkKey{overworldKey}, 2),
+		diskSavesFor([]core.ChunkKey{beyond}, 1)...,
+	)
+	if _, err := store.SaveBatch(ctx, rejected); err == nil {
+		t.Fatal("维度 2 的保存批次被接受")
+	}
+	afterOverworld, err := os.ReadFile(store.regionPath(overworldRegion))
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterDepths, err := os.ReadFile(store.regionPath(depthsRegion))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(afterOverworld, beforeOverworld) || !bytes.Equal(afterDepths, beforeDepths) {
+		t.Fatal("被拒绝的批次改写了磁盘既有数据")
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := OpenDisk(ctx, root, OpenOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	for _, key := range []core.ChunkKey{overworldKey, depthsKey} {
+		stored, err := reopened.LoadChunk(ctx, key)
+		if err != nil {
+			t.Fatalf("重开后加载维度 %d 区块：%v", key.Dimension, err)
+		}
+		if stored.Revision != 1 || stored.Chunk.Pos != key.Pos {
+			t.Fatalf("重开后维度 %d 区块 = %+v，想要 revision 1", key.Dimension, stored)
+		}
 	}
 }
 

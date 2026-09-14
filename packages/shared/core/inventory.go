@@ -143,6 +143,51 @@ func (inventory Inventory) MoveStack(from, to uint8) (Inventory, bool) {
 	return inventory, true
 }
 
+// MoveStackAmount 在完整状态的副本上做至多 amount 个物品的部分移动：空目标
+// 接收 min(amount, 来源数量)，同类目标按剩余容量截断合并、余量留在来源格。
+// 数量语义由调用方显式传入（服务端按来源栈推导半组 ceil(n/2) 或单件 1），
+// 本原语只做「至多 amount」的确定性搬运，不做任何推导——这样客户端不可能
+// 借它表达任意数量的语义，推导权收在权威侧。异类非空目标直接拒绝而非交换：
+// 交换是 `MoveStack` 的整堆语义，半组/单件移动一旦交换，来源格会意外失去
+// 整堆控制权，与「恰好一半/恰好一个」的玩家意图不符。同格、越界、空来源、
+// amount 为零或可移动量为零（同类满目标）返回原值和 false，任何失败路径
+// 零改动。
+func (inventory Inventory) MoveStackAmount(from, to, amount uint8) (Inventory, bool) {
+	if from == to || amount == 0 {
+		return inventory, false
+	}
+	source, ok := inventory.Slot(from)
+	if !ok || source.Item == ItemNone {
+		return inventory, false
+	}
+	target, ok := inventory.Slot(to)
+	if !ok {
+		return inventory, false
+	}
+	if target.Item != ItemNone && target.Item != source.Item {
+		return inventory, false
+	}
+	if target.Item == ItemNone {
+		// 空目标先继承来源的物品与耐久字段并清零数量，随后与同类合并共用
+		// 同一段「按剩余容量截断」的搬运逻辑，两分支不再分叉。
+		target = source
+		target.Count = 0
+	}
+	limit, _ := ItemStackLimit(source.Item)
+	moved := min(min(amount, source.Count), limit-target.Count)
+	if moved == 0 {
+		return inventory, false
+	}
+	target.Count += moved
+	source.Count -= moved
+	if source.Count == 0 {
+		source = ItemStack{}
+	}
+	inventory.setSlot(to, target)
+	inventory.setSlot(from, source)
+	return inventory, true
+}
+
 // SetSlot 返回把统一索引 slot 写为 stack 后的新值；
 // 索引越界或物品未注册时返回原值和 false。
 func (inventory Inventory) SetSlot(slot uint8, stack ItemStack) (Inventory, bool) {
@@ -152,6 +197,37 @@ func (inventory Inventory) SetSlot(slot uint8, stack ItemStack) (Inventory, bool
 	next := inventory
 	next.setSlot(slot, stack)
 	return next, true
+}
+
+// ConsumeItem 在完整物品状态的副本上原子扣除一个指定物品：按固定扫描序
+// （快捷栏 0..8 在前、背包 9..35 在后，区段内统一索引升序）找到第一个数量
+// 大于零的匹配栈恰减 1，扣到零的栈规范化为零值空栈。任何区段都没有可消耗的
+// 匹配栈（空物品状态、目标物品只剩零数量残留栈、空物品或未注册编号）时返回
+// 原值与 false，绝不留下部分扣减。
+//
+// 扫描序是确定性契约：弹药类消耗（弓的发射结算）依赖「先快捷栏后背包、区段
+// 内取最低索引」的固定顺序，保证同一物品状态重复结算必然得到同一结果。数量
+// 为零的残留栈刻意跳过——它们不是可消耗的来源，与 `ConsumeRecipe` 对空栈的
+// 处理同形。实现在 36 格副本上的单次扫描，无分配。
+func (inventory Inventory) ConsumeItem(id ItemID) (Inventory, bool) {
+	if id == ItemNone {
+		return inventory, false
+	}
+	for slot := uint8(0); slot < InventorySlots; slot++ {
+		stack, _ := inventory.Slot(slot)
+		if stack.Item != id || stack.Count == 0 {
+			continue
+		}
+		// copy-on-write：只有真正找到可消耗栈时才复制原值，失败路径零复制。
+		next := inventory
+		stack.Count--
+		if stack.Count == 0 {
+			stack = ItemStack{}
+		}
+		next.setSlot(slot, stack)
+		return next, true
+	}
+	return inventory, false
 }
 
 // ConsumeRecipe 在合成网格的副本上原子执行一次形状消费：按与

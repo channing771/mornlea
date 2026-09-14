@@ -27,6 +27,7 @@ import {
   MARKER_LENGTH,
   MARKER_OFFSET,
   MARKER_THICKNESS,
+  MAX_ARMOR,
   POPUP_ROW_HEIGHT,
   POPUP_TRACK_GAP,
   PROGRESS_TRACK_GAP,
@@ -39,7 +40,9 @@ import {
   STATUS_HOTBAR_GAP,
   STATUS_ICON_GAP,
   STATUS_ICON_SIZE,
+  STATUS_SEGMENTS,
   hudScale,
+  resolveArmorFill,
 } from "./geometry";
 
 describe("HUD design 基准镜像", () => {
@@ -52,19 +55,21 @@ describe("HUD design 基准镜像", () => {
     expect(HOTBAR_PANEL_PADDING).toBe(6);
   });
 
-  it("design 高度 = Go closedHUDHeight 的自下而上记账", () => {
+  it("design 高度 = 关闭态联合高度的自下而上记账（含护甲行）", () => {
     expect(DESIGN_HEIGHT).toBe(
       // hotbarBottomMargin + hotbarSlotSize + hotbarPanelPadding +
-      // statusHotbarGap + 2*(statusBarGap+healthHeartSize) + miningBarGap +
+      // statusHotbarGap + 3*(statusBarGap+healthHeartSize) + miningBarGap +
       // miningBarHeight + popupTrackGap + popupRowHeight
+      // 三行状态栈 = 主行 + 护甲行 + 氧气行；护甲行随穿戴出现，点数为 0
+      // 时该行不渲染、记账差额成为缩放余量。
       6 + HOTBAR_SLOT_SIZE + HOTBAR_PANEL_PADDING + STATUS_HOTBAR_GAP +
-        2 * (STATUS_BAR_GAP + STATUS_ICON_SIZE) +
+        3 * (STATUS_BAR_GAP + STATUS_ICON_SIZE) +
         PROGRESS_TRACK_GAP +
         PROGRESS_TRACK_HEIGHT +
         POPUP_TRACK_GAP +
         POPUP_ROW_HEIGHT,
     );
-    expect(DESIGN_HEIGHT).toBe(160);
+    expect(DESIGN_HEIGHT).toBe(180);
     expect(STATUS_HOTBAR_GAP).toBe(10);
     expect(STATUS_BAR_GAP).toBe(4);
     expect(STATUS_ICON_SIZE).toBe(16);
@@ -73,13 +78,44 @@ describe("HUD design 基准镜像", () => {
   it("hudScale 镜像 Go 关闭态口径：单一比例、上限 1、扣两侧视口边距", () => {
     // 基准尺寸内不放大会回到 1。
     expect(hudScale({ width: 1280, height: 720 })).toBe(1);
-    expect(hudScale({ width: 492, height: 176 })).toBe(1);
-    // 宽度先触界：(492-16)/476 ≈ 1.0 → 高度界 (176-16)/160 = 1。
+    expect(hudScale({ width: 492, height: 196 })).toBe(1);
+    // 宽度先触界：(492-16)/476 ≈ 1.0 → 高度界 (196-16)/180 = 1。
     expect(hudScale({ width: 400, height: 720 })).toBeCloseTo((400 - 16) / DESIGN_WIDTH, 12);
-    expect(hudScale({ width: 1280, height: 120 })).toBeCloseTo((120 - 16) / DESIGN_HEIGHT, 12);
+    expect(hudScale({ width: 1280, height: 140 })).toBeCloseTo((140 - 16) / DESIGN_HEIGHT, 12);
     // 不足一个像素的呈现空间降级为 0（零尺寸/非法视口由组件整体不呈现）。
     expect(hudScale({ width: 16, height: 720 })).toBe(0);
     expect(hudScale({ width: 0, height: 0 })).toBe(0);
+  });
+});
+
+// ---- 护甲条语义解析：十档、每档两点、半档收尾、零点整行不渲染 ----
+
+describe("护甲条解析", () => {
+  it("resolveArmorFill 镜像护甲条逐档判定：7 点 = 3 全档 + 1 半档", () => {
+    const fills = Array.from({ length: STATUS_SEGMENTS }, (_, segment) =>
+      resolveArmorFill(segment, 7),
+    );
+    expect(fills).toEqual([
+      "full",
+      "full",
+      "full",
+      "half",
+      "empty",
+      "empty",
+      "empty",
+      "empty",
+      "empty",
+      "empty",
+    ]);
+  });
+
+  it("20 点满档、0 点全空（整行由组件按零点不渲染收敛）", () => {
+    expect(Array.from({ length: STATUS_SEGMENTS }, (_, segment) =>
+      resolveArmorFill(segment, MAX_ARMOR),
+    )).toEqual(Array<string>(10).fill("full"));
+    expect(Array.from({ length: STATUS_SEGMENTS }, (_, segment) =>
+      resolveArmorFill(segment, 0),
+    )).toEqual(Array<string>(10).fill("empty"));
   });
 });
 

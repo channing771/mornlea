@@ -28,7 +28,7 @@ func BenchmarkSmallPacketCodec(b *testing.B) {
 		value network.ClientPacket
 	}{
 		{"ClientHello", network.StateHandshake, network.ClientHello{ProtocolVersion: network.ProtocolVersion}},
-		{"LoginStart", network.StateLogin, network.LoginStart{PlayerID: id, DisplayName: "Benchmark"}},
+		{"LoginStart", network.StateLogin, network.LoginStart{PlayerID: id, DisplayName: "Benchmark", ViewDistance: 32}},
 		{"PlayerInput", network.StatePlay, network.PlayerInput{Sequence: 1, MoveX: 1, MoveZ: -1, Jump: true, Yaw: 0.5, Pitch: -0.25, Mining: true}},
 		{"PlaceBlock", network.StatePlay, network.PlaceBlock{Sequence: 3, Yaw: 0.5, Pitch: -0.25, Slot: 2}},
 		{"RequestChunkResync", network.StatePlay, network.RequestChunkResync{Sequence: 4, Dimension: core.Overworld, Chunk: core.ChunkPos{X: -2, Z: 3}, HaveRevision: 7}},

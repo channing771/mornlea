@@ -1,4 +1,4 @@
-// Package player 承载 player 存档域：MCPL 信封编解码、schema v1..v8 迁移链
+// Package player 承载 player 存档域：MCPL 信封编解码、schema v1..v9 迁移链
 // 与玩家存档值类型。
 //
 // 本包是纯 codec 域：只依赖 core 值类型与 storagedef 哨兵，不感知根包编排
@@ -37,7 +37,11 @@ type StoredPlayer struct {
 	RespawnPosition [3]float32
 	// RespawnDimension 是重生点所在的维度。
 	RespawnDimension core.DimensionID
-	NeedsRewrite     bool
+	// Armor 是四槽已装备护甲，schema v9 起落盘，按 core.ArmorSlot 槽位顺序
+	// （头/胸/腿/脚）；更旧的存档读入时迁移为四空槽。codec 层不做语义校验，
+	// 穿戴合法性由 sim 层判定。
+	Armor        [core.ArmorSlotCount]core.ItemStack
+	NeedsRewrite bool
 }
 
 type PlayerSave struct {
@@ -61,4 +65,8 @@ type PlayerSave struct {
 	RespawnPresent   bool
 	RespawnPosition  [3]float32
 	RespawnDimension core.DimensionID
+	// Armor 是四槽已装备护甲，schema v9 起落盘，按 core.ArmorSlot 槽位顺序
+	// （头/胸/腿/脚）。与重生点同理，装备区恒占满 20 字节、空槽写零：每槽
+	// 5 字节栈编码原样保真，不做语义校验，穿戴合法性由 sim 层判定。
+	Armor [core.ArmorSlotCount]core.ItemStack
 }

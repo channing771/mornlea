@@ -7,8 +7,10 @@ import (
 	"sort"
 
 	"github.com/channing771/mornlea/packages/server/fluid"
+	"github.com/channing771/mornlea/packages/server/updates"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/world"
+	"github.com/channing771/mornlea/packages/shared/worldgen"
 )
 
 const (
@@ -47,15 +49,13 @@ type EnvironmentMutation struct {
 	state *State
 }
 
-type farmlandMoistureKey struct {
-	dimension core.DimensionID
-	position  core.BlockPos
-}
-
+// farmlandMoistureState 是湿度阶段的本 tick 计量与全块重扫状态。候选待办本身
+// 不在这里：自 FIFO → 统一调度器迁移（change unified-block-updates-world-streaming）
+// 起，湿度候选由各维度共享的 `updates.Queue` 实例承载（kind=FarmlandMoisture、
+// 新鲜入队 due=当 tick，经 `fluid.Queue.Scheduler()` 取得），消费顺序从入队序
+// 改为调度器确定性全序——这是 authoritative-farming delta 允许的唯一行为可见
+// 差异，预算、平衡态与同 tick 重判语义原样保持。
 type farmlandMoistureState struct {
-	pending              []farmlandMoistureKey
-	head                 int
-	queued               map[farmlandMoistureKey]struct{}
 	rescans              farmlandMoistureRescanState
 	candidateInspections int
 	blockReads           int
@@ -90,9 +90,16 @@ type environmentState struct {
 	fluidDimensionScratch []core.DimensionID
 	fluidRescan           fluidRescanState
 	farmlandMoisture      farmlandMoistureState
-	cropCellScratch       []int
-	cropCellsExamined     int
-	cropBlockReads        int
+	// moistureHandler 是注册进各维度调度器 FarmlandMoisture 域的稳定处理回调
+	// （只捕获 State 指针，构造一次跨 tick 复用）；moistureDimension/
+	// moistureMutation 是它每次推进时的工作上下文，由 AdvanceFarmlandMoisture
+	// 先设置再驱动对应维度，注册路径因此不产生闭包分配。
+	moistureHandler   updates.Handler
+	moistureDimension *Dimension
+	moistureMutation  *EnvironmentMutation
+	cropCellScratch   []int
+	cropCellsExamined int
+	cropBlockReads    int
 }
 
 // NewEnvironmentMutation 将环境参数附着到当前 tick 的区块事务。
@@ -109,7 +116,9 @@ func (state *State) NewEnvironmentMutation(
 	return &EnvironmentMutation{Mutation: mutation, state: state}
 }
 
-// SetBlock 写入一格并把真实变更登记到本次环境事务。
+// SetBlock 写入一格并把真实变更登记到本次环境事务；写入成功后的定时面反
+// activate入队（流体域与条件湿窗口）由统一门面 enqueueBlockWrite 派生，环境
+// 写入方因此与 entity 侧 recordChange 共享同一份入队策略。
 func (mutation *EnvironmentMutation) SetBlock(
 	dimensionID core.DimensionID,
 	position core.BlockPos,
@@ -124,10 +133,7 @@ func (mutation *EnvironmentMutation) SetBlock(
 		return old, changed, err
 	}
 	mutation.Record(dimensionID, position, block)
-	mutation.state.environment.enqueueFluidUpdate(dimensionID, position)
-	if core.IsFluid(old) != core.IsFluid(block) {
-		mutation.state.environment.enqueueFarmlandMoistureAroundFluid(dimensionID, position)
-	}
+	mutation.state.environment.enqueueBlockWrite(dimensionID, position, old, block)
 	return old, true, nil
 }
 
@@ -140,21 +146,6 @@ func (state *State) SetEnvironmentTick(tick uint64, seed int64, cfg EnvironmentC
 	state.environment.tick = tick
 	state.environment.seed = seed
 	state.environment.config = cfg
-}
-
-func (state *farmlandMoistureState) pop() {
-	key := state.pending[state.head]
-	delete(state.queued, key)
-	state.head++
-	if state.head == len(state.pending) {
-		state.pending = state.pending[:0]
-		state.head = 0
-		return
-	}
-	if state.head >= 4096 && state.head*2 >= len(state.pending) {
-		state.pending = state.pending[state.head:]
-		state.head = 0
-	}
 }
 
 func (state *environmentState) fluidQueue(dimension core.DimensionID) *fluid.Queue {
@@ -188,6 +179,9 @@ func (state *environmentState) enqueueFluidUpdate(dimension core.DimensionID, po
 	}
 }
 
+// 以下三个细粒度入队方法自统一门面 EnqueueBlockWrite 落地起只服务测试夹具
+// 直连（按需构造单域待办），生产写入方必须走门面——入队策略只有一个真源，
+// 由 sim/entity 的入队入口守卫测试钉住唯一性。
 func (state *State) EnqueueFluidUpdate(dimension core.DimensionID, position core.BlockPos) {
 	state.environment.enqueueFluidUpdate(dimension, position)
 }
@@ -198,6 +192,43 @@ func (state *State) EnqueueFarmlandMoisture(dimension core.DimensionID, position
 
 func (state *State) EnqueueFarmlandMoistureAroundFluid(dimension core.DimensionID, position core.BlockPos) {
 	state.environment.enqueueFarmlandMoistureAroundFluid(dimension, position)
+}
+
+// EnqueueBlockWrite 是权威方块写入后的统一入队门面：写入方（entity 侧经
+// recordChange、环境事务经 EnvironmentMutation.SetBlock）在写块成功后以写前
+// 旧值 old 与新值 block 调用它，全部定时面的响应式激活入队由 (old, block)
+// 的方块类别派生，策略只有一个真源：
+//   - 流体域：恒入队目标格及其 6 面邻域，邻接流体获得重估机会；
+//   - 湿度域：流体成员变化（IsFluid(old) != IsFluid(block)）按湿窗口入队；
+//   - 湿度域：新造耕地（IsFarmland(block) 且非 IsFarmland(old)）单格入队，
+//     due=当 tick，流体推进子阶段之后即重判。
+//
+// 三条规则分别继承自门面化之前 recordChange 的流体入队、bucket/placement 的
+// 条件湿窗口与翻地的单格湿度候选，各写入方的入队语义（哪些格、几邻域、湿度
+// 窗口）逐不变；新增写入方只接线这一个入口。
+func (state *State) EnqueueBlockWrite(
+	dimension core.DimensionID,
+	position core.BlockPos,
+	old, block core.BlockID,
+) {
+	state.environment.enqueueBlockWrite(dimension, position, old, block)
+}
+
+// enqueueBlockWrite 是统一入队门面的实现：按 (old, block) 依次派生流体域与
+// 两个湿度域条件。入队顺序（流体在先）与门面化之前各调用点的写法一致；两个
+// 域的待办按 (pos, kind) 去重、只提前不推迟，入队先后对队列终态无影响。
+func (state *environmentState) enqueueBlockWrite(
+	dimension core.DimensionID,
+	position core.BlockPos,
+	old, block core.BlockID,
+) {
+	state.enqueueFluidUpdate(dimension, position)
+	if core.IsFluid(old) != core.IsFluid(block) {
+		state.enqueueFarmlandMoistureAroundFluid(dimension, position)
+	}
+	if core.IsFarmland(block) && !core.IsFarmland(old) {
+		state.enqueueFarmlandMoisture(dimension, position)
+	}
 }
 
 func (state *State) FluidQueue(dimension core.DimensionID) *fluid.Queue {
@@ -241,20 +272,15 @@ func (state *State) CropBlockReads() int {
 	return state.environment.cropBlockReads
 }
 
+// enqueueFarmlandMoisture 把一格湿度候选排进该维度的统一调度器实例
+// （FarmlandMoisture 域、due=当前 tick）：无旧积压时它在同一权威 tick 的流体
+// 推进子阶段之后即被结算。去重与「只提前不推迟」由调度器的 (pos, kind) 键承载，
+// 这里不再自持队列结构。
 func (state *environmentState) enqueueFarmlandMoisture(dimension core.DimensionID, position core.BlockPos) {
 	if position.Y < core.MinY || position.Y >= core.MaxY {
 		return
 	}
-	moisture := &state.farmlandMoisture
-	if moisture.queued == nil {
-		moisture.queued = make(map[farmlandMoistureKey]struct{})
-	}
-	key := farmlandMoistureKey{dimension: dimension, position: position}
-	if _, exists := moisture.queued[key]; exists {
-		return
-	}
-	moisture.queued[key] = struct{}{}
-	moisture.pending = append(moisture.pending, key)
+	state.fluidQueue(dimension).Scheduler().Enqueue(position, updates.KindFarmlandMoisture, state.tick)
 }
 
 func (state *environmentState) enqueueFarmlandMoistureAroundFluid(
@@ -398,45 +424,81 @@ func (state *State) runFarmlandMoistureRescans(budget int) {
 	}
 }
 
-// AdvanceFarmlandMoisture 按既有 FIFO 和读取预算处理活动区块内的湿度候选。
+// AdvanceFarmlandMoisture 按统一调度器确定性全序与双预算处理活动区块内的湿度
+// 候选：每维度在自己的共享调度器实例上以 `AdvanceKinds(now, FarmlandMoisture)`
+// 结算（engine_step 的固定阶段序保证流体推进子阶段先行，新鲜候选同 tick 重判）。
+// 候选检查数与方块读取数的预算是跨维度合计的全局上界，由处理回调内的计量守卫
+// 承载；预算不足的候选按原 dueTick 回插顺延，不丢失。全块重扫保留在本阶段尾部。
 func (state *State) AdvanceFarmlandMoisture(active []core.ChunkKey, mutation *EnvironmentMutation) {
 	state.updateEnvironmentScope(active)
 	moisture := &state.environment.farmlandMoisture
 	moisture.blockReads = 0
 	moisture.candidateInspections = 0
-	for moisture.candidateInspections < farmlandMoistureCandidatesPerTick &&
-		moisture.blockReads < farmlandMoistureReadsPerTick && moisture.head < len(moisture.pending) {
-		key := moisture.pending[moisture.head]
-		moisture.candidateInspections++
-		chunkKey := core.ChunkKey{Dimension: key.dimension, Pos: key.position.Chunk()}
-		if _, ok := state.environment.scope[chunkKey]; !ok {
-			moisture.pop()
+	if state.environment.moistureHandler == nil {
+		state.environment.moistureHandler = state.newFarmlandMoistureHandler()
+	}
+	now := state.environment.tick
+	for _, id := range state.sortedFluidDimensions() {
+		queue := state.environment.fluidQueues[id]
+		if queue.Scheduler().LenOf(updates.KindFarmlandMoisture) == 0 {
 			continue
 		}
-		dimension := state.Dimension(key.dimension)
+		dimension := state.Dimension(id)
 		if dimension == nil {
-			moisture.pop()
 			continue
 		}
-		block, ready := dimension.BlockAt(key.position)
+		state.environment.moistureDimension = dimension
+		state.environment.moistureMutation = mutation
+		scheduler := queue.Scheduler()
+		scheduler.Register(updates.KindFarmlandMoisture, farmlandMoistureCandidatesPerTick, state.environment.moistureHandler)
+		scheduler.AdvanceKinds(now, updates.KindFarmlandMoisture)
+	}
+	state.runFarmlandMoistureRescans(farmlandMoistureReadsPerTick - moisture.blockReads)
+}
+
+// newFarmlandMoistureHandler 构造湿度域处理回调：每个被调度器弹出的候选先计入全局
+// 检查预算，再按「范围 → 读取守卫 → 目标格 → 邻域判定」推进；处置结果里
+// HandleDeferred 让调度器把候选按原 dueTick 回插并暂停湿度域——余额不足的
+// 判定不保存部分结果，候选继续占用待办、后续 tick 仍按全序可达。
+func (state *State) newFarmlandMoistureHandler() updates.Handler {
+	return func(entry updates.Entry) updates.HandleResult {
+		environment := &state.environment
+		moisture := &environment.farmlandMoisture
+		if moisture.candidateInspections >= farmlandMoistureCandidatesPerTick {
+			// 跨维度合计的检查预算已耗尽：本候选不消耗检查额度，按原 dueTick
+			// 顺延到下一 tick（另一维度可能已花完全局额度）。
+			return updates.HandleDeferred
+		}
+		moisture.candidateInspections++
+		dimension := environment.moistureDimension
+		chunkKey := core.ChunkKey{Dimension: dimension.id, Pos: entry.Pos.Chunk()}
+		if _, ok := environment.scope[chunkKey]; !ok {
+			// 候选离开 active Ready 范围：检查即丢弃（0 方块读取、计入检查数），
+			// 重入范围由全块重扫在固定预算内重建湿度。
+			return updates.HandleConsumed
+		}
+		if moisture.blockReads >= farmlandMoistureReadsPerTick {
+			// 连目标格的 1 次读取都付不起：不消耗读取，整条顺延。
+			return updates.HandleDeferred
+		}
+		block, ready := dimension.BlockAt(entry.Pos)
 		moisture.blockReads++
 		if !ready || !core.IsFarmland(block) {
-			moisture.pop()
-			continue
+			return updates.HandleConsumed
 		}
 		if farmlandMoistureReadsPerTick-moisture.blockReads < farmlandWetNeighborReads {
-			break
+			// 邻域判定不可跨 tick 拆分：保留待办并暂停本域推进，下一 tick 重判。
+			return updates.HandleDeferred
 		}
 		next := core.FarmlandDryID
-		if state.farmlandIsWet(dimension, key.position) {
+		if state.farmlandIsWet(dimension, entry.Pos) {
 			next = core.FarmlandWetID
 		}
 		if next != block {
-			_, _, _ = mutation.SetBlock(key.dimension, key.position, next)
+			_, _, _ = environment.moistureMutation.SetBlock(dimension.id, entry.Pos, next)
 		}
-		moisture.pop()
+		return updates.HandleConsumed
 	}
-	state.runFarmlandMoistureRescans(farmlandMoistureReadsPerTick - moisture.blockReads)
 }
 
 // Fluid 相关
@@ -483,7 +545,7 @@ func (w *fluidWorld) SetBlock(position core.BlockPos, id core.BlockID) {
 	if old == id {
 		return
 	}
-	if w.settleFloodedCrop(chunk, position, old, id) {
+	if w.settleFloodedCrop(chunk, position, old, id) || w.settleFloodedSapling(chunk, position, old, id) {
 		if next := chunk.BlockAt(x, position.Y, z); core.IsFluid(old) != core.IsFluid(next) {
 			w.state.environment.enqueueFarmlandMoistureAroundFluid(w.id, position)
 		}
@@ -516,7 +578,7 @@ func (w *fluidWorld) settleFloodedCrop(
 	count := 0
 	if harvestable {
 		if old == core.WheatStage7ID {
-			wheatCount, seedCount := cropYieldRolls(
+			wheatCount, seedCount := sampler.CropYieldRolls(
 				w.state.environment.seed, w.state.environment.tick, w.id, position,
 			)
 			stacks[count] = core.ItemStack{Item: item, Count: wheatCount}
@@ -542,6 +604,37 @@ func (w *fluidWorld) settleFloodedCrop(
 		return true
 	}
 	return false
+}
+
+// settleFloodedSapling 在流体写入的目标格当前是树苗时结算冲毁：掉落恰好 1 个
+// 树苗，容量不足时原子拒绝并保留树苗、把该格重新排程等待重试（与 `settleFloodedCrop`
+// 同语义——任何时刻都不会出现树苗已被替换而掉落物未产出的状态）。
+func (w *fluidWorld) settleFloodedSapling(
+	chunk *world.Chunk,
+	position core.BlockPos,
+	old core.BlockID,
+	id core.BlockID,
+) bool {
+	if !core.IsSapling(old) || !core.IsFluid(id) {
+		return false
+	}
+	blockIndex, indexed := world.ChunkBlockIndex(position)
+	if !indexed {
+		return true
+	}
+	x, _, z := position.Local()
+	stacks := [1]core.ItemStack{{Item: core.ItemSapling, Count: 1}}
+	next, capacityOK := chunk.PrepareDropBatch(
+		stacks[:], blockIndex, w.state.environment.config.DropPickupDelayTicks,
+	)
+	if !capacityOK {
+		w.state.environment.enqueueFluidUpdate(w.id, position)
+		return true
+	}
+	chunk.SetBlock(x, position.Y, z, id)
+	w.mutation.Record(w.id, position, id)
+	chunk.CommitDropBatch(next)
+	return true
 }
 
 type fluidBoundaryPlane struct {
@@ -853,7 +946,9 @@ func (state *State) AdvanceFluids(active []core.ChunkKey, mutation *Mutation) {
 	for _, id := range state.sortedFluidDimensions() {
 		queue := state.environment.fluidQueues[id]
 		dimension := state.Dimension(id)
-		if dimension == nil || queue.Len() == 0 {
+		// 跳过判断按 FluidFlow 域计量：同一调度器实例还承载湿度域的待办，
+		// 跨域总数（Len）非零不代表流体有待推进的到期项。
+		if dimension == nil || queue.Scheduler().LenOf(updates.KindFluidFlow) == 0 {
 			continue
 		}
 		queue.Advance(now, &fluidWorld{
@@ -878,111 +973,14 @@ func (state *State) sortedFluidDimensions() []core.DimensionID {
 
 // --- Crop ---
 
-func splitmix64(x uint64) uint64 {
-	x += 0x9e3779b97f4a7c15
-	x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9
-	x = (x ^ (x >> 27)) * 0x94d049bb133111eb
-	return x ^ (x >> 31)
-}
-
-func cropSectionHash(seed int64, tick uint64, key core.ChunkKey, sectionY int) uint64 {
-	hash := splitmix64(uint64(seed))
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(key.Dimension)))
-	hash = splitmix64(hash ^ uint64(uint32(key.Pos.X)))
-	hash = splitmix64(hash ^ uint64(uint32(key.Pos.Z)))
-	return splitmix64(hash ^ uint64(uint32(sectionY)))
-}
-
-func sampleCells(seed int64, tick uint64, key core.ChunkKey, sectionY, n int, out []int) []int {
-	cells := out[:0]
-	if n <= 0 {
-		return cells
-	}
-	base := cropSectionHash(seed, tick, key, sectionY)
-	for index := range n {
-		cells = append(cells, int(splitmix64(base^uint64(index))%core.BlocksPerSection))
-	}
-	return cells
-}
-
-const cropGrowthRollSalt = 0xc0ffee5eedca11ed
-
-func cropGrowthRoll(
-	seed int64,
-	tick uint64,
-	dimension core.DimensionID,
-	position core.BlockPos,
-	chancePercent uint8,
-) bool {
-	if chancePercent == 0 {
-		return false
-	}
-	if chancePercent >= 100 {
-		return true
-	}
-	hash := splitmix64(uint64(seed) ^ cropGrowthRollSalt)
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(dimension)))
-	hash = splitmix64(hash ^ uint64(uint32(position.X)))
-	hash = splitmix64(hash ^ uint64(uint32(position.Y)))
-	hash = splitmix64(hash ^ uint64(uint32(position.Z)))
-	return hash%100 < uint64(chancePercent)
-}
-
-const cropYieldRollSalt = 0x5eedfeedfaceface
-
-func cropYieldRolls(
-	seed int64,
-	tick uint64,
-	dimension core.DimensionID,
-	position core.BlockPos,
-) (wheat uint8, seeds uint8) {
-	hash := splitmix64(uint64(seed) ^ cropYieldRollSalt)
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(dimension)))
-	hash = splitmix64(hash ^ uint64(uint32(position.X)))
-	hash = splitmix64(hash ^ uint64(uint32(position.Y)))
-	hash = splitmix64(hash ^ uint64(uint32(position.Z)))
-	wheat = uint8(hash%3) + 1
-	hash = splitmix64(hash)
-	seeds = uint8(hash%3) + 1
-	return wheat, seeds
-}
-
-const cropYieldPotatoSalt = 0x70a70a515eedface
-const cropYieldCarrotSalt = 0xca7707701ace5eed
-const poisonPotatoSalt = 0xdeadbeefcafe1234
-
-func cropYieldRollsPotato(seed int64, tick uint64, dim core.DimensionID, pos core.BlockPos) uint8 {
-	hash := splitmix64(uint64(seed) ^ cropYieldPotatoSalt)
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(dim)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.X)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.Y)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
-	return uint8(hash%4) + 1
-}
-
-func cropYieldRollsCarrot(seed int64, tick uint64, dim core.DimensionID, pos core.BlockPos) uint8 {
-	hash := splitmix64(uint64(seed) ^ cropYieldCarrotSalt)
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(dim)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.X)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.Y)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
-	return uint8(hash%4) + 1
-}
-
-func poisonRoll(seed int64, tick uint64, dim core.DimensionID, pos core.BlockPos) bool {
-	hash := splitmix64(uint64(seed) ^ poisonPotatoSalt)
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(dim)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.X)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.Y)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
-	return hash%50 == 0
-}
+// sampler 是随机面判定器的统一调用点：零值 `updates.Sampler` 是无状态纯函数
+// 集合，包级变量只是固定「判定真相在 updates」的写法（与 sim/entity 先例一
+// 致）——随机 tick 的抽样派生（`SampleCells`）与生长、退化、产量、毒素各判定
+// 流都从这里取值。历史上哈希链与域盐值常量在本包与 sim/entity 各持一份本地
+// 副本，变更 unified-block-updates-world-streaming 已原样搬迁到 updates 导出；
+// 搬迁前实现在固定输入下的输出由 updates 的已知答案测试与本包的固定世界重放
+// 钉子逐位钉住，换接保持搅拌输入顺序、次数与常量逐字不变。
+var sampler = updates.Sampler{}
 
 func growCrop(block core.BlockID, wet, skyExposed bool) (next core.BlockID, changed bool) {
 	if !core.IsCrop(block) {
@@ -1000,19 +998,6 @@ func growCrop(block core.BlockID, wet, skyExposed bool) (next core.BlockID, chan
 func cropSkyExposed(chunk *world.Chunk, position core.BlockPos) bool {
 	localX, _, localZ := position.Local()
 	return position.Y >= chunk.HighestOpaque(localX, localZ)
-}
-
-const farmlandRevertRollSalt = 0xfa1abb1edeadc0de
-const farmlandRevertChancePercent = 30
-
-func farmlandRevertRoll(seed int64, tick uint64, dimension core.DimensionID, position core.BlockPos) bool {
-	hash := splitmix64(uint64(seed) ^ farmlandRevertRollSalt)
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(dimension)))
-	hash = splitmix64(hash ^ uint64(uint32(position.X)))
-	hash = splitmix64(hash ^ uint64(uint32(position.Y)))
-	hash = splitmix64(hash ^ uint64(uint32(position.Z)))
-	return hash%100 < uint64(farmlandRevertChancePercent)
 }
 
 func (state *State) AdvanceCrops(active []core.ChunkKey, mutation *Mutation) {
@@ -1047,7 +1032,7 @@ func (state *State) AdvanceCrops(active []core.ChunkKey, mutation *Mutation) {
 		baseZ := key.Pos.Z << core.SectionShift
 		for sectionY := range core.SectionsPerChunk {
 			baseY := int32(sectionY<<core.SectionShift) + core.MinY
-			state.environment.cropCellScratch = sampleCells(
+			state.environment.cropCellScratch = sampler.SampleCells(
 				seed, tick, key, sectionY, samples, state.environment.cropCellScratch,
 			)
 			for _, cell := range state.environment.cropCellScratch {
@@ -1065,9 +1050,10 @@ func (state *State) AdvanceCrops(active []core.ChunkKey, mutation *Mutation) {
 	}
 }
 
-// advanceCropCell 是随机 tick 抽中一格后的判定分发器：作物生长、干耕地退化、
-// 积雪/消融共用同一抽样与预算，各分支互斥（作物与耕地命中后直接返回），至多
-// 写 1 格。
+// advanceCropCell 是随机 tick 抽中一格后的判定分发器：作物生长、树苗生长、
+// 干耕地退化、积雪/消融共用同一抽样与预算，各分支互斥（作物、树苗与耕地命中后
+// 直接返回）。作物与耕地分支至多写 1 格；树苗生长按树形几何整棵写入（见
+// `advanceSaplingCell`）。
 func (state *State) advanceCropCell(
 	dimension *Dimension,
 	dimensionID core.DimensionID,
@@ -1089,7 +1075,7 @@ func (state *State) advanceCropCell(
 		if !changed {
 			return
 		}
-		if !cropGrowthRoll(
+		if !sampler.CropGrowthRoll(
 			state.environment.seed, tick, dimensionID, position,
 			state.environment.config.CropGrowthChancePercent,
 		) {
@@ -1110,7 +1096,7 @@ func (state *State) advanceCropCell(
 		if !ready || aboveBlock != core.AirID {
 			return
 		}
-		if !farmlandRevertRoll(state.environment.seed, tick, dimensionID, position) {
+		if !sampler.FarmlandRevertRoll(state.environment.seed, tick, dimensionID, position) {
 			return
 		}
 		// 先写入区块，成功后再登记变更，避免幽灵变更
@@ -1120,9 +1106,122 @@ func (state *State) advanceCropCell(
 		mutation.Record(dimensionID, position, core.DirtID)
 		return
 	}
+	if core.IsSapling(block) {
+		state.advanceSaplingCell(dimension, dimensionID, chunk, position, tick, mutation)
+		return
+	}
 	// 既非作物也非干耕地：按白名单地表交给积雪/消融判定（内部再拒非白名单与
 	// 非空气上方，多数命中到此为止零额外读取）。
 	state.advanceSnowCover(dimension, dimensionID, chunk, position, block, mutation)
+}
+
+// saplingGrowthWrite 是一次生长写入的记账项：目标格、写入后的方块与写入前的
+// 旧值。旧值只用于失败回滚，不回滚则不必保留。
+type saplingGrowthWrite struct {
+	position core.BlockPos
+	block    core.BlockID
+	old      core.BlockID
+}
+
+// advanceSaplingCell 尝试让随机 tick 抽中的树苗长成一棵普通橡树。
+//
+// 判定序（全部满足才尝试写入，任一步不满足都保持树苗原样、后续 tick 可重试）：
+//
+//  1. 支撑：正下方仍是 `DirtID` 或 `GrassID`；
+//  2. 露天：本列最高非空气格不高于树苗自身（复用作物同式 `cropSkyExposed`）；
+//  3. 根坐标上界：`root.Y <= core.MaxY - 9`。engine 只接受该上界内的根坐标，
+//     越界请求以硬状态拒绝并让 Go 桥 panic；玩家可以在高处搭塔种苗，因此这条
+//     前置守卫是必须的；
+//  4. 独立冻结 salt 的 1/8 判定 `sampler.SaplingGrowthRoll` 命中；
+//  5. 树形几何（engine ABI 单一真源）的每条记录都在世界高度内且当前是 `AirID`
+//     或 `ShortGrassID`。树苗自身那一格（树干底）例外：它就是被替换的格；
+//  6. 全部目标区块处于 Ready。
+//
+// 写入全有或全无：先逐格保存旧值再写，任一格写入失败即把已写入的格恢复为旧值，
+// 不登记任何变更；成功后每个被改写的格经 `Mutation.Record` 登记，受影响区块的
+// revision 由既有提交路径各推进一次。覆盖短草不产生掉落（环境生长不是种子来源）。
+//
+// 读取预算：支撑 1 次读取后，只有判定命中才会求值树形几何并逐格校验（至多
+// `128` 格），因此每 tick 的读取总量仍以「被考察格数 × 128」为上界。
+func (state *State) advanceSaplingCell(
+	dimension *Dimension,
+	dimensionID core.DimensionID,
+	chunk *world.Chunk,
+	position core.BlockPos,
+	tick uint64,
+	mutation *Mutation,
+) {
+	below := core.BlockPos{X: position.X, Y: position.Y - 1, Z: position.Z}
+	belowBlock, belowReady := dimension.BlockAt(below)
+	state.environment.cropBlockReads++
+	if !belowReady || (belowBlock != core.DirtID && belowBlock != core.GrassID) {
+		return
+	}
+	if !cropSkyExposed(chunk, position) {
+		return
+	}
+	if position.Y > core.MaxY-9 {
+		return
+	}
+	if !sampler.SaplingGrowthRoll(state.environment.seed, tick, dimensionID, position) {
+		return
+	}
+	records := worldgen.TreeBlocks(state.environment.seed, position)
+	for _, record := range records {
+		target := core.BlockPos{
+			X: position.X + int32(record.DX),
+			Y: position.Y + int32(record.DY),
+			Z: position.Z + int32(record.DZ),
+		}
+		if target == position {
+			continue
+		}
+		if target.Y < core.MinY || target.Y >= core.MaxY {
+			return
+		}
+		block, _ := dimension.BlockAt(target)
+		state.environment.cropBlockReads++
+		if block != core.AirID && block != core.ShortGrassID {
+			return
+		}
+	}
+	// 目标区块就绪前置：任一未就绪即放弃，避免写到一半才发现（零副作用）。
+	// 未就绪区块的格在上面的空间校验里读作空气，因此这条检查是唯一的就绪闸门。
+	for _, record := range records {
+		target := core.BlockPos{
+			X: position.X + int32(record.DX),
+			Y: position.Y + int32(record.DY),
+			Z: position.Z + int32(record.DZ),
+		}
+		if _, ready := dimension.ReadyChunk(target.Chunk()); !ready {
+			return
+		}
+	}
+	writes := make([]saplingGrowthWrite, 0, len(records))
+	for _, record := range records {
+		target := core.BlockPos{
+			X: position.X + int32(record.DX),
+			Y: position.Y + int32(record.DY),
+			Z: position.Z + int32(record.DZ),
+		}
+		old, changed, err := dimension.SetBlock(target, record.Block)
+		if err != nil {
+			for _, write := range writes {
+				_, _, _ = dimension.SetBlock(write.position, write.old)
+			}
+			return
+		}
+		if changed {
+			writes = append(writes, saplingGrowthWrite{
+				position: target,
+				block:    record.Block,
+				old:      old,
+			})
+		}
+	}
+	for _, write := range writes {
+		mutation.Record(dimensionID, write.position, write.block)
+	}
 }
 
 // Torch/Bed support
@@ -1189,6 +1288,94 @@ func (state *State) invalidateWildGrassAbove(
 		return
 	}
 	mutation.Record(dimensionID, above, core.AirID)
+}
+
+// saplingSweepCell 是树苗复核快照里的一条已变位置：维度加方块坐标唯一定位一格。
+// 与短草/火把/床的复核快照同形但各自独立，避免一条 sweep 的目标类型被另一条改动。
+type saplingSweepCell struct {
+	dimension core.DimensionID
+	position  core.BlockPos
+}
+
+// SweepUnsupportedSaplings 清除失去泥土/草地支撑的树苗：取得本 mutation 当前
+// `ChangedBlocks()` 的稳定快照，对每个变化格只检查正上方一格——若上方是树苗且
+// 变化格的最终值不再是 `DirtID` 或 `GrassID`，就把树苗清为空气并掉落恰好 1 个
+// 树苗，登记到同一 mutation。
+//
+// 掉落走与采掘同形的原子路径：先 `PrepareDrop` 预检容量，容量不足整次清除被
+// 拒绝（树苗保留、不写方块、不登记变更），后续支撑变化可重试。有界性与短草
+// sweep 相同：快照在入口一次取定、不递归重扫，工作量严格正比于本 tick 已受预算
+// 约束的 changed set 大小。本 sweep 与短草 sweep 同相位、先于火把与床复核执行，
+// 因此后两者能看到树苗清除产生的新变更。
+func (state *State) SweepUnsupportedSaplings(mutation *Mutation) {
+	changes := mutation.ChangedBlocks()
+	if len(changes) == 0 {
+		return
+	}
+	cells := make([]saplingSweepCell, len(changes))
+	for index, change := range changes {
+		cells[index] = saplingSweepCell{dimension: change.Dimension, position: change.Position}
+	}
+	for _, cell := range cells {
+		state.invalidateSaplingAbove(cell.dimension, cell.position, mutation)
+	}
+}
+
+// invalidateSaplingAbove 检查 position 正上方一格：那里是树苗且 position 的最终
+// 内容不再是泥土或草地时，树苗支撑失效，同 mutation 清除并掉落一个树苗。支撑格
+// 读取变化后的最终值——同 tick 内多次写入以最后一次为准，被换回泥土/草地的支撑
+// 不触发清除。上方格未加载（跨区块边界）时跳过：树苗所在区块必然已就绪才会被
+// 生成，未就绪意味着整列已随区块卸载，没有可复核的权威状态（短草与火把复核
+// 同款取舍）。
+func (state *State) invalidateSaplingAbove(
+	dimensionID core.DimensionID,
+	position core.BlockPos,
+	mutation *Mutation,
+) {
+	dimension := state.Dimension(dimensionID)
+	if dimension == nil {
+		return
+	}
+	above := core.BlockPos{X: position.X, Y: position.Y + 1, Z: position.Z}
+	block, ready := dimension.BlockAt(above)
+	if !ready || !core.IsSapling(block) {
+		return
+	}
+	supportBlock, supportReady := dimension.BlockAt(position)
+	if !supportReady || supportBlock == core.DirtID || supportBlock == core.GrassID {
+		return
+	}
+	state.removeUnsupportedSapling(dimensionID, above, mutation)
+}
+
+// removeUnsupportedSapling 把失去支撑的树苗清为空气并掉落 1 个树苗。容量预检
+// 先于写入：预检失败整次拒绝，树苗与区块状态逐字段保持不变。
+func (state *State) removeUnsupportedSapling(
+	dimensionID core.DimensionID,
+	position core.BlockPos,
+	mutation *Mutation,
+) {
+	dimension := state.Dimension(dimensionID)
+	chunk, recordOK := dimension.ReadyChunk(position.Chunk())
+	index, indexOK := world.ChunkBlockIndex(position)
+	if !recordOK || !indexOK {
+		return
+	}
+	slot, capacityOK := chunk.PrepareDrop(core.ItemSapling, index)
+	if !capacityOK {
+		return
+	}
+	_, changed, err := dimension.SetBlock(position, core.AirID)
+	if err != nil || !changed {
+		return
+	}
+	mutation.Record(dimensionID, position, core.AirID)
+	chunk.CommitDrop(
+		slot,
+		core.ItemStack{Item: core.ItemSapling, Count: 1},
+		index,
+		state.environment.config.DropPickupDelayTicks,
+	)
 }
 
 func torchSupportOffset(block core.BlockID) (core.BlockPos, bool) {
@@ -1583,19 +1770,42 @@ func (state *State) FarmlandRescanCursor() int {
 func (state *State) FarmlandRescanPendingLen() int {
 	return len(state.environment.farmlandMoisture.rescans.pending)
 }
+
+// FarmlandQueued 报告 (dim, pos) 是否有排队的湿度候选（FarmlandMoisture 域）。
 func (state *State) FarmlandQueued(dim core.DimensionID, pos core.BlockPos) bool {
-	key := farmlandMoistureKey{dimension: dim, position: pos}
-	_, ok := state.environment.farmlandMoisture.queued[key]
+	_, ok := state.FarmlandMoistureDueTick(dim, pos)
 	return ok
 }
+
+// FarmlandMoistureDueTick 返回 (dim, pos) 当前湿度候选的到期 tick；未在队返回
+// false。供测试断言「只提前不推迟」的落位值，生产热路径不调用。
+func (state *State) FarmlandMoistureDueTick(dim core.DimensionID, pos core.BlockPos) (uint64, bool) {
+	queue := state.environment.fluidQueues[dim]
+	if queue == nil {
+		return 0, false
+	}
+	return queue.Scheduler().DueTick(pos, updates.KindFarmlandMoisture)
+}
+
 func (state *State) FarmlandRescanPending() []core.ChunkKey {
 	return append([]core.ChunkKey(nil), state.environment.farmlandMoisture.rescans.pending...)
 }
+
+// FarmlandMoisturePendingLen 返回全部维度 FarmlandMoisture 域的排队候选总数
+// （求和与 map 遍历顺序无关，结果确定）。
 func (state *State) FarmlandMoisturePendingLen() int {
-	return len(state.environment.farmlandMoisture.pending)
+	total := 0
+	for _, queue := range state.environment.fluidQueues {
+		total += queue.Scheduler().LenOf(updates.KindFarmlandMoisture)
+	}
+	return total
 }
-func (state *State) FarmlandMoistureHead() int { return state.environment.farmlandMoisture.head }
-func (state *State) FarmlandQueuedCount() int  { return len(state.environment.farmlandMoisture.queued) }
+
+// ResetFarmlandMoisture 清空湿度域的全部状态：各维度调度器上的 FarmlandMoisture
+// 待办、计量与全块重扫队列（流体域待办不受影响——测试夹具用它隔离湿度域）。
 func (state *State) ResetFarmlandMoisture() {
 	state.environment.farmlandMoisture = farmlandMoistureState{}
+	for _, queue := range state.environment.fluidQueues {
+		queue.Scheduler().ClearKind(updates.KindFarmlandMoisture)
+	}
 }

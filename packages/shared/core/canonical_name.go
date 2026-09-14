@@ -92,6 +92,7 @@ var canonicalBlockNames = [...]string{
 	SnowLayer2BlockID:    "snow_layer_2",
 	SnowLayer3BlockID:    "snow_layer_3",
 	SnowLayer4BlockID:    "snow_layer_4",
+	SaplingID:            "oak_sapling",
 }
 
 // explicitCanonicalItemNames 只登记没有同名完整方块的物品。完整方块物品通过
@@ -130,6 +131,16 @@ var explicitCanonicalItemNames = map[ItemID]string{
 	ItemBrokenIronSword:    "broken_iron_sword",
 	ItemEmptyBucket:        "empty_bucket",
 	ItemWaterBucket:        "water_bucket",
+	// 四件铁质护甲不可放置、无方块名可复用，必须显式登记 machine name。
+	ItemIronHelmet:     "iron_helmet",
+	ItemIronChestplate: "iron_chestplate",
+	ItemIronLeggings:   "iron_leggings",
+	ItemIronBoots:      "iron_boots",
+	// 弓箭批次四件同样不可放置、无方块名可复用，必须显式登记 machine name。
+	ItemBow:       "bow",
+	ItemArrow:     "arrow",
+	ItemBone:      "bone",
+	ItemBrokenBow: "broken_bow",
 }
 
 var canonicalItemNames = buildCanonicalItemNames()

@@ -12,7 +12,17 @@ import (
 // 用于精确钉住自动回复的 tick 边界。
 func readyRegenPlayer(t *testing.T, id SessionID, health uint8) *Engine {
 	t.Helper()
-	engine := NewEngine(0, 0, 0)
+	return readyRegenPlayerAtDifficulty(t, id, core.DifficultyNormal, health)
+}
+
+// readyRegenPlayerAtDifficulty 是 `readyRegenPlayer` 的难度感知变体：夹具逐字
+// 相同，只把构造难度换成入参，供难度分档用例与 normal 基线共用同一套回血
+// 边界夹具。
+func readyRegenPlayerAtDifficulty(
+	t *testing.T, id SessionID, difficulty core.Difficulty, health uint8,
+) *Engine {
+	t.Helper()
+	engine := NewEngine(0, 0, 0, difficulty)
 	current := PlayerLocation{
 		Dimension: core.Overworld,
 		Position:  mgl32.Vec3{2.5, 1, 0.5},

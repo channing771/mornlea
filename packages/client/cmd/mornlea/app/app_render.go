@@ -103,20 +103,40 @@ func AppendCompanionRenderPresentationsInto(
 	return avatars, tags
 }
 
-// AppendHostileRenderPresentationsInto 把夜行者镜像转换为 avatar 记录：
-// 夜行者只进入实体通道，绝不进入名称标签集合（名标容量不随敌怪数量变化）。
+// AppendHostileRenderPresentationsInto 把敌怪镜像转换为 avatar 记录：
+// 敌怪只进入实体通道，绝不进入名称标签集合（名标容量不随敌怪数量变化）。
+// 类别字节与 wire 侧同值直通（夜行者/掷骨者的几何与配色分支在 render 侧
+// 按 `render.HostileKind` 分流），本函数不做任何类别重解释。
 func AppendHostileRenderPresentationsInto(
 	avatars []render.Avatar,
 	presentations []client.HostilePresentation,
 ) []render.Avatar {
 	for _, presentation := range presentations {
 		avatars = append(avatars, render.Avatar{
-			Key:      render.HostileEntityKey(presentation.ID),
-			Position: presentation.Position,
-			Yaw:      presentation.Yaw,
+			Key:         render.HostileEntityKey(presentation.ID),
+			Position:    presentation.Position,
+			Yaw:         presentation.Yaw,
+			HostileKind: presentation.Kind,
 		})
 	}
 	return avatars
+}
+
+// AppendProjectileRenderPresentationsInto 把投射物镜像呈现转换为投射物编
+// 码输入：位置/速度/弹种全部 latest-wins 直通，客户端不预测弹道；投射物
+// 走独立的 tag 14 实例段，不进入 avatar 通道与名标集合。
+func AppendProjectileRenderPresentationsInto(
+	dst []render.Projectile,
+	presentations []client.ProjectilePresentation,
+) []render.Projectile {
+	for _, presentation := range presentations {
+		dst = append(dst, render.Projectile{
+			Kind:     presentation.Kind,
+			Position: presentation.Position,
+			Velocity: presentation.Velocity,
+		})
+	}
+	return dst
 }
 
 // passiveRenderYaw 把被动牛的权威 yaw 映射为牛模型的渲染朝向。牛模型静止

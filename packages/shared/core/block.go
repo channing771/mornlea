@@ -24,6 +24,15 @@ type SectionKey struct {
 // Overworld 是 M2A 使用的主世界维度。
 const Overworld DimensionID = 0
 
+// Depths 是随主世界一并启动的第二权威维度：`Overworld` 为 0，
+// `Depths` 固定为 1，后续世界生成、存档与协议值域都以该编号区分双维。
+const Depths DimensionID = 1
+
+// DepthsSeedSalt 是派生 `Depths` 地形种子的盐（经典 64 位黄金比例常数）：
+// 存档 `DepthsSeedSalt` 字段与世界生成侧的种子异或共用这一唯一源头，两侧
+// 只做位模式一致的运行时转换，不各自拼写字面量。
+const DepthsSeedSalt uint64 = 0x9E3779B97F4A7C15
+
 // 方块 ID 是协议稳定值，不能重排。
 const (
 	AirID BlockID = iota
@@ -163,6 +172,12 @@ const (
 	SnowLayer2BlockID
 	SnowLayer3BlockID
 	SnowLayer4BlockID
+	// SaplingID 是橡树树苗的稳定方块编号，只追加在四档雪层之后：方块 ID 是
+	// 协议稳定值，重排会破坏既有存档与线上字节。树苗是零碰撞、非不透明、
+	// 不发光的植物方块，由 ItemSapling 放置在泥土或草方块上方，并在露天且
+	// 空间足够时按随机 tick 生长成橡树；树形几何由 engine 侧单一真源提供，
+	// 本包只负责编号、谓词与名称。
+	SaplingID
 	// BlockIDMax 是合法方块编号的独占上界（最后一个合法 BlockID + 1），本身不是
 	// 方块枚举成员，与物品侧的 ItemIDMax 同形。它供哨兵与穷举测试以
 	// 「id < BlockIDMax」表达「全部已注册方块」，替代「某个具体编号恰为枚举末项」

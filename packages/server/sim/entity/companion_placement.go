@@ -167,13 +167,17 @@ func (engine *engineContext) completeCompanionPlacement(
 	if !ok {
 		return false
 	}
-	_, changed, err := dimension.SetBlock(target, placement)
+	old, changed, err := dimension.SetBlock(target, placement)
 	if err != nil || !changed {
 		// 目标已在前置校验确认是空气；changed=false 只能来自同 tick 更早结算的
 		// 意图（多伙伴竞争），对齐玩家的 RejectOccupied 语义整体拒绝不扣料。
 		return false
 	}
-	engine.recordChange(entry.dimension, target, placement, pending)
+	// `recordChange` 的契约要求调用方透传写前旧值（门面只认类别变化、不回读
+	// 世界），因此取 `SetBlock` 的返回值而非硬编码空气：今天写前校验保证旧值
+	// 恒为空气，未来若放开伙伴放置覆盖流体，湿窗口派生也不会因硬编码而静默
+	// 跳过。
+	engine.recordChange(entry.dimension, target, old, placement, pending)
 	if reserveFurnace {
 		targetChunk.CommitFurnace(furnaceSlot, targetIndex)
 	}

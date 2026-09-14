@@ -19,15 +19,14 @@ func TestRuntimeStepPhaseOrder(t *testing.T) {
 	engine.stepPhaseObserver = nil
 	want := []stepPhase{
 		phasePlayerCommands, phaseCompanionActions, phasePhysicsAdvance,
-		phaseHostileAdvance, phaseFluidAdvance, phaseFarmlandMoistureAdvance,
-		phaseCropAdvance,
+		phaseHostileAdvance, phaseBlockUpdates,
 	}
 	if !reflect.DeepEqual(phases, want) {
 		t.Fatalf("阶段顺序=%v，想要 %v", phases, want)
 	}
 }
 
-func TestStepRunsHostilePhasesBetweenPhysicsAndFluid(t *testing.T) {
+func TestStepRunsHostilePhasesBetweenPhysicsAndBlockUpdates(t *testing.T) {
 	engine := NewEngine(0, 0, 0)
 	var phases []stepPhase
 	engine.stepPhaseObserver = func(phase stepPhase) { phases = append(phases, phase) }
@@ -36,8 +35,7 @@ func TestStepRunsHostilePhasesBetweenPhysicsAndFluid(t *testing.T) {
 
 	want := []stepPhase{
 		phasePlayerCommands, phaseCompanionActions, phasePhysicsAdvance,
-		phaseHostileAdvance, phaseFluidAdvance, phaseFarmlandMoistureAdvance,
-		phaseCropAdvance,
+		phaseHostileAdvance, phaseBlockUpdates,
 	}
 	if !reflect.DeepEqual(phases, want) {
 		t.Fatalf("阶段顺序=%v，想要 %v", phases, want)
@@ -285,5 +283,15 @@ func TestHostileActionsQueuedAtPhaseBoundaryRunInCurrentTick(t *testing.T) {
 	second := engine.HostileMobs()
 	if len(second) != 1 || second[0].State.Position != positionAfterFirst {
 		t.Fatalf("action 延迟到下一空闲 tick 才结算：first=%+v second=%+v", first, second)
+	}
+}
+
+func TestEngineBootsTwoDimensions(t *testing.T) {
+	engine := NewEngine(2, 0, 1234)
+	if engine.dimension(core.Overworld) == nil {
+		t.Fatal("overworld missing")
+	}
+	if engine.dimension(core.Depths) == nil {
+		t.Fatal("depths missing")
 	}
 }

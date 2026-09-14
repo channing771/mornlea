@@ -33,6 +33,39 @@ const (
 	CommandInteractBed
 	CommandCollectWater
 	CommandPlaceWater
+	// CommandEquipArmor 请求把权威选中快捷栏格中的护甲件穿到对应槽位；载荷
+	// 只有序号，目标槽位由件类映射唯一确定。只读写玩家自身状态，不触碰区块。
+	CommandEquipArmor
+	// CommandMoveStackPartial 请求半组/单件部分数量移动：`Slot`/`ToSlot` 是
+	// `StackView` 视图域的统一索引，`Single` 在半组（ceil）与单件（1）两档间
+	// 选择。移动数量 MUST 由服务端在结算时按权威来源栈推导，命令载荷不存在
+	// 客户端可声明的数量。背包/合成视图只读写玩家自身状态，命令阶段内联
+	// 结算；容器视图携带 `Furnace` 容器引用并延迟到区块写相位结算（与
+	// `CommandMoveFurnaceStack` 同路径）。
+	CommandMoveStackPartial
+	// CommandQuickMoveStack 请求快捷搬运：把 `Slot`（`StackView` 视图域的
+	// 统一索引）整堆移动到对侧区域的首个可容纳位置。目标序是固定确定性
+	// 契约（容器区来源按拾取四相位序并入背包、箱子/网格按统一索引升序、
+	// 熔炉按「熔炼输入优先于燃料」、纯背包面板快捷栏↔背包对侧互移），由
+	// 服务端权威推导，命令不携带目标字段；余量按既有合并语义留在来源格，
+	// 对侧零吸收时整单拒绝。结算相位与 `CommandMoveStackPartial` 同族：
+	// 背包/合成视图内联，容器视图延迟到区块写相位。
+	CommandQuickMoveStack
+)
+
+// 分堆命令族（`CommandMoveStackPartial` 与 `CommandQuickMoveStack`）的视图域
+// 值域。值与协议侧 `network.StackView*` 常量逐值相同（ingress 按两侧常量
+// 显式映射而不是透传字节，等值由 contract 钉值测试拦住漂移）；sim 按它
+// 分派结算相位与值域上界。
+// 零值即背包域，其它命令族不携带该字段，零值不会误入分堆路径。
+const (
+	// StackViewInventory 是背包视图域：统一索引 0..`core.InventorySlots`-1。
+	StackViewInventory uint8 = 0
+	// StackViewCrafting 是合成统一视图域：网格 0..8、背包 9..44。
+	StackViewCrafting uint8 = 1
+	// StackViewContainer 是容器统一视图域：箱子 0..62、熔炉 0..38，命令必须
+	// 携带与查看关系一致的合法容器引用（`Command.Furnace`）。
+	StackViewContainer uint8 = 2
 )
 
 type RejectReason uint8
@@ -52,6 +85,11 @@ const (
 	RejectContainerCapacity RejectReason = 11
 	RejectNotFluidSource    RejectReason = 12
 	RejectBucketMismatch    RejectReason = 13
+	// RejectNotArmor 表示装备互换命令的权威选中快捷栏格未持有可穿戴的护甲件
+	//（空格、非护甲物品或多件栈），权威状态零变化。显式取 14：按前值的
+	// iota 重复语义会拿到与 `RejectBucketMismatch` 相同的字面量 13，让两个
+	// 拒绝原因在 server 的映射 switch 里坍缩成同一个 case。
+	RejectNotArmor RejectReason = 14
 )
 
 type Command struct {
@@ -74,6 +112,15 @@ type Command struct {
 	Mining       bool
 	Eating       bool
 	Sprinting    bool
+	Sneaking     bool
+	// StackView 是分堆命令族（`CommandMoveStackPartial` 与
+	// `CommandQuickMoveStack`）的视图域，取值 `StackView*` 三常量之一；
+	// 其它命令族恒为零值。
+	StackView uint8
+	// Single 是部分移动（`CommandMoveStackPartial`）的数量档位：false = 半组
+	//（来源数量向上取整）、true = 单件（1）。数量由服务端在结算时按权威
+	// 来源栈推导；快捷搬运恒为整堆，不消费本字段。
+	Single bool
 }
 
 type GeneratedChunk struct {
@@ -170,6 +217,9 @@ type PlayerUpdate struct {
 	// from zero——.5 恰值远离零）后收窄为 int8，域由 core 在源头 clamp 到
 	// [-40,45]，无二次裁剪。逐人求值、逐人不可变。
 	Temperature int8
+	// ArmorPoints 是四槽已装备护甲的完好件点数投影（`core.ArmorPoints`，
+	// 0..`core.MaxArmorPoints`），每次发布时从权威装备区现算，损坏件计 0。
+	ArmorPoints uint8
 }
 
 type CompanionUpdate struct {
@@ -250,12 +300,21 @@ type PlayerLocation struct {
 }
 
 type PlayerRestore struct {
-	Current          *PlayerLocation
-	Safe             *PlayerLocation
-	Yaw, Pitch       float32
-	SpawnDimension   core.DimensionID
-	SpawnAnchor      core.ChunkPos
-	Inventory        core.Inventory
+	Current        *PlayerLocation
+	Safe           *PlayerLocation
+	Yaw, Pitch     float32
+	SpawnDimension core.DimensionID
+	SpawnAnchor    core.ChunkPos
+	// ViewDistance 是该会话在登录协商中声明的期望视距（v40 `LoginStart`
+	// 域内值 2..64）；0 表示未声明（未经登录协商的注册路径）。它是会话
+	// 协商事实而非存档状态：不持久化、不进入快照，仅在注册时被换算为
+	// 订阅半径（声明 +1，按引擎视界上界钳制）后即完成使命。
+	ViewDistance uint8
+	Inventory    core.Inventory
+	// Armor 是四槽已装备护甲（按 `core.ArmorSlot` 槽位顺序），随存档跨重启
+	// 保留；缺失路径（新玩家、只给锚点的注册）为零值即全空。损坏形态以
+	// 「数量 1、耐久 0」原地表达。
+	Armor            [core.ArmorSlotCount]core.ItemStack
 	Health           uint8
 	Hunger           uint8
 	SaturationMilli  uint16
@@ -267,10 +326,13 @@ type PlayerRestore struct {
 }
 
 type PlayerSnapshot struct {
-	Current          PlayerLocation
-	Yaw, Pitch       float32
-	Safe             *PlayerLocation
-	Inventory        core.Inventory
+	Current    PlayerLocation
+	Yaw, Pitch float32
+	Safe       *PlayerLocation
+	Inventory  core.Inventory
+	// Armor 是四槽已装备护甲（按 `core.ArmorSlot` 槽位顺序），持久化路径是
+	// 它跨重启保留的唯一通道；漏进快照之外会在重登时静默落回空装备。
+	Armor            [core.ArmorSlotCount]core.ItemStack
 	Health           uint8
 	Hunger           uint8
 	SaturationMilli  uint16
@@ -361,6 +423,31 @@ type ChunkInfo struct {
 
 const HostileAttackRange = float32(1.8)
 
+// ProjectileSnapshot 是一条在飞投射物的权威投影：非零稳定 ID、弹种（0=骨刺、
+// 1=箭，与协议 v43 的 kind 字节同值）、所在维度、位置与速度。发布侧消费本投影
+// 组装按会话订阅的 spawn/state 批次（despawn 由「镜像有而截面无」的差异判据
+// 派生，与敌怪发布同形）。全部字段为值语义，跨 goroutine 发送成功后视为不可变。
+type ProjectileSnapshot struct {
+	ID        uint64
+	Kind      uint8
+	Dimension core.DimensionID
+	Position  mgl32.Vec3
+	Velocity  mgl32.Vec3
+}
+
+// 敌怪 kind 值域（与协议 v43 hostile record 尾部 kind 字节、hostile_mobs v2
+// 存档记录的 Kind 字段共用同一映射）：0 是夜行者（近战追击），1 是掷骨者
+// （远程投掷骨刺）。新增敌怪类别必须同步扩展协议、存档与引擎三侧值域。
+const (
+	HostileKindNightwalker uint8 = 0
+	HostileKindBoneThrower uint8 = 1
+)
+
+// HostileMob 是一只敌怪（任一 kind）的权威投影：非零稳定 ID、所在维度、
+// 物理体、朝向、生命、三个 20-tick 周期冷却与追逐事实。`Kind` 随记录持久化
+// 并随线上消息携带；`ShootCooldown` 是掷骨者射击冷却的瞬态投影（0 = 就绪），
+// 仅供编排层的射击决策消费，永不落盘。全部字段为值语义，跨 goroutine 发送
+// 成功后视为不可变。
 type HostileMob struct {
 	ID              uint64
 	Dimension       core.DimensionID
@@ -374,14 +461,25 @@ type HostileMob struct {
 	PlayerID        core.PlayerID
 	NextRepathTicks uint64
 	DistantTicks    uint16
+	Kind            uint8
+	ShootCooldown   uint8
 }
 
+// HostileAction 是服务端编排层在 tick 边界提交给一只敌怪的本 tick 意图。
+// 移动以世界轴分量表达（与玩家/伙伴输入同界 [-1,1]），攻击意图携带目标
+// 会话；`RangedAttack` 为真表示本意图是掷骨者的远程射击——`AimX/Y/Z` 是
+// 归一化的瞄准基准方向（目标眼位 − 掷骨者眼位），散布由引擎侧确定性求值。
+// 每个 ID 每 tick 取最早的一条合法意图，重复与非法载荷确定性丢弃。
 type HostileAction struct {
 	ID            uint64
 	MoveX, MoveZ  float32
 	Jump          bool
 	AttackTarget  bool
 	TargetSession SessionID
+	// RangedAttack 是射击意图判别位：为真时本意图不携带移动语义，冷却/
+	// 存活/kind 校验在引擎侧结算点统一执行。
+	RangedAttack     bool
+	AimX, AimY, AimZ float32
 }
 
 // PassiveMob 是一头被动牛的权威身体事实：稳定非零身份、所在维度、物理体、

@@ -428,6 +428,7 @@ func hudSchemaFixture(t *testing.T, hotbar core.Hotbar) *client.UIHudState {
 		Viewport:      client.NewUIHudViewport(1280, 720),
 		Hotbar:        client.NewUIHudHotbar(hotbar),
 		Health:        client.NewUIHudHealth(17),
+		Armor:         client.NewUIHudArmor(7),
 		Hunger:        client.NewUIHudHunger(18, true),
 		Oxygen:        client.NewUIHudOxygen(210),
 		Eating:        client.NewUIHudEating(true, 0.5),
@@ -503,9 +504,10 @@ func TestUIHudStateConformsToBridgeSchema(t *testing.T) {
 		t.Fatal("HUD 状态未知键应被 schema 拒绝")
 	}
 
-	// 越界值:生命超上限、进食进度超 1、快捷栏选中下标越界。
+	// 越界值:生命超上限、护甲点数超上限、进食进度超 1、快捷栏选中下标越界。
 	for name, mutate := range map[string]func(*client.UIHudState){
 		"health 越界":   func(state *client.UIHudState) { state.Health = &client.UIHudHealth{Value: core.MaxHealth + 1} },
+		"armor 越界":    func(state *client.UIHudState) { state.Armor = &client.UIHudArmor{Points: core.MaxArmorPoints + 1} },
 		"progress 越界": func(state *client.UIHudState) { state.Eating = client.UIHudEating{Active: true, Progress: 1.5} },
 		"选中下标越界":      func(state *client.UIHudState) { state.Hotbar.SelectedIndex = core.HotbarSlots },
 	} {

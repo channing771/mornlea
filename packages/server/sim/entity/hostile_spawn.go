@@ -25,8 +25,10 @@ const (
 	hostileSpawnMaxRehashes = 64
 	// 候选格局部区块光的暗度判定上限（≤7 视为足够暗）。
 	hostileSpawnLightLimit = 7
-	// 任一 active 玩家水平 48 格半径内的夜行者数量上限。
+	// 任一 active 玩家水平 48 格半径内的敌怪数量上限，按 kind 分别计数
+	// （两类上限互不挤占；全服 64 由 hostileSet 容量共享）。
 	maxHostilesNearPlayer = 8
+	maxHostilesNearHurler = 4
 )
 
 // hostileSpawnColumn 从本 tick 的基准哈希派生唯一候选列：半径取基准哈希的
@@ -41,27 +43,23 @@ func hostileSpawnColumn(base uint64, anchorX, anchorZ int32) (x, z int32, radius
 	return anchorX + deltaX*int32(radius), anchorZ + deltaZ*int32(radius), radius, axis
 }
 
-// hostileCandidateHash 把候选坐标折进哈希链：基准哈希（seed^tick 过
-// `splitmix64`）先混入 X/Z 的零扩展 uint32，再按同样的传播混入 Y。该哈希的
-// 低 8 位是生成门槛，其非零值本身即候选 ID——ID 与门槛同源，重放必然逐位
-// 一致。
-func hostileCandidateHash(seed int64, tick uint64, x, y, z int32) uint64 {
-	hash := splitmix64(uint64(seed) ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(x)) ^ uint64(uint32(z)))
-	return splitmix64(hash ^ uint64(uint32(y)))
-}
-
 // advanceHostileSpawn 是权威 tick 的夜间生成判定：每 tick 恰好推导一个候选
 // （锚点玩家、候选列、落点 Y 依次确定），全部必要条件按「廉价前置、昂贵后
 // 置」的顺序校验，任一不成立即放弃且本 tick 不再考察其它候选。生成发生在
 // tick 边界、先于物理阶段；新个体下一 tick 才参与积分（见
 // advanceHostileMovement 的 fresh 约定）。
 //
-// 条件清单（spec「夜间在暗处确定性生成」）：夜间窗口、active 锚点、全服
-// ≤64、候选 chunk 完整加载、双格空气 + 下方 solid + 非流体落点、门槛哈希、
-// 每玩家 48 格内 ≤8、局部区块光 ≤7、非零唯一 ID。整个判定只读世界，绝不
-// 为生成触发同步加载。
+// 条件清单（spec「夜间在暗处确定性生成」）：世界难度非 peaceful、夜间窗口、
+// active 锚点、全服 ≤64、候选 chunk 完整加载、双格空气 + 下方 solid + 非流体
+// 落点、门槛哈希、每玩家 48 格内 ≤8、局部区块光 ≤7、非零唯一 ID。整个判定只读
+// 世界，绝不为生成触发同步加载。
 func (engine *engineContext) advanceHostileSpawn() {
+	// 和平难度在入口短路，先于一切候选派生：不推导锚点与候选列，也不占用
+	// 「每 tick 至多验证一个候选」的预算语义。不实现加载后清除既有夜行者——
+	// 难度在创建世界时固定，peaceful 世界的持久化天然为空，门控只管生成。
+	if engine.difficulty == core.DifficultyPeaceful {
+		return
+	}
 	now := engine.worldTime.Load()
 	phase := core.EffectiveDayPhaseAt(now, engine.DayPhaseOffset(), engine.seasonOffset)
 	if phase < hostileSpawnPhaseStart || phase > hostileSpawnPhaseEnd {
@@ -84,7 +82,7 @@ func (engine *engineContext) advanceHostileSpawn() {
 		return
 	}
 	anchor := blockPosOf(anchorSession.player.state.Position)
-	x, z, _, _ := hostileSpawnColumn(splitmix64(uint64(engine.seed)^now), anchor.X, anchor.Z)
+	x, z, _, _ := hostileSpawnColumn(sampler.SplitMix64(uint64(engine.seed)^now), anchor.X, anchor.Z)
 	if info, ok := dimension.Info(core.BlockPos{X: x, Z: z}.Chunk()); !ok || info.State != realm.ChunkReady {
 		return
 	}
@@ -92,12 +90,20 @@ func (engine *engineContext) advanceHostileSpawn() {
 	if !ok {
 		return
 	}
-	hash := hostileCandidateHash(engine.seed, now, x, y, z)
+	hash := sampler.HostileCandidateHash(engine.seed, now, x, y, z)
 	if hash&0xFF >= hostileSpawnGateThreshold {
 		return
 	}
+	// kind 分派在候选哈希门槛通过后立即求值：它是候选哈希的纯函数（无世界
+	// 读取），但近玩家上限按 kind 分别计数，分派必须先于该判定可见。被任何
+	// 后续校验拒绝的候选不物化任何个体，分派因此仍只在「通过全部校验」时
+	// 产生可观察结果。规则：hash%3==0 → 掷骨者，其余 → 夜行者（2:1）。
+	kind := HostileKindNightwalker
+	if hash%3 == 0 {
+		kind = HostileKindBoneThrower
+	}
 	candidate := mgl32.Vec3{float32(x) + 0.5, float32(y), float32(z) + 0.5}
-	if engine.hostileNearLimitExceeded(anchorSession.dimension, candidate) {
+	if engine.hostileNearLimitExceeded(anchorSession.dimension, candidate, kind) {
 		return
 	}
 	if engine.hostileBlockLight(dimension, core.BlockPos{X: x, Y: y, Z: z}) > hostileSpawnLightLimit {
@@ -109,16 +115,18 @@ func (engine *engineContext) advanceHostileSpawn() {
 	for attempt := 0; attempt < hostileSpawnMaxRehashes; attempt++ {
 		if id != 0 && engine.hostiles.findIndex(id) < 0 {
 			engine.hostiles.insert(hostileState{
-				state:        physics.State{Position: candidate, OnGround: true},
-				id:           id,
-				dimension:    anchorSession.dimension,
-				health:       core.MaxHealth,
-				burnCooldown: hostileCooldownPeriodTicks,
-				fresh:        true,
+				state:         physics.State{Position: candidate, OnGround: true},
+				id:            id,
+				dimension:     anchorSession.dimension,
+				kind:          kind,
+				health:        core.MaxHealth,
+				burnCooldown:  hostileCooldownPeriodTicks,
+				shootCooldown: 0,
+				fresh:         true,
 			})
 			return
 		}
-		id = splitmix64(id)
+		id = sampler.SplitMix64(id)
 	}
 }
 
@@ -148,11 +156,20 @@ func hostileSpawnColumnSpot(dimension *Dimension, x, z int32) (int32, bool) {
 	return 0, false
 }
 
-// hostileNearLimitExceeded 报告「任一 active 玩家水平 48 格内已有 8 只夜行
-// 者，且候选落在该玩家的 48 格半径内」。距离全部在平方域比较，避免开方；
-// 统计范围只含同维个体，成本至多 active 玩家数 × 64。
-func (engine *engineContext) hostileNearLimitExceeded(dimensionID core.DimensionID, candidate mgl32.Vec3) bool {
+// hostileNearLimitExceeded 报告「任一 active 玩家水平 48 格内已有足够多的同
+// kind 敌怪，且候选落在该玩家的 48 格半径内」。上限按 kind 分别计数（夜行者
+// 8、掷骨者 4，互不挤占）；距离全部在平方域比较，避免开方；统计范围只含同
+// 维个体，成本至多 active 玩家数 × 64。
+func (engine *engineContext) hostileNearLimitExceeded(
+	dimensionID core.DimensionID,
+	candidate mgl32.Vec3,
+	kind uint8,
+) bool {
 	nearSq := float32(maxHostilesNearRadius) * float32(maxHostilesNearRadius)
+	limit := maxHostilesNearPlayer
+	if kind == HostileKindBoneThrower {
+		limit = maxHostilesNearHurler
+	}
 	for _, id := range engine.sortedActiveSessions() {
 		session := engine.sessions[id]
 		if session == nil || session.player == nil || session.dimension != dimensionID {
@@ -165,12 +182,12 @@ func (engine *engineContext) hostileNearLimitExceeded(dimensionID core.Dimension
 		count := 0
 		for index := range engine.hostiles.entries {
 			entry := &engine.hostiles.entries[index]
-			if entry.dimension == dimensionID &&
+			if entry.kind == kind && entry.dimension == dimensionID &&
 				horizontalDistanceSq(entry.state.Position, playerPos) <= nearSq {
 				count++
 			}
 		}
-		if count >= maxHostilesNearPlayer {
+		if count >= limit {
 			return true
 		}
 	}

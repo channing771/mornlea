@@ -17,17 +17,28 @@ func TestValidateClientPacket(t *testing.T) {
 		packet ClientPacket
 	}{
 		{"hello", StateHandshake, ClientHello{ProtocolVersion: ProtocolVersion}},
-		{"login start", StateLogin, LoginStart{PlayerID: validID, DisplayName: "Chen"}},
+		// v40 起视距合法域是闭区间 2..64，两端边界值都必须放行。
+		{"login start", StateLogin, LoginStart{PlayerID: validID, DisplayName: "Chen", ViewDistance: LoginViewDistanceMin}},
+		{"login start max view distance", StateLogin, LoginStart{PlayerID: validID, DisplayName: "Chen", ViewDistance: LoginViewDistanceMax}},
 		{"input", StatePlay, PlayerInput{Yaw: 90, Pitch: -15, Mining: true}},
 		{"place", StatePlay, PlaceBlock{Yaw: 90, Pitch: -15, Slot: 8}},
 		{"select hotbar", StatePlay, SelectHotbar{Slot: 8}},
 		{"move inventory stack", StatePlay, MoveInventoryStack{From: 0, To: core.InventorySlots - 1}},
 		{"move crafting stack", StatePlay, MoveCraftingStack{From: 9, To: 0}},
+		{"move stack partial inventory", StatePlay, MoveStackPartial{View: StackViewInventory, From: 0, To: core.InventorySlots - 1}},
+		{"quick move stack container", StatePlay, QuickMoveStack{
+			Container: core.ContainerRef{
+				Dimension: core.Overworld, Chunk: core.ChunkPos{X: 1, Z: 2},
+				Kind: core.ContainerKindChest, Slot: 1, Generation: 1,
+			},
+			View: StackViewContainer, From: 0,
+		}},
 		{"resync", StatePlay, RequestChunkResync{}},
 		{"keep alive reply", StatePlay, KeepAliveReply{Token: 1}},
 		{"till soil", StatePlay, TillSoil{Yaw: 90, Pitch: -15}},
 		{"collect water", StatePlay, CollectWater{Yaw: 90, Pitch: -15}},
 		{"place water", StatePlay, PlaceWater{Yaw: 90, Pitch: -15}},
+		{"equip armor", StatePlay, EquipArmor{}},
 	}
 	for _, tc := range valid {
 		t.Run(tc.name, func(t *testing.T) {
@@ -44,9 +55,16 @@ func TestValidateClientPacket(t *testing.T) {
 	}{
 		{"unsupported protocol", StateHandshake, ClientHello{}},
 		{"future protocol", StateHandshake, ClientHello{ProtocolVersion: ProtocolVersion + 1}},
-		{"zero player ID", StateLogin, LoginStart{DisplayName: "Chen"}},
-		{"non-v4 player ID", StateLogin, LoginStart{PlayerID: core.PlayerID{1}, DisplayName: "Chen"}},
-		{"invalid display name", StateLogin, LoginStart{PlayerID: validID, DisplayName: "Chen\nName"}},
+		{"zero player ID", StateLogin, LoginStart{DisplayName: "Chen", ViewDistance: 32}},
+		{"non-v4 player ID", StateLogin, LoginStart{PlayerID: core.PlayerID{1}, DisplayName: "Chen", ViewDistance: 32}},
+		{"invalid display name", StateLogin, LoginStart{PlayerID: validID, DisplayName: "Chen\nName", ViewDistance: 32}},
+		// v40 视距域外值：0（未填写）、1（下界外一格）、65（上界外一格）、
+		// 255（全 1 字节）都必须拒绝——合法域 2..64 是登录协商的封闭区间，
+		// 域外值既不钳制也不静默放行。
+		{"zero view distance", StateLogin, LoginStart{PlayerID: validID, DisplayName: "Chen"}},
+		{"view distance below minimum", StateLogin, LoginStart{PlayerID: validID, DisplayName: "Chen", ViewDistance: LoginViewDistanceMin - 1}},
+		{"view distance above maximum", StateLogin, LoginStart{PlayerID: validID, DisplayName: "Chen", ViewDistance: LoginViewDistanceMax + 1}},
+		{"view distance byte saturated", StateLogin, LoginStart{PlayerID: validID, DisplayName: "Chen", ViewDistance: 255}},
 		{"zero keep alive token", StatePlay, KeepAliveReply{}},
 		{"input NaN", StatePlay, PlayerInput{Yaw: float32(math.NaN())}},
 		{"place NaN", StatePlay, PlaceBlock{Yaw: float32(math.NaN())}},
@@ -60,7 +78,9 @@ func TestValidateClientPacket(t *testing.T) {
 		{"inventory move same slot", StatePlay, MoveInventoryStack{From: 2, To: 2}},
 		{"crafting move out of range", StatePlay, MoveCraftingStack{From: 45, To: 0}},
 		{"crafting move both ends in inventory", StatePlay, MoveCraftingStack{From: 9, To: 10}},
-		{"resync outside overworld", StatePlay, RequestChunkResync{Dimension: core.DimensionID(1)}},
+		{"stack split unknown view", StatePlay, MoveStackPartial{View: 3, From: 0, To: 1}},
+		{"stack split container view with zero ref", StatePlay, QuickMoveStack{View: StackViewContainer, From: 0}},
+		{"resync dimension outside overworld and depths", StatePlay, RequestChunkResync{Dimension: core.DimensionID(2)}},
 		{"play packet during handshake", StateHandshake, PlayerInput{}},
 		{"play packet during login", StateLogin, PlayerInput{}},
 	}
@@ -88,8 +108,8 @@ func TestProtocolV1StateAndErrorCodesAreFrozen(t *testing.T) {
 			t.Fatalf("%s state = %d, want %d", tc.name, tc.got, tc.want)
 		}
 	}
-	if ProtocolVersion != 38 {
-		t.Fatalf("protocol version = %d, want 38", ProtocolVersion)
+	if ProtocolVersion != 44 {
+		t.Fatalf("protocol version = %d, want 44", ProtocolVersion)
 	}
 
 	codes := []struct {
@@ -133,6 +153,7 @@ func TestValidateServerPacket(t *testing.T) {
 		{"block changes", StatePlay, validPacketBlockChanges()},
 		{"forget chunks", StatePlay, ForgetChunks{Chunks: []core.ChunkPos{{}}}},
 		{"player state", StatePlay, PlayerState{Position: mgl32.Vec3{1, 2, 3}, Velocity: mgl32.Vec3{4, 5, 6}, Yaw: 90, Pitch: -15, MiningActive: true, MiningTarget: core.BlockPos{X: 1, Y: 2, Z: 3}, MiningProgressTicks: 6, MiningRequiredTicks: 15, MiningHarvestable: true}},
+		{"player state with max armor", StatePlay, PlayerState{ArmorPoints: core.MaxArmorPoints}},
 		{"command reject", StatePlay, CommandRejected{Reason: RejectInvalidRay}},
 		{"keep alive", StatePlay, KeepAlive{Token: 1}},
 		{"disconnect", StatePlay, Disconnect{Code: DisconnectTimeout}},
@@ -186,6 +207,7 @@ func TestValidateServerPacket(t *testing.T) {
 		{"player state hunger out of range", StatePlay, PlayerState{Hunger: core.MaxHunger + 1}},
 		{"player state weather out of range", StatePlay, PlayerState{WeatherKind: core.WeatherThunder + 1}},
 		{"player state season out of range", StatePlay, PlayerState{Season: core.SeasonWinter + 1}},
+		{"player state armor out of range", StatePlay, PlayerState{ArmorPoints: core.MaxArmorPoints + 1}},
 		{"unknown command rejection", StatePlay, CommandRejected{Reason: RejectReason("other")}},
 		{"inventory state out of range", StatePlay, InventoryState{Inventory: core.Inventory{Hotbar: core.Hotbar{Selected: core.HotbarSlots}}}},
 		{"empty drop upserts", StatePlay, ItemDropUpserts{}},
@@ -251,4 +273,20 @@ func tooManyValidBlockChanges() BlockChanges {
 		}
 	}
 	return BlockChanges{BaseRevision: 1, NewRevision: 2, Changes: changes}
+}
+
+// TestValidLoginViewDistanceMatchesClosedDomain 直接钉住域判定谓词本身：
+// 闭区间 2..64 之内（含两端）放行、域外（0、1、65、255）拒绝。wire 发送
+// 校验与服务端登录驱动共用该谓词，两处域漂移都会在这里先红。
+func TestValidLoginViewDistanceMatchesClosedDomain(t *testing.T) {
+	for _, valid := range []uint8{LoginViewDistanceMin, 8, LoginViewDistanceMax} {
+		if !ValidLoginViewDistance(valid) {
+			t.Fatalf("ValidLoginViewDistance(%d) = false，想要 true", valid)
+		}
+	}
+	for _, invalid := range []uint8{0, LoginViewDistanceMin - 1, LoginViewDistanceMax + 1, 255} {
+		if ValidLoginViewDistance(invalid) {
+			t.Fatalf("ValidLoginViewDistance(%d) = true，想要 false", invalid)
+		}
+	}
 }

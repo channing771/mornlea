@@ -287,7 +287,7 @@ describe("schema：下行 uiState 非法用例一律拒绝", () => {
 });
 
 // 游戏相位 hud 分节夹具：字段取值与 Go 侧镜像域同源（九格快捷栏、生命 0..20、
-// 氧气 0..300、聊天至多 6 行且每行至多 32 rune）。
+// 护甲 0..20、氧气 0..300、聊天至多 6 行且每行至多 32 rune）。
 const hudSlot = (item: number, count: number, durability?: number) =>
   durability === undefined ? { item, count } : { item, count, durability };
 
@@ -302,6 +302,7 @@ const hudState = {
   viewport: { width: 1280, height: 720 },
   hotbar: { slots: hudSlots, selectedIndex: 2 },
   health: { value: 17 },
+  armor: { points: 7 },
   hunger: { value: 18, saturationZero: true },
   oxygen: { value: 210 },
   eating: { active: false, progress: 0 },
@@ -433,6 +434,19 @@ describe("schema：下行 hud 分节非法用例一律拒绝", () => {
     );
   });
 
+  it("armor 越界或缺 points 拒绝", () => {
+    expect(validateUiState({ phase: "game", hud: { ...hudState, armor: { points: 21 } } })).toBe(
+      false,
+    );
+    expect(validateUiState({ phase: "game", hud: { ...hudState, armor: { points: -1 } } })).toBe(
+      false,
+    );
+    expect(validateUiState({ phase: "game", hud: { ...hudState, armor: {} } })).toBe(false);
+    expect(
+      validateUiState({ phase: "game", hud: { ...hudState, armor: { points: 7, full: true } } }),
+    ).toBe(false);
+  });
+
   it("hunger 缺 saturationZero 拒绝", () => {
     expect(
       validateUiState({ phase: "game", hud: { ...hudState, hunger: { value: 18 } } }),
@@ -523,6 +537,18 @@ describe("schema：上行 uplinkEnvelope 合法夹具", () => {
       }),
     ).toBe(true);
   });
+
+  it("game-action slot 携带 button/shift 通过校验", () => {
+    expect(
+      validateEnvelope({
+        v: 1,
+        events: [
+          { type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, button: "left", shift: false },
+          { type: "game-action", token: 1, op: "slot", area: "crafting", index: 8, button: "right", shift: true },
+        ],
+      }),
+    ).toBe(true);
+  });
 });
 
 describe("schema：上行 uplinkEnvelope 非法用例一律拒绝", () => {
@@ -570,6 +596,41 @@ describe("schema：上行 uplinkEnvelope 非法用例一律拒绝", () => {
 
   it("未知 debug-edit op 拒绝", () => {
     expect(validateEnvelope({ v: 1, events: [{ type: "debug-edit", op: "rewind" }] })).toBe(false);
+  });
+
+  it("game-action slot 缺 button/shift 或取值非法拒绝", () => {
+    // 旧字段集（缺按键语义）被新 schema 拒绝属预期，前端与 Go 同批发布。
+    expect(
+      validateEnvelope({ v: 1, events: [{ type: "game-action", token: 1, op: "slot", area: "inventory", index: 0 }] }),
+    ).toBe(false);
+    expect(
+      validateEnvelope({
+        v: 1,
+        events: [{ type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, button: "left" }],
+      }),
+    ).toBe(false);
+    expect(
+      validateEnvelope({
+        v: 1,
+        events: [{ type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, shift: false }],
+      }),
+    ).toBe(false);
+    expect(
+      validateEnvelope({
+        v: 1,
+        events: [
+          { type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, button: "middle", shift: false },
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      validateEnvelope({
+        v: 1,
+        events: [
+          { type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, button: "left", shift: "no" },
+        ],
+      }),
+    ).toBe(false);
   });
 
   it("信封版本非 1 拒绝", () => {

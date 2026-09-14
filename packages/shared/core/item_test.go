@@ -21,13 +21,13 @@ func TestCanonicalItemIDsStayStable(t *testing.T) {
 }
 
 // TestItemIDMaxGuardsExhaustiveEnumeration 锁定 ItemIDMax 独占哨兵与枚举末项的
-// 关系：当前最后一个合法物品必须是水桶。物品演进
+// 关系：当前最后一个合法物品必须是损坏的弓。物品演进
 // 纪律是只能在哨兵之前追加；将来追加新物品时第一个断言变红，迫使开发者同步
 // 审视全部以「item < ItemIDMax」为穷举界的测试（例如 companion 的 place 注册表
 // 覆盖测试），而不是让穷举测试静默失去对新物品的覆盖。
 func TestItemIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
-	if core.ItemWaterBucket != core.ItemIDMax-1 {
-		t.Fatalf("ItemID 枚举末项不再是 ItemWaterBucket（ItemIDMax-1 = %d）；"+
+	if core.ItemBrokenBow != core.ItemIDMax-1 {
+		t.Fatalf("ItemID 枚举末项不再是 ItemBrokenBow（ItemIDMax-1 = %d）；"+
 			"新增物品必须同步审视全部以 ItemIDMax 为穷举界的测试", core.ItemIDMax-1)
 	}
 	// 哨兵之外不得再出现已注册物品：若有人把新物品追加在哨兵之后，穷举界会
@@ -40,8 +40,8 @@ func TestItemIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
 }
 
 func TestBucketIDsAppendBeforeSentinels(t *testing.T) {
-	if core.ItemEmptyBucket != 55 || core.ItemWaterBucket != 56 || core.ItemIDMax != 57 {
-		t.Fatalf("桶编号 = %d/%d/哨兵 %d，想要 55/56/57", core.ItemEmptyBucket, core.ItemWaterBucket, core.ItemIDMax)
+	if core.ItemEmptyBucket != 55 || core.ItemWaterBucket != 56 || core.ItemIDMax != 66 {
+		t.Fatalf("桶编号 = %d/%d/哨兵 %d，想要 55/56/66（哨兵已随弓箭批次后移）", core.ItemEmptyBucket, core.ItemWaterBucket, core.ItemIDMax)
 	}
 	for _, id := range []core.ItemID{core.ItemEmptyBucket, core.ItemWaterBucket} {
 		if limit, ok := core.ItemStackLimit(id); !ok || limit != 1 {
@@ -54,8 +54,35 @@ func TestBucketIDsAppendBeforeSentinels(t *testing.T) {
 }
 
 func TestItemIDsAppendOnly(t *testing.T) {
-	if core.ItemWaterBucket != core.ItemIDMax-1 {
-		t.Fatal("Water bucket must be last before Max")
+	if core.ItemBrokenBow != core.ItemIDMax-1 {
+		t.Fatal("Broken bow must be last before Max")
+	}
+	if core.ItemBone != core.ItemBrokenBow-1 {
+		t.Fatal("Bone must sit right before broken bow")
+	}
+	if core.ItemArrow != core.ItemBone-1 {
+		t.Fatal("Arrow must sit right before bone")
+	}
+	if core.ItemBow != core.ItemArrow-1 {
+		t.Fatal("Bow must sit right before arrow")
+	}
+	if core.ItemBow != core.ItemIronBoots+1 {
+		t.Fatal("Bow must sit right after iron boots")
+	}
+	if core.ItemIronLeggings != core.ItemIronBoots-1 {
+		t.Fatal("Iron leggings must sit right before iron boots")
+	}
+	if core.ItemIronChestplate != core.ItemIronLeggings-1 {
+		t.Fatal("Iron chestplate must sit right before iron leggings")
+	}
+	if core.ItemIronHelmet != core.ItemIronChestplate-1 {
+		t.Fatal("Iron helmet must sit right before iron chestplate")
+	}
+	if core.ItemSapling != core.ItemIronHelmet-1 {
+		t.Fatal("Sapling must sit right before the iron helmet")
+	}
+	if core.ItemWaterBucket != core.ItemSapling-1 {
+		t.Fatal("Water bucket must sit right before the sapling")
 	}
 	if core.ItemEmptyBucket != core.ItemWaterBucket-1 {
 		t.Fatal("Empty bucket must sit right before water bucket")
@@ -142,8 +169,8 @@ func TestSwordItemsAreRegisteredWithFixedSemantics(t *testing.T) {
 			}
 		})
 	}
-	if core.ItemIDMax != 57 {
-		t.Fatalf("ItemIDMax = %d，想要 57", core.ItemIDMax)
+	if core.ItemIDMax != 66 {
+		t.Fatalf("ItemIDMax = %d，想要 66", core.ItemIDMax)
 	}
 	for _, item := range []core.ItemID{core.ItemNone, core.ItemDirt} {
 		if core.IsIntactSword(item) {
@@ -590,8 +617,9 @@ func TestBrokenToolsAreRegisteredAndUnstackable(t *testing.T) {
 // TestGridCraftingIDsAppendBeforeSentinels 锁定格子工作台批次追加的稳定编号：
 // 木棍 `ItemStick=37`、工作台物品 `ItemWorkbench=38`、骨粉 `ItemBoneMeal=39`
 // （三者 + 马铃薯/胡萝卜/毒土豆都曾紧贴 `ItemIDMax` 哨兵之前；门、火把、腐肉、
-// 床与剑批次依次追加后哨兵曾为 53，生/熟牛肉批次再追加后哨兵曾为 55，空桶与
-// 水桶批次再追加后哨兵为 57），
+// 床与剑批次依次追加后哨兵曾为 53，生/熟牛肉批次再追加后哨兵曾为 55，空桶、
+// 水桶与树苗批次再追加后哨兵曾为 58，护甲四件批次再追加后哨兵曾为 62，弓箭
+// 批次再追加后哨兵为 66），
 // 工作台方块 `WorkbenchID=45`（紧随
 // `WheatStage7ID`，后接马铃薯/胡萝卜，该批次落定后 `BlockIDMax` 为 62；门 9 个
 // 与火把五形态追加后现为 76）。
@@ -644,7 +672,8 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 			core.ItemBed, core.ItemRottenFlesh)
 	}
 	// 生/熟牛肉紧随剑批次追加在哨兵之前：剑的稳定编号（47..52）不受影响；
-	// 空桶与水桶紧随熟牛肉追加在哨兵之前，哨兵后移到 57。
+	// 空桶、水桶与树苗紧随熟牛肉追加在哨兵之前，护甲四件再紧随树苗追加，
+	// 弓箭四件再紧随铁靴子追加，哨兵后移到 66。
 	if core.ItemRawBeef != core.ItemBrokenIronSword+1 {
 		t.Fatalf("ItemRawBeef = %d，必须紧随 ItemBrokenIronSword(%d)",
 			core.ItemRawBeef, core.ItemBrokenIronSword)
@@ -661,8 +690,42 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 		t.Fatalf("ItemWaterBucket = %d，必须紧随 ItemEmptyBucket(%d)",
 			core.ItemWaterBucket, core.ItemEmptyBucket)
 	}
-	if core.ItemIDMax != 57 {
-		t.Fatalf("ItemIDMax = %d，必须在水桶批次后移到 57", core.ItemIDMax)
+	if core.ItemIronHelmet != core.ItemSapling+1 {
+		t.Fatalf("ItemIronHelmet = %d，必须紧随 ItemSapling(%d)",
+			core.ItemIronHelmet, core.ItemSapling)
+	}
+	if core.ItemIronChestplate != core.ItemIronHelmet+1 {
+		t.Fatalf("ItemIronChestplate = %d，必须紧随 ItemIronHelmet(%d)",
+			core.ItemIronChestplate, core.ItemIronHelmet)
+	}
+	if core.ItemIronLeggings != core.ItemIronChestplate+1 {
+		t.Fatalf("ItemIronLeggings = %d，必须紧随 ItemIronChestplate(%d)",
+			core.ItemIronLeggings, core.ItemIronChestplate)
+	}
+	if core.ItemIronBoots != core.ItemIronLeggings+1 {
+		t.Fatalf("ItemIronBoots = %d，必须紧随 ItemIronLeggings(%d)",
+			core.ItemIronBoots, core.ItemIronLeggings)
+	}
+	// 弓箭批次紧随护甲四件追加在哨兵之前：弓与损坏的弓沿工具先例单格堆叠，
+	// 箭与骨头是可堆叠 64 的消耗材料。
+	if core.ItemBow != core.ItemIronBoots+1 {
+		t.Fatalf("ItemBow = %d，必须紧随 ItemIronBoots(%d)",
+			core.ItemBow, core.ItemIronBoots)
+	}
+	if core.ItemArrow != core.ItemBow+1 {
+		t.Fatalf("ItemArrow = %d，必须紧随 ItemBow(%d)",
+			core.ItemArrow, core.ItemBow)
+	}
+	if core.ItemBone != core.ItemArrow+1 {
+		t.Fatalf("ItemBone = %d，必须紧随 ItemArrow(%d)",
+			core.ItemBone, core.ItemArrow)
+	}
+	if core.ItemBrokenBow != core.ItemBone+1 {
+		t.Fatalf("ItemBrokenBow = %d，必须紧随 ItemBone(%d)",
+			core.ItemBrokenBow, core.ItemBone)
+	}
+	if core.ItemIDMax != 66 {
+		t.Fatalf("ItemIDMax = %d，必须在弓箭批次后移到 66", core.ItemIDMax)
 	}
 	if core.WorkbenchID != 45 {
 		t.Fatalf("WorkbenchID = %d，必须稳定为 45 且紧随 WheatStage7ID(%d)",
@@ -685,7 +748,7 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 			core.DoorUpper, core.DoorLowerEastOpen)
 	}
 	// 火把五形态紧随门方块追加，床八形态紧随火把追加，短草再追加为 84、四档
-	// 雪层 85..88，方块侧哨兵随之后移到 89。
+	// 雪层 85..88、橡树树苗 89，方块侧哨兵随之后移到 90。
 	if core.TorchStandingID != core.DoorUpper+1 {
 		t.Fatalf("TorchStandingID = %d，必须紧随 DoorUpper(%d)",
 			core.TorchStandingID, core.DoorUpper)
@@ -694,8 +757,8 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 		t.Fatalf("BedFootSouthID = %d，必须紧随 TorchWallNegZID(%d)",
 			core.BedFootSouthID, core.TorchWallNegZID)
 	}
-	if core.ShortGrassID != core.BedHeadEastID+1 || core.BlockIDMax != 89 {
-		t.Fatalf("短草/BlockIDMax = %d/%d，必须紧随 BedHeadEastID(%d) 为 84、哨兵 89",
+	if core.ShortGrassID != core.BedHeadEastID+1 || core.BlockIDMax != 90 {
+		t.Fatalf("短草/BlockIDMax = %d/%d，必须紧随 BedHeadEastID(%d) 为 84、哨兵 90",
 			core.ShortGrassID, core.BlockIDMax, core.BedHeadEastID)
 	}
 }
@@ -743,8 +806,8 @@ func TestWorkbenchItemPlacesAndDropsBack(t *testing.T) {
 }
 
 // TestTorchItemIsRegisteredStackableMaterial 锁定火把物品语义：编号 44（紧随
-// 门物品；其后依次追加腐肉、床、剑、牛肉与水桶批次，ItemIDMax 后移到 57）、
-// 堆叠 64、没有耐久、不是工具、不是食物。
+// 门物品；其后依次追加腐肉、床、剑、牛肉、水桶、树苗、护甲与弓箭批次，ItemIDMax
+// 后移到 66）、堆叠 64、没有耐久、不是工具、不是食物。
 // 放置不经 ItemPlacement（面向无关的旧窗口），只经 PlaceableBlockAtFace 的
 // 面 → 形态映射——因此火把对 ItemPlacement 必须保持不可放置，防止任何调用方
 // 绕开面映射直接写出「默认形态」。
@@ -765,8 +828,8 @@ func TestTorchItemIsRegisteredStackableMaterial(t *testing.T) {
 		t.Fatalf("ItemBed = %d，必须紧随 ItemRottenFlesh(%d)",
 			core.ItemBed, core.ItemRottenFlesh)
 	}
-	if core.ItemIDMax != 57 {
-		t.Fatalf("ItemIDMax = %d，必须后移到 57", core.ItemIDMax)
+	if core.ItemIDMax != 66 {
+		t.Fatalf("ItemIDMax = %d，必须后移到 66", core.ItemIDMax)
 	}
 	if !core.RegisteredItem(core.ItemTorch) {
 		t.Fatal("ItemTorch 未注册")
@@ -812,7 +875,7 @@ func TestTorchFormsDropBackOneTorch(t *testing.T) {
 }
 
 func TestItemDoorPlacementDrop(t *testing.T) {
-	if core.ItemDoor != 43 || core.ItemIDMax != 57 {
+	if core.ItemDoor != 43 || core.ItemIDMax != 66 {
 		t.Fatal("ItemDoor IDs")
 	}
 	if got, ok := core.ItemPlacement(core.ItemDoor); !ok || got != core.DoorLowerSouthClosed {
@@ -849,5 +912,125 @@ func TestItemStackValidEnforcesDurabilityDomain(t *testing.T) {
 				t.Fatalf("Valid() = %v，想要 %v", got, test.want)
 			}
 		})
+	}
+}
+
+// TestRangedAmmoItemsAppendBeforeSentinel 锁定弓箭批次的注册语义：弓、箭、骨头
+// 与损坏的弓沿 append-only 纪律紧随铁靴子追加，`ItemIDMax` 哨兵随之从 62 后移
+// 到 66。弓是带耐久的远程武器（堆叠 1、耐久上限 120、耐久归零换成损坏形态）；
+// 箭与骨头是可堆叠 64、无耐久的消耗材料。四件都不可放置、不出现在任何
+// `BlockDrop` 表（骨头与弓来自敌怪掉落路径，箭来自合成）。
+func TestRangedAmmoItemsAppendBeforeSentinel(t *testing.T) {
+	if core.ItemBow != 62 || core.ItemArrow != 63 || core.ItemBone != 64 || core.ItemBrokenBow != 65 {
+		t.Fatalf("弓箭批次编号 = %d/%d/%d/%d，想要 62/63/64/65",
+			core.ItemBow, core.ItemArrow, core.ItemBone, core.ItemBrokenBow)
+	}
+	if core.ItemBow != core.ItemIronBoots+1 {
+		t.Fatalf("ItemBow = %d，必须紧随 ItemIronBoots(%d)", core.ItemBow, core.ItemIronBoots)
+	}
+	if core.ItemArrow != core.ItemBow+1 || core.ItemBone != core.ItemArrow+1 ||
+		core.ItemBrokenBow != core.ItemBone+1 {
+		t.Fatalf("弓箭批次位次不连续: bow=%d arrow=%d bone=%d broken=%d",
+			core.ItemBow, core.ItemArrow, core.ItemBone, core.ItemBrokenBow)
+	}
+	if core.ItemIDMax != core.ItemBrokenBow+1 {
+		t.Fatalf("ItemIDMax = %d，必须紧随 ItemBrokenBow(%d)", core.ItemIDMax, core.ItemBrokenBow)
+	}
+	if core.ItemIDMax != 66 {
+		t.Fatalf("ItemIDMax = %d，必须随弓箭批次后移到 66", core.ItemIDMax)
+	}
+
+	limits := []struct {
+		name  string
+		item  core.ItemID
+		limit uint8
+		// durability 是该物品构成合法栈所需的耐久值：弓必须带 1..120 的耐久，
+		// 其余物品耐久必须保持零值。
+		durability uint16
+	}{
+		{"弓", core.ItemBow, 1, 120},
+		{"箭", core.ItemArrow, core.MaxStackCount, 0},
+		{"骨头", core.ItemBone, core.MaxStackCount, 0},
+		{"损坏的弓", core.ItemBrokenBow, 1, 0},
+	}
+	for _, test := range limits {
+		t.Run(test.name, func(t *testing.T) {
+			if !core.RegisteredItem(test.item) {
+				t.Fatalf("%s %d 未注册", test.name, test.item)
+			}
+			if limit, ok := core.ItemStackLimit(test.item); !ok || limit != test.limit {
+				t.Fatalf("ItemStackLimit(%s) = (%d,%v)，想要 (%d,true)", test.name, limit, ok, test.limit)
+			}
+			if block, ok := core.ItemPlacement(test.item); ok || block != core.AirID {
+				t.Fatalf("ItemPlacement(%s) = (%d,%v)，弓箭批次四件都不可放置", test.name, block, ok)
+			}
+			stack := core.ItemStack{Item: test.item, Count: test.limit, Durability: test.durability}
+			if !stack.Valid() {
+				t.Fatalf("%s 满栈 %+v 必须合法", test.name, stack)
+			}
+			if over := (core.ItemStack{Item: test.item, Count: test.limit + 1, Durability: test.durability}); over.Valid() {
+				t.Fatalf("%s 超上限栈 %+v 必须非法", test.name, over)
+			}
+		})
+	}
+
+	// 弓的耐久域：上限 120，完好栈耐久必须落在 1..120，两件一栈非法。
+	if got, ok := core.ItemMaxDurability(core.ItemBow); !ok || got != 120 {
+		t.Fatalf("ItemMaxDurability(弓) = (%d,%v)，想要 (120,true)", got, ok)
+	}
+	if full := (core.ItemStack{Item: core.ItemBow, Count: 1, Durability: 120}); !full.Valid() {
+		t.Fatal("满耐久弓栈必须合法")
+	}
+	if half := (core.ItemStack{Item: core.ItemBow, Count: 1, Durability: 1}); !half.Valid() {
+		t.Fatal("残耐久弓栈必须合法")
+	}
+	if zero := (core.ItemStack{Item: core.ItemBow, Count: 1, Durability: 0}); zero.Valid() {
+		t.Fatal("零耐久完好弓栈必须非法")
+	}
+	if over := (core.ItemStack{Item: core.ItemBow, Count: 1, Durability: 121}); over.Valid() {
+		t.Fatal("超上限耐久弓栈必须非法")
+	}
+	if two := (core.ItemStack{Item: core.ItemBow, Count: 2, Durability: 120}); two.Valid() {
+		t.Fatal("两把弓一栈必须非法：堆叠上限 1")
+	}
+	// 损坏的弓沿损坏工具先例：零耐久合法、带耐久非法。
+	if broken := (core.ItemStack{Item: core.ItemBrokenBow, Count: 1}); !broken.Valid() {
+		t.Fatal("零耐久损坏弓栈必须合法")
+	}
+	if brokenWithDurability := (core.ItemStack{Item: core.ItemBrokenBow, Count: 1, Durability: 1}); brokenWithDurability.Valid() {
+		t.Fatal("带耐久的损坏弓栈必须非法")
+	}
+
+	// 箭与骨头没有耐久概念；损坏形态只属于弓。
+	for _, test := range []struct {
+		name string
+		item core.ItemID
+	}{{"箭", core.ItemArrow}, {"骨头", core.ItemBone}, {"损坏的弓", core.ItemBrokenBow}} {
+		if got, ok := core.ItemMaxDurability(test.item); ok || got != 0 {
+			t.Fatalf("ItemMaxDurability(%s) = (%d,%v)，想要 (0,false)", test.name, got, ok)
+		}
+	}
+	if got, ok := core.ItemBrokenForm(core.ItemBow); !ok || got != core.ItemBrokenBow {
+		t.Fatalf("ItemBrokenForm(弓) = (%d,%v)，想要 (ItemBrokenBow,true)", got, ok)
+	}
+	for _, test := range []struct {
+		name string
+		item core.ItemID
+	}{{"箭", core.ItemArrow}, {"骨头", core.ItemBone}, {"损坏的弓", core.ItemBrokenBow}} {
+		if got, ok := core.ItemBrokenForm(test.item); ok || got != core.ItemNone {
+			t.Fatalf("ItemBrokenForm(%s) = (%d,%v)，想要 (ItemNone,false)", test.name, got, ok)
+		}
+	}
+
+	// 穷举守护：世界上没有任何方块采掘出弓箭批次物品。
+	for block := core.BlockID(0); block < core.BlockIDMax; block++ {
+		item, ok := core.BlockDrop(block)
+		if !ok {
+			continue
+		}
+		switch item {
+		case core.ItemBow, core.ItemArrow, core.ItemBone, core.ItemBrokenBow:
+			t.Fatalf("BlockDrop(%d) = %d：弓箭批次物品不得出现在任何掉落表", block, item)
+		}
 	}
 }

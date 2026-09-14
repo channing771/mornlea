@@ -26,6 +26,8 @@ package nativeabi
 #cgo nocallback mornlea_fluid_eval_batch
 #cgo noescape mornlea_fluid_rescan
 #cgo nocallback mornlea_fluid_rescan
+#cgo noescape mornlea_tree_blocks
+#cgo nocallback mornlea_tree_blocks
 #include "mornlea_engine.h"
 */
 import "C"
@@ -199,6 +201,83 @@ func worldgenStatusPanicText(entry string, status Status) string {
 		return "nativeabi: worldgen " + entry + " Rust panic"
 	default:
 		return "nativeabi: worldgen " + entry + " 未知状态"
+	}
+}
+
+// 运行时树形几何 ABI 布局常量,与 engine `worldgen.rs` 的
+// TREE_BLOCKS_INPUT_BYTES/TREE_BLOCKS_RECORD_BYTES/TREE_BLOCKS_COUNT_BYTES/
+// TREE_BLOCKS_MAX_RECORDS/TREE_BLOCKS_MAX_OUTPUT_BYTES 逐字一致。
+const (
+	// TreeBlocksInputBytes 是 `mornlea_tree_blocks` 入口输入字节数:
+	// `MTB1` magic(4)+ layout u32(4)+ 世界种子 i64(8)+ 根坐标 x/y/z i32(12)。
+	TreeBlocksInputBytes = 28
+	// TreeBlocksRecordBytes 是单条输出记录字节数:dx/dy/dz i8 + 保留 u8 +
+	// block u16 LE + 保留 u16。
+	TreeBlocksRecordBytes = 8
+	// TreeBlocksCountBytes 是输出头部 `count u32` 的字节数。
+	TreeBlocksCountBytes = 4
+	// TreeBlocksMaxRecords 是记录上限;调用方按它预分配输出缓冲。
+	TreeBlocksMaxRecords = 128
+	// TreeBlocksMaxOutputBytes 是输出的静态上界:头部 + 记录上限 × 单条长度。
+	TreeBlocksMaxOutputBytes = TreeBlocksCountBytes + TreeBlocksMaxRecords*TreeBlocksRecordBytes
+)
+
+// TreeBlocks 把调用方拥有的运行时树形几何请求与输出缓冲传给 engine,返回
+// 写入的记录数。
+//
+// input 为 28 字节 `MTB1` 请求(布局见 packages/engine/include/mornlea_engine.h
+// 的 mornlea_tree_blocks 注释),output 必须至少能容纳
+// `TreeBlocksCountBytes + count×TreeBlocksRecordBytes`;调用方按
+// `TreeBlocksMaxOutputBytes` 预分配即可。返回的记录数取自输出头部的
+// `count u32`——它属于输出布局,因此在这里校验:超出记录上限或与缓冲容量
+// 不符说明 engine 破坏了布局契约,按稳定文案 panic 而不是让调用方越界读。
+// 任何非 OK 状态都以稳定中文文案 panic,且 engine 保证失败时不触碰 output。
+func TreeBlocks(input, output []byte) int {
+	status, count := treeBlocksVersion(ABIVersion, input, output)
+	if status != StatusOK {
+		panic(treeBlocksStatusPanicText(status))
+	}
+	if count < 0 || count > TreeBlocksMaxRecords {
+		panic("nativeabi: tree blocks 成功元数据非法")
+	}
+	if len(output) < TreeBlocksCountBytes+count*TreeBlocksRecordBytes {
+		panic("nativeabi: tree blocks 成功元数据非法")
+	}
+	return count
+}
+
+// treeBlocksVersion 把调用方拥有的树形几何输入与输出缓冲传给 engine。
+//
+// 返回 (status, count):成功时 count 为输出头部记录的记录数;其余失败路径
+// count 恒为 0(engine 不写入输出缓冲,头部不可信)。
+func treeBlocksVersion(version uint32, input, output []byte) (Status, int) {
+	status := Status(C.mornlea_tree_blocks(
+		C.uint32_t(version),
+		(*C.uint8_t)(unsafe.Pointer(unsafe.SliceData(input))),
+		C.size_t(len(input)),
+		(*C.uint8_t)(unsafe.Pointer(unsafe.SliceData(output))),
+		C.size_t(len(output)),
+	))
+	if status != StatusOK || len(output) < TreeBlocksCountBytes {
+		return status, 0
+	}
+	return status, int(binary.LittleEndian.Uint32(output[:TreeBlocksCountBytes]))
+}
+
+func treeBlocksStatusPanicText(status Status) string {
+	switch status {
+	case StatusABIVersion:
+		return "nativeabi: tree blocks ABI 版本不匹配"
+	case StatusInvalidArgument:
+		return "nativeabi: tree blocks 参数非法"
+	case StatusInput:
+		return "nativeabi: tree blocks 输入非法"
+	case StatusOutputOverflow:
+		return "nativeabi: tree blocks output 过短"
+	case StatusPanic:
+		return "nativeabi: tree blocks Rust panic"
+	default:
+		return "nativeabi: tree blocks 未知状态"
 	}
 }
 
