@@ -20,13 +20,13 @@ func TestViewmodelCompleteSweepClearsFullHUD(t *testing.T) {
 					parts := buildViewmodelParts(nil, &ViewmodelInput{Selected: core.ItemStack{Item: item, Count: 1}, ViewportWidth: w, ViewportHeight: h, FovY: fov * math.Pi / 180}, float32(step)*.05)
 					out := make([]byte, len(parts)*96)
 					encodeAvatarPartsInto(out, parts)
-					hand := viewmodelInstanceScreenHull(t, out, 0, projection)
+					hand := viewmodelInstanceScreenHull(t, out, 2, projection)
 					for i := range parts {
 						hull := viewmodelInstanceScreenHull(t, out, i, projection)
 						if viewmodelHullCoversPoint(hull, mgl32.Vec2{}) {
 							t.Fatalf("item %d part %d covers crosshair at %v", item, i, viewport)
 						}
-						if models, ok := viewmodelDefaultRegistry.ItemToolParts(item); ok && i > 0 && models[i-1].Center[1] > .27 {
+						if models, ok := viewmodelDefaultRegistry.ItemToolParts(item); ok && i >= 8 && models[i-8].Center[1]-models[i-8].Size[1]/2 > .20 {
 							for _, corner := range hull {
 								if abs32(corner[0]) >= 1 || abs32(corner[1]) >= 1 {
 									t.Fatalf("tool %d head corner clipped at %v angle %v: %v", item, viewport, float32(step)*.05, corner)
@@ -49,7 +49,7 @@ func TestViewmodelCompleteSweepClearsFullHUD(t *testing.T) {
 						if viewmodelHUDIntersects(hull, left, right, top, h, w) {
 							t.Fatalf("viewport %v fov %v item %d angle %v part %d overlaps HUD: %v..%v top %v", viewport, fov, item, float32(step)*.05, i, lo, hi, top)
 						}
-						if i > 0 && (hi[0] < 0 || lo[0] > w || hi[1] < 0 || lo[1] > h) {
+						if i >= 8 && (hi[0] < 0 || lo[0] > w || hi[1] < 0 || lo[1] > h) {
 							t.Fatalf("viewport %v fov %v angle %v item %d part %d completely offscreen %v..%v", viewport, fov, float32(step)*.05, item, i, lo, hi)
 						}
 					}
@@ -57,7 +57,7 @@ func TestViewmodelCompleteSweepClearsFullHUD(t *testing.T) {
 						for _, z := range []float32{-1, 1} {
 							p, _ := projectToNDC(projection, viewmodelInstanceCorner(out, 0, x, -1, z))
 							if abs32(p[0]) <= 1 && abs32(p[1]) <= 1 {
-								t.Fatalf("arm root visible %v", p)
+								t.Fatalf("arm root visible viewport %v fov %v angle %v point %v", viewport, fov, float32(step)*.05, p)
 							}
 						}
 					}

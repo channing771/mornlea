@@ -79,7 +79,7 @@ func (a *Application) AdvanceViewmodel(elapsed time.Duration, primary bool) {
 // validateViewmodelInstanceCount 校验单帧 viewmodel 实例数恒不超过
 // `ViewmodelMaxInstances`：沿 `validateEntityPresentationCounts` 同形，超
 // 限或非对齐的帧稳定拒绝（调用方返回 error，不截断绘制）。编码器输出恒至
-// 多 257 实例，本门生产不可达，只防未来装配回归。
+// 多 264 实例，本门生产不可达，只防未来装配回归。
 func validateViewmodelInstanceCount(stream []byte) error {
 	if len(stream)%viewmodelInstanceBytes != 0 {
 		return fmt.Errorf("viewmodel stream length %d is not a multiple of %d", len(stream), viewmodelInstanceBytes)

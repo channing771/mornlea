@@ -126,7 +126,7 @@ func TestViewmodelEncodeUnregisteredSelection(t *testing.T) {
 		}()
 		out = encoder.EncodeViewmodelInstances(nil, input)
 	}()
-	if count := len(out) / avatarInstanceBytes; count != 1 {
-		t.Fatalf("未注册选中实例数 = %d，想要 1（主手、无持物）", count)
+	if count := len(out) / avatarInstanceBytes; count != 8 {
+		t.Fatalf("未注册选中实例数 = %d，想要 8（主手部件、无持物）", count)
 	}
 }

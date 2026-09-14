@@ -62,16 +62,16 @@ func viewmodelInstanceCorner(out []byte, index int, sx, sy, sz float32) mgl32.Ve
 }
 
 // TestViewmodelSlantAngleInSpecRange 锁定斜持倾角落在契约区间：手臂长轴与
-// 竖直方向的夹角必须在 70°–85° 之间，主手需要满足。
+// 竖直方向的夹角必须在 30°–55° 之间，主手需要满足。
 func TestViewmodelSlantAngleInSpecRange(t *testing.T) {
 	input := viewmodelTestInput(core.PlayerID{51}, core.ItemStack{}, 10)
 	out := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, input)
-	if len(out) != avatarInstanceBytes {
-		t.Fatalf("中立实例数 = %d，想要 1（主手）", len(out)/avatarInstanceBytes)
+	if len(out) != 8*avatarInstanceBytes {
+		t.Fatalf("中立实例数 = %d，想要 8（主手部件）", len(out)/avatarInstanceBytes)
 	}
 	for index := range 1 {
-		if degrees := viewmodelSlantDegreesOf(out, index); degrees < 70 || degrees > 85 {
-			t.Fatalf("第 %d 只手倾角 = %.1f°，想要 70°–85°", index, degrees)
+		if degrees := viewmodelSlantDegreesOf(out, index); degrees < 30 || degrees > 55 {
+			t.Fatalf("第 %d 只手倾角 = %.1f°，想要 30°–55°", index, degrees)
 		}
 	}
 }

@@ -11,8 +11,8 @@ import (
 
 func TestViewmodelSingleHandAndIconClassification(t *testing.T) {
 	out := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, &ViewmodelInput{})
-	if len(out) != 96 {
-		t.Fatalf("idle hand count=%d, want one", len(out)/96)
+	if len(out) != 8*96 {
+		t.Fatalf("idle hand count=%d, want eight hand parts", len(out)/96)
 	}
 	for _, item := range []core.ItemID{core.ItemTorch, core.ItemDoor, core.ItemBed, core.ItemWheatSeeds} {
 		if ViewmodelHeldKindOf(core.ItemStack{Item: item, Count: 1}) != ViewmodelHeldItem {
@@ -25,12 +25,12 @@ func TestViewmodelBlockFacesMatchWorld(t *testing.T) {
 	r := assets.NewDefaultRegistry()
 	for _, item := range []core.ItemID{core.ItemGrass, core.ItemOakLog, core.ItemWorkbench} {
 		parts := buildViewmodelParts(nil, &ViewmodelInput{Selected: core.ItemStack{Item: item, Count: 1}}, 0)
-		if len(parts) != 7 {
-			t.Fatalf("item %d: parts=%d, want hand plus six faces", item, len(parts))
+		if len(parts) != 8+6 {
+			t.Fatalf("item %d: parts=%d, want eight hand parts plus six faces", item, len(parts))
 		}
 		block, _ := core.ItemPlacement(item)
 		for i, face := range []mesh.Face{mesh.FacePosX, mesh.FaceNegX, mesh.FacePosY, mesh.FaceNegY, mesh.FacePosZ, mesh.FaceNegZ} {
-			if parts[i+1].material != uint32(r.Material(block, face)) {
+			if parts[i+8].material != uint32(r.Material(block, face)) {
 				t.Errorf("item %d face %d wrong material", item, face)
 			}
 		}
@@ -74,19 +74,19 @@ func TestViewmodelAllIconsVisibleAcrossCompleteSwings(t *testing.T) {
 				parts := buildViewmodelParts(nil, &ViewmodelInput{Selected: stack, Registry: registry, ViewportWidth: aspect * 720, ViewportHeight: 720}, angle)
 				out := make([]byte, len(parts)*avatarInstanceBytes)
 				encodeAvatarPartsInto(out, parts)
-				hand := viewmodelInstanceScreenHull(t, out, 0, projection)
+				hand := viewmodelInstanceScreenHull(t, out, 2, projection)
 				visible, total := 0, 0
 				prisms, _ := registry.ItemIconPrisms(item)
-				for i := 0; i < len(parts)-1; i++ {
+				for i := 0; i < len(parts)-8; i++ {
 					weight := 1
 					if _, solid := registry.ItemToolParts(item); !solid {
 						weight = int(prisms[i].Width)
 					}
-					center, w := projectToNDC(projection, decodedPartCenter(out, i+1))
+					center, w := projectToNDC(projection, decodedPartCenter(out, i+8))
 					if w <= 0 || abs32(center[0]) > .98 || abs32(center[1]) > .98 {
 						t.Fatalf("item %d angle %.3f aspect %.3f: icon outside screen %v", item, angle, aspect, center)
 					}
-					hull := viewmodelInstanceScreenHull(t, out, i+1, projection)
+					hull := viewmodelInstanceScreenHull(t, out, i+8, projection)
 					if viewmodelHullCoversPoint(hull, mgl32.Vec2{}) {
 						t.Fatalf("item %d angle %.3f: crosshair covered", item, angle)
 					}
@@ -105,7 +105,7 @@ func TestViewmodelAllIconsVisibleAcrossCompleteSwings(t *testing.T) {
 
 func TestViewmodelIconsKeepDistinctGeometryAndZeroAlloc(t *testing.T) {
 	encoder := &ViewmodelEncoder{}
-	dst := make([]byte, 0, 257*96)
+	dst := make([]byte, 0, 264*96)
 	seen := map[string]core.ItemID{}
 	for item := core.ItemID(1); item < core.ItemIDMax; item++ {
 		if _, ok := assets.ItemIconLayer(item); !ok {
@@ -113,10 +113,10 @@ func TestViewmodelIconsKeepDistinctGeometryAndZeroAlloc(t *testing.T) {
 		}
 		input := &ViewmodelInput{Selected: core.ItemStack{Item: item, Count: 1}}
 		out := encoder.EncodeViewmodelInstances(dst, input)
-		if len(out) > 257*96 || len(out) <= 96 {
+		if len(out) > 264*96 || len(out) <= 96 {
 			t.Fatalf("item %d budget %d", item, len(out)/96)
 		}
-		key := string(out[96:])
+		key := string(out[8*96:])
 		if prior, ok := seen[key]; ok {
 			t.Fatalf("item %d indistinguishable from %d", item, prior)
 		}
@@ -130,9 +130,9 @@ func TestViewmodelIconsKeepDistinctGeometryAndZeroAlloc(t *testing.T) {
 func TestViewmodelEveryItemTouchesMainHand(t *testing.T) {
 	for item := core.ItemID(1); item < core.ItemIDMax; item++ {
 		parts := buildViewmodelParts(nil, &ViewmodelInput{Selected: core.ItemStack{Item: item, Count: 1}}, 0)
-		inverse := parts[0].transform.Inv()
+		inverse := parts[2].transform.Inv()
 		touches := false
-		for _, part := range parts[1:] {
+		for _, part := range parts[8:] {
 			local := inverse.Mul4(part.transform)
 			lo, hi := mgl32.Vec3{100, 100, 100}, mgl32.Vec3{-100, -100, -100}
 			for _, x := range []float32{-.5, .5} {
@@ -168,7 +168,7 @@ func TestViewmodelBlockFacesStayOnScreenAcrossCompleteSwings(t *testing.T) {
 				parts := buildViewmodelParts(nil, &ViewmodelInput{Selected: core.ItemStack{Item: item, Count: 1}, ViewportWidth: aspect * 720, ViewportHeight: 720}, angle)
 				out := make([]byte, len(parts)*96)
 				encodeAvatarPartsInto(out, parts)
-				for i := 1; i < len(parts); i++ {
+				for i := 8; i < len(parts); i++ {
 					hull := viewmodelInstanceScreenHull(t, out, i, projection)
 					for _, p := range hull {
 						if abs32(p[0]) >= 1 || abs32(p[1]) >= 1 {
@@ -206,7 +206,7 @@ func TestViewmodelArmEndRemainsClippedAcrossSwing(t *testing.T) {
 
 func TestViewmodelBlockFaceSlabsDoNotOverlap(t *testing.T) {
 	parts := buildViewmodelParts(nil, &ViewmodelInput{Selected: core.ItemStack{Item: core.ItemGrass, Count: 1}}, 0)
-	basis := parts[1].transform
+	basis := parts[8].transform
 	for col := range 3 {
 		length := mgl32.Vec3{basis[col*4], basis[col*4+1], basis[col*4+2]}.Len()
 		for row := range 3 {
@@ -214,7 +214,7 @@ func TestViewmodelBlockFaceSlabsDoNotOverlap(t *testing.T) {
 		}
 	}
 	inverse := basis.Inv()
-	for i := 1; i < len(parts); i++ {
+	for i := 8; i < len(parts); i++ {
 		for j := i + 1; j < len(parts); j++ {
 			a, b := inverse.Mul4(parts[i].transform), inverse.Mul4(parts[j].transform)
 			overlap := true

@@ -153,7 +153,7 @@ packages/client/cmd/mornlea/app/
 - 空闲左手隐藏，主手与图标棱柱或六面方块共用握持根；相位、HUD 门控、
   静态 capture 抑制和第三人称显隐沿用原路径。
 - `TestViewmodelUsesCurrentAtlasIconAndMaximumPixelBudget` 通过真实材质覆盖
-  检查完整图标的颜色、257 实例预算、注册表切换与预热后零分配。
+  检查完整图标的颜色、264 实例预算（8 手部件 + 256 图标像素）、注册表切换与预热后零分配。
 - `Actions.PrimaryDown` 保留物理主键，`applyInteractiveInput` 经相位、聊天、
   面板与光标门控后推进 `viewmodelMotion`；被 UI 或首次捕获抑制的按键须松开
   才能重新起挥。呈现消费完整单调 elapsed，预测保持原 100ms 上限。

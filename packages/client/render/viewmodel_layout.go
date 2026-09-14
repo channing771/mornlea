@@ -28,13 +28,15 @@ func viewmodelGripRoot(input *ViewmodelInput, angle float32) mgl32.Mat4 {
 	}
 	tangent := float32(math.Tan(float64(fov) / 2))
 	scale := max(0, min((w-2*viewmodelHUDEdge)/viewmodelHUDWidth, (h-2*viewmodelHUDEdge)/viewmodelHUDHeight, float32(1)))
-	// 护甲状态栈增高后，中立与预备动作略下移；下挥恢复净空以避开状态行。
-	clearance := float32(68) + min(float32(12), max(angle, 0)*40)
-	y := min(float32(.35), 1-2*(viewmodelHUDStatusHeight*scale+clearance)/h)
-	y -= (max(0, 1.5-w/h) * .4) * max(angle, 0) / .7
+	// 窄窗口收窄组合并向右上让出状态栈；缩放不改变手与物品的局部连接。
+	compact := min(float32(1), w/1000)
+	x := min(float32(.90), float32(.74)+(1-compact)*.38)
+	y := min(float32(.58), 1-2*(viewmodelHUDStatusHeight*scale+55*compact+max(0, 640-w)*.25)/h)
+	y += (.58 - y) * min(float32(1), max(float32(0), (w-800)/200))
 	compensation := tangent / float32(math.Tan(35*math.Pi/180))
-	return mgl32.Translate3D(.60*w/h*tangent*.95-max(angle, 0)*.12*compensation, -y*tangent*.95-(min(angle, 0)*.07+max(angle, 0)*.15)*compensation, -.95-max(angle, 0)*.22).
-		Mul4(mgl32.Scale3D(compensation, compensation, 1)).
-		Mul4(mgl32.HomogRotate3DZ(80*math.Pi/180 - angle*.12)).
-		Mul4(mgl32.HomogRotate3DX(angle * .35))
+	depth := .95 + max(angle, 0)*.20
+	return mgl32.Translate3D(x*w/h*tangent*depth-max(angle, 0)*.05*compensation, -y*tangent*depth-(min(angle, 0)*.035+max(angle, 0)*.06)*compensation, -depth).
+		Mul4(mgl32.Scale3D(compensation*compact, compensation*compact, compact)).
+		Mul4(mgl32.HomogRotate3DZ(50*math.Pi/180 - angle*.12)).
+		Mul4(mgl32.HomogRotate3DX(angle * .20))
 }

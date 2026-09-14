@@ -70,15 +70,15 @@ func assertHandsLandedOnScreen(t *testing.T, pos mgl32.Vec3, yaw, pitch float32)
 	input.CamPos, input.CamYaw, input.CamPitch = pos, yaw, pitch
 	input.ViewportWidth, input.ViewportHeight = 480, 480
 	out := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, input)
-	if len(out) != avatarInstanceBytes {
-		t.Fatalf("中立实例数 = %d，想要 1（主手）", len(out)/avatarInstanceBytes)
+	if len(out) != 8*avatarInstanceBytes {
+		t.Fatalf("中立实例数 = %d，想要 8（主手部件）", len(out)/avatarInstanceBytes)
 	}
 	viewProj := viewmodelProjectionViewProj(pos, yaw, pitch)
 	const framePixels = 480
 	var ndc [1]mgl32.Vec3
 	for index := range 1 {
-		// 检查拳面而非已经出画的长前臂中心。
-		center := viewmodelInstanceCorner(out, index, 0, 1, 0)
+		// 检查拳面而非已经出画的前臂中心。
+		center := decodedPartCenter(out, 2)
 		if distance := center.Sub(pos).Len(); distance > 1.5 {
 			t.Fatalf("第 %d 只手距相机 %.2f 米，想要 1.5 米内（烘焙到本帧相机处）", index, distance)
 		}

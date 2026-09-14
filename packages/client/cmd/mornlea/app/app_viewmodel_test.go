@@ -179,15 +179,15 @@ func TestRenderFrameSuppressedViewmodelStreamEmpty(t *testing.T) {
 	}
 }
 
-// TestValidateViewmodelInstanceCount 锁定计数门：空与 1..257 实例放行，超限
+// TestValidateViewmodelInstanceCount 锁定计数门：空与 1..264 实例放行，超限
 // 与非对齐字节流稳定拒绝。
 func TestValidateViewmodelInstanceCount(t *testing.T) {
-	for _, size := range []int{0, 96, 192, 257 * 96} {
+	for _, size := range []int{0, 96, 192, 264 * 96} {
 		if err := validateViewmodelInstanceCount(make([]byte, size)); err != nil {
 			t.Fatalf("%d 字节被拒绝: %v", size, err)
 		}
 	}
-	for _, size := range []int{95, 97, 258 * 96} {
+	for _, size := range []int{95, 97, 265 * 96} {
 		if err := validateViewmodelInstanceCount(make([]byte, size)); err == nil {
 			t.Fatalf("%d 字节被放行，想要拒绝", size)
 		}
@@ -268,16 +268,16 @@ func TestSceneFirstFrameNeutralAfterViewmodelReset(t *testing.T) {
 }
 
 // TestViewmodelInstanceBytesMatchesEncoderOutput 把计数门常量钉在编码器真
-// 实输出上：中立主手恰一实例、手持方块恰七实例；`render` 侧布局若变，本测
+// 实输出上：中立主手恰八实例、手持方块恰十四实例；`render` 侧布局若变，本测
 // 先红，计数门不静默漂移。
 func TestViewmodelInstanceBytesMatchesEncoderOutput(t *testing.T) {
 	neutral := &render.ViewmodelInput{Selected: core.ItemStack{}}
-	if out := (&render.ViewmodelEncoder{}).EncodeViewmodelInstances(nil, neutral); len(out) != viewmodelInstanceBytes {
-		t.Fatalf("中立输出 %d 字节，想要 %d", len(out), viewmodelInstanceBytes)
+	if out := (&render.ViewmodelEncoder{}).EncodeViewmodelInstances(nil, neutral); len(out) != 8*viewmodelInstanceBytes {
+		t.Fatalf("中立输出 %d 字节，想要 %d", len(out), 8*viewmodelInstanceBytes)
 	}
 	held := &render.ViewmodelInput{Selected: viewmodelStoneStack}
-	if out := (&render.ViewmodelEncoder{}).EncodeViewmodelInstances(nil, held); len(out) != 7*viewmodelInstanceBytes {
-		t.Fatalf("持物输出 %d 字节，想要 %d", len(out), 7*viewmodelInstanceBytes)
+	if out := (&render.ViewmodelEncoder{}).EncodeViewmodelInstances(nil, held); len(out) != 14*viewmodelInstanceBytes {
+		t.Fatalf("持物输出 %d 字节，想要 %d", len(out), 14*viewmodelInstanceBytes)
 	}
 }
 
@@ -334,7 +334,7 @@ func TestPlayerStateResetClearsViewmodel(t *testing.T) {
 	}
 }
 
-// TestRenderFrameEncodesViewmodelStream 锁定帧接线：已确认手持方块进帧得七
+// TestRenderFrameEncodesViewmodelStream 锁定帧接线：已确认手持方块进帧得十四
 // 实例流，空槽回落主手；接线不破坏帧提交。
 func TestRenderFrameEncodesViewmodelStream(t *testing.T) {
 	app := newRemoteRenderApplication(t, &IntegrationGlyphSource{})
@@ -350,16 +350,16 @@ func TestRenderFrameEncodesViewmodelStream(t *testing.T) {
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("持物帧 RenderFrame=(%v,%v)", rendered, err)
 	}
-	if len(app.viewmodelStream) != 7*96 {
-		t.Fatalf("持物帧 viewmodel 流 %d 字节，想要 672（主手+六面）", len(app.viewmodelStream))
+	if len(app.viewmodelStream) != 14*96 {
+		t.Fatalf("持物帧 viewmodel 流 %d 字节，想要 1344（八个主手部件+六面）", len(app.viewmodelStream))
 	}
 
 	applyViewmodelHotbar(t, app, core.ItemStack{}, 0)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("空手帧 RenderFrame=(%v,%v)", rendered, err)
 	}
-	if len(app.viewmodelStream) != 96 {
-		t.Fatalf("空手帧 viewmodel 流 %d 字节，想要 96（主手无持物）", len(app.viewmodelStream))
+	if len(app.viewmodelStream) != 8*96 {
+		t.Fatalf("空手帧 viewmodel 流 %d 字节，想要 768（主手无持物）", len(app.viewmodelStream))
 	}
 }
 
@@ -460,14 +460,14 @@ func TestViewmodelUsesCurrentAtlasIconAndMaximumPixelBudget(t *testing.T) {
 	applyViewmodelHotbar(t, app, core.ItemStack{Item: core.ItemRawBeef, Count: 1}, 0)
 	input := app.deriveViewmodelInput(false, render.BlockCrack{})
 	out := app.viewmodelEncoder.EncodeViewmodelInstances(nil, input)
-	if len(out) != 257*96 {
+	if len(out) != 264*96 {
 		t.Fatalf("完整 16×16 图标得到 %d 实例", len(out)/96)
 	}
 	if err := validateViewmodelInstanceCount(out); err != nil {
 		t.Fatal(err)
 	}
 	for i := range 256 {
-		base := (i+1)*96 + 64
+		base := (i+8)*96 + 64
 		want := [4]float32{float32((i%16)*16) / 255, float32((i/16)*16) / 255, 71.0 / 255, 1}
 		for c := range 4 {
 			if got := math.Float32frombits(binary.LittleEndian.Uint32(out[base+c*4:])); got != want[c] {
@@ -475,7 +475,7 @@ func TestViewmodelUsesCurrentAtlasIconAndMaximumPixelBudget(t *testing.T) {
 			}
 		}
 	}
-	dst := make([]byte, 0, 257*96)
+	dst := make([]byte, 0, 264*96)
 	if allocs := testing.AllocsPerRun(10, func() { app.viewmodelEncoder.EncodeViewmodelInstances(dst, input) }); allocs != 0 {
 		t.Fatalf("最大预算热编码分配 %f", allocs)
 	}

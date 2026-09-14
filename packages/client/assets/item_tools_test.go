@@ -41,3 +41,50 @@ func TestSolidToolsHaveIndependentCrossSectionsAndRefresh(t *testing.T) {
 		t.Fatal("food must retain icon")
 	}
 }
+
+func TestApprovedToolsHaveWoodBandsAndMetalGuard(t *testing.T) {
+	r := NewDefaultRegistry()
+	for _, item := range []core.ItemID{core.ItemIronSword, core.ItemIronPickaxe, core.ItemIronHoe} {
+		parts, _ := r.ItemToolParts(item)
+		bands := map[[4]float32]bool{}
+		for _, p := range parts {
+			if p.Center[1] > .08 && p.Center[1] < .3 && p.Size[0] < .08 {
+				bands[p.Color] = true
+			}
+		}
+		if len(bands) < 3 {
+			t.Errorf("tool %d lacks woodgrain bands: %d", item, len(bands))
+		}
+		if item == core.ItemIronSword {
+			for _, p := range parts {
+				if p.Size[0] > .2 && p.Center[1] < .3 && p.Color == parts[0].Color {
+					t.Error("sword guard is wood handle color")
+				}
+			}
+		}
+	}
+}
+
+func TestApprovedPickCurveAndBroadHoeBlade(t *testing.T) {
+	r := NewDefaultRegistry()
+	pick, _ := r.ItemToolParts(core.ItemIronPickaxe)
+	lowTips := 0
+	for _, p := range pick {
+		if (p.Center[0] < -.2 || p.Center[0] > .2) && p.Center[1] < .3 && p.Size[2] >= .07 {
+			lowTips++
+		}
+	}
+	if lowTips < 2 {
+		t.Fatalf("pick has %d solid lowered arm tips", lowTips)
+	}
+	hoe, _ := r.ItemToolParts(core.ItemIronHoe)
+	broad := false
+	for _, p := range hoe {
+		if p.Center[0] < -.15 && p.Center[1] < .37 && p.Size[0] >= .15 && p.Size[1] >= .12 && p.Size[2] >= .1 {
+			broad = true
+		}
+	}
+	if !broad {
+		t.Fatal("hoe lacks broad offset solid blade")
+	}
+}

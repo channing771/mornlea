@@ -22,14 +22,14 @@
 //! 一致。
 
 /// 单帧 viewmodel 实例恒定上限：主手与最多 256 个图标棱柱；与 Go 编码侧的同名上限同值，超限整帧拒绝（整帧 `Invalid`）。
-pub const VIEWMODEL_MAX_INSTANCES: usize = 257;
+pub const VIEWMODEL_MAX_INSTANCES: usize = 264;
 /// 每实例字节数：与 avatar 实例逐字节同布局（mat4 + RGBA + 材质 u32 +
 /// 保留零填充），绘制复用 `EntityPass` 的同一套材质分支。
 pub const VIEWMODEL_INSTANCE_BYTES: usize = super::entity::ENTITY_INSTANCE_BYTES;
 /// 叠加 pass 的录制标签：抓帧定位相机空间叠加层用，改名即红。
 pub const VIEWMODEL_PASS_LABEL: &str = "viewmodel pass";
 
-/// 校验 viewmodel 实例段字节：96 的倍数且不超过 257 实例；空流合法（本帧
+/// 校验 viewmodel 实例段字节：96 的倍数且不超过 264 实例；空流合法（本帧
 /// 无双手）。容量是编译期常量，校验无需 GPU 资源，可供无适配器环境的
 /// 单元测试与 `validate_frame` 直接复用。
 pub fn instances_valid(instances: &[u8]) -> bool {
@@ -47,7 +47,7 @@ pub fn wants_draw(instances: &[u8]) -> bool {
 mod tests {
     use super::*;
 
-    /// 跨语言布局锁：96 字节/实例与 avatar 逐字节同布局，容量恒为 257
+    /// 跨语言布局锁：96 字节/实例与 avatar 逐字节同布局，容量恒为 264
     /// （主手与图标棱柱），与 Go 编码侧的同值常量一致；
     /// 材质槽偏移与哨兵沿 avatar 材质分支纪律，不相交性即纯色与贴图可辨。
     #[test]
@@ -57,11 +57,11 @@ mod tests {
             VIEWMODEL_INSTANCE_BYTES,
             super::super::entity::ENTITY_INSTANCE_BYTES
         );
-        assert_eq!(VIEWMODEL_MAX_INSTANCES, 257);
+        assert_eq!(VIEWMODEL_MAX_INSTANCES, 264);
         assert_eq!(
             VIEWMODEL_MAX_INSTANCES * VIEWMODEL_INSTANCE_BYTES,
-            24672,
-            "满段 257 实例的字节数"
+            25344,
+            "满段 264 实例的字节数"
         );
         assert_eq!(super::super::entity::AVATAR_MATERIAL_OFFSET, 80);
         assert_eq!(
@@ -71,8 +71,8 @@ mod tests {
         );
     }
 
-    /// 实例段校验锁：空流合法（本帧无双手），1..=257 实例合法；错位长度与
-    /// 第 258 个实例整帧拒绝，拒绝语义与 avatar/drop/轮廓/裂纹门一致。
+    /// 实例段校验锁：空流合法（本帧无双手），1..=264 实例合法；错位长度与
+    /// 第 265 个实例整帧拒绝，拒绝语义与 avatar/drop/轮廓/裂纹门一致。
     #[test]
     fn instances_valid_locks_count_and_alignment() {
         assert!(instances_valid(&[]), "空流合法（本帧无双手）");
@@ -81,7 +81,7 @@ mod tests {
             assert!(instances_valid(&stream), "{count} 实例合法");
         }
         let oversized = vec![0u8; (VIEWMODEL_MAX_INSTANCES + 1) * VIEWMODEL_INSTANCE_BYTES];
-        assert!(!instances_valid(&oversized), "第 258 个实例必须整帧拒绝");
+        assert!(!instances_valid(&oversized), "第 265 个实例必须整帧拒绝");
         let misaligned = vec![0u8; VIEWMODEL_INSTANCE_BYTES + 1];
         assert!(!instances_valid(&misaligned), "非 96 倍数必须拒绝");
         assert!(!instances_valid(&[0u8; 79]), "错位短流必须拒绝");
@@ -143,7 +143,7 @@ mod render_tests {
     }
 
     /// 双手叠加层真实参与成像：atlas 预热后同一实例必须改变图像；超限
-    /// （258 实例）与错位流在渲染前整帧拒绝且不触碰 target。
+    /// （265 实例）与错位流在渲染前整帧拒绝且不触碰 target。
     #[test]
     fn viewmodel_renders_and_invalid_rejects_without_touching_target() {
         use super::super::FrameResult;
