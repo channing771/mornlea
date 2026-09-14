@@ -2,6 +2,7 @@ package render
 
 import (
 	"math"
+	"slices"
 	"testing"
 
 	"github.com/channing771/mornlea/packages/shared/core"
@@ -65,6 +66,69 @@ func TestViewmodelToolsKeepShortPhysicalWrist(t *testing.T) {
 				if pixels := b.Sub(a).Len() * 360; pixels > palmPixels*.5 {
 					t.Fatalf("item %d phase %.2f exposed wrist %.1fpx exceeds half fist %.1fpx", item, input.SwingPhase, pixels, palmPixels)
 				}
+			}
+		}
+	}
+}
+
+// 皮肤棱体侧面可能比中心线露得更长；按实际深度可见的面像素量取腕轴跨度。
+func TestViewmodelToolWristSideFacesStayCompact(t *testing.T) {
+	projection := core.Perspective(70*math.Pi/180, 1280.0/720, .1, 100)
+	toPixels := func(p mgl32.Vec2) mgl32.Vec2 { return mgl32.Vec2{(p[0] + 1) * 640, (1 - p[1]) * 360} }
+	for _, item := range viewmodelToolVariants {
+		var encoder ViewmodelEncoder
+		input := ViewmodelInput{Selected: core.ItemStack{Item: item, Count: 1}, ViewportWidth: 1280, ViewportHeight: 720, SwingActive: true}
+		for _, phase := range []float32{0, .16, .24, .32, .40, .48, .56, .70, .85, 1} {
+			input.SwingPhase = phase
+			out := encoder.EncodeViewmodelInstances(nil, &input)
+			palm0, _ := projectToNDC(projection, viewmodelInstanceCorner(out, 2, 0, -1, 0))
+			palm1, _ := projectToNDC(projection, viewmodelInstanceCorner(out, 2, 0, 1, 0))
+			palmLength := toPixels(mgl32.Vec2{palm1[0], palm1[1]}).Sub(toPixels(mgl32.Vec2{palm0[0], palm0[1]})).Len()
+			wrist0, _ := projectToNDC(projection, viewmodelInstanceCorner(out, 7, 0, -1, 0))
+			wrist1, _ := projectToNDC(projection, viewmodelInstanceCorner(out, 7, 0, 1, 0))
+			axis := toPixels(mgl32.Vec2{wrist1[0], wrist1[1]}).Sub(toPixels(mgl32.Vec2{wrist0[0], wrist0[1]})).Normalize()
+			// 横截面的投影厚度不能被误计为沿腕轴拉长的皮肤。
+			crossSpan := float32(0)
+			for _, y := range []float32{-1, 0, 1} {
+				crossLo, crossHi := float32(1e6), float32(-1e6)
+				for _, x := range []float32{-1, 1} {
+					for _, z := range []float32{-1, 1} {
+						point := encoder.parts[7].transform.Mul4x1(mgl32.Vec4{x * .5, y * .5, z * .5, 1}).Vec3()
+						ndc, _ := projectToNDC(projection, point)
+						along := toPixels(mgl32.Vec2{ndc[0], ndc[1]}).Dot(axis)
+						crossLo, crossHi = min(crossLo, along), max(crossHi, along)
+					}
+				}
+				crossSpan = max(crossSpan, crossHi-crossLo)
+			}
+			hull := viewmodelInstanceScreenHull(t, out, 7, projection)
+			lo, hi := mgl32.Vec2{10, 10}, mgl32.Vec2{-10, -10}
+			for _, p := range hull {
+				lo[0], lo[1] = min(lo[0], p[0]), min(lo[1], p[1])
+				hi[0], hi[1] = max(hi[0], p[0]), max(hi[1], p[1])
+			}
+			first, last := float32(1e6), float32(-1e6)
+			for y := 0; y < 25; y++ {
+				for x := 0; x < 25; x++ {
+					p := mgl32.Vec2{lo[0] + (hi[0]-lo[0])*(float32(x)+.5)/25, lo[1] + (hi[1]-lo[1])*(float32(y)+.5)/25}
+					if !viewmodelHullCoversPoint(hull, p) {
+						continue
+					}
+					ray := mgl32.Vec3{p[0] * (1280.0 / 720) * float32(math.Tan(35*math.Pi/180)), p[1] * float32(math.Tan(35*math.Pi/180)), -1}
+					nearest, depth := -1, float32(1e6)
+					for index, part := range encoder.parts {
+						if d, hit := viewmodelPartRayDepth(part, ray); hit && d < depth {
+							nearest, depth = index, d
+						}
+					}
+					if nearest == 7 {
+						along := toPixels(p).Dot(axis)
+						first, last = min(first, along), max(last, along)
+					}
+				}
+			}
+			if last >= first && last-first-crossSpan > palmLength*.5 {
+				t.Fatalf("item %d phase %.2f visible wrist side length %.1fpx exceeds half fist %.1fpx", item, phase, last-first-crossSpan, palmLength)
 			}
 		}
 	}
@@ -190,30 +254,132 @@ func TestViewmodelToolsEnterFromLowerRightAcrossStroke(t *testing.T) {
 		for step := 0; step <= 100; step++ {
 			input.SwingPhase = float32(step) / 100
 			out := encoder.EncodeViewmodelInstances(nil, &input)
-			right, bottom := viewmodelSleeveEntry(t, out, projection)
-			if (right < 10 && right < .90) || (right == 10 && bottom < .78) {
+			right, bottom := viewmodelSleeveEntry(t, out, encoder.parts, projection)
+			if !viewmodelSleeveEntryAccepted(right, bottom) {
 				t.Fatalf("item %d phase %.2f sleeve enters from side: right %.3fH bottom %.3fW", item, input.SwingPhase, right, bottom)
 			}
 		}
 	}
 }
 
-func viewmodelSleeveEntry(t *testing.T, out []byte, projection mgl32.Mat4) (right, bottom float32) {
+func viewmodelSleeveEntryAccepted(right, bottom float32) bool {
+	if right < 10 {
+		return right >= .90
+	}
+	return bottom < 10 && bottom >= .78
+}
+
+// 独立构造屏边缺失、屏外伪交点及仅布料连接段入侧边的编码实例，锁住判定器本身。
+func TestViewmodelSleeveEntryOracleRejectsAbsentOrInvalidEdges(t *testing.T) {
+	projection := core.Perspective(70*math.Pi/180, 1280.0/720, .1, 100)
+	for _, probe := range []struct {
+		name     string
+		part     int
+		position mgl32.Vec3
+	}{
+		{"no crossing", 6, mgl32.Vec3{0, 0, -1}},
+		{"right crossing outside viewport", 0, mgl32.Vec3{1.22, -1.4, -1}},
+		{"bridge crosses screen side", 6, mgl32.Vec3{1.22, 0, -1}},
+	} {
+		t.Run(probe.name, func(t *testing.T) {
+			parts := make([]avatarPart, 8)
+			for index := range parts {
+				parts[index].transform = mgl32.Translate3D(0, 0, -1).Mul4(mgl32.Scale3D(.05, .05, .05))
+			}
+			parts[probe.part].transform = mgl32.Translate3D(probe.position[0], probe.position[1], probe.position[2]).Mul4(mgl32.Scale3D(.3, .3, .3))
+			out := make([]byte, len(parts)*avatarInstanceBytes)
+			encodeAvatarPartsInto(out, parts)
+			if probe.name == "right crossing outside viewport" {
+				hull := viewmodelInstanceScreenHull(t, out, probe.part, projection)
+				outside := false
+				for i, a := range hull {
+					b := hull[(i+1)%len(hull)]
+					if (a[0]-1)*(b[0]-1) > 0 || a[0] == b[0] {
+						continue
+					}
+					y := a[1] + (b[1]-a[1])*(1-a[0])/(b[0]-a[0])
+					outside = outside || y < -1 || y > 1
+				}
+				if !outside {
+					t.Fatal("probe did not produce an off-viewport right-edge intersection")
+				}
+			}
+			right, bottom := viewmodelSleeveEntry(t, out, parts, projection)
+			if viewmodelSleeveEntryAccepted(right, bottom) {
+				t.Fatalf("invalid sleeve edge accepted: right %.3f bottom %.3f", right, bottom)
+			}
+		})
+	}
+}
+
+// 布料连接段在屏边被更近的拳掌遮住时，以实际可见的前臂轮廓判定入画位置。
+func TestViewmodelSleeveEntryOracleIgnoresOccludedFabric(t *testing.T) {
+	projection := core.Perspective(70*math.Pi/180, 1280.0/720, .1, 100)
+	parts := make([]avatarPart, 8)
+	for i := range parts {
+		parts[i].transform = mgl32.Translate3D(0, 0, -1).Mul4(mgl32.Scale3D(.05, .05, .05))
+	}
+	parts[0].transform = mgl32.Translate3D(1.22, -.75, -1).Mul4(mgl32.Scale3D(.3, .3, .3))
+	parts[6].transform = mgl32.Translate3D(1.22, 0, -1).Mul4(mgl32.Scale3D(.3, .3, .3))
+	parts[2].transform = mgl32.Translate3D(.95, 0, -.65).Mul4(mgl32.Scale3D(.6, .6, .5))
+	out := make([]byte, len(parts)*avatarInstanceBytes)
+	encodeAvatarPartsInto(out, parts)
+	right, bottom := viewmodelSleeveEntry(t, out, parts, projection)
+	if !viewmodelSleeveEntryAccepted(right, bottom) {
+		t.Fatalf("occluded fabric falsely counted as side entry: right %.3f bottom %.3f", right, bottom)
+	}
+}
+
+func viewmodelSleeveEntry(t *testing.T, out []byte, parts []avatarPart, projection mgl32.Mat4) (right, bottom float32) {
 	t.Helper()
-	right, bottom = 10, 10
-	for _, index := range []int{0, 1} {
+	rightCuts, bottomCuts := []float32{0, 1}, []float32{0, 1}
+	for index := range parts {
 		hull := viewmodelInstanceScreenHull(t, out, index, projection)
 		for i, a := range hull {
 			b := hull[(i+1)%len(hull)]
 			if (a[0]-1)*(b[0]-1) <= 0 && a[0] != b[0] {
 				y := a[1] + (b[1]-a[1])*(1-a[0])/(b[0]-a[0])
-				right = min(right, (1-y)/2)
+				if y >= -1 && y <= 1 {
+					rightCuts = append(rightCuts, (1-y)/2)
+				}
 			}
 			if (a[1]+1)*(b[1]+1) <= 0 && a[1] != b[1] {
 				x := a[0] + (b[0]-a[0])*(-1-a[1])/(b[1]-a[1])
-				bottom = min(bottom, (1+x)/2)
+				if x >= -1 && x <= 1 {
+					bottomCuts = append(bottomCuts, (1+x)/2)
+				}
 			}
 		}
 	}
-	return
+	slices.Sort(rightCuts)
+	slices.Sort(bottomCuts)
+	right = viewmodelVisibleFabricEdge(rightCuts, parts, projection.Inv(), true)
+	bottom = viewmodelVisibleFabricEdge(bottomCuts, parts, projection.Inv(), false)
+	return right, bottom
+}
+
+// 沿投影凸包在屏边的所有切分段抽样，取实际深度最前的布料联合轮廓。
+// 用持物和拳掌的边界一并切段，避免被它们遮住的布料面误报侧边入画。
+func viewmodelVisibleFabricEdge(cuts []float32, parts []avatarPart, projectionInverse mgl32.Mat4, rightEdge bool) float32 {
+	for i := 0; i+1 < len(cuts); i++ {
+		if cuts[i+1]-cuts[i] < 1e-5 {
+			continue
+		}
+		position := (cuts[i] + cuts[i+1]) * .5
+		x, y := position*2-1, float32(-1)+1e-4
+		if rightEdge {
+			x, y = 1-1e-4, 1-position*2
+		}
+		ray := projectionInverse.Mul4x1(mgl32.Vec4{x, y, 0, 1}).Vec3()
+		nearest, nearestDepth := -1, float32(1e6)
+		for index, part := range parts {
+			if depth, hit := viewmodelPartRayDepth(part, ray); hit && depth < nearestDepth {
+				nearest, nearestDepth = index, depth
+			}
+		}
+		if nearest == 0 || nearest == 1 || nearest == 6 {
+			return cuts[i]
+		}
+	}
+	return 10
 }
