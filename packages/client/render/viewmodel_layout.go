@@ -30,7 +30,10 @@ func viewmodelGripRoot(input *ViewmodelInput, angle float32) mgl32.Mat4 {
 	scale := max(0, min((w-2*viewmodelHUDEdge)/viewmodelHUDWidth, (h-2*viewmodelHUDEdge)/viewmodelHUDHeight, float32(1)))
 	// 窄窗口收窄组合并向右上让出状态栈；缩放不改变手与物品的局部连接。
 	compact := min(float32(1), w/1000)
-	x := min(float32(.90), float32(.74)+(1-compact)*.38)
+	x := min(float32(.90), float32(.68)+(1-compact)*.55)
+	if ViewmodelTierOf(input.Selected) == ViewmodelTierPick {
+		x -= .04 * min(float32(1), max(float32(0), (w-800)/200))
+	}
 	y := min(float32(.58), 1-2*(viewmodelHUDStatusHeight*scale+55*compact+max(0, 640-w)*.25)/h)
 	y += (.58 - y) * min(float32(1), max(float32(0), (w-800)/200))
 	compensation := tangent / float32(math.Tan(35*math.Pi/180))

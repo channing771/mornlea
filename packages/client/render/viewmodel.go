@@ -194,13 +194,18 @@ func buildViewmodelParts(dst []avatarPart, input *ViewmodelInput, angle float32)
 	// 头底面的肤色取当前身份 atlas，避免独立调色板与材质覆盖脱节。
 	px := registry.LayerRGBA(int(material) + 3)
 	skin := [4]float32{float32(px[0]) / 255, float32(px[1]) / 255, float32(px[2]) / 255, 1}
-	coat := avatarShade(avatarColor(key), .82)
-	add(root.Mul4(mgl32.HomogRotate3DX(-.35)), mgl32.Vec3{0, -.48, .03}, mgl32.Vec3{.17, .78, .185}, coat, material+12)
-	add(root, mgl32.Vec3{0, -.10, .025}, mgl32.Vec3{.175, .065, .185}, avatarShade(coat, 1.08), material+12)
-	add(root, mgl32.Vec3{0, 0, 0}, mgl32.Vec3{.15, .15, .155}, skin, avatarMaterialSolid)
-	add(root, mgl32.Vec3{-.083, .008, .055}, mgl32.Vec3{.06, .095, .085}, avatarShade(skin, .9), avatarMaterialSolid)
+	// 主手迎光面的暖色对比只作用于当前采样，不改变第三人称或公共着色器。
+	skin[0], skin[1], skin[2] = min(1, skin[0]*1.20), min(1, skin[1]*1.07), skin[2]*.92
+	// 袖子的中部布料色来自当前身份原材质，避免整条第三人称袖纹挤成白色腕带。
+	coatPixels := registry.LayerRGBA(int(material) + 12)
+	coatOffset := (6*16 + 8) * 4
+	coat := [4]float32{float32(coatPixels[coatOffset]) / 255, float32(coatPixels[coatOffset+1]) / 255, float32(coatPixels[coatOffset+2]) / 255, 1}
+	add(root.Mul4(mgl32.HomogRotate3DX(-.35)), mgl32.Vec3{0, -.48, .03}, mgl32.Vec3{.17, .78, .185}, coat, avatarMaterialSolid)
+	add(root, mgl32.Vec3{0, -.10, .025}, mgl32.Vec3{.175, .065, .185}, avatarShade(coat, 1.03), avatarMaterialSolid)
+	add(root, mgl32.Vec3{0, 0, 0}, mgl32.Vec3{.13, .15, .145}, skin, avatarMaterialSolid)
+	add(root, mgl32.Vec3{-.060, .006, .06}, mgl32.Vec3{.040, .078, .070}, avatarShade(skin, .9), avatarMaterialSolid)
 	for i := 0; i < 4; i++ {
-		add(root, mgl32.Vec3{-.055 + float32(i)*.036, .065, .055}, mgl32.Vec3{.035, .045, .055}, avatarShade(skin, 1-float32(i%2)*.035), avatarMaterialSolid)
+		add(root, mgl32.Vec3{-.045 + float32(i)*.03, .054, .030}, mgl32.Vec3{.030, .040, .065}, avatarShade(skin, 1-float32(i%2)*.035), avatarMaterialSolid)
 	}
 	switch ViewmodelHeldKindOf(input.Selected) {
 	case ViewmodelHeldBlock:
@@ -220,12 +225,20 @@ func buildViewmodelParts(dst []avatarPart, input *ViewmodelInput, angle float32)
 		}
 	case ViewmodelHeldItem:
 		toolParts, solidTool := registry.ItemToolParts(input.Selected.Item)
-		itemYaw := float32(-.45)
 		if solidTool {
-			itemYaw = .15
-		}
-		frame := root.Mul4(mgl32.Translate3D(0, .085, 0)).Mul4(mgl32.HomogRotate3DZ(-30 * math.Pi / 180)).Mul4(mgl32.HomogRotate3DY(itemYaw)).Mul4(mgl32.HomogRotate3DX(-.20)).Mul4(mgl32.Scale3D(.85, .85, .85))
-		if solidTool {
+			// 工具独立抵消前臂斜角；刃头向握点右上方伸出，柄仍穿过拳掌。
+			width, height := input.ViewportWidth, input.ViewportHeight
+			if width <= 0 || height <= 0 {
+				width, height = 1280, 720
+			}
+			// 窄屏逐渐扶正工具，4:3 单独收窄工具比例，给完整头部保留挥动余量。
+			normal := min(float32(1), max(float32(0), (width-800)/200))
+			toolScale := float32(.85) * min(float32(1), width/height/(16.0/9))
+			toolYaw := float32(-.38)
+			if ViewmodelTierOf(input.Selected) == ViewmodelTierPick {
+				toolYaw = .30
+			}
+			frame := root.Mul4(mgl32.Translate3D(.015, .025, 0)).Mul4(mgl32.HomogRotate3DZ((-45 - 19*normal) * math.Pi / 180)).Mul4(mgl32.HomogRotate3DY(toolYaw)).Mul4(mgl32.Scale3D(toolScale, toolScale, toolScale))
 			for _, part := range toolParts {
 				partFrame := frame.Mul4(mgl32.Translate3D(part.Center[0], part.Center[1], part.Center[2])).Mul4(mgl32.HomogRotate3DZ(part.RotationZ))
 				add(partFrame, mgl32.Vec3{}, mgl32.Vec3(part.Size), part.Color, avatarMaterialSolid)
@@ -233,10 +246,15 @@ func buildViewmodelParts(dst []avatarPart, input *ViewmodelInput, angle float32)
 			return dst
 		}
 		// 非工具图标沿原有像素承托点装配，完整立方仍走独立六面路径。
+		frame := root.Mul4(mgl32.Translate3D(0, .065, 0)).Mul4(mgl32.HomogRotate3DZ(-30 * math.Pi / 180)).Mul4(mgl32.HomogRotate3DY(-.45)).Mul4(mgl32.HomogRotate3DX(-.20)).Mul4(mgl32.Scale3D(.85, .85, .85))
 		gripX, gripY, pixel := float32(8), float32(12), float32(.032)
 		// 弓的握把位于图稿左侧；默认图标中心落在透明区，需对齐实际弓臂。
 		if input.Selected.Item == core.ItemBow || input.Selected.Item == core.ItemBrokenBow {
 			gripX = 2
+		}
+		// 头盔面甲中心是透明开口，改由左颊下缘接入收窄后的拳掌。
+		if input.Selected.Item == core.ItemIronHelmet {
+			gripX = 5
 		}
 		parts, _ := registry.ItemIconPrisms(input.Selected.Item)
 		for _, part := range parts {

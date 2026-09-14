@@ -1,6 +1,10 @@
 package assets
 
-import "github.com/channing771/mornlea/packages/shared/core"
+import (
+	"math"
+
+	"github.com/channing771/mornlea/packages/shared/core"
+)
 
 // ItemToolPart 是以握点为原点的实心体素部件；尺寸与颜色缓存随图标一起刷新。
 // 柄、柄套、刃脊和刃缘拥有不同截面，不能退化为图标的均匀挤出。
@@ -68,71 +72,95 @@ func buildItemToolParts(item core.ItemID, px []byte) []ItemToolPart {
 	add := func(x, y, z, w, h, d float32, c [4]float32) {
 		parts = append(parts, ItemToolPart{Center: [3]float32{x, y, z}, Size: [3]float32{w, h, d}, Color: c})
 	}
-	add(0, -.005, 0, .065, .41, .075, handle)
 	shade := func(c [4]float32, f float32) [4]float32 {
 		for i := 0; i < 3; i++ {
 			c[i] = min(1, c[i]*f)
 		}
 		return c
 	}
-	// 连续实心柄保留握点，表面窄条形成有明暗变化的原创木纹。
-	for i := 0; i < 12; i++ {
-		y := float32(i)*.045 - .19
-		add(.009, y, .039, .044, .022, .009, shade(handle, .73+float32(i%3)*.13))
-		add(-.034, y+.012, 0, .007, .026, .06, shade(handle, .66+float32(i%2)*.12))
+	// 实心木纹分段首尾相接，宽色带覆盖四侧；采样更新传播到整个工具。
+	handleTop := float32(.20)
+	bandCount := 6
+	if category != 1 {
+		handleTop = .70
+		bandCount = 8
 	}
-	add(0, -.225, 0, .085, .04, .09, edge)
+	bandHeight := (handleTop + .21) / float32(bandCount)
+	for i := 0; i < bandCount; i++ {
+		y := -.21 + (float32(i)+.5)*bandHeight
+		add(0, y, 0, .065, bandHeight, .075, shade(handle, [...]float32{.30, .47, .36, .52, .38, .48, .35, .50}[i]))
+	}
+	add(0, -.225, 0, .072, .035, .082, shade(metal, .25))
 	if category == 1 {
-		add(0, .20, 0, .25, .055, .12, shade(metal, .45))
-		add(0, .245, 0, .105, .05, .115, shade(metal, .65))
-		length := float32(.40)
-		if broken {
-			length = .18
+		add(0, .175, 0, .25, .052, .12, shade(metal, .28))
+		for _, sign := range []float32{-1, 1} {
+			add(sign*.139, .175, 0, .045, .07, .13, shade(metal, .24))
+			parts[len(parts)-1].RotationZ = -sign * .18
 		}
-		add(0, .27+length/2, 0, .085, length, .11, shade(metal, .58))
-		add(-.016, .27+length/2, .060, .032, length, .012, shade(metal, .83))
-		add(-.055, .27+length/2, 0, .028, length, .05, edge)
-		add(.055, .27+length/2, 0, .028, length, .05, edge)
+		add(0, .220, 0, .105, .045, .115, shade(metal, .35))
+		length := float32(.535)
+		sections := 6
 		if broken {
-			add(-.022, .27+length+.025, 0, .045, .05, .065, metal)
+			length = .21
+			sections = 3
+		}
+		// 刃脊比刃面深，沿长度逐级收窄；尖端连同厚度收窄，形成真正的实心尖刃。
+		for i := 0; i < sections; i++ {
+			h := length / float32(sections)
+			width := [...]float32{.118, .112, .103, .093, .077, .055}[i]
+			y := .242 + (float32(i)+.5)*h
+			add(0, y, 0, width, h, .105, shade(metal, .30))
+			add(-.012, y, .058, width*.56, h, .011, shade(metal, .72))
+			add(-width/2-.010, y, .019, .022, h, .055, shade(edge, .94))
+			add(width/2+.007, y, -.008, .016, h, .07, shade(metal, .45))
+		}
+		if broken {
+			add(-.025, .242+length+.023, 0, .046, .046, .065, shade(metal, .50))
 		} else {
-			for i := 0; i < 4; i++ {
-				width := .075 - float32(i)*.018
-				add(0, .27+length+.012+float32(i)*.02, 0, width, .024, width, edge)
-			}
+			// 斜置实心菱形的下半部接入末段，形成连续斜边而非细小方块帽。
+			add(0, .811, 0, .055, .055, .080, shade(metal, .35))
+			parts[len(parts)-1].RotationZ = math.Pi / 4
+			add(0, .811, .045, .055, .055, .010, shade(metal, .72))
+			parts[len(parts)-1].RotationZ = math.Pi / 4
+			add(-.019, .830, .045, .011, .055, .014, shade(edge, .94))
+			parts[len(parts)-1].RotationZ = -math.Pi / 4
 		}
 	} else {
-		add(0, .28, 0, .065, .20, .075, handle)
-		add(0, .37, 0, .115, .13, .125, shade(metal, .66))
+		const lift = float32(.33)
+		add(0, .37+lift, 0, .115, .13, .125, shade(metal, .32))
 		if category == 2 {
-			// 逐段下弯的双臂保持实心截面，端部收窄；损坏形态移去右臂。
+			// 三段折线下弯后以两级尖端收束，避免恒厚弧段形成圆钩。
 			for _, sign := range []float32{-1, 1} {
 				if broken && sign > 0 {
 					continue
 				}
-				for i := 0; i < 4; i++ {
-					x := []float32{.07, .14, .205, .252}[i]
-					y := []float32{.414, .389, .345, .285}[i]
-					w := []float32{.105, .08, .065, .04}[i]
-					add(sign*x, y, 0, w+.015, .085, .12-float32(i)*.009, shade(metal, .60))
-					parts[len(parts)-1].RotationZ = -sign * (.15 + float32(i)*.22)
-					add(sign*x, y+.032, .005, w+.010, .020, .10-float32(i)*.009, edge)
-					parts[len(parts)-1].RotationZ = -sign * (.15 + float32(i)*.22)
+				for i := 0; i < 5; i++ {
+					x := [...]float32{.075, .155, .220, .265, .292}[i]
+					y := [...]float32{.421, .397, .347, .293, .251}[i] + lift
+					w := [...]float32{.11, .10, .09, .064, .041}[i]
+					h := [...]float32{.075, .070, .054, .034, .016}[i]
+					d := [...]float32{.12, .105, .082, .052, .022}[i]
+					add(sign*x, y, 0, w, h, d, shade(metal, .34))
+					parts[len(parts)-1].RotationZ = -sign * ([...]float32{.20, .45, .72, .92, 1.04}[i])
+					add(sign*x, y, .5*d+.004, w, h, .008, shade(metal, .78))
+					parts[len(parts)-1].RotationZ = -sign * ([...]float32{.20, .45, .72, .92, 1.04}[i])
 				}
 			}
 		} else {
-			length := float32(.20)
+			width := float32(.27)
 			if broken {
-				length = .105
+				width = .14
 			}
-			add(-length/2, .415, 0, length, .09, .13, shade(metal, .62))
-			width := float32(.16)
-			if broken {
-				width = .09
-			}
-			add(-length, .325, 0, width, .15, .12, shade(metal, .72))
-			add(-length, .325, .064, width-.025, .12, .012, shade(metal, .88))
-			add(-length, .242, 0, width+.018, .024, .07, edge)
+			// 宽刃沿柄套左侧斜出，厚度集中在刃背；不能堆成方锤头。
+			add(-.045, .755, 0, .11, .060, .105, shade(metal, .31))
+			add(-.17, .728, 0, width, .065, .13, shade(metal, .34))
+			parts[len(parts)-1].RotationZ = .55
+			add(-.17, .728, .071, width, .065, .012, shade(metal, .76))
+			parts[len(parts)-1].RotationZ = .55
+			tipX := -.17 - width*.44
+			tipY := .728 - width*.27
+			add(tipX, tipY, 0, .04, .025, .072, shade(metal, .56))
+			parts[len(parts)-1].RotationZ = .55
 		}
 	}
 	return parts

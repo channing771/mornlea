@@ -58,17 +58,20 @@ func TestViewmodelHandsMatchAvatarArmStyle(t *testing.T) {
 		t.Fatalf("空手实例数 = %d，想要 8", len(out)/avatarInstanceBytes)
 	}
 	key := EntityKey{Kind: EntityPlayer, ID: [16]byte(player)}
-	wantColor := avatarShade(avatarColor(key), 0.82)
+
 	headMaterial := uint32(assets.LayerHumanSageHead)
 	if swingPhaseID(key)%2 != 0 {
 		headMaterial = uint32(assets.LayerHumanClayHead)
 	}
+	coatPixels := viewmodelDefaultRegistry.LayerRGBA(int(headMaterial) + 12)
+	offset := (6*16 + 8) * 4
+	wantColor := [4]float32{float32(coatPixels[offset]) / 255, float32(coatPixels[offset+1]) / 255, float32(coatPixels[offset+2]) / 255, 1}
 	for index := range 1 {
 		if color := decodedPartColor(out, index); color != wantColor {
-			t.Fatalf("第 %d 只手颜色 = %v，想要 %v（与同身体基色同源）", index, color, wantColor)
+			t.Fatalf("第 %d 只手颜色 = %v，想要 %v（与同身份袖子布料同源）", index, color, wantColor)
 		}
-		if material := decodedPartMaterial(out, index); material != headMaterial+12 {
-			t.Fatalf("第 %d 只手材质 = %d，想要头部层 +12", index, material)
+		if material := decodedPartMaterial(out, index); material != avatarMaterialSolid {
+			t.Fatalf("第 %d 只手材质 = %d，想要当前身份布料色的独立分面", index, material)
 		}
 		if size := decodedPartSize(out, index); !approxEqual(size[0], 0.17) || size[1] > .8 || !approxEqual(size[2], 0.185) {
 			t.Fatalf("第 %d 只手尺寸 = %v，想要短前臂截面 0.17×0.185", index, size)
