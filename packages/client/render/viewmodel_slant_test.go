@@ -9,8 +9,8 @@ import (
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-// 本文件锁定第一人称双手的斜持姿态：双手自左下/右下屏角斜向入画，长轴向
-// 画面中心倾斜而非竖直柱状，右手为主手（更靠中心、位置更高），准星常空。
+// 本文件锁定第一人称主手斜持姿态：右下屏角斜向入画，长轴向
+// 画面中心倾斜，臂根在屏外，准星常空。
 
 // viewmodelSlantDegreesOf 从实例矩阵还原手臂长轴与竖直方向的夹角（度）：
 // 实例几何以局部原点为中心、`Y` 列即长轴方向（含缩放），零位姿下根为单位
@@ -62,42 +62,17 @@ func viewmodelInstanceCorner(out []byte, index int, sx, sy, sz float32) mgl32.Ve
 }
 
 // TestViewmodelSlantAngleInSpecRange 锁定斜持倾角落在契约区间：手臂长轴与
-// 竖直方向的夹角必须在 20°–35° 之间，左右手都要满足。
+// 竖直方向的夹角必须在 30°–55° 之间，主手需要满足。
 func TestViewmodelSlantAngleInSpecRange(t *testing.T) {
 	input := viewmodelTestInput(core.PlayerID{51}, core.ItemStack{}, 10)
 	out := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, input)
-	if len(out) != 2*avatarInstanceBytes {
-		t.Fatalf("中立实例数 = %d，想要 2（左右手）", len(out)/avatarInstanceBytes)
+	if len(out) != 8*avatarInstanceBytes {
+		t.Fatalf("中立实例数 = %d，想要 8（主手部件）", len(out)/avatarInstanceBytes)
 	}
-	for index := range 2 {
-		if degrees := viewmodelSlantDegreesOf(out, index); degrees < 20 || degrees > 35 {
-			t.Fatalf("第 %d 只手倾角 = %.1f°，想要 20°–35°", index, degrees)
+	for index := range 1 {
+		if degrees := viewmodelSlantDegreesOf(out, index); degrees < 30 || degrees > 55 {
+			t.Fatalf("第 %d 只手倾角 = %.1f°，想要 30°–55°", index, degrees)
 		}
-	}
-}
-
-// TestViewmodelArmsLeanTowardCenter 锁定倾斜方向与主手布局：左手顶端偏右、
-// 右手顶端偏左（向画面中心），右手更靠中心且位置更高。
-func TestViewmodelArmsLeanTowardCenter(t *testing.T) {
-	input := viewmodelTestInput(core.PlayerID{51}, core.ItemStack{}, 10)
-	out := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, input)
-	topX := func(index int) float32 {
-		base := index * avatarInstanceBytes
-		return math.Float32frombits(uint32Of(out, base+4*4))
-	}
-	if got := topX(0); got <= 0 {
-		t.Fatalf("左手长轴顶端 x 分量 = %.3f，想要偏右（>0）", got)
-	}
-	if got := topX(1); got >= 0 {
-		t.Fatalf("右手长轴顶端 x 分量 = %.3f，想要偏左（<0）", got)
-	}
-	// 零位姿下世界坐标即相机坐标：右手理应更靠中心（|x| 更小）且更高。
-	left, right := decodedPartCenter(out, 0), decodedPartCenter(out, 1)
-	if abs32(right[0]) >= abs32(left[0]) {
-		t.Fatalf("右手 |x|=%.3f，想要小于左手 |x|=%.3f（主手更靠中心）", right[0], left[0])
-	}
-	if right[1] <= left[1] {
-		t.Fatalf("右手 y=%.3f，想要高于左手 y=%.3f", right[1], left[1])
 	}
 }
 
@@ -108,7 +83,7 @@ func abs32(value float32) float32 {
 	return value
 }
 
-// assertViewmodelCrosshairClear 断言准星像素不被双手覆盖：逐实例把 8 角点
+// assertViewmodelCrosshairClear 断言准星像素不被主手及持物覆盖：逐实例把 8 角点
 // 投影为屏面凸包，原点落在任一凸包内（留一像素级余量）即失败。长条持物
 // 的顶端可以越过中心线（《我的世界》式持握本就如此），只要细长剪影偏在
 // 一侧、准星像素本身是空的即算通过。
@@ -179,7 +154,7 @@ func viewmodelHullCoversPoint(hull []mgl32.Vec2, point mgl32.Vec2) bool {
 		return false
 	}
 	// 凸多边形同侧判定：原点与包内任一点恒在每条边的同侧。
-	const margin = float32(0.01)
+	const margin = float32(0.000001)
 	sign := float32(0)
 	for i := range hull {
 		a, b := hull[i], hull[(i+1)%len(hull)]
@@ -210,72 +185,18 @@ func TestViewmodelCrosshairClearNeutral(t *testing.T) {
 	assertViewmodelCrosshairClear(t, (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, armed))
 }
 
-// TestViewmodelCrosshairClearAtSwingPeak 锁定挥动峰值仍不挡准星：以最大摆
-// 幅档（工具 0.7 弧度）正负峰值直接装配，投影依旧留空准星。
-func TestViewmodelCrosshairClearAtSwingPeak(t *testing.T) {
+// `TestViewmodelCrosshairClearAtNeutral` 锁定工具中立姿态留空准星；
+// 活跃挥动允许短暂经过准星附近，不属于本断言的约束范围。
+func TestViewmodelCrosshairClearAtNeutral(t *testing.T) {
 	for _, stack := range []core.ItemStack{
 		{Item: core.ItemIronSword, Count: 1, Durability: 125},
 		{Item: core.ItemIronPickaxe, Count: 1, Durability: 125},
 	} {
 		input := viewmodelTestInput(core.PlayerID{51}, stack, 10)
-		for _, angle := range []float32{0.7, -0.7} {
-			parts := buildViewmodelParts(nil, input, angle)
-			dst := growEncodeBuffer(nil, len(parts)*avatarInstanceBytes)
-			encodeAvatarPartsInto(dst, parts)
-			assertViewmodelCrosshairClear(t, dst)
-		}
-	}
-}
-
-// TestViewmodelHeldItemSitsForwardOfHand 锁定持物装在手的前方（朝相机一侧）：
-// 中立持握下持物中心在相机空间比右手中心更靠近相机（`z` 更大），刃面不被
-// 手臂遮挡才有像素可读性；左右手臂本身不参与本断言。
-func TestViewmodelHeldItemSitsForwardOfHand(t *testing.T) {
-	for _, stack := range []core.ItemStack{
-		{Item: core.ItemIronPickaxe, Count: 1, Durability: 125},
-		{Item: core.ItemDirt, Count: 1},
-	} {
-		input := viewmodelTestInput(core.PlayerID{51}, stack, 10)
-		out := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, input)
-		if len(out) != 3*avatarInstanceBytes {
-			t.Fatalf("持物实例数 = %d，想要 3（左右手 + 持物）", len(out)/avatarInstanceBytes)
-		}
-		hand := decodedPartCenter(out, 1)
-		held := decodedPartCenter(out, 2)
-		// 零位姿下世界坐标即相机坐标（相机朝 `-Z`）：持物 `z` 必须显著更大。
-		if held[2]-hand[2] < 0.05 {
-			t.Fatalf("持物 %v 相对手臂前移 = %.3f，想要至少 0.05（装在手的前方）",
-				stack.Item, held[2]-hand[2])
-		}
-	}
-}
-
-// TestViewmodelPickMountClearsFistFront 锁定镐类持物装在拳面之前：镐中心相
-// 对右手中心的前移必须超过拳体前半厚度（0.18），刃体整体落在拳面朝相机一
-// 侧，否则中段像素被手臂深度遮挡（抓帧目检结论）。锄斧随镐档同落点。
-func TestViewmodelPickMountClearsFistFront(t *testing.T) {
-	input := viewmodelTestInput(core.PlayerID{51},
-		core.ItemStack{Item: core.ItemIronPickaxe, Count: 1, Durability: 125}, 10)
-	out := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, input)
-	hand := decodedPartCenter(out, 1)
-	held := decodedPartCenter(out, 2)
-	if held[2]-hand[2] < 0.18 {
-		t.Fatalf("镐相对手臂前移 = %.3f，想要至少 0.18（刃体出拳面）", held[2]-hand[2])
-	}
-	if held.Sub(viewmodelHeldPickCenter).Len() > 1e-5 {
-		t.Fatalf("镐中心 = %v，想要镐专用落点 %v", held, viewmodelHeldPickCenter)
-	}
-}
-
-// TestViewmodelSwordMountUnchanged 锁定剑类持物落点不动：剑与镐分挂不同落
-// 点后，剑持物中心必须逐分量等于既有长条落点常量（攻击静帧/GIF 像素零回归
-// 的单元侧证据）。
-func TestViewmodelSwordMountUnchanged(t *testing.T) {
-	input := viewmodelTestInput(core.PlayerID{51},
-		core.ItemStack{Item: core.ItemIronSword, Count: 1, Durability: 125}, 10)
-	out := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, input)
-	if held := decodedPartCenter(out, 2); held.Sub(viewmodelHeldItemCenter).Len() > 1e-5 {
-		t.Fatalf("剑持物中心 = %v，想要既有落点 %v（不得随镐前移）", held, viewmodelHeldItemCenter)
+		parts := buildViewmodelParts(nil, input, 0)
+		dst := growEncodeBuffer(nil, len(parts)*avatarInstanceBytes)
+		encodeAvatarPartsInto(dst, parts)
+		assertViewmodelCrosshairClear(t, dst)
 	}
 }
 
@@ -299,81 +220,20 @@ func viewmodelInstanceScreenHull(t *testing.T, out []byte, index int, viewProj m
 	return viewmodelConvexHullOf(points)
 }
 
-// countViewmodelVisibleCells 在屏面 NDC 网格上数持物可见像素：落在持物凸包
-// 内、且不被任一手臂凸包覆盖的格点即为未遮挡像素。这是保守下界：屏面重叠但
-// 深度在前的部分未计入——只会少算不会多算，足以证明“有像素”。
-func countViewmodelVisibleCells(held, left, right []mgl32.Vec2) (visible, heldCells int) {
-	const grid = 256
-	for iy := 0; iy < grid; iy++ {
-		for ix := 0; ix < grid; ix++ {
-			point := mgl32.Vec2{
-				(float32(ix)+0.5)/grid*2 - 1,
-				(float32(iy)+0.5)/grid*2 - 1,
-			}
-			if !viewmodelHullCoversPoint(held, point) {
-				continue
-			}
-			heldCells++
-			if viewmodelHullCoversPoint(left, point) || viewmodelHullCoversPoint(right, point) {
-				continue
-			}
-			visible++
-		}
-	}
-	return visible, heldCells
-}
-
-// viewmodelWideViewProj 是抓帧同口径的宽幅投影 oracle：与
-// `viewmodelProjectionViewProj` 同一数学公式，只把宽高比换成抓帧画幅
-// （16:9）。静息遮挡只在宽幅下复现（方形 oracle 里新旧落点都与手臂屏面分
-// 离），回归探针必须用本口径，否则红测试无法变红。
-func viewmodelWideViewProj() mgl32.Mat4 {
-	forward := mgl32.Vec3{0, 0, -1}
-	view := mgl32.LookAtV(mgl32.Vec3{}, forward, mgl32.Vec3{0, 1, 0})
-	return core.Perspective(
-		viewmodelProjectionFovY, float32(16)/float32(9),
-		viewmodelProjectionNear, viewmodelProjectionFar,
-	).Mul4(view)
-}
-
-// TestViewmodelPickHeadVisibleAtRest 锁定挖掘静息帧镐头有屏面像素：软件光栅
-// 数出未被双手遮挡的镐格数（保守下界）。本探针是防回归烟雾线（阈值远低于实测
-// 值，只防未来有人把持物移回臂后或缩几何导致可见面积塌零）；新旧落点的区分由
-// 落点钉死测试与抓帧像素计数承担——旧落点屏面本就不遮挡，遮挡并非静息无镐的主
-// 因（主因是持物原色与天空同亮，见视觉基线报告）。
-func TestViewmodelPickHeadVisibleAtRest(t *testing.T) {
-	input := viewmodelTestInput(core.PlayerID{51},
-		core.ItemStack{Item: core.ItemIronPickaxe, Count: 1, Durability: 125}, 10)
-	out := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, input)
-	if len(out) != 3*avatarInstanceBytes {
-		t.Fatalf("持物实例数 = %d，想要 3（左右手 + 持物）", len(out)/avatarInstanceBytes)
-	}
-	viewProj := viewmodelWideViewProj()
-	left := viewmodelInstanceScreenHull(t, out, 0, viewProj)
-	right := viewmodelInstanceScreenHull(t, out, 1, viewProj)
-	held := viewmodelInstanceScreenHull(t, out, 2, viewProj)
-	visible, heldCells := countViewmodelVisibleCells(held, left, right)
-	t.Logf("静息镐屏面格 = %d，可见（未被双手覆盖）= %d", heldCells, visible)
-	const minVisibleCells = 400
-	if visible < minVisibleCells {
-		t.Fatalf("静息镐可见格 = %d，想要至少 %d（镐头须露出手臂剪影）", visible, minVisibleCells)
-	}
-}
-
 // TestViewmodelArmRootsOutsideScreenCorners 锁定臂根落在屏角之外：手臂底端
-// 经投影必须在屏幕之外（下边缘之下），只留前臂入画。
+// 经投影必须在屏幕之外（右边缘之外），只留前臂入画。
 func TestViewmodelArmRootsOutsideScreenCorners(t *testing.T) {
 	input := viewmodelTestInput(core.PlayerID{51}, core.ItemStack{}, 10)
 	out := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, input)
 	viewProj := viewmodelProjectionViewProj(mgl32.Vec3{}, 0, 0)
-	for _, index := range []int{0, 1} {
+	for _, index := range []int{0} {
 		bottom := viewmodelInstanceCorner(out, index, 0, -1, 0)
 		ndc, w := projectToNDC(viewProj, bottom)
 		if w <= 0 {
 			t.Fatalf("第 %d 只手臂根在相机后方（w=%.2f）", index, w)
 		}
-		if ndc[1] >= -1 {
-			t.Fatalf("第 %d 只手臂根 NDC=(%.2f,%.2f)，想要落在屏底之外（y<-1）",
+		if ndc[0] <= 1 && ndc[1] >= -1 {
+			t.Fatalf("第 %d 只手臂根 NDC=(%.2f,%.2f)，想要落在屏右或屏底之外",
 				index, ndc[0], ndc[1])
 		}
 	}

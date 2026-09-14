@@ -60,23 +60,25 @@ func projectToNDC(viewProj mgl32.Mat4, point mgl32.Vec3) (ndc mgl32.Vec3, w floa
 	return mgl32.Vec3{clip[0] / w, clip[1] / w, clip[2] / w}, w
 }
 
-// assertHandsLandedOnScreen 是落点断言的唯一落点：给定相机位姿下中立双手
-// 经世界投影落在屏幕内，左手在左半屏、右手在右半屏。双手定义在相机空间，落
+// assertHandsLandedOnScreen 是落点断言的唯一落点：给定相机位姿下中立主手
+// 经世界投影落在屏幕右半区。主手定义在相机空间，落
 // 点 NDC 与世界位姿无关；根的顺序/符号一旦写错，烘焙出的世界点经世界投影即
 // 偏离相机空间原位，断言变红。
 func assertHandsLandedOnScreen(t *testing.T, pos mgl32.Vec3, yaw, pitch float32) {
 	t.Helper()
 	input := viewmodelTestInput(core.PlayerID{41}, core.ItemStack{}, 10)
 	input.CamPos, input.CamYaw, input.CamPitch = pos, yaw, pitch
+	input.ViewportWidth, input.ViewportHeight = 480, 480
 	out := (&ViewmodelEncoder{}).EncodeViewmodelInstances(nil, input)
-	if len(out) != 2*avatarInstanceBytes {
-		t.Fatalf("中立实例数 = %d，想要 2（左右手）", len(out)/avatarInstanceBytes)
+	if len(out) != 8*avatarInstanceBytes {
+		t.Fatalf("中立实例数 = %d，想要 8（主手部件）", len(out)/avatarInstanceBytes)
 	}
 	viewProj := viewmodelProjectionViewProj(pos, yaw, pitch)
 	const framePixels = 480
-	var ndc [2]mgl32.Vec3
-	for index := range 2 {
-		center := decodedPartCenter(out, index)
+	var ndc [1]mgl32.Vec3
+	for index := range 1 {
+		// 检查拳面而非已经出画的前臂中心。
+		center := decodedPartCenter(out, 2)
 		if distance := center.Sub(pos).Len(); distance > 1.5 {
 			t.Fatalf("第 %d 只手距相机 %.2f 米，想要 1.5 米内（烘焙到本帧相机处）", index, distance)
 		}
@@ -89,21 +91,18 @@ func assertHandsLandedOnScreen(t *testing.T, pos mgl32.Vec3, yaw, pitch float32)
 		}
 		ndc[index] = point
 	}
-	if ndc[0][0] >= 0 {
-		t.Fatalf("左手 NDC x=%.2f，想要在左半屏（<0）", ndc[0][0])
+	if ndc[0][0] <= 0 {
+		t.Fatal("主手应在右半屏")
 	}
-	if ndc[1][0] <= 0 {
-		t.Fatalf("右手 NDC x=%.2f，想要在右半屏（>0）", ndc[1][0])
+	rightPx := (ndc[0][0]*0.5 + 0.5) * framePixels
+	if rightPx <= framePixels/2 || rightPx > framePixels {
+		t.Fatal("主手不在画面右半区")
 	}
-	leftPx := (ndc[0][0]*0.5 + 0.5) * framePixels
-	rightPx := (ndc[1][0]*0.5 + 0.5) * framePixels
-	if leftPx < 0 || leftPx >= framePixels/2 || rightPx <= framePixels/2 || rightPx > framePixels {
-		t.Fatalf("双手像素 x=%.0f/%.0f，想要分居 %d 像素帧的左右两半", leftPx, rightPx, framePixels)
-	}
+
 }
 
 // TestViewmodelLandingProjectionOnScreen 锁定世界烘焙的落点：远离原点的固定
-// 相机下双手经世界投影落在屏幕左右区域；旧行为下双手钉在世界原点附近（本相
+// 相机下主手经世界投影落在屏幕右侧区域；旧行为下双手钉在世界原点附近（本相
 // 机视锥之外），本测试必红。
 func TestViewmodelLandingProjectionOnScreen(t *testing.T) {
 	assertHandsLandedOnScreen(t, mgl32.Vec3{10, 3, 10}, 0, -0.1)
@@ -116,8 +115,8 @@ func TestViewmodelLandingProjectionYawedCamera(t *testing.T) {
 	assertHandsLandedOnScreen(t, mgl32.Vec3{-3, 4, 7}, 0.6, -0.25)
 }
 
-// TestViewmodelZeroPoseRootIsIdentity 锁定零位姿的根变换为单位阵：既有零位
-// 姿输入（全部历史测试与 Task 1/2 回归口径）走旧链，逐字节行为不动。
+// TestViewmodelZeroPoseRootIsIdentity 锁定零位姿的根变换为单位阵：零位姿输入
+// 不引入额外相机偏移。
 func TestViewmodelZeroPoseRootIsIdentity(t *testing.T) {
 	if root := viewmodelRootFromCameraPose(mgl32.Vec3{}, 0, 0); root != mgl32.Ident4() {
 		t.Fatalf("零位姿根变换 = %v，想要单位阵", root)

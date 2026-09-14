@@ -19,7 +19,7 @@ func TestViewmodelTierMapping(t *testing.T) {
 		{"零数量", core.ItemStack{Item: core.ItemStone, Count: 0}, ViewmodelTierEmptyHand},
 		{"未注册", core.ItemStack{Item: core.ItemIDMax, Count: 1}, ViewmodelTierEmptyHand},
 		{"方块", core.ItemStack{Item: core.ItemStone, Count: 1}, ViewmodelTierBlock},
-		{"种子同样方块档", core.ItemStack{Item: core.ItemWheatSeeds, Count: 1}, ViewmodelTierBlock},
+		{"种子使用图标物品档", core.ItemStack{Item: core.ItemWheatSeeds, Count: 1}, ViewmodelTierEmptyHand},
 		{"木剑", core.ItemStack{Item: core.ItemWoodenSword, Count: 1}, ViewmodelTierSword},
 		{"石剑", core.ItemStack{Item: core.ItemStoneSword, Count: 1}, ViewmodelTierSword},
 		{"铁剑", core.ItemStack{Item: core.ItemIronSword, Count: 1}, ViewmodelTierSword},
@@ -47,8 +47,8 @@ func TestViewmodelSwingTablePinsValues(t *testing.T) {
 		amplitude   float32
 		periodTicks uint64
 	}{
-		{ViewmodelTierEmptyHand, 0.5, 12},
-		{ViewmodelTierBlock, 0.4, 14},
+		{ViewmodelTierEmptyHand, 0.5, 8},
+		{ViewmodelTierBlock, 0.4, 9},
 		{ViewmodelTierSword, 0.7, 8},
 		{ViewmodelTierPick, 0.7, 10},
 		// 锄与斧取镐档默认值：与镐逐值相等，规则落地后只改这两行。

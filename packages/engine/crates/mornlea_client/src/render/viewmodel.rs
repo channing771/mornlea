@@ -1,8 +1,7 @@
 //! 第一人称双手 viewmodel 叠加层：Go `render` 包编码的相机空间实例流的
 //! GPU 侧呈现。
 //!
-//! Go 侧把权威 tick 派生的摆动相位烘焙进世界空间无关的实例变换里（左手、
-//! 右手、持物各一，另保留一位副手占位，恒不超过 [`VIEWMODEL_MAX_INSTANCES`]），
+//! Go 侧把本地呈现 elapsed 与主键输入推进的摆动相位烘焙进世界空间无关的实例变换里（主手与图标棱柱，恒不超过 [`VIEWMODEL_MAX_INSTANCES`]），
 //! 经帧 TLV 段过境；本模块只做绘制选择与合法性门，不做任何摆动推测。
 //!
 //! 复用纪律（与 `entity.rs` 同源）：
@@ -22,16 +21,15 @@
 //! 全屏叠加、HUD、调试面板之前；空段跳过录制，无段帧的 draw 选择与变更前
 //! 一致。
 
-/// 单帧 viewmodel 实例恒定上限：左手、右手、持物各一，另保留一位副手扩展
-/// 占位；与 Go 编码侧的同名上限同值，超限整帧拒绝（整帧 `Invalid`）。
-pub const VIEWMODEL_MAX_INSTANCES: usize = 4;
+/// 单帧 viewmodel 实例恒定上限：主手与最多 256 个图标棱柱；与 Go 编码侧的同名上限同值，超限整帧拒绝（整帧 `Invalid`）。
+pub const VIEWMODEL_MAX_INSTANCES: usize = 264;
 /// 每实例字节数：与 avatar 实例逐字节同布局（mat4 + RGBA + 材质 u32 +
 /// 保留零填充），绘制复用 `EntityPass` 的同一套材质分支。
 pub const VIEWMODEL_INSTANCE_BYTES: usize = super::entity::ENTITY_INSTANCE_BYTES;
 /// 叠加 pass 的录制标签：抓帧定位相机空间叠加层用，改名即红。
 pub const VIEWMODEL_PASS_LABEL: &str = "viewmodel pass";
 
-/// 校验 viewmodel 实例段字节：96 的倍数且不超过 4 实例；空流合法（本帧
+/// 校验 viewmodel 实例段字节：96 的倍数且不超过 264 实例；空流合法（本帧
 /// 无双手）。容量是编译期常量，校验无需 GPU 资源，可供无适配器环境的
 /// 单元测试与 `validate_frame` 直接复用。
 pub fn instances_valid(instances: &[u8]) -> bool {
@@ -49,8 +47,8 @@ pub fn wants_draw(instances: &[u8]) -> bool {
 mod tests {
     use super::*;
 
-    /// 跨语言布局锁：96 字节/实例与 avatar 逐字节同布局，容量恒为 4
-    /// （左手、右手、持物、副手保留位），与 Go 编码侧的同值常量一致；
+    /// 跨语言布局锁：96 字节/实例与 avatar 逐字节同布局，容量恒为 264
+    /// （主手与图标棱柱），与 Go 编码侧的同值常量一致；
     /// 材质槽偏移与哨兵沿 avatar 材质分支纪律，不相交性即纯色与贴图可辨。
     #[test]
     fn layout_matches_avatar_and_go_encoder() {
@@ -59,11 +57,11 @@ mod tests {
             VIEWMODEL_INSTANCE_BYTES,
             super::super::entity::ENTITY_INSTANCE_BYTES
         );
-        assert_eq!(VIEWMODEL_MAX_INSTANCES, 4);
+        assert_eq!(VIEWMODEL_MAX_INSTANCES, 264);
         assert_eq!(
             VIEWMODEL_MAX_INSTANCES * VIEWMODEL_INSTANCE_BYTES,
-            384,
-            "满段 4 实例的字节数"
+            25344,
+            "满段 264 实例的字节数"
         );
         assert_eq!(super::super::entity::AVATAR_MATERIAL_OFFSET, 80);
         assert_eq!(
@@ -73,8 +71,8 @@ mod tests {
         );
     }
 
-    /// 实例段校验锁：空流合法（本帧无双手），1..=4 实例合法；错位长度与
-    /// 第 5 个实例整帧拒绝，拒绝语义与 avatar/drop/轮廓/裂纹门一致。
+    /// 实例段校验锁：空流合法（本帧无双手），1..=264 实例合法；错位长度与
+    /// 第 265 个实例整帧拒绝，拒绝语义与 avatar/drop/轮廓/裂纹门一致。
     #[test]
     fn instances_valid_locks_count_and_alignment() {
         assert!(instances_valid(&[]), "空流合法（本帧无双手）");
@@ -83,7 +81,7 @@ mod tests {
             assert!(instances_valid(&stream), "{count} 实例合法");
         }
         let oversized = vec![0u8; (VIEWMODEL_MAX_INSTANCES + 1) * VIEWMODEL_INSTANCE_BYTES];
-        assert!(!instances_valid(&oversized), "第 5 个实例必须整帧拒绝");
+        assert!(!instances_valid(&oversized), "第 265 个实例必须整帧拒绝");
         let misaligned = vec![0u8; VIEWMODEL_INSTANCE_BYTES + 1];
         assert!(!instances_valid(&misaligned), "非 96 倍数必须拒绝");
         assert!(!instances_valid(&[0u8; 79]), "错位短流必须拒绝");
@@ -145,7 +143,7 @@ mod render_tests {
     }
 
     /// 双手叠加层真实参与成像：atlas 预热后同一实例必须改变图像；超限
-    /// （5 实例）与错位流在渲染前整帧拒绝且不触碰 target。
+    /// （265 实例）与错位流在渲染前整帧拒绝且不触碰 target。
     #[test]
     fn viewmodel_renders_and_invalid_rejects_without_touching_target() {
         use super::super::FrameResult;
@@ -165,7 +163,7 @@ mod render_tests {
         assert!(renderer.readback(&mut base));
 
         let mut frame = empty_frame_pub();
-        frame.viewmodel_instances = viewmodel_instance();
+        frame.viewmodel_instances = viewmodel_instance().repeat(VIEWMODEL_MAX_INSTANCES);
         assert_eq!(renderer.render_frame(&frame), FrameResult::Rendered);
         let mut with_viewmodel = vec![0u8; 64 * 64 * 4];
         assert!(renderer.readback(&mut with_viewmodel));

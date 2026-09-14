@@ -21,3 +21,6 @@
 
 - 测试：`go test ./packages/client/client -race -count=1`。
 - 当前文档入口：`openspec/specs/rust-client-render-cutover/spec.md`。
+
+- `Actions.PrimaryDown` 是独立于 UI 抑制的物理主键状态，只给本地呈现用于
+  识别被抑制的点击；`Mining` 等既有上行意图的门控、协议与预测语义不变。

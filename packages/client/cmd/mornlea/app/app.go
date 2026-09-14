@@ -111,9 +111,11 @@ type Application struct {
 	outlineStream   []byte
 	crackStream     []byte
 	// viewmodelStream 是本帧第一人称双手实例流的复用缓冲；`viewmodelEncoder`
-	// 跨帧存续挥动边沿（挖掘锚、攻击窗），会话重置时清零。
-	viewmodelStream  []byte
-	viewmodelEncoder render.ViewmodelEncoder
+	// 复用几何缓冲，`viewmodelMotion` 持有独立呈现时钟，会话重置时清零。
+	viewmodelStream         []byte
+	viewmodelEncoder        render.ViewmodelEncoder
+	viewmodelMotion         render.ViewmodelMotion
+	viewmodelPrimaryBlocked bool
 	// weatherStream/weatherState 是本帧降水实例流与天气状态段的复用缓冲；
 	// 降水无跨帧跟踪表，会话重置无需清理。
 	weatherStream []byte

@@ -142,3 +142,23 @@ packages/client/cmd/mornlea/app/
 - Tab 进入自由光标，WebView 返回的关闭/捕获事件刷新鼠标基线并抑制当帧世界动作。交互远程连接也装配前端，capture/benchmark 保持无 WebView。
 
 - capture 公共清场经 `ResetEntityPresentation` 同时清掉步态、破碎粒子与下落历史，防止加载阶段掉落或前一个场景污染后续独立画面。
+
+## 第一人称持物 (`app_viewmodel.go`)
+
+- `deriveViewmodelInput` 只消费已确认快捷栏，直通本帧相机与 `registry`；
+  `ViewmodelInput.Registry` 让持物像素与上传 atlas 使用同一注册表缓存。
+  `hudLogicalSize` 同时供 HUD 与主手使用；`ViewportWidth`/`ViewportHeight`
+  直通窗口 `ContentSize`（无头 capture 用帧尺寸），`FovY` 直通本帧世界相机，
+  render 负责按完整状态栈安全区布局，不能误用 Retina 物理像素。
+- 空闲左手隐藏，主手与图标棱柱或六面方块共用握持根；相位、HUD 门控、
+  静态 capture 抑制和第三人称显隐沿用原路径。
+- `TestViewmodelUsesCurrentAtlasIconAndMaximumPixelBudget` 通过真实材质覆盖
+  检查完整图标的颜色、264 实例预算（8 手部件 + 256 图标像素）、注册表切换与预热后零分配。
+- `Actions.PrimaryDown` 保留物理主键，`applyInteractiveInput` 经相位、聊天、
+  面板与光标门控后推进 `viewmodelMotion`；被 UI 或首次捕获抑制的按键须松开
+  才能重新起挥。呈现消费完整单调 elapsed，预测保持原 100ms 上限。
+- `ViewmodelInput.SwingActive` / `SwingPhase` 只取本地动作时钟；不再传入
+  权威 tick、裂纹或 `CombatHit`。重复渲染不推进动作，松键后完成当前挥动，
+  持键以档位周期有界循环，迟到命中只驱动既有 marker 与音频。有效点击立即激活动作，零 elapsed 首帧仍为中立；后续显式时间连续进入预备/工作/回收，不能以首帧跳变制造即时反馈。
+- capture 经 `AdvanceViewmodel(elapsed, primary)` 使用同一时钟；`ResetViewmodel`
+  同时清除动作与输入抑制沿，会话和 `PlayerState.Reset` 复用这一落点。

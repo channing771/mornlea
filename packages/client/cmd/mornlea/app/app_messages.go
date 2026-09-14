@@ -49,7 +49,7 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 				a.combatFeedback.Reset()
 				// 权威 reset 是会话边界：双手编码器的边沿状态与 marker 同步丢弃，
 				// 否则残留攻击窗会在重生后继续挥动。
-				a.viewmodelEncoder.ResetViewmodel()
+				a.ResetViewmodel()
 				// 权威 reset（重生/传送）同样重锚踩雪呈现：旧位置的步频里程与
 				// 踢雪事件锚点不得在重生点继续出声/扬尘。
 				a.snowStep.Reset()

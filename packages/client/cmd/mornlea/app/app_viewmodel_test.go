@@ -3,11 +3,20 @@
 package app
 
 // app_viewmodel_test.go：第一人称双手 viewmodel 的装配派生：已确认快捷栏
-// 选中、采掘裂纹与战斗确认进入编码器输入的门控，会话边界清零边沿状态，实
+// 选中与显式本地动作进入编码器输入的门控，会话边界清零动作状态，实
 // 例计数门把超限帧稳定拒绝。
 
 import (
+	"bytes"
+	"encoding/binary"
+	"github.com/channing771/mornlea/packages/client/assets"
+	"image"
+	"image/color"
+	"image/png"
+	"math"
 	"testing"
+	"testing/fstest"
+	"time"
 
 	"github.com/go-gl/mathgl/mgl32"
 
@@ -51,46 +60,27 @@ func TestDeriveViewmodelInputNeutralWithoutCrackOrHit(t *testing.T) {
 	if input == nil {
 		t.Fatal("已确认选中派生为 nil，想要非 nil 中立输入")
 	}
-	if input.Selected != viewmodelStoneStack || input.Tick != 10 {
+	if input.Selected != viewmodelStoneStack {
 		t.Fatalf("派生=%+v，想要选中石头且 tick 10", input)
 	}
-	if input.Mining || input.AttackTick != 0 {
+	if input.SwingActive {
 		t.Fatalf("派生=%+v，想要中立（无挖掘无攻击）", input)
 	}
 }
 
-// TestDeriveViewmodelInputMiningFollowsCrack 锁定挖掘门控复用裂纹可见性：
-// 选框、采掘 active、裂纹阶段与游戏相位的收敛已由 `deriveBlockCrack` 完成，
-// 本派生只读一比特。
-func TestDeriveViewmodelInputMiningFollowsCrack(t *testing.T) {
+// 裂纹和命中只服务各自反馈，不得启动或推进本地动作。
+func TestDeriveViewmodelInputIgnoresCrackAndHit(t *testing.T) {
 	app := &Application{}
 	applyViewmodelHotbar(t, app, viewmodelStoneStack, 0)
-	app.serverTick = 10
-	if input := app.deriveViewmodelInput(false, render.BlockCrack{Visible: true}); input == nil || !input.Mining {
-		t.Fatalf("可见裂纹派生=%+v，想要 Mining 置位", input)
-	}
-	if input := app.deriveViewmodelInput(false, render.BlockCrack{}); input == nil || input.Mining {
-		t.Fatalf("不可见裂纹派生=%+v，想要 Mining 清零回中立", input)
-	}
-}
-
-// TestDeriveViewmodelInputAttackFollowsConfirmedHit 锁定攻击沿直通战斗确认
-// 的最后 tick：严格递增才开窗由编码器判定，重复与陈旧确认在此原样透传。
-func TestDeriveViewmodelInputAttackFollowsConfirmedHit(t *testing.T) {
-	app := &Application{}
-	applyViewmodelHotbar(t, app, viewmodelStoneStack, 0)
-	app.serverTick = 10
-	if !app.combatFeedback.Observe(7) {
-		t.Fatal("首次战斗确认未被接受")
-	}
-	if input := app.deriveViewmodelInput(false, render.BlockCrack{}); input == nil || input.AttackTick != 7 {
-		t.Fatalf("命中后派生=%+v，想要 AttackTick 7", input)
-	}
-	// 重复与陈旧确认不推进沿：派生仍透传最后确认值，编码器侧不重启窗口。
 	app.combatFeedback.Observe(7)
-	app.combatFeedback.Observe(5)
-	if input := app.deriveViewmodelInput(false, render.BlockCrack{}); input == nil || input.AttackTick != 7 {
-		t.Fatalf("重复/陈旧确认后派生=%+v，想要 AttackTick 仍为 7", input)
+	if input := app.deriveViewmodelInput(false, render.BlockCrack{Visible: true}); input == nil || input.SwingActive {
+		t.Fatal("confirmation triggered swing")
+	}
+	app.AdvanceViewmodel(0, true)
+	first := *app.deriveViewmodelInput(false, render.BlockCrack{})
+	app.combatFeedback.Observe(8)
+	if input := app.deriveViewmodelInput(false, render.BlockCrack{Visible: true}); input.SwingPhase != first.SwingPhase || input.SwingActive != first.SwingActive {
+		t.Fatal("late confirmation changed swing")
 	}
 }
 
@@ -189,15 +179,15 @@ func TestRenderFrameSuppressedViewmodelStreamEmpty(t *testing.T) {
 	}
 }
 
-// TestValidateViewmodelInstanceCount 锁定计数门：空与 1..4 实例放行，超限
+// TestValidateViewmodelInstanceCount 锁定计数门：空与 1..264 实例放行，超限
 // 与非对齐字节流稳定拒绝。
 func TestValidateViewmodelInstanceCount(t *testing.T) {
-	for _, size := range []int{0, 96, 192, 384} {
+	for _, size := range []int{0, 96, 192, 264 * 96} {
 		if err := validateViewmodelInstanceCount(make([]byte, size)); err != nil {
 			t.Fatalf("%d 字节被拒绝: %v", size, err)
 		}
 	}
-	for _, size := range []int{95, 97, 480} {
+	for _, size := range []int{95, 97, 265 * 96} {
 		if err := validateViewmodelInstanceCount(make([]byte, size)); err == nil {
 			t.Fatalf("%d 字节被放行，想要拒绝", size)
 		}
@@ -259,83 +249,58 @@ func TestDeriveViewmodelInputCarriesCameraPose(t *testing.T) {
 }
 
 // TestSceneFirstFrameNeutralAfterViewmodelReset 锁定场景首帧：公共清场落点
-// 的重置（抓帧场景切换经同一落点）丢弃旧场景的攻击窗与挖掘锚，新场景首帧按
-// 新输入重新锚定，与新编码器逐字节一致。
+// 的重置（抓帧场景切换经同一落点）丢弃旧场景的本地动作，首帧恢复中立。
 func TestSceneFirstFrameNeutralAfterViewmodelReset(t *testing.T) {
 	app, _ := newInteractiveTestApplication(t)
 	applyViewmodelHotbar(t, app, viewmodelStoneStack, 0)
-	app.serverTick = 10
-	app.camera.Pos = mgl32.Vec3{10, 3, 10}
-	app.camera.Pitch = -0.1
-	app.combatFeedback.Observe(9)
-	priming := app.deriveViewmodelInput(false, render.BlockCrack{Visible: true})
-	app.viewmodelStream = app.viewmodelEncoder.EncodeViewmodelInstances(app.viewmodelStream, priming)
-
-	neutral := app.deriveViewmodelInput(false, render.BlockCrack{})
-	if neutral == nil {
-		t.Fatal("已确认选中派生为 nil，想要新场景首帧的中立输入")
+	encode := func() []byte {
+		return app.viewmodelEncoder.EncodeViewmodelInstances(nil, app.deriveViewmodelInput(false, render.BlockCrack{}))
 	}
-	fresh := &render.ViewmodelEncoder{}
-	want := fresh.EncodeViewmodelInstances(nil, neutral)
-	if got := app.viewmodelEncoder.EncodeViewmodelInstances(nil, neutral); string(got) == string(want) {
-		t.Fatal("重置前残留状态与新编码器一致，测试失去区分能力")
+	neutral := encode()
+	app.AdvanceViewmodel(0, true)
+	app.AdvanceViewmodel(time.Millisecond, true)
+	if bytes.Equal(neutral, encode()) {
+		t.Fatal("missing primed swing")
 	}
-
-	// 与 `resetCapturePresentation` 同落点的重置：场景切换清掉旧边沿。
-	// 战斗确认本身未清（归 `ResetCombatFeedback` 管），故首帧沿新沿重开
-	// （窗龄归零）而非续接旧窗——与新编码器首帧逐字节一致即锁定重锚。
 	app.ResetViewmodel()
-	got := app.viewmodelEncoder.EncodeViewmodelInstances(nil, app.deriveViewmodelInput(false, render.BlockCrack{}))
-	if string(got) != string(want) {
-		t.Fatal("场景首帧编码与新编码器不一致，旧挥动延续到了新场景")
+	if !bytes.Equal(neutral, encode()) {
+		t.Fatal("reset retained swing")
 	}
 }
 
 // TestViewmodelInstanceBytesMatchesEncoderOutput 把计数门常量钉在编码器真
-// 实输出上：中立双手恰两实例、手持方块恰三实例；`render` 侧布局若变，本测
+// 实输出上：中立主手恰八实例、手持方块恰十四实例；`render` 侧布局若变，本测
 // 先红，计数门不静默漂移。
 func TestViewmodelInstanceBytesMatchesEncoderOutput(t *testing.T) {
-	neutral := &render.ViewmodelInput{Selected: core.ItemStack{}, Tick: 10}
-	if out := (&render.ViewmodelEncoder{}).EncodeViewmodelInstances(nil, neutral); len(out) != 2*viewmodelInstanceBytes {
-		t.Fatalf("中立输出 %d 字节，想要 %d", len(out), 2*viewmodelInstanceBytes)
+	neutral := &render.ViewmodelInput{Selected: core.ItemStack{}}
+	if out := (&render.ViewmodelEncoder{}).EncodeViewmodelInstances(nil, neutral); len(out) != 8*viewmodelInstanceBytes {
+		t.Fatalf("中立输出 %d 字节，想要 %d", len(out), 8*viewmodelInstanceBytes)
 	}
-	held := &render.ViewmodelInput{Selected: viewmodelStoneStack, Tick: 10}
-	if out := (&render.ViewmodelEncoder{}).EncodeViewmodelInstances(nil, held); len(out) != 3*viewmodelInstanceBytes {
-		t.Fatalf("持物输出 %d 字节，想要 %d", len(out), 3*viewmodelInstanceBytes)
+	held := &render.ViewmodelInput{Selected: viewmodelStoneStack}
+	if out := (&render.ViewmodelEncoder{}).EncodeViewmodelInstances(nil, held); len(out) != 14*viewmodelInstanceBytes {
+		t.Fatalf("持物输出 %d 字节，想要 %d", len(out), 14*viewmodelInstanceBytes)
 	}
 }
 
-// TestResetSessionOwnedStateClearsViewmodel 锁定会话边界：重置前打开的攻击
-// 窗与挖掘锚在 `resetSessionOwnedState` 后与新编码器逐字节一致。
+// TestResetSessionOwnedStateClearsViewmodel 锁定会话边界清掉本地动作与确认镜像。
 func TestResetSessionOwnedStateClearsViewmodel(t *testing.T) {
 	app, _ := newInteractiveTestApplication(t)
 	applyViewmodelHotbar(t, app, viewmodelStoneStack, 0)
-	app.serverTick = 10
-	app.combatFeedback.Observe(9)
-	priming := app.deriveViewmodelInput(false, render.BlockCrack{Visible: true})
-	app.viewmodelStream = app.viewmodelEncoder.EncodeViewmodelInstances(app.viewmodelStream, priming)
-
-	neutral := &render.ViewmodelInput{Selected: viewmodelStoneStack, Tick: 10}
-	fresh := &render.ViewmodelEncoder{}
-	want := fresh.EncodeViewmodelInstances(nil, neutral)
-	if got := app.viewmodelEncoder.EncodeViewmodelInstances(nil, neutral); string(got) == string(want) {
-		t.Fatal("重置前残留状态与新编码器一致，测试失去区分能力")
+	app.AdvanceViewmodel(0, true)
+	if active, _ := app.viewmodelMotion.Phase(); !active {
+		t.Fatal("missing primed swing")
 	}
-
 	app.resetSessionOwnedState()
-	// 重置清空背包确认：新会话首个确认前派生为 nil，与首登行为一致。
-	if input := app.deriveViewmodelInput(false, render.BlockCrack{}); input != nil {
-		t.Fatalf("重置后未确认派生=%+v，想要 nil", input)
+	if active, _ := app.viewmodelMotion.Phase(); active {
+		t.Fatal("session reset retained swing")
 	}
-	applyViewmodelHotbar(t, app, viewmodelStoneStack, 0)
-	got := app.viewmodelEncoder.EncodeViewmodelInstances(nil, neutral)
-	if string(got) != string(want) {
-		t.Fatalf("重置后编码 %d 字节与新编码器不一致", len(got))
+	if input := app.deriveViewmodelInput(false, render.BlockCrack{}); input != nil {
+		t.Fatal("reset retained confirmation")
 	}
 }
 
 // TestPlayerStateResetClearsViewmodel 锁定权威 reset 分支：重生/dimension
-// 切换的 reset 状态到达后，残留攻击窗不得在下一帧继续挥动。
+// 切换的 reset 状态到达后，残留本地动作不得在下一帧继续挥动。
 func TestPlayerStateResetClearsViewmodel(t *testing.T) {
 	app, endpoint := newInteractiveTestApplication(t)
 	if err := app.predictor.Begin(network.PlayerState{
@@ -348,6 +313,10 @@ func TestPlayerStateResetClearsViewmodel(t *testing.T) {
 	applyViewmodelHotbar(t, app, viewmodelStoneStack, 0)
 	app.serverTick = 9
 	app.combatFeedback.Observe(7)
+	app.AdvanceViewmodel(0, true)
+	if active, _ := app.viewmodelMotion.Phase(); !active {
+		t.Fatal("missing primed motion")
+	}
 	priming := app.deriveViewmodelInput(false, render.BlockCrack{Visible: true})
 	app.viewmodelStream = app.viewmodelEncoder.EncodeViewmodelInstances(app.viewmodelStream, priming)
 
@@ -361,16 +330,13 @@ func TestPlayerStateResetClearsViewmodel(t *testing.T) {
 		t.Fatal("权威 reset 后战斗 marker 仍可见，前置失败")
 	}
 
-	neutral := &render.ViewmodelInput{Selected: viewmodelStoneStack, Tick: 10}
-	fresh := &render.ViewmodelEncoder{}
-	want := fresh.EncodeViewmodelInstances(nil, neutral)
-	if got := app.viewmodelEncoder.EncodeViewmodelInstances(nil, neutral); string(got) != string(want) {
-		t.Fatal("权威 reset 后残留攻击窗延续，下一帧仍在挥动")
+	if active, _ := app.viewmodelMotion.Phase(); active {
+		t.Fatal("authoritative reset retained local motion")
 	}
 }
 
-// TestRenderFrameEncodesViewmodelStream 锁定帧接线：已确认手持方块进帧得三
-// 实例流，空槽回落双手；接线不破坏帧提交。
+// TestRenderFrameEncodesViewmodelStream 锁定帧接线：已确认手持方块进帧得十四
+// 实例流，空槽回落主手；接线不破坏帧提交。
 func TestRenderFrameEncodesViewmodelStream(t *testing.T) {
 	app := newRemoteRenderApplication(t, &IntegrationGlyphSource{})
 	if err := app.predictor.Begin(network.PlayerState{
@@ -385,22 +351,22 @@ func TestRenderFrameEncodesViewmodelStream(t *testing.T) {
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("持物帧 RenderFrame=(%v,%v)", rendered, err)
 	}
-	if len(app.viewmodelStream) != 3*96 {
-		t.Fatalf("持物帧 viewmodel 流 %d 字节，想要 288（双手+持物）", len(app.viewmodelStream))
+	if len(app.viewmodelStream) != 14*96 {
+		t.Fatalf("持物帧 viewmodel 流 %d 字节，想要 1344（八个主手部件+六面）", len(app.viewmodelStream))
 	}
 
 	applyViewmodelHotbar(t, app, core.ItemStack{}, 0)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("空手帧 RenderFrame=(%v,%v)", rendered, err)
 	}
-	if len(app.viewmodelStream) != 2*96 {
-		t.Fatalf("空手帧 viewmodel 流 %d 字节，想要 192（双手无持物）", len(app.viewmodelStream))
+	if len(app.viewmodelStream) != 8*96 {
+		t.Fatalf("空手帧 viewmodel 流 %d 字节，想要 768（主手无持物）", len(app.viewmodelStream))
 	}
 }
 
-// TestRenderFrameViewmodelMiningAdvancesWithTick 锁定挖掘挥动端到端：同锚
-// 下 tick 推进改变相位，overlay 清除后回中立。
-func TestRenderFrameViewmodelMiningAdvancesWithTick(t *testing.T) {
+// TestRenderFrameViewmodelClickAdvancesWithElapsed 锁定本地点击到实际帧编码，
+// elapsed 推进轨迹，松键并完成动作后回中立。
+func TestRenderFrameViewmodelClickAdvancesWithElapsed(t *testing.T) {
 	app, _ := visibleCrackApplication(t)
 	applyViewmodelHotbar(t, app, viewmodelStoneStack, 0)
 	app.SetServerTick(10)
@@ -409,26 +375,29 @@ func TestRenderFrameViewmodelMiningAdvancesWithTick(t *testing.T) {
 	}
 	first := append([]byte(nil), app.viewmodelStream...)
 	app.SetServerTick(11)
+	app.AdvanceViewmodel(0, true)
+	app.AdvanceViewmodel(100*time.Millisecond, true)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("挖掘次帧 RenderFrame=(%v,%v)", rendered, err)
 	}
 	second := append([]byte(nil), app.viewmodelStream...)
 	if string(first) == string(second) {
-		t.Fatal("tick 推进后挖掘相位未变化，想要挥动")
+		t.Fatal("elapsed 推进后本地相位未变化")
 	}
 	app.SetMiningOverlay(hud.MiningOverlay{})
 	app.SetServerTick(12)
+	app.AdvanceViewmodel(time.Second, false)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("清除帧 RenderFrame=(%v,%v)", rendered, err)
 	}
 	if string(app.viewmodelStream) != string(first) {
-		t.Fatal("overlay 清除后未回中立持握")
+		t.Fatal("动作完成后未回中立持握")
 	}
 }
 
-// TestRenderFrameViewmodelAttackWindowCloses 锁定攻击挥动端到端：新确认命
-// 中起挥，6 帧窗满回中立。
-func TestRenderFrameViewmodelAttackWindowCloses(t *testing.T) {
+// TestRenderFrameViewmodelClickCompletesAfterElapsed 锁定重复渲染不推进动作，
+// 本地点击起挥，显式时间达到档位周期后回中立。
+func TestRenderFrameViewmodelClickCompletesAfterElapsed(t *testing.T) {
 	app := newRemoteRenderApplication(t, &IntegrationGlyphSource{})
 	if err := app.predictor.Begin(network.PlayerState{
 		ServerTick: 5, Dimension: core.Overworld,
@@ -445,12 +414,14 @@ func TestRenderFrameViewmodelAttackWindowCloses(t *testing.T) {
 	}
 	neutral := append([]byte(nil), app.viewmodelStream...)
 
+	app.AdvanceViewmodel(0, true)
+	app.AdvanceViewmodel(time.Millisecond, true)
 	app.combatFeedback.Observe(10)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("起挥帧 RenderFrame=(%v,%v)", rendered, err)
 	}
 	if string(app.viewmodelStream) == string(neutral) {
-		t.Fatal("命中确认后首帧未起挥")
+		t.Fatal("本地点击推进时间后未起挥")
 	}
 	for i := 0; i < 5; i++ {
 		if rendered, err := app.RenderFrame(1); err != nil || !rendered {
@@ -458,12 +429,82 @@ func TestRenderFrameViewmodelAttackWindowCloses(t *testing.T) {
 		}
 	}
 	if string(app.viewmodelStream) == string(neutral) {
-		t.Fatal("第 6 帧已回中立，想要窗内仍在挥动")
+		t.Fatal("额外渲染错误推进了动作时间")
 	}
+	app.AdvanceViewmodel(400*time.Millisecond, false)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("窗满帧 RenderFrame=(%v,%v)", rendered, err)
 	}
 	if string(app.viewmodelStream) != string(neutral) {
-		t.Fatal("6 帧窗满后未回中立持握")
+		t.Fatal("400ms 动作结束后未回中立持握")
+	}
+}
+
+func TestViewmodelUsesCurrentAtlasIconAndMaximumPixelBudget(t *testing.T) {
+	artwork := image.NewNRGBA(image.Rect(0, 0, 16, 16))
+	for y := range 16 {
+		for x := range 16 {
+			artwork.SetNRGBA(x, y, color.NRGBA{R: uint8(x * 16), G: uint8(y * 16), B: 71, A: 255})
+		}
+	}
+	var pngBytes bytes.Buffer
+	if err := png.Encode(&pngBytes, artwork); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := assets.NewRegistryWithOverride(fstest.MapFS{
+		"pack.json":             {Data: []byte(`{"format":1,"name":"viewmodel test"}`)},
+		"textures/raw_beef.png": {Data: pngBytes.Bytes()},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &Application{registry: registry}
+	applyViewmodelHotbar(t, app, core.ItemStack{Item: core.ItemRawBeef, Count: 1}, 0)
+	input := app.deriveViewmodelInput(false, render.BlockCrack{})
+	out := app.viewmodelEncoder.EncodeViewmodelInstances(nil, input)
+	if len(out) != 264*96 {
+		t.Fatalf("完整 16×16 图标得到 %d 实例", len(out)/96)
+	}
+	if err := validateViewmodelInstanceCount(out); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 256 {
+		base := (i+8)*96 + 64
+		want := [4]float32{float32((i%16)*16) / 255, float32((i/16)*16) / 255, 71.0 / 255, 1}
+		for c := range 4 {
+			if got := math.Float32frombits(binary.LittleEndian.Uint32(out[base+c*4:])); got != want[c] {
+				t.Fatalf("像素 %d 颜色 %d=%f, want %f", i, c, got, want[c])
+			}
+		}
+	}
+	dst := make([]byte, 0, 264*96)
+	if allocs := testing.AllocsPerRun(10, func() { app.viewmodelEncoder.EncodeViewmodelInstances(dst, input) }); allocs != 0 {
+		t.Fatalf("最大预算热编码分配 %f", allocs)
+	}
+	app.registry = assets.NewDefaultRegistry()
+	next := app.viewmodelEncoder.EncodeViewmodelInstances(nil, app.deriveViewmodelInput(false, render.BlockCrack{}))
+	if bytes.Equal(next, out) {
+		t.Fatal("替换注册表后仍读取旧图标缓存")
+	}
+}
+
+func TestViewmodelUsesHUDLogicalViewportAndWorldFOV(t *testing.T) {
+	app := NewPresentationApplicationForTest()
+	app.frameWidth, app.frameHeight = 1280, 720
+	applyViewmodelHotbar(t, app, viewmodelStoneStack, 0)
+	app.camera.FovY = .9
+	// 使用已有窗口夹具的逻辑尺寸；物理帧缓冲刻意不一致。
+	app.window = nil
+	input := app.deriveViewmodelInput(false, render.BlockCrack{})
+	if input.ViewportWidth != 1280 || input.ViewportHeight != 720 || input.FovY != .9 {
+		t.Fatalf("capture viewport/FOV missing: %+v", input)
+	}
+	app.window = &settingsTestWindow{contentWidth: 640, contentHeight: 360, framebufferWidth: 1280, framebufferHeight: 720}
+	w, h := app.window.ContentSize()
+	input = app.deriveViewmodelInput(false, render.BlockCrack{})
+	app.clientSessionClosed = true
+	hud := app.assembleHUDState()
+	if input.ViewportWidth != float32(w) || input.ViewportHeight != float32(h) || input.ViewportWidth != float32(hud.Viewport.Width) || input.ViewportHeight != float32(hud.Viewport.Height) {
+		t.Fatal("viewmodel and HUD use different logical viewport")
 	}
 }
