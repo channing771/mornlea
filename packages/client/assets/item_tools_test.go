@@ -56,10 +56,17 @@ func TestApprovedToolsHaveWoodBandsAndMetalGuard(t *testing.T) {
 			t.Errorf("tool %d lacks woodgrain bands: %d", item, len(bands))
 		}
 		if item == core.ItemIronSword {
+			guardFound := false
 			for _, p := range parts {
-				if p.Size[0] > .2 && p.Center[1] < .3 && p.Color == parts[0].Color {
-					t.Error("sword guard is wood handle color")
+				if p.Size[0] > .2 && p.Center[1] < .3 {
+					guardFound = true
+					if p.Color == parts[0].Color {
+						t.Error("sword guard is wood handle color")
+					}
 				}
+			}
+			if !guardFound {
+				t.Error("sword lacks a wide metal guard")
 			}
 		}
 	}
