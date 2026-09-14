@@ -73,7 +73,10 @@ func viewmodelToolLocalPose(phase float32, tier ViewmodelTier) viewmodelPose {
 	case ViewmodelTierSword:
 		wind = viewmodelPose{yaw: .85}
 		hit = viewmodelPose{pitch: .20, yaw: 1.57, roll: .48}
-	case ViewmodelTierHoe, ViewmodelTierAxe:
+	case ViewmodelTierHoe:
+		wind = viewmodelPose{yaw: .85}
+		hit = viewmodelPose{pitch: .15, yaw: 1.6, roll: .08}
+	case ViewmodelTierAxe:
 		wind = viewmodelPose{yaw: .85}
 		hit = viewmodelPose{pitch: .15, roll: -.10}
 	default:
