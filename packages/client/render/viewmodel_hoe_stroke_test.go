@@ -33,46 +33,49 @@ func TestViewmodelHoeFreeEdgeLeadsWorkingApproach(t *testing.T) {
 		}
 		var encoder ViewmodelEncoder
 		input := ViewmodelInput{Selected: core.ItemStack{Item: item, Count: 1}, ViewportWidth: 1280, ViewportHeight: 720, SwingActive: true}
-		sample := func(phase float32) (edge, axis, hub, faceNormal mgl32.Vec3) {
+		sample := func(phase float32) (edge, outer, axis, hub mgl32.Vec3, faceFacing float32) {
 			input.SwingPhase = phase
 			out := encoder.EncodeViewmodelInstances(nil, &input)
 			edge = decodedPartCenter(out, cap)
 			hub = decodedPartCenter(out, socket)
 			axis = edge.Sub(hub).Normalize()
-			// 八个实际编码角点应围住自由刃端中心，避免只测试局部模型数据。
+			// 从编码棱体八角中选离柄套最远的自由刃端，击点不能由刃端中心代替。
+			farthest := float32(-1e6)
 			for _, x := range []float32{-1, 1} {
 				for _, y := range []float32{-1, 1} {
 					for _, z := range []float32{-1, 1} {
 						vertex := viewmodelInstanceCorner(out, cap, x, y, z)
-						if vertex.Sub(edge).Len() > .05 {
-							t.Fatalf("item %d phase %.2f cap vertex detached from center", item, phase)
+						if distance := vertex.Sub(hub).Dot(axis); distance > farthest {
+							farthest, outer = distance, vertex
 						}
 					}
 				}
 			}
-			faceNormal = viewmodelInstanceCorner(out, face, 0, 0, 1).Sub(viewmodelInstanceCorner(out, face, 0, 0, -1)).Normalize()
+			faceNormal := viewmodelInstanceCorner(out, face, 0, 0, 1).Sub(viewmodelInstanceCorner(out, face, 0, 0, -1)).Normalize()
+			faceFacing = faceNormal.Dot(decodedPartCenter(out, face).Mul(-1).Normalize())
 			return
 		}
-		wind, _, _, _ := sample(.16)
+		wind, _, _, _, _ := sample(.16)
 		for _, phase := range []float32{.32, .36, .40} {
-			edge, axis, hub, faceNormal := sample(phase)
+			edge, outer, axis, hub, faceFacing := sample(phase)
 			approach := edge.Sub(wind).Normalize()
-			pixel, hubPixel := toPixels(edge), toPixels(hub)
-			t.Logf("item %d phase %.2f free edge %v px %v socket %v lead %.3f alignment %.3f face normal %v", item, phase, edge, pixel, hubPixel, hub[2]-edge[2], axis.Dot(approach), faceNormal)
-			if pixel[0] > 1280*.63 || pixel[1] < 720*.45 || pixel[1] > 720*.56 {
-				t.Errorf("item %d phase %.2f free edge misses crosshair work area: %v", item, phase, pixel)
+			pixel, outerPixel, hubPixel := toPixels(edge), toPixels(outer), toPixels(hub)
+			t.Logf("item %d phase %.2f free edge center %v outer %v socket %v lead %.3f outer lead %.3f alignment %.3f face facing %.3f", item, phase, pixel, outerPixel, hubPixel, hub[2]-edge[2], hub[2]-outer[2], axis.Dot(approach), faceFacing)
+			if outerPixel[0] < 1280*.48 || outerPixel[0] > 1280*.63 || outerPixel[1] < 720*.45 || outerPixel[1] > 720*.56 ||
+				pixel[0] < 1280*.48 || pixel[0] > 1280*.63 || pixel[1] < 720*.45 || pixel[1] > 720*.56 {
+				t.Errorf("item %d phase %.2f free cutting edge misses bounded crosshair work area: center %v outer %v", item, phase, pixel, outerPixel)
 			}
-			if pixel[0] >= hubPixel[0] || pixel[1] <= hubPixel[1] || hub[2]-edge[2] < .12 {
+			if outerPixel[0] >= hubPixel[0] || outerPixel[1] <= hubPixel[1] || hub[2]-outer[2] < .12 || hub[2]-edge[2] < .12 {
 				t.Errorf("item %d phase %.2f free edge does not lead inboard, below and targetward of socket", item, phase)
 			}
 			if axis.Dot(approach) < .75 || approach[1] >= 0 || approach[2] >= 0 {
 				t.Errorf("item %d phase %.2f free edge axis misses descending targetward approach", item, phase)
 			}
-			if faceNormal[2] <= 0 {
+			if faceFacing <= 0 {
 				t.Errorf("item %d phase %.2f bright cutting face points away from camera", item, phase)
 			}
 		}
-		hit, _, _, _ := sample(.40)
+		hit, _, _, _, _ := sample(.40)
 		if hit[1] >= wind[1] || hit[2] >= wind[2]-.08 || toPixels(hit)[1] <= toPixels(wind)[1]+30 {
 			t.Errorf("item %d free edge does not descend forward: %v -> %v", item, wind, hit)
 		}
