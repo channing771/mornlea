@@ -168,15 +168,10 @@ func TestApprovedHoeIsAngledSlabAndPickFrontIsLight(t *testing.T) {
 	}
 }
 
-func TestApprovedSwordHasAngledPointAndUpperTaper(t *testing.T) {
+func TestApprovedSwordPointHasContinuousTaperedSupport(t *testing.T) {
 	parts, _ := NewDefaultRegistry().ItemToolParts(core.ItemIronSword)
-	highest, tipRotation := float32(0), float32(0)
 	lowerWidth, upperWidth := float32(0), float32(0)
 	for _, p := range parts {
-		upper := p.Center[1] + float32(math.Abs(math.Sin(float64(p.RotationZ))))*p.Size[0]/2 + float32(math.Abs(math.Cos(float64(p.RotationZ))))*p.Size[1]/2
-		if upper > highest {
-			highest, tipRotation = upper, p.RotationZ
-		}
 		if p.Size[2] >= .1 && p.Center[1] > .28 && p.Center[1] < .36 {
 			lowerWidth = max(lowerWidth, p.Size[0])
 		}
@@ -184,10 +179,44 @@ func TestApprovedSwordHasAngledPointAndUpperTaper(t *testing.T) {
 			upperWidth = max(upperWidth, p.Size[0])
 		}
 	}
-	if absToolColor(tipRotation) < .5 {
-		t.Error("sword point is an axis-aligned stack instead of an angled point")
-	}
 	if lowerWidth == 0 || upperWidth == 0 || upperWidth > lowerWidth*.7 {
 		t.Errorf("upper blade lacks progressive taper: %v -> %v", lowerWidth, upperWidth)
+	}
+	// 对实际旋转棱柱在刃尖横截面求交，捕获先缩成细颈又扩成菱形帽的轮廓。
+	previousWidth := float32(1)
+	previousLeft, previousRight := float32(-1), float32(1)
+	for step := 0; step <= 27; step++ {
+		y := float32(.765) + float32(step)*.003
+		left, right := float32(1), float32(-1)
+		for _, p := range parts {
+			c, s := float32(math.Cos(float64(p.RotationZ))), float32(math.Sin(float64(p.RotationZ)))
+			var corners [4][2]float32
+			for i, xy := range [4][2]float32{{-.5, -.5}, {.5, -.5}, {.5, .5}, {-.5, .5}} {
+				x, yy := xy[0]*p.Size[0], xy[1]*p.Size[1]
+				corners[i] = [2]float32{p.Center[0] + c*x - s*yy, p.Center[1] + s*x + c*yy}
+			}
+			for i, a := range corners {
+				b := corners[(i+1)%4]
+				if y < min(a[1], b[1]) || y > max(a[1], b[1]) || a[1] == b[1] {
+					continue
+				}
+				x := a[0] + (b[0]-a[0])*(y-a[1])/(b[1]-a[1])
+				left, right = min(left, x), max(right, x)
+			}
+		}
+		if left > right {
+			t.Fatalf("sword point disconnected at y=%v", y)
+		}
+		width := right - left
+		if width > previousWidth+.0005 {
+			t.Fatalf("point widens above neck at y=%v: %v -> %v", y, previousWidth, width)
+		}
+		if left > previousRight || right < previousLeft {
+			t.Fatalf("point lacks projected support at y=%v", y)
+		}
+		previousWidth, previousLeft, previousRight = width, left, right
+	}
+	if previousWidth > .025 {
+		t.Fatalf("sword tip remains blunt: %v", previousWidth)
 	}
 }

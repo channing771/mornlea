@@ -117,13 +117,25 @@ func buildItemToolParts(item core.ItemID, px []byte) []ItemToolPart {
 		if broken {
 			add(-.025, .242+length+.023, 0, .046, .046, .065, shade(metal, .50))
 		} else {
-			// 斜置实心菱形的下半部接入末段，形成连续斜边而非细小方块帽。
-			add(0, .811, 0, .055, .055, .080, shade(metal, .35))
-			parts[len(parts)-1].RotationZ = math.Pi / 4
-			add(0, .811, .045, .055, .055, .010, shade(metal, .72))
-			parts[len(parts)-1].RotationZ = math.Pi / 4
-			add(-.019, .830, .045, .011, .055, .014, shade(edge, .94))
-			parts[len(parts)-1].RotationZ = -math.Pi / 4
+			// 收尖体填满刃身上沿，两条连续斜刃从原刃缘收束，避免细颈上的独立菱形帽。
+			const tipBase = float32(.777)
+			const tipHeight = float32(.073)
+			for i := 0; i < 6; i++ {
+				fraction := (float32(i) + .5) / 6
+				width := .075 - float32(i)*.014
+				depth := .100 - float32(i)*.017
+				y := tipBase + tipHeight*fraction
+				add(0, y, .045-depth/2, width, tipHeight/6, depth, shade(metal, .30))
+				add(-.012*(1-fraction), y, .0475, .055*.56*(1-fraction), tipHeight/6, .005, shade(metal, .72))
+			}
+			for _, side := range []struct {
+				x     float32
+				color [4]float32
+			}{{-.042, shade(edge, .94)}, {.036, shade(metal, .45)}} {
+				length := float32(math.Hypot(float64(side.x), float64(tipHeight)))
+				add(side.x/2, tipBase+tipHeight/2, .0325, .010, length, .025, side.color)
+				parts[len(parts)-1].RotationZ = float32(math.Atan2(float64(side.x), float64(tipHeight)))
+			}
 		}
 	} else {
 		const lift = float32(.33)
