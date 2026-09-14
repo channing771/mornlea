@@ -139,7 +139,13 @@ func buildItemToolParts(item core.ItemID, px []byte) []ItemToolPart {
 		if category == 3 {
 			socketY += .045
 		}
-		add(0, socketY, 0, .09, .13, .125, shade(metal, .075))
+		socketHeight := float32(.13)
+		if category == 2 {
+			// 向上接入两翼交汇体积，底端保持原位，转腕后也不出现悬空的镐头。
+			socketY += .0525
+			socketHeight += .105
+		}
+		add(0, socketY, 0, .09, socketHeight, .125, shade(metal, .075))
 		if category == 2 {
 			// 相邻翼段共享端点并小幅相交，粗大斜面连续下垂，右翼明显更长。
 			for _, sign := range []float32{-1, 1} {

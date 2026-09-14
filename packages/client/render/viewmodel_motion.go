@@ -58,7 +58,11 @@ func viewmodelPhasePose(phase float32, tier ViewmodelTier) viewmodelPose {
 	switch tier {
 	case ViewmodelTierSword:
 		hit = viewmodelPose{x: -.20, y: .32, forward: .10, pitch: -.22, yaw: -.18, roll: .80}
-	case ViewmodelTierPick, ViewmodelTierAxe:
+	case ViewmodelTierPick:
+		// 预备时将横头转入凿击平面，保留左尖在损坏形态下也能领先入土。
+		wind = viewmodelPose{x: -.01, y: .08, forward: -.04, yaw: -.85, roll: .025}
+		hit = viewmodelPose{x: -.12, y: .22, forward: .15, pitch: -.42, yaw: -1.75, roll: .32}
+	case ViewmodelTierAxe:
 		hit = viewmodelPose{x: -.12, y: .22, forward: .15, pitch: -.95, yaw: .08, roll: .32}
 	case ViewmodelTierHoe:
 		hit = viewmodelPose{x: -.11, y: .20, forward: .14, pitch: -.80, yaw: -.12, roll: .38}

@@ -291,3 +291,34 @@ func TestDesktopMetalFrontAndSideRemainDistinct(t *testing.T) {
 		}
 	}
 }
+
+// 柄套必须与两翼根部共享真实体积；中立投影遮住的空气缝隙在转腕后仍会露出。
+func TestPickSocketPhysicallyJoinsHead(t *testing.T) {
+	for _, item := range []core.ItemID{core.ItemStonePickaxe, core.ItemIronPickaxe, core.ItemBrokenStonePickaxe, core.ItemBrokenIronPickaxe} {
+		parts, _ := NewDefaultRegistry().ItemToolParts(item)
+		var socket ItemToolPart
+		for _, p := range parts {
+			if p.Center[0] == 0 && p.Size[0] == .09 {
+				socket = p
+			}
+		}
+		joined := 0
+		for _, p := range parts {
+			if absToolColor(p.Center[0]) < .05 || absToolColor(p.Center[0]) > .15 || p.Center[1] < .75 || p.Size[2] < .1 {
+				continue
+			}
+			x := float32(.035)
+			if p.Center[0] < 0 {
+				x = -x
+			}
+			y := p.Center[1] + (x-p.Center[0])*float32(math.Tan(float64(p.RotationZ)))
+			if absToolColor(x-socket.Center[0]) >= socket.Size[0]/2 || absToolColor(y-socket.Center[1]) >= socket.Size[1]/2-.002 {
+				t.Errorf("item %d wing root (%v,%v) disconnected from socket %+v", item, x, y, socket)
+			}
+			joined++
+		}
+		if joined == 0 {
+			t.Fatal("no physical wing roots checked")
+		}
+	}
+}
