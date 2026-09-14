@@ -258,6 +258,7 @@ func TestSceneFirstFrameNeutralAfterViewmodelReset(t *testing.T) {
 	}
 	neutral := encode()
 	app.AdvanceViewmodel(0, true)
+	app.AdvanceViewmodel(time.Millisecond, true)
 	if bytes.Equal(neutral, encode()) {
 		t.Fatal("missing primed swing")
 	}
@@ -414,12 +415,13 @@ func TestRenderFrameViewmodelClickCompletesAfterElapsed(t *testing.T) {
 	neutral := append([]byte(nil), app.viewmodelStream...)
 
 	app.AdvanceViewmodel(0, true)
+	app.AdvanceViewmodel(time.Millisecond, true)
 	app.combatFeedback.Observe(10)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("起挥帧 RenderFrame=(%v,%v)", rendered, err)
 	}
 	if string(app.viewmodelStream) == string(neutral) {
-		t.Fatal("本地点击后首帧未起挥")
+		t.Fatal("本地点击推进时间后未起挥")
 	}
 	for i := 0; i < 5; i++ {
 		if rendered, err := app.RenderFrame(1); err != nil || !rendered {

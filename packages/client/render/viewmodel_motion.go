@@ -37,7 +37,7 @@ func (m *ViewmodelMotion) Advance(elapsed time.Duration, primary bool, tier View
 	m.held = primary
 }
 
-// Phase 返回完整动作的归一化时间；起挥首帧保留可见预备姿势。
+// Phase 返回完整动作的归一化时间；起挥首帧为中立，后续显式时间连续推进预备姿势。
 func (m *ViewmodelMotion) Phase() (bool, float32) {
 	if !m.active {
 		return false, 0
@@ -45,18 +45,40 @@ func (m *ViewmodelMotion) Phase() (bool, float32) {
 	return true, float32(float64(m.age) / float64(m.duration))
 }
 
-// ViewmodelClickAngle 的负段预备、正段下挥、末段回收均在同一握持根上完成。
-func ViewmodelClickAngle(active bool, phase float32, tier ViewmodelTier) float32 {
-	if !active || phase >= 1 {
-		return 0
+// `viewmodelPose` 将短预备、快速工作段和较慢回收写成共同握持根的相机空间姿态。
+// 位移的 XY 使用归一化投影跨度；深度独立推进，避免只增加 Z 却原地摆动。
+type viewmodelPose struct{ x, y, forward, pitch, yaw, roll float32 }
+
+func viewmodelPhasePose(phase float32, tier ViewmodelTier) viewmodelPose {
+	if phase <= 0 || phase >= 1 {
+		return viewmodelPose{}
 	}
-	amplitude, _ := ViewmodelSwingParams(tier)
-	if phase < .2 {
-		return -amplitude * (.12 + .48*max(phase, 0)/.2)
+	wind := viewmodelPose{x: -.01, y: .02, forward: .015, roll: .025}
+	hit := viewmodelPose{x: -.22, y: .20, forward: .14, pitch: -.35, yaw: -.10, roll: .30}
+	switch tier {
+	case ViewmodelTierSword:
+		hit = viewmodelPose{x: -.20, y: .32, forward: .10, pitch: -.22, yaw: -.18, roll: .80}
+	case ViewmodelTierPick, ViewmodelTierAxe:
+		hit = viewmodelPose{x: -.12, y: .22, forward: .15, pitch: -.95, yaw: .08, roll: .32}
+	case ViewmodelTierHoe:
+		hit = viewmodelPose{x: -.11, y: .20, forward: .14, pitch: -.80, yaw: -.12, roll: .38}
+	case ViewmodelTierBlock:
+		hit = viewmodelPose{x: -.20, y: .18, forward: .10, pitch: -.30, yaw: -.08, roll: .25}
 	}
-	if phase < .48 {
-		return amplitude * (-.6 + 1.6*(phase-.2)/.28)
+	var a, b viewmodelPose
+	var t float32
+	switch {
+	case phase < .16:
+		b = wind
+		t = phase / .16
+	case phase < .40:
+		a = wind
+		b = hit
+		t = (phase - .16) / .24
+	default:
+		a = hit
+		t = (phase - .40) / .60
 	}
-	p := (phase - .48) / .52
-	return amplitude * (1 - p*p*(3-2*p))
+	t = t * t * (3 - 2*t)
+	return viewmodelPose{x: a.x + (b.x-a.x)*t, y: a.y + (b.y-a.y)*t, forward: a.forward + (b.forward-a.forward)*t, pitch: a.pitch + (b.pitch-a.pitch)*t, yaw: a.yaw + (b.yaw-a.yaw)*t, roll: a.roll + (b.roll-a.roll)*t}
 }

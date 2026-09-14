@@ -47,8 +47,8 @@ func TestViewmodelSwingTablePinsValues(t *testing.T) {
 		amplitude   float32
 		periodTicks uint64
 	}{
-		{ViewmodelTierEmptyHand, 0.5, 12},
-		{ViewmodelTierBlock, 0.4, 14},
+		{ViewmodelTierEmptyHand, 0.5, 8},
+		{ViewmodelTierBlock, 0.4, 9},
 		{ViewmodelTierSword, 0.7, 8},
 		{ViewmodelTierPick, 0.7, 10},
 		// 锄与斧取镐档默认值：与镐逐值相等，规则落地后只改这两行。

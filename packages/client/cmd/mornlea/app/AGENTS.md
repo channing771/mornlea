@@ -159,6 +159,6 @@ packages/client/cmd/mornlea/app/
   才能重新起挥。呈现消费完整单调 elapsed，预测保持原 100ms 上限。
 - `ViewmodelInput.SwingActive` / `SwingPhase` 只取本地动作时钟；不再传入
   权威 tick、裂纹或 `CombatHit`。重复渲染不推进动作，松键后完成当前挥动，
-  持键以档位周期有界循环，迟到命中只驱动既有 marker 与音频。
+  持键以档位周期有界循环，迟到命中只驱动既有 marker 与音频。有效点击立即激活动作，零 elapsed 首帧仍为中立；后续显式时间连续进入预备/工作/回收，不能以首帧跳变制造即时反馈。
 - capture 经 `AdvanceViewmodel(elapsed, primary)` 使用同一时钟；`ResetViewmodel`
   同时清除动作与输入抑制沿，会话和 `PlayerState.Reset` 复用这一落点。

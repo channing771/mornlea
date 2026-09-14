@@ -25,8 +25,12 @@ func TestViewmodelEffectiveAirClickImmediateAndReleaseCompletes(t *testing.T) {
 		}
 		neutral := encode()
 		a.applyInteractiveCursorInput(0, client.Movement{}, client.Actions{PrimaryDown: true, Mining: true}, true, false)
+		if active, phase := a.viewmodelMotion.Phase(); !active || phase != 0 || !bytes.Equal(neutral, encode()) {
+			t.Fatalf("item %d: click must activate at continuous neutral endpoint", item)
+		}
+		a.applyInteractiveCursorInput(time.Millisecond, client.Movement{}, client.Actions{}, true, false)
 		if bytes.Equal(neutral, encode()) {
-			t.Fatalf("item %d: effective air click remained neutral", item)
+			t.Fatal("elapsed click did not move")
 		}
 		a.applyInteractiveCursorInput(100*time.Millisecond, client.Movement{}, client.Actions{}, true, false)
 		stroke := encode()

@@ -71,16 +71,3 @@ func TestViewmodelClickMotionRepeatedClicksCompleteStroke(t *testing.T) {
 		t.Fatal("negative time moved phase")
 	}
 }
-
-func TestViewmodelClickTrajectoryHasForwardDownstroke(t *testing.T) {
-	in := ViewmodelInput{}
-	neutral := viewmodelGripRoot(&in, 0)
-	windup := viewmodelGripRoot(&in, ViewmodelClickAngle(true, .2, ViewmodelTierEmptyHand))
-	hit := viewmodelGripRoot(&in, ViewmodelClickAngle(true, .48, ViewmodelTierEmptyHand))
-	if !(hit[14] < neutral[14]-.08 && hit[13] < windup[13]-.035) {
-		t.Fatalf("missing forward/down displacement: rest %v windup %v hit %v", neutral.Col(3), windup.Col(3), hit.Col(3))
-	}
-	if ViewmodelClickAngle(true, 0, ViewmodelTierEmptyHand) == 0 || ViewmodelClickAngle(true, 1, ViewmodelTierEmptyHand) != 0 {
-		t.Fatal("missing immediate windup or recovery")
-	}
-}

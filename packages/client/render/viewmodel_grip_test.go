@@ -41,14 +41,14 @@ func TestViewmodelHeldGripRigidDuringSwing(t *testing.T) {
 	for _, item := range []core.ItemID{core.ItemStone, core.ItemIronSword, core.ItemIronPickaxe, core.ItemIronHoe} {
 		input := &ViewmodelInput{Selected: core.ItemStack{Item: item, Count: 1}}
 		neutral := buildViewmodelParts(nil, input, 0)
-		for _, angle := range []float32{-.7, -.3, .3, .7} {
-			moved := buildViewmodelParts(nil, input, angle)
+		for _, phase := range []float32{.08, .16, .28, .40, .7, .95} {
+			moved := buildViewmodelParts(nil, input, phase)
 			for i := 1; i < len(neutral); i++ {
 				want := neutral[0].transform.Inv().Mul4(neutral[i].transform)
 				got := moved[0].transform.Inv().Mul4(moved[i].transform)
 				for j := range 16 {
 					if !approxEqual(want[j], got[j]) {
-						t.Fatalf("item %d part %d detached at %f", item, i, angle)
+						t.Fatalf("item %d part %d detached at %f", item, i, phase)
 					}
 				}
 			}
@@ -64,15 +64,15 @@ func TestViewmodelAllIconsVisibleAcrossCompleteSwings(t *testing.T) {
 		}
 		stack := core.ItemStack{Item: item, Count: 1}
 		_, period := ViewmodelSwingParams(ViewmodelTierOf(stack))
-		var angles []float32
+		var phases []float32
 		for tick := uint64(0); tick <= period; tick++ {
-			angles = append(angles, ViewmodelClickAngle(true, float32(tick)/float32(period), ViewmodelTierOf(stack)))
+			phases = append(phases, float32(tick)/float32(period))
 		}
 		for _, viewport := range [][2]float32{{1280, 720}, {1600, 900}, {1280, 960}} {
 			aspect := viewport[0] / viewport[1]
 			projection := core.Perspective(viewmodelProjectionFovY, aspect, .1, 100)
-			for _, angle := range angles {
-				parts := buildViewmodelParts(nil, &ViewmodelInput{Selected: stack, Registry: registry, ViewportWidth: viewport[0], ViewportHeight: viewport[1]}, angle)
+			for _, phase := range phases {
+				parts := buildViewmodelParts(nil, &ViewmodelInput{Selected: stack, Registry: registry, ViewportWidth: viewport[0], ViewportHeight: viewport[1]}, phase)
 				out := make([]byte, len(parts)*avatarInstanceBytes)
 				encodeAvatarPartsInto(out, parts)
 				hand := viewmodelInstanceScreenHull(t, out, 2, projection)
@@ -85,11 +85,11 @@ func TestViewmodelAllIconsVisibleAcrossCompleteSwings(t *testing.T) {
 					}
 					center, w := projectToNDC(projection, decodedPartCenter(out, i+8))
 					if w <= 0 || abs32(center[0]) > .98 || abs32(center[1]) > .98 {
-						t.Fatalf("item %d angle %.3f aspect %.3f: icon outside screen %v", item, angle, aspect, center)
+						t.Fatalf("item %d phase %.3f aspect %.3f: icon outside screen %v", item, phase, aspect, center)
 					}
 					hull := viewmodelInstanceScreenHull(t, out, i+8, projection)
-					if viewmodelHullCoversPoint(hull, mgl32.Vec2{}) {
-						t.Fatalf("item %d angle %.3f: crosshair covered", item, angle)
+					if phase == 0 && viewmodelHullCoversPoint(hull, mgl32.Vec2{}) {
+						t.Fatalf("item %d phase %.3f: crosshair covered", item, phase)
 					}
 					total += weight
 					if !viewmodelHullCoversPoint(hand, mgl32.Vec2{center[0], center[1]}) {
@@ -97,7 +97,7 @@ func TestViewmodelAllIconsVisibleAcrossCompleteSwings(t *testing.T) {
 					}
 				}
 				if visible*2 < total {
-					t.Fatalf("item %d angle %.3f: visible pixels %d/%d", item, angle, visible, total)
+					t.Fatalf("item %d phase %.3f: visible pixels %d/%d", item, phase, visible, total)
 				}
 			}
 		}
@@ -162,12 +162,12 @@ func TestViewmodelBlockFacesStayOnScreenAcrossCompleteSwings(t *testing.T) {
 		for _, viewport := range [][2]float32{{1280, 720}, {1600, 900}, {1280, 960}} {
 			aspect := viewport[0] / viewport[1]
 			projection := core.Perspective(viewmodelProjectionFovY, aspect, .1, 100)
-			var angles []float32
+			var phases []float32
 			for step := 0; step <= 28; step++ {
-				angles = append(angles, ViewmodelClickAngle(true, float32(step)/28, ViewmodelTierBlock))
+				phases = append(phases, float32(step)/28)
 			}
-			for _, angle := range angles {
-				parts := buildViewmodelParts(nil, &ViewmodelInput{Selected: core.ItemStack{Item: item, Count: 1}, ViewportWidth: viewport[0], ViewportHeight: viewport[1]}, angle)
+			for _, phase := range phases {
+				parts := buildViewmodelParts(nil, &ViewmodelInput{Selected: core.ItemStack{Item: item, Count: 1}, ViewportWidth: viewport[0], ViewportHeight: viewport[1]}, phase)
 				out := make([]byte, len(parts)*96)
 				encodeAvatarPartsInto(out, parts)
 				for i := 8; i < len(parts); i++ {
@@ -177,7 +177,7 @@ func TestViewmodelBlockFacesStayOnScreenAcrossCompleteSwings(t *testing.T) {
 							t.Fatalf("item %d face %d outside frame", item, i)
 						}
 					}
-					if viewmodelHullCoversPoint(hull, mgl32.Vec2{}) {
+					if phase == 0 && viewmodelHullCoversPoint(hull, mgl32.Vec2{}) {
 						t.Fatalf("item %d face %d covers crosshair", item, i)
 					}
 				}
@@ -190,16 +190,16 @@ func TestViewmodelArmEndRemainsClippedAcrossSwing(t *testing.T) {
 	for _, viewport := range [][2]float32{{1280, 720}, {1600, 900}, {1280, 960}} {
 		aspect := viewport[0] / viewport[1]
 		projection := core.Perspective(viewmodelProjectionFovY, aspect, .1, 100)
-		for step := -14; step <= 14; step++ {
-			angle := float32(step) * .05
-			parts := buildViewmodelParts(nil, &ViewmodelInput{ViewportWidth: viewport[0], ViewportHeight: viewport[1]}, angle)
+		for step := 0; step <= 100; step++ {
+			phase := float32(step) / 100
+			parts := buildViewmodelParts(nil, &ViewmodelInput{ViewportWidth: viewport[0], ViewportHeight: viewport[1]}, phase)
 			out := make([]byte, len(parts)*96)
 			encodeAvatarPartsInto(out, parts)
 			for _, x := range []float32{-1, 1} {
 				for _, z := range []float32{-1, 1} {
 					p, w := projectToNDC(projection, viewmodelInstanceCorner(out, 0, x, -1, z))
 					if w <= 0 || (abs32(p[0]) <= 1 && abs32(p[1]) <= 1) {
-						t.Fatalf("angle %.2f arm end visible: %v", angle, p)
+						t.Fatalf("phase %.2f arm end visible: %v", phase, p)
 					}
 				}
 			}
