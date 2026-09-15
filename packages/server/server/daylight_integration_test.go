@@ -89,7 +89,7 @@ func awaitMeshedSection(
 	key := meshedSectionKey(position)
 	deadline := time.Now().Add(waitDeadline)
 	for {
-		mesher.Schedule(mirror, 1)
+		mesher.Schedule(mirror, client.ViewCenter{}, 1)
 		for _, section := range mesher.Drain(mirror, 1) {
 			if section.Dimension != key.Dimension || section.Pos != key.Pos {
 				continue
@@ -129,7 +129,7 @@ func drainMesher(t *testing.T, mesher *client.Mesher, mirror *client.Mirror) {
 	t.Helper()
 	deadline := time.Now().Add(waitDeadline)
 	for {
-		mesher.Schedule(mirror, 1)
+		mesher.Schedule(mirror, client.ViewCenter{}, 1)
 		mesher.Drain(mirror, 1)
 		stats := mesher.Stats()
 		if stats.DirtySections == 0 && stats.QueuedJobs == 0 &&
@@ -223,7 +223,7 @@ func TestAuthoritativeRoofChangeDrivesMirrorSkyLight(t *testing.T) {
 	sectionKey := meshedSectionKey(underHole)
 	releaseRevision1 := mesher.BlockForTest(sectionKey)
 	mesher.MarkDirty(sectionKey)
-	mesher.Schedule(mirror, 1)
+	mesher.Schedule(mirror, client.ViewCenter{}, 1)
 	waitForMesherStats(t, mesher, func(stats client.MesherStats) bool {
 		return stats.DirtySections == 1 && stats.QueuedJobs == 0 &&
 			stats.InFlightJobs == 1 && stats.ReadyResults == 0
@@ -269,7 +269,7 @@ func TestAuthoritativeRoofChangeDrivesMirrorSkyLight(t *testing.T) {
 	// 权威移除同一方块：下方必须恢复满天空光。
 	releaseRevision2 := mesher.BlockForTest(sectionKey)
 	mesher.MarkDirty(sectionKey)
-	mesher.Schedule(mirror, 1)
+	mesher.Schedule(mirror, client.ViewCenter{}, 1)
 	waitForMesherStats(t, mesher, func(stats client.MesherStats) bool {
 		return stats.DirtySections == 1 && stats.QueuedJobs == 0 &&
 			stats.InFlightJobs == 1 && stats.ReadyResults == 0

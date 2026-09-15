@@ -219,7 +219,12 @@ func (v *menuVista) pump(workMax int) {
 		}
 		v.mesher.MarkDirty(update.Dirty...)
 	}
-	v.mesher.Schedule(v.mirror, workMax)
+	// 全景中心恒为锚点区块，烘焙就绪堆按到锚点的近处优先排序；排序只影响
+	// 先后，收敛内容与揭示后的画面不变（上传顺序不影响图像）。
+	v.mesher.Schedule(v.mirror, client.ViewCenter{
+		Dimension: core.Overworld,
+		Chunk:     v.center,
+	}, workMax)
 	for _, result := range v.mesher.Drain(v.mirror, workMax) {
 		if result.Dimension != core.Overworld {
 			continue
