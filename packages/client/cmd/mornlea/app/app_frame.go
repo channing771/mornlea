@@ -187,7 +187,13 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	if vista != nil {
 		activeScheduler = vista.scheduler
 	} else {
-		a.mesher.Schedule(a.mirror, workMax)
+		// 烘焙优先级以当前视图中心（区块粒度）为圆心：`a.center` 由每帧输入
+		// 步骤从相机姿态推导，中心跨界时 mesher 惰性重建就绪堆，近处脏段
+		// 先于前进方向的远处脏段补齐。
+		a.mesher.Schedule(a.mirror, client.ViewCenter{
+			Dimension: core.Overworld,
+			Chunk:     a.center,
+		}, workMax)
 		for _, result := range a.mesher.Drain(a.mirror, workMax) {
 			if result.Dimension != core.Overworld {
 				continue

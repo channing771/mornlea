@@ -331,7 +331,7 @@ func awaitStaticBlockLight(
 	key := staticBlockLightSectionKey(target)
 	deadline := time.Now().Add(waitDeadline)
 	for {
-		mesher.Schedule(mirror, 1)
+		mesher.Schedule(mirror, client.ViewCenter{}, 1)
 		for _, section := range mesher.Drain(mirror, 1) {
 			if section.Dimension != key.Dimension || section.Pos != key.Pos {
 				continue
