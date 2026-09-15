@@ -182,6 +182,31 @@ func TestSamplerSaplingGrowthRollKAT(t *testing.T) {
 	}
 }
 
+// TestSamplerGrassSpreadRollKAT 把草蔓延判定钉在固定输入的实测输出上：锚点取
+// 自 `hash&3 == 0` 掩码与独立盐值链在基线上的实测值，任何搅拌顺序、掩码宽度
+// 或盐值漂移都会让这里的逐位比对变红。
+func TestSamplerGrassSpreadRollKAT(t *testing.T) {
+	sampler := Sampler{}
+	for _, v := range []struct {
+		seed int64
+		tick uint64
+		dim  core.DimensionID
+		pos  core.BlockPos
+		want bool
+	}{
+		{4611686018427387904, 9223372036854775808, 4, core.BlockPos{X: -1, Y: -2, Z: -3}, false},
+		{0, 0, 0, core.BlockPos{}, false},
+		{11, 22, 3, core.BlockPos{X: 10, Y: 64, Z: -10}, true},
+		{-42, 777, 2, core.BlockPos{X: -100, Y: 64, Z: 32000}, false},
+		{8675309, 1099511627776, 0, core.BlockPos{X: 300, Y: -64, Z: -300}, false},
+	} {
+		if got := sampler.GrassSpreadRoll(v.seed, v.tick, v.dim, v.pos); got != v.want {
+			t.Fatalf("GrassSpreadRoll(%d,%d,%d,%+v)=%v，want %v",
+				v.seed, v.tick, v.dim, v.pos, got, v.want)
+		}
+	}
+}
+
 // TestSamplerSaltConstants 把全部域盐值与概率常量钉在搬迁时的取值上：盐值是
 // 判定流身份的一部分，任何「顺手美化」都是行为变更，必须过 KAT。
 func TestSamplerSaltConstants(t *testing.T) {
@@ -197,6 +222,7 @@ func TestSamplerSaltConstants(t *testing.T) {
 		{"PoisonPotatoSalt", PoisonPotatoSalt, 0xdeadbeefcafe1234},
 		{"FarmlandRevertRollSalt", FarmlandRevertRollSalt, 0xfa1abb1edeadc0de},
 		{"SaplingGrowthRollSalt", SaplingGrowthRollSalt, 0x5341_504C_4752_4F57},
+		{"GrassSpreadRollSalt", GrassSpreadRollSalt, 0x4752_5350_5245_4144},
 		{"ProjectileSpawnSalt", ProjectileSpawnSalt, 0x5052_4F4A_4543_5449},
 		{"HostileShotSpreadSalt", HostileShotSpreadSalt, 0x5348_4F54_5350_5244},
 		{"HostileHurlerDropSalt", HostileHurlerDropSalt, 0x4855_524C_4452_4F50},
@@ -210,9 +236,9 @@ func TestSamplerSaltConstants(t *testing.T) {
 	}
 }
 
-// TestSamplerSaltsPairwiseDistinct 钉住「全量盐值两两互异」：随机面当前共 11
-// 个域盐值（realm 家族 7 个 + entity 家族 3 个 + 投射物 ID 派生 1 个，另有非
-// 盐值的分母/概率常量）。
+// TestSamplerSaltsPairwiseDistinct 钉住「全量盐值两两互异」：随机面当前共 14
+// 个域盐值（realm 家族 8 个 + entity 家族 3 个 + 投射物 ID 派生 1 个与掷骨者
+// 判定 2 个，另有非盐值的分母/概率常量）。
 // 各判定流只靠盐值区分身份，未来追加新盐值若与既有任何一个撞值，两条流会在
 // 相同 `(种子, tick, 维度, 位置)` 输入下系统性同源——这条两两互异断言让撞盐
 // 在新增当刻变红，无须等到分布级测试以统计方式偶然暴露。
@@ -228,6 +254,7 @@ func TestSamplerSaltsPairwiseDistinct(t *testing.T) {
 		{"PoisonPotatoSalt", PoisonPotatoSalt},
 		{"FarmlandRevertRollSalt", FarmlandRevertRollSalt},
 		{"SaplingGrowthRollSalt", SaplingGrowthRollSalt},
+		{"GrassSpreadRollSalt", GrassSpreadRollSalt},
 		{"ShortGrassSeedDropSalt", ShortGrassSeedDropSalt},
 		{"LeavesSaplingDropSalt", LeavesSaplingDropSalt},
 		{"PassiveGrazeRollSalt", PassiveGrazeRollSalt},
@@ -235,8 +262,8 @@ func TestSamplerSaltsPairwiseDistinct(t *testing.T) {
 		{"HostileShotSpreadSalt", HostileShotSpreadSalt},
 		{"HostileHurlerDropSalt", HostileHurlerDropSalt},
 	}
-	if len(salts) != 13 {
-		t.Fatalf("盐值清单长度 %d，想要 13——新增盐值后必须把本断言的清单同步扩容", len(salts))
+	if len(salts) != 14 {
+		t.Fatalf("盐值清单长度 %d，想要 14——新增盐值后必须把本断言的清单同步扩容", len(salts))
 	}
 	for i := range salts {
 		for j := i + 1; j < len(salts); j++ {
