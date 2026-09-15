@@ -69,3 +69,8 @@
 .game-slot-grid { width:min(calc(var(--game-columns) * var(--game-slot-size) + (var(--game-columns) - 1) * var(--game-small-gap)),100%); grid-template-columns:repeat(var(--game-columns),minmax(var(--game-slot-min),1fr)); }
 .game-slot-grid > .game-slot { width:100%; height:auto; aspect-ratio:1; min-width:var(--game-slot-min); }
 .game-slot .game-item-icon { max-width:calc(100% - 2 * var(--game-border)); max-height:calc(100% - 2 * var(--game-border)); }
+/* 拖拽浮层与让位态只在真实拖拽期间出现：浮层跟随指针、不参与命中
+   （pointer-events:none），源槽位让位呈现半透明。 */
+.game-panel-overlay--dragging { cursor:grabbing; }
+.game-drag-ghost { position:fixed; z-index:40; transform:translate(-50%,-50%); display:flex; align-items:center; justify-content:center; width:var(--game-slot-size); height:var(--game-slot-size); border:var(--game-border) solid var(--hud-slot-edge); border-radius:var(--game-control-radius); background:var(--game-paper); box-shadow:0 var(--hud-slot-shadow-offset) var(--hud-slot-shadow-blur) var(--hud-slot-shadow); pointer-events:none; }
+.game-slot--drag-source { opacity:.45; }

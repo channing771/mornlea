@@ -174,6 +174,41 @@ fn valid_game_action(event: &serde_json::Value) -> bool {
                 _ => return false,
             }
         }
+        // 拖出面板整组丢弃:单端寻址与槽位点击同界,无按键语义字段。
+        Some("drop") => {
+            keys.push("area");
+            match event.get("area").and_then(|v| v.as_str()) {
+                Some("inventory") => Some(35),
+                Some("crafting") => Some(8),
+                Some("chest") => Some(26),
+                Some("furnace") => Some(2),
+                _ => return false,
+            }
+        }
+        // 拖拽落槽:源/目标双端各自独立校验区域与索引域,跨区域合法。
+        Some("dragMove") => {
+            keys.push("fromArea");
+            keys.push("fromIndex");
+            keys.push("toArea");
+            keys.push("toIndex");
+            for (area_key, index_key) in [("fromArea", "fromIndex"), ("toArea", "toIndex")] {
+                let end_limit = match event.get(area_key).and_then(|v| v.as_str()) {
+                    Some("inventory") => 35,
+                    Some("crafting") => 8,
+                    Some("chest") => 26,
+                    Some("furnace") => 2,
+                    _ => return false,
+                };
+                if !event
+                    .get(index_key)
+                    .and_then(|v| v.as_u64())
+                    .is_some_and(|v| v <= end_limit)
+                {
+                    return false;
+                }
+            }
+            None
+        }
         _ => return false,
     };
     if let Some(limit) = limit {
@@ -453,6 +488,16 @@ mod game_action_tests {
             serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"inventory","index":0,"shift":false}),
             serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"inventory","index":0,"button":"middle","shift":false}),
             serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"inventory","index":0,"button":"left","shift":"false"}),
+            // 拖出丢弃:缺字段、未知区域与区域索引越界。
+            serde_json::json!({"type":"game-action","token":1,"op":"drop","area":"inventory"}),
+            serde_json::json!({"type":"game-action","token":1,"op":"drop","area":"output","index":0}),
+            serde_json::json!({"type":"game-action","token":1,"op":"drop","area":"inventory","index":36}),
+            serde_json::json!({"type":"game-action","token":1,"op":"drop","area":"inventory","index":0,"button":"left"}),
+            // 拖拽落槽:任一端缺失、未知区域与按区域分派的索引越界。
+            serde_json::json!({"type":"game-action","token":1,"op":"dragMove","fromArea":"inventory","fromIndex":0,"toArea":"inventory"}),
+            serde_json::json!({"type":"game-action","token":1,"op":"dragMove","fromArea":"output","fromIndex":0,"toArea":"inventory","toIndex":0}),
+            serde_json::json!({"type":"game-action","token":1,"op":"dragMove","fromArea":"inventory","fromIndex":36,"toArea":"inventory","toIndex":0}),
+            serde_json::json!({"type":"game-action","token":1,"op":"dragMove","fromArea":"inventory","fromIndex":0,"toArea":"chest","toIndex":27}),
         ] {
             let mut queue = UiEventQueue::new();
             let data = serde_json::to_vec(&serde_json::json!({"v":1,"events":[event]})).unwrap();
@@ -463,12 +508,17 @@ mod game_action_tests {
 
     /// 槽位事件的按键语义字段（`button`/`shift`）必须能过原生桥浅校验进入
     /// 队列——否则分堆/快捷搬运的合法载荷会在半路被吞，Go 永远收不到。
+    /// 拖拽两操作（`drop`/`dragMove`）同理:拒绝即整批信封作废。
     #[test]
     fn slot_pointer_semantics_enter_queue() {
         for event in [
             serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"inventory","index":0,"button":"left","shift":false}),
             serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"furnace","index":2,"button":"right","shift":true}),
             serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"chest","index":26,"button":"right","shift":true}),
+            serde_json::json!({"type":"game-action","token":1,"op":"drop","area":"chest","index":26}),
+            serde_json::json!({"type":"game-action","token":1,"op":"drop","area":"inventory","index":35}),
+            serde_json::json!({"type":"game-action","token":1,"op":"dragMove","fromArea":"inventory","fromIndex":35,"toArea":"crafting","toIndex":8}),
+            serde_json::json!({"type":"game-action","token":1,"op":"dragMove","fromArea":"chest","fromIndex":26,"toArea":"furnace","toIndex":2}),
         ] {
             let mut queue = UiEventQueue::new();
             let data = serde_json::to_vec(&serde_json::json!({"v":1,"events":[event]})).unwrap();

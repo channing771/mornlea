@@ -1193,7 +1193,247 @@
               "$ref": "#/$defs/gamePointerShift"
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "token",
+            "op",
+            "area",
+            "index"
+          ],
+          "properties": {
+            "type": {
+              "const": "game-action"
+            },
+            "token": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "op": {
+              "const": "drop"
+            },
+            "area": {
+              "$ref": "#/$defs/gameSlotArea"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 35
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "area": {
+                    "const": "crafting"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "index": {
+                    "maximum": 8,
+                    "type": "integer"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "area": {
+                    "const": "chest"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "index": {
+                    "maximum": 26,
+                    "type": "integer"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "area": {
+                    "const": "furnace"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "index": {
+                    "maximum": 2,
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "token",
+            "op",
+            "fromArea",
+            "fromIndex",
+            "toArea",
+            "toIndex"
+          ],
+          "properties": {
+            "type": {
+              "const": "game-action"
+            },
+            "token": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "op": {
+              "const": "dragMove"
+            },
+            "fromArea": {
+              "$ref": "#/$defs/gameSlotArea"
+            },
+            "fromIndex": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 35
+            },
+            "toArea": {
+              "$ref": "#/$defs/gameSlotArea"
+            },
+            "toIndex": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 35
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "fromArea": {
+                    "const": "crafting"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "fromIndex": {
+                    "maximum": 8,
+                    "type": "integer"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "fromArea": {
+                    "const": "chest"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "fromIndex": {
+                    "maximum": 26,
+                    "type": "integer"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "fromArea": {
+                    "const": "furnace"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "fromIndex": {
+                    "maximum": 2,
+                    "type": "integer"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "toArea": {
+                    "const": "crafting"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "toIndex": {
+                    "maximum": 8,
+                    "type": "integer"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "toArea": {
+                    "const": "chest"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "toIndex": {
+                    "maximum": 26,
+                    "type": "integer"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "toArea": {
+                    "const": "furnace"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "toIndex": {
+                    "maximum": 2,
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          ]
         }
+      ]
+    },
+    "gameSlotArea": {
+      "description": "语义槽位区域：背包（0..35）、合成（0..8）、箱子（0..26）、熔炉（0..2）；各区域索引上界由引用方的分支约束钉死。",
+      "enum": [
+        "inventory",
+        "crafting",
+        "chest",
+        "furnace"
       ]
     },
     "gamePointerButton": {

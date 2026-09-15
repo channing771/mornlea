@@ -165,6 +165,56 @@ func (a *Application) handleGameAction(action client.UIGameAction) {
 		a.sendGameCommand(network.TakeCraftingOutput{Sequence: a.nextSequence()})
 		return
 	}
+	// 拖拽落槽：与两次点击主键路径共用同一映射与同一发送出口，保证发出的
+	// Move* 消息逐字段一致（同格与熔炉产物目标沿两次点击的取消语义）。
+	if action.Op == "dragMove" {
+		from, valid := a.gameUnifiedSlot(kind, client.UIGameSlotRef{Area: action.FromArea, Index: action.FromIndex})
+		if !valid {
+			return
+		}
+		to, valid := a.gameUnifiedSlot(kind, client.UIGameSlotRef{Area: action.ToArea, Index: action.ToIndex})
+		if !valid {
+			return
+		}
+		if kind == "furnace" && to == core.FurnaceOutputSlot && from != to {
+			return
+		}
+		a.gameSource = nil
+		a.gameUIDirty = true
+		if from == to {
+			return
+		}
+		a.sendUnifiedSlotMove(kind, from, to)
+		return
+	}
+	// 拖出面板整组丢弃：区域/槽位映射与槽位点击一致，翻译为按视图槽位寻址的
+	// DropStack；投放位置与整组数量由服务端权威推导。
+	if action.Op == "drop" {
+		target := client.UIGameSlotRef{Area: action.Area, Index: action.Index}
+		to, valid := a.gameUnifiedSlot(kind, target)
+		if !valid {
+			return
+		}
+		a.gameSource = nil
+		a.gameUIDirty = true
+		switch kind {
+		case "chest":
+			state, _ := a.chest.State()
+			a.sendGameCommand(network.DropStack{Sequence: a.nextSequence(), Container: state.Chest, View: network.StackViewContainer, Slot: to})
+		case "furnace":
+			state, _ := a.furnace.State()
+			a.sendGameCommand(network.DropStack{Sequence: a.nextSequence(), Container: state.Furnace, View: network.StackViewContainer, Slot: to})
+		default:
+			// 个人背包面板的背包/快捷栏格走背包视图域（原始 0..35 索引），
+			// 与快捷搬运同款换算；网格格与工作台面板仍走合成视图统一映射。
+			if kind == "inventory" && target.Area == "inventory" {
+				a.sendGameCommand(network.DropStack{Sequence: a.nextSequence(), View: network.StackViewInventory, Slot: to - 9})
+				return
+			}
+			a.sendGameCommand(network.DropStack{Sequence: a.nextSequence(), View: network.StackViewCrafting, Slot: to})
+		}
+		return
+	}
 	if action.Op != "slot" {
 		return
 	}
@@ -239,6 +289,13 @@ func (a *Application) handleGameAction(action client.UIGameAction) {
 		a.sendGameCommand(network.MoveStackPartial{Sequence: a.nextSequence(), View: network.StackViewCrafting, From: from, To: to, Single: action.Shift})
 		return
 	}
+	a.sendUnifiedSlotMove(kind, from, to)
+}
+
+// sendUnifiedSlotMove 按当前面板身份把统一视图格 from→to 的整堆移动翻译为
+// 既有 Move* 命令：两次点击主键路径与拖拽落槽（dragMove）共用这一出口，
+// 结构上保证两条交互发出逐字段一致的消息。
+func (a *Application) sendUnifiedSlotMove(kind string, from, to uint8) {
 	if kind == "chest" {
 		state, _ := a.chest.State()
 		a.sendGameCommand(network.MoveContainerStack{Sequence: a.nextSequence(), Container: state.Chest, From: from, To: to})

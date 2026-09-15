@@ -117,6 +117,13 @@ func encodeClientPacketPayload(state protocol.State, packet protocol.ClientPacke
 			encodeContainerRef(&e, message.Container)
 			e.u8(message.View)
 			e.u8(message.From)
+		case protocol.DropStack:
+			// v45：u64 序号 + 18 字节容器引用 + u8 视图 + u8 统一索引，固定
+			// 28 字节；投放位置与整组数量由服务端从权威状态推导，wire 上不携带。
+			e.u64(message.Sequence)
+			encodeContainerRef(&e, message.Container)
+			e.u8(message.View)
+			e.u8(message.Slot)
 		default:
 			return 0, nil, codecError("encode client", state, packetID, protocol.InvalidClientPacket(state, packet))
 		}
@@ -388,6 +395,21 @@ func decodeClientPacketPayload(state protocol.State, packetID uint32, payload []
 				quick.From, err = d.u8()
 			}
 			packet = quick
+		case 21:
+			// v45：整组丢弃，固定 28 字节；域校验由本函数尾部的
+			// `ValidateDecodedClientWirePacket` 统一入口执行，此处只搬运字节。
+			var drop protocol.DropStack
+			drop.Sequence, err = d.u64()
+			if err == nil {
+				drop.Container, err = decodeContainerRef(&d)
+			}
+			if err == nil {
+				drop.View, err = d.u8()
+			}
+			if err == nil {
+				drop.Slot, err = d.u8()
+			}
+			packet = drop
 		default:
 			return nil, codecError("decode client", state, packetID, errUnknownPacketID)
 		}
