@@ -55,8 +55,11 @@ const (
 	// 192 block，覆盖固定相机俯仰下的近景地形带，更远处由远环壳接手。
 	menuVistaRadiusChunks = 12
 	// menuVistaChunksPerFrame 是每帧生成的区块预算：惰性/后台生成在帧循环
-	// 内分摊，不阻塞渲染热路径。
-	menuVistaChunksPerFrame = 4
+	// 内分摊，不阻塞渲染热路径。收敛前不揭示部分装配的几何（见
+	// `revealMenuVista` 的揭示门），等待期只有装配泵与天空清屏，把预算从
+	// 4 提高到 12 以缩短等待窗口；生成顺序仍是确定性环序，收敛后的内容
+	// 与逐帧相机轨迹不因泵速改变。
+	menuVistaChunksPerFrame = 12
 	// menuVistaCameraLift 是相机在地面之上的固定抬升（block）。取值让画面
 	// 同容纳天空与地形，且相机保持在远环壳带最高点之下（与 far-horizon 场景
 	// 「相机低于壳上界」同一构图纪律，跨壳缝的视线因此被壳体正面遮挡）。
@@ -272,7 +275,7 @@ func (v *menuVista) release() {
 	v.lodScheduler.Close()
 }
 
-// menuVistaForFrame 返回本帧应使用的全景（或 nil 表示渲染真实世界）：
+// menuVistaForFrame 返回本帧所属的全景管线（或 nil 表示无全景可推进）：
 // 只有主菜单与设置页相位参与；首次进入惰性构建，相位切换把自转 tick 归零，
 // 保证每次进入菜单的第一帧姿态一致。装配失败只降级为暗色天空背景（记
 // 警告日志），绝不阻塞菜单可用性。
@@ -280,10 +283,12 @@ func (a *Application) menuVistaForFrame() *menuVista {
 	if a.menu.phase != MenuPhaseMenu && a.menu.phase != MenuPhaseSettings {
 		return nil
 	}
-	if a.renderer == nil || a.registry == nil {
-		return nil
-	}
+	// 渲染器与材质目录只约束首次构建：已构建的全景必然持有这两者，检查
+	// 收进构建分支后，注入既有全景的帧入口测试无需 GPU。
 	if a.menuVista == nil {
+		if a.renderer == nil || a.registry == nil {
+			return nil
+		}
 		vista, err := newMenuVista(
 			a.renderer, a.registry, a.render, a.startupOptions.FluidEnabled,
 		)
@@ -302,6 +307,26 @@ func (a *Application) menuVistaForFrame() *menuVista {
 		a.menuVista.tick = 0
 	}
 	return a.menuVista
+}
+
+// revealMenuVista 推进一帧全景装配并应用揭示门：装配泵先照常推进（等待期
+// 持续出图，收敛才有可能），随后以 `pending` 归零——capture 收敛判据
+// （`MenuVistaPending`）的同一口径——判定本帧是否揭示完整全景。返回 nil
+// 表示本帧不提交任何全景几何：游戏相位、构建失败与未收敛共用这一返回
+// 值，调用方走与构建失败降级相同的「仅天空清屏」出口，相机自转时钟
+// 随之冻结（`RenderFrame` 只对非 nil 返回值在渲染后推进 tick），收敛后
+// 的首帧因此从 tick 0 开始揭示，收敛段帧序列与既有「全景背景确定性」
+// 契约逐帧一致。收敛后的泵是确定性空转（预算照常重置），揭示持续打开。
+func (a *Application) revealMenuVista(workMax int) *menuVista {
+	vista := a.menuVistaForFrame()
+	if vista == nil {
+		return nil
+	}
+	vista.pump(workMax)
+	if vista.pending() > 0 {
+		return nil
+	}
+	return vista
 }
 
 // discardMenuVista 丢弃当前全景（世界装配成功或 Application 关闭时调用）：
