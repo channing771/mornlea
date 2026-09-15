@@ -51,6 +51,12 @@ const (
 	// 对侧零吸收时整单拒绝。结算相位与 `CommandMoveStackPartial` 同族：
 	// 背包/合成视图内联，容器视图延迟到区块写相位。
 	CommandQuickMoveStack
+	// CommandDropStack 请求整组丢弃（面板拖出）：把 `Slot`（`StackView`
+	// 视图域的统一索引）整组物品按既有掉落契约投放在玩家脚下。投放位置
+	// 与数量都由 sim 从权威状态推导，命令只携带视图域、统一索引与（容器
+	// 视图时的）容器引用；空槽与非法引用按既有拒绝语义整单拒绝。结算相位
+	// 与分堆命令族同族：背包/合成视图内联，容器视图延迟到区块写相位。
+	CommandDropStack
 )
 
 // 分堆命令族（`CommandMoveStackPartial` 与 `CommandQuickMoveStack`）的视图域

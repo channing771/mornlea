@@ -72,6 +72,7 @@ const (
 	CommandEquipArmor            = contract.CommandEquipArmor
 	CommandMoveStackPartial      = contract.CommandMoveStackPartial
 	CommandQuickMoveStack        = contract.CommandQuickMoveStack
+	CommandDropStack             = contract.CommandDropStack
 	StackViewInventory           = contract.StackViewInventory
 	StackViewCrafting            = contract.StackViewCrafting
 	StackViewContainer           = contract.StackViewContainer

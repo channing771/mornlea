@@ -44,6 +44,18 @@ export type GameAction = {
   readonly button: "left" | "right";
   /** Shift 修饰位：左键为快捷搬运，右键第二击在单件/半组间定档。 */
   readonly shift: boolean;
+} | {
+  /** 拖出面板整组丢弃：服务端按视图槽位寻址在玩家脚下投放整组。 */
+  readonly op: "drop";
+  readonly area: SlotArea;
+  readonly index: number;
+} | {
+  /** 拖拽落槽：与两次点击主键搬运完全相同的权威消息（源/目标语义槽位引用）。 */
+  readonly op: "dragMove";
+  readonly fromArea: SlotArea;
+  readonly fromIndex: number;
+  readonly toArea: SlotArea;
+  readonly toIndex: number;
 });
 const limits: Record<SlotArea, number> = {
   inventory: 35,
@@ -118,6 +130,24 @@ export function validateGameAction(raw: unknown): GameAction {
       if (r.button !== "left" && r.button !== "right")
         return fail();
       bool(r.shift);
+      break;
+    case "drop":
+      object(r, [...keys, "area", "index"]);
+      slotRef({
+        area: r.area,
+        index: r.index
+      });
+      break;
+    case "dragMove":
+      object(r, [...keys, "fromArea", "fromIndex", "toArea", "toIndex"]);
+      slotRef({
+        area: r.fromArea,
+        index: r.fromIndex
+      });
+      slotRef({
+        area: r.toArea,
+        index: r.toIndex
+      });
       break;
     case "hotbar":
     case "recipe":

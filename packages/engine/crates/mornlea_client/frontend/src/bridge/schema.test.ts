@@ -549,6 +549,20 @@ describe("schema：上行 uplinkEnvelope 合法夹具", () => {
       }),
     ).toBe(true);
   });
+
+  it("game-action drop/dragMove 合法载荷通过校验", () => {
+    expect(
+      validateEnvelope({
+        v: 1,
+        events: [
+          { type: "game-action", token: 1, op: "drop", area: "chest", index: 26 },
+          { type: "game-action", token: 1, op: "drop", area: "inventory", index: 35 },
+          { type: "game-action", token: 1, op: "dragMove", fromArea: "inventory", fromIndex: 35, toArea: "crafting", toIndex: 8 },
+          { type: "game-action", token: 1, op: "dragMove", fromArea: "chest", fromIndex: 26, toArea: "furnace", toIndex: 2 },
+        ],
+      }),
+    ).toBe(true);
+  });
 });
 
 describe("schema：上行 uplinkEnvelope 非法用例一律拒绝", () => {
@@ -629,6 +643,59 @@ describe("schema：上行 uplinkEnvelope 非法用例一律拒绝", () => {
         events: [
           { type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, button: "left", shift: "no" },
         ],
+      }),
+    ).toBe(false);
+  });
+
+  it("game-action drop/dragMove 缺字段、未知区域或索引越界拒绝", () => {
+    // drop：缺 index、未知区域、区域索引越界与携带多余字段。
+    expect(
+      validateEnvelope({ v: 1, events: [{ type: "game-action", token: 1, op: "drop", area: "inventory" }] }),
+    ).toBe(false);
+    expect(
+      validateEnvelope({ v: 1, events: [{ type: "game-action", token: 1, op: "drop", area: "output", index: 0 }] }),
+    ).toBe(false);
+    expect(
+      validateEnvelope({ v: 1, events: [{ type: "game-action", token: 1, op: "drop", area: "inventory", index: 36 }] }),
+    ).toBe(false);
+    expect(
+      validateEnvelope({ v: 1, events: [{ type: "game-action", token: 1, op: "drop", area: "furnace", index: 3 }] }),
+    ).toBe(false);
+    expect(
+      validateEnvelope({
+        v: 1,
+        events: [{ type: "game-action", token: 1, op: "drop", area: "inventory", index: 0, button: "left" }],
+      }),
+    ).toBe(false);
+    // dragMove：任一端缺失、未知区域、按区域分派的索引越界与携带多余字段。
+    expect(
+      validateEnvelope({
+        v: 1,
+        events: [{ type: "game-action", token: 1, op: "dragMove", fromArea: "inventory", fromIndex: 0, toArea: "inventory" }],
+      }),
+    ).toBe(false);
+    expect(
+      validateEnvelope({
+        v: 1,
+        events: [{ type: "game-action", token: 1, op: "dragMove", fromArea: "output", fromIndex: 0, toArea: "inventory", toIndex: 0 }],
+      }),
+    ).toBe(false);
+    expect(
+      validateEnvelope({
+        v: 1,
+        events: [{ type: "game-action", token: 1, op: "dragMove", fromArea: "inventory", fromIndex: 36, toArea: "inventory", toIndex: 0 }],
+      }),
+    ).toBe(false);
+    expect(
+      validateEnvelope({
+        v: 1,
+        events: [{ type: "game-action", token: 1, op: "dragMove", fromArea: "inventory", fromIndex: 0, toArea: "chest", toIndex: 27 }],
+      }),
+    ).toBe(false);
+    expect(
+      validateEnvelope({
+        v: 1,
+        events: [{ type: "game-action", token: 1, op: "dragMove", fromArea: "inventory", fromIndex: 0, toArea: "inventory", toIndex: 1, shift: false }],
       }),
     ).toBe(false);
   });
