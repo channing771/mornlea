@@ -36,21 +36,21 @@ type baselineVersionMapping struct {
 var baselineVersionMappings = []baselineVersionMapping{
 	{
 		name:        "协议版本",
-		docPattern:  `协议 v(\d+)`,
+		docPattern:  `protocol v(\d+)`,
 		sourcePath:  filepath.Join("packages", "shared", "network", "protocol", "packet.go"),
 		codePattern: `const\s+ProtocolVersion\s+uint32\s*=\s*(\w+)`,
 		why:         "ProtocolVersion 是握手与全部 packet 编解码唯一支持的版本号，wire 兼容性以它为准。",
 	},
 	{
 		name:        "区块 schema",
-		docPattern:  `区块 schema v(\d+)`,
+		docPattern:  `chunk schema v(\d+)`,
 		sourcePath:  filepath.Join("packages", "server", "storage", "chunk", "chunk_codec.go"),
 		codePattern: `currentChunkSchema\s+uint32\s*=\s*(\w+)`,
 		why:         "currentChunkSchema 是区块记录写出时落盘的 schema 号，也是拒绝更高版本的上界。",
 	},
 	{
 		name:        "玩家 schema",
-		docPattern:  `玩家 schema v(\d+)`,
+		docPattern:  `player schema v(\d+)`,
 		sourcePath:  filepath.Join("packages", "server", "storage", "player", "player_codec.go"),
 		codePattern: `CurrentSchema\s+uint32\s*=\s*(\w+)`,
 		why:         "CurrentSchema 是玩家记录写出时落盘的 schema 号（player 包导出的权威常量）。",
@@ -64,7 +64,7 @@ var baselineVersionMappings = []baselineVersionMapping{
 	},
 	{
 		name:        "世界 metadata 版本",
-		docPattern:  `世界 metadata v(\d+)`,
+		docPattern:  `world metadata v(\d+)`,
 		sourcePath:  filepath.Join("packages", "server", "storage", "metadata.go"),
 		codePattern: `currentMetadataVersion\s+uint32\s*=\s*(\w+)`,
 		why:         "currentMetadataVersion 是世界 metadata 写出时的 FormatVersion，也是加载时的上界。",
@@ -99,7 +99,7 @@ var baselineVersionMappings = []baselineVersionMapping{
 	},
 	{
 		name:        "benchmark scenario",
-		docPattern:  `benchmark scenario (?:为 )?v(\d+)`,
+		docPattern:  `benchmark scenario v(\d+)`,
 		sourcePath:  filepath.Join("packages", "client", "cmd", "mornlea", "benchmark", "benchmark.go"),
 		codePattern: `scenarioVersion\s*=\s*(\w+)`,
 		why:         "scenarioVersion 是 benchmark 报告写出的场景版本，场景迁移链以它为终点。",

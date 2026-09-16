@@ -1,0 +1,66 @@
+# Capability discovery
+
+Use this reference only when model availability and reasoning-effort support cannot be read from one authoritative native response.
+
+## Source priority
+
+Treat the invocation boundary as the source of truth for what can run now:
+
+1. Inspect native `spawn`, `delegate`, `worker`, `agent`, or model-request tool metadata. Enumerated model and effort values are authoritative for that call surface.
+2. Call a read-only capability or model inventory operation if the host provides one.
+3. If a provider's list-models response contains only identifiers, consult current official documentation or machine-readable model metadata for reasoning effort, modalities, context, and tool support.
+4. Use local CLI help or a dry-run command only when it is provider-supported and does not modify configuration or incur inference cost.
+
+Never scrape account secrets, print credentials, or use an unrelated account to fill gaps. Community tables and remembered model-family behavior are hints for where to look, not authoritative capability evidence.
+
+## Normalize heterogeneous hosts
+
+Build a temporary record for each available option:
+
+```yaml
+model_id: exact-provider-identifier
+availability_source: native-tool | provider-api | local-cli | official-docs
+reasoning:
+  values: [exact, supported, labels]
+  default: exact-label-or-unknown
+  omission: inherit | provider-default | unknown
+capabilities:
+  modalities: []
+  tools: []
+  context_window: unknown
+  max_output: unknown
+constraints:
+  regions: []
+  service_tiers: []
+  policy_ceiling:
+    model: none
+    reasoning_effort: none
+signals:
+  capability: unknown
+  latency: unknown
+  cost: unknown
+```
+
+Omit unsupported fields or mark them `unknown`; do not manufacture comparable numeric scores from qualitative marketing descriptions.
+
+## Reconcile conflicting sources
+
+- Native runtime rejection or a current invocation schema overrides general documentation for immediate availability.
+- Account-scoped inventory overrides a public catalog for access.
+- Official per-model documentation overrides family-name inference for reasoning-effort support.
+- A product-specific policy ceiling filters otherwise available options; availability never overrides the ceiling.
+- When two current authoritative sources conflict, avoid the disputed option unless the user explicitly wants a safe, authorized probe.
+
+## No discovery interface
+
+If the host has no model inventory, no provider documentation access, and no override fields, retain the current or inherited configuration and label it as such. The router must not claim it selected the best model.
+
+If override fields exist but their accepted values are undiscoverable, use a user-specified exact value when available. Otherwise, keep the default rather than guessing and causing a failed or billable invocation.
+
+## Example judgments
+
+- A tool schema lists four models and effort values per model: use that schema; do not browse for a larger public catalog the tool cannot invoke.
+- A `/models` API lists identifiers but no reasoning metadata: intersect the returned identifiers with current official capability documentation.
+- A local agent exposes only presets such as `fast`, `balanced`, and `deep`: treat these as atomic configurations rather than pretending model and effort were chosen independently.
+- A child worker inherits the parent unless an override is supplied: omission is inheritance, not adaptive routing. Supply an override only when the task justifies it and the host accepts it.
+- Any host, API, or gateway exposes an OpenAI model above `gpt-5.6-sol` or an effort above `max`: record the option as available but ineligible under the preset OpenAI ceiling, then select downward.

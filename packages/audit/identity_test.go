@@ -182,7 +182,7 @@ func TestNativeEngineLibraryIdentity(t *testing.T) {
 	requireIdentity("packages/engine/crates/mornlea_engine/build.rs", "@rpath/libmornlea_engine.dylib", "libmornlea_mesh.dylib")
 	requireIdentity("Makefile", "libmornlea_engine.dylib", "libmornlea_mesh.dylib")
 	requireIdentity("packages/shared/nativeabi/native.go", "-lmornlea_engine", "-lmornlea_mesh")
-	for _, relative := range []string{"AGENTS.md", "README.md", "README.en.md", "openspec/config.yaml", "docs/notes/progress.md"} {
+	for _, relative := range []string{"AGENTS.md", "README.md", "README.zh.md", "openspec/config.yaml", "docs/notes/progress.md"} {
 		requireIdentity(relative, "mornlea_engine", "libmornlea_mesh")
 	}
 }

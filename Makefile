@@ -21,7 +21,7 @@ ARGS ?=
 # dev-check、vet）显式循环该列表，防止新模块成为 ./... 盲区。
 GO_TEST_MODULES := ./packages/contracts ./packages/shared ./packages/server ./packages/client ./packages/tools ./packages/audit
 
-.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev
+.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck comment-language-check fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev
 
 run test test-multiplayer bench-multiplayer visual-check visual-update: rust
 build: rust
@@ -41,6 +41,7 @@ help:
 		'  make test-multiplayer 运行 M3C 八玩家与 v6 报告测试' \
 		'  make bench-multiplayer 运行三组 M3C 多人微基准' \
 		'  make archcheck        验证依赖闭包与无图形服务端边界' \
+		'  make comment-language-check 验证英文源码注释迁移基线只能下降' \
 		'  make rust             构建固定版本的 Rust cdylib' \
 		'  make rust-check       运行 Rust 格式、clippy 与单测' \
 		'  make frontend-check   菜单 WebView 前端门禁(冻结安装+typecheck+vitest+构建+dist 一致)' \
@@ -142,11 +143,14 @@ archcheck:
 	$(GO) test ./packages/audit -count=1
 	test -z "$$($(GO) list -deps $(SERVER) | rg 'packages/client/(client|mesh|render)|gfxspike|glfw|webgpu|x/image/font')"
 
+comment-language-check:
+	$(GO) test ./packages/audit -run 'EnglishCommentMigration|CodeCommentLanguage|CommentScanner' -count=1
+
 # dev-check:迭代期快检——gofmt 检查、vet、全仓短测试(重型测试经 `-short` 跳过)
 # 与 Rust fmt/clippy/单测。完整门禁(test/test-race/visual-check/rust-check)
 # 仍留给 CI 与提交前,短模式不做任何正确性放宽。
 dev-check:
-	@unformatted=$$(gofmt -l .); if [ -n "$$unformatted" ]; then echo "gofmt 需要格式化: $$unformatted"; exit 1; fi
+	@unformatted=$$(find . -type f -name '*.go' -not -path './vendor/*' -not -path './.worktrees/*' -not -path './.claude/worktrees/*' -exec gofmt -l {} +); if [ -n "$$unformatted" ]; then echo "gofmt 需要格式化: $$unformatted"; exit 1; fi
 	for module in $(GO_TEST_MODULES); do $(GO) vet $$module/... || exit 1; done
 	for module in $(GO_TEST_MODULES); do $(GO) test $$module/... -short || exit 1; done
 	cd $(RUST_DIR) && $(CARGO) fmt --check
@@ -177,6 +181,7 @@ fmt:
 	find . -type f -name '*.go' \
 		-not -path './vendor/*' \
 		-not -path './.worktrees/*' \
+		-not -path './.claude/worktrees/*' \
 		-exec gofmt -w {} +
 
 # visual-check：SCENES= 传逗号分隔场景子集（如 SCENES=mining-crack-early,mining-crack-heavy）

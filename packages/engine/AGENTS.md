@@ -1,29 +1,31 @@
-# Rust Workspace 指南
+# Rust Workspace Guide
 
-## 作用域
+## Scope
 
-进入 `packages/engine/crates/mornlea_engine/` 或 `packages/engine/crates/mornlea_client/` 前，分别读取对应 crate 内的 `AGENTS.md`。
+Read the crate-specific `AGENTS.md` before working in `packages/engine/crates/mornlea_engine/` or `packages/engine/crates/mornlea_client/`.
 
-## 工具链与职责
+The root provider-aware orchestration policy applies without modification. This scoped guide does not impose an additional subagent count, sequence, or review topology.
 
-- `packages/engine/rust-toolchain.toml` 固定 Rust 1.97.1；不要单独升级 compiler、Cargo lock 或 wgpu 依赖线。
-- `mornlea_engine` 是无窗口数值内核，提供 mesh/light、collision、raycast、physics 与 worldgen 的 engine ABI。
-- `mornlea_client` 是 Darwin 窗口、事件、进程内 WKWebView 菜单层和 GPU 后端，提供独立的 client ABI。两个 ABI 独立演进，不共享版本号。
+## Toolchain and ownership
+
+- `packages/engine/rust-toolchain.toml` pins Rust 1.97.1. Do not upgrade the compiler, Cargo lockfile, or wgpu dependency line independently.
+- `mornlea_engine` is the windowless numerical core and exposes mesh/light, collision, raycast, physics, and world-generation operations through the engine ABI.
+- `mornlea_client` owns the Darwin window, events, in-process WKWebView menu layer, and GPU backend and exposes a separate client ABI. The two ABIs evolve independently and do not share a version number.
 
 ## FFI
 
-- `extern "C"` 入口不得让 panic unwind 穿过 FFI；在构造 slice、解引用或写输出前校验 ABI、pointer、length、alignment、overlap 与容量。
-- 校验失败不留下部分输出。固定容量和 overflow 状态属于跨语言契约，不得为通过测试静默截断。
-- Rust 导出项使用中文 `///` doc comment，说明安全前提、所有权、失败语义和 ABI 同步面。
+- `extern "C"` entry points must not allow a panic to unwind across FFI. Validate ABI version, pointers, lengths, alignment, overlap, and capacity before constructing slices, dereferencing pointers, or writing output.
+- Validation failures must not leave partial output. Fixed capacity and overflow status are cross-language contracts and must not be silently truncated to pass tests.
+- Rust exports use English `///` doc comments that explain safety preconditions, ownership, failure semantics, and ABI synchronization surfaces.
 
-## 测试组织
+## Test organization
 
-Rust 测试按 `docs/test-organization.md` 的主题子模块与 helper 中心规则组织；单主题测试留在对应模块树，不新建平行集成测试镜像。
+Organize Rust tests according to the topic-module and helper-center rules in `docs/test-organization.md`. Keep a single-topic test in its existing module tree rather than creating a parallel integration-test mirror.
 
-## 验证与入口
+## Validation and entry points
 
-- 构建 cdylib：`make rust`。
-- Makefile 为 `make rust` 默认设置当前 worktree 的 `CARGO_TARGET_DIR=packages/engine/target/cargo`；`make rust` 将 release dylibs 经 `scripts/engine/deploy-dylib.sh` 复制到 `packages/engine/target/release`。直接调用 cargo 不读取 Makefile，需要该目录或其他目标时须显式设置 `CARGO_TARGET_DIR`；CI 也显式设置，传给 `make rust` 的值可覆盖默认值。
-- workspace 门禁：`make rust-check`。
-- crate 定点：`cd packages/engine && cargo test -p mornlea_engine --locked`、`cd packages/engine && cargo test -p mornlea_client --locked`。
-- 当前文档入口：`docs/notes/go-rust-division.md`、`docs/test-organization.md`。
+- Build cdylibs with `make rust`.
+- The Makefile sets `CARGO_TARGET_DIR=packages/engine/target/cargo` for `make rust` by default and copies release dylibs to `packages/engine/target/release` through `scripts/engine/deploy-dylib.sh`. Direct Cargo invocations do not read the Makefile, so set `CARGO_TARGET_DIR` explicitly when that directory or another target is required. CI also sets it explicitly, and a value passed to `make rust` overrides the default.
+- Run the workspace gate with `make rust-check`.
+- Run focused crate tests with `cd packages/engine && cargo test -p mornlea_engine --locked` or `cd packages/engine && cargo test -p mornlea_client --locked`.
+- Current documentation entry points are `docs/notes/go-rust-division.md` and `docs/test-organization.md`.

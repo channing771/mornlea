@@ -1,0 +1,567 @@
+{
+  "schema_version": 1,
+  "total_files": 112,
+  "total_lines": 10656,
+  "files": [
+    {
+      "path": "openspec/specs/authoritative-armor/spec.md",
+      "count": 91,
+      "digest": "1a9c6ca9a34a7268c8e590e6f2a2940a3f7bf00ad82531a8c9e4d31267e710a2"
+    },
+    {
+      "path": "openspec/specs/authoritative-bed-sleep/spec.md",
+      "count": 83,
+      "digest": "dd1593518d59f9037a4cfb8d4057fa82fc9559084e31818fda6461fe96451ba3"
+    },
+    {
+      "path": "openspec/specs/authoritative-chests/spec.md",
+      "count": 122,
+      "digest": "d6f8d5dc19df3f8bdff171daba26437a2cfbeea34a4bfd9f2f9dd62b78b22c2f"
+    },
+    {
+      "path": "openspec/specs/authoritative-companion-entities/spec.md",
+      "count": 63,
+      "digest": "0de5ac34e8a07607786ae120d10b9974fd6029c3406bdc7f121ddf118dcbe93c"
+    },
+    {
+      "path": "openspec/specs/authoritative-crafting/spec.md",
+      "count": 217,
+      "digest": "3f49a5ec8964baa47c8a6af583bdcf84df3e51a5f6bbfb3874d7c39cb95f0c02"
+    },
+    {
+      "path": "openspec/specs/authoritative-daylight/spec.md",
+      "count": 131,
+      "digest": "8072eb21b667d6636fd3df4a19aa3c07e3e5f1059b2a0641d26dd43ee674aced"
+    },
+    {
+      "path": "openspec/specs/authoritative-difficulty/spec.md",
+      "count": 46,
+      "digest": "4e7f673d5a8f9644d864392476da2432beff51d22cc7b9bc080b2177de1b28ec"
+    },
+    {
+      "path": "openspec/specs/authoritative-farming/spec.md",
+      "count": 288,
+      "digest": "6f6eba018758db141784e6bb58c9e98ee55ecc7261430671b21276c767d41834"
+    },
+    {
+      "path": "openspec/specs/authoritative-fluid/spec.md",
+      "count": 185,
+      "digest": "57b8b27f7eae4da470ddddacd407dfe9487dbaa567b7c66a90160efe1c588cd8"
+    },
+    {
+      "path": "openspec/specs/authoritative-furnaces/spec.md",
+      "count": 178,
+      "digest": "8ec098018c60e1696c3ab8300d781ba40e3208c3a0968cf46f40c0961afdd72c"
+    },
+    {
+      "path": "openspec/specs/authoritative-grid-crafting/spec.md",
+      "count": 156,
+      "digest": "c70ba1ac4b79db629adfb50cc92bfb3342345e70a5bd0c57f3bcb9cd8768cf19"
+    },
+    {
+      "path": "openspec/specs/authoritative-health/spec.md",
+      "count": 163,
+      "digest": "193c37cb1891aa00326d5b1cdd32695ee5dbc1e55e67258bfec2476c08852a73"
+    },
+    {
+      "path": "openspec/specs/authoritative-hostile-nightwalker/spec.md",
+      "count": 146,
+      "digest": "232d45a1d14b3545e23b2a9159bdc1dc6e7e57a762448803a07c7ad9f02e746a"
+    },
+    {
+      "path": "openspec/specs/authoritative-hotbar/spec.md",
+      "count": 129,
+      "digest": "dbd18fdbc215defa0edb7fd3277674c7d3e1b4a1acb0a77f7fc27640a448fc99"
+    },
+    {
+      "path": "openspec/specs/authoritative-hunger/spec.md",
+      "count": 157,
+      "digest": "f22dc8256ecac350d9f70de1478ed49074a8e54ded1d23579b748c2d7d725398"
+    },
+    {
+      "path": "openspec/specs/authoritative-inventory/spec.md",
+      "count": 187,
+      "digest": "c022539be717e1e06fb6a48e0f41801856ee57174a7d5e3770430e48262ae551"
+    },
+    {
+      "path": "openspec/specs/authoritative-item-dropping/spec.md",
+      "count": 101,
+      "digest": "4c78b4d1b8ebe16f05cfbf3a8e80cdb81b368e618fc2d4bd502eee3c1acfdf4f"
+    },
+    {
+      "path": "openspec/specs/authoritative-mining/spec.md",
+      "count": 195,
+      "digest": "ca576499f076495e0ed2efe879ea04943e7c716fa7445109c18f15ff96aae968"
+    },
+    {
+      "path": "openspec/specs/authoritative-player-melee/spec.md",
+      "count": 52,
+      "digest": "490a0231e70d00311a8bea141b98c2b1ea31bf7311996d507c27c0ecab39c938"
+    },
+    {
+      "path": "openspec/specs/authoritative-projectiles/spec.md",
+      "count": 61,
+      "digest": "ee039d7a3282d41bddd1b2b98862a6799eed63195e5e2bd20cf89c0532a5b9ee"
+    },
+    {
+      "path": "openspec/specs/authoritative-spawn-support/spec.md",
+      "count": 36,
+      "digest": "3b48540ad8f6d8a03ed5777721a178da460c7fcc19131e41c2d0b288f4ee7521"
+    },
+    {
+      "path": "openspec/specs/authoritative-weather/spec.md",
+      "count": 47,
+      "digest": "c0e51446b093ef4b3a7332cda0ba69c5fb0a4df798427ec1a5f0f737bd54530f"
+    },
+    {
+      "path": "openspec/specs/avatar-locomotion/spec.md",
+      "count": 33,
+      "digest": "ace8deae3d2359cdcf4e37b59b33724dd00a2ab805ea2d1eb706e81a7d4be290"
+    },
+    {
+      "path": "openspec/specs/bounded-benchmark-workload/spec.md",
+      "count": 271,
+      "digest": "1edac4a50884f90ad81ddabab4ae35f6982938abd22fd3f9c2eaa8e9964d870f"
+    },
+    {
+      "path": "openspec/specs/break-burst-particles/spec.md",
+      "count": 22,
+      "digest": "ed379f79b5528d459974a80d82246f7f1936e6e8e0f26dfa0d4777c57be40402"
+    },
+    {
+      "path": "openspec/specs/camera-perspectives/spec.md",
+      "count": 35,
+      "digest": "6885b1d72648166ff39b6d135fa07d65707c4fc645f1d9f3174298fa0d9bcdbf"
+    },
+    {
+      "path": "openspec/specs/celestial-sky-presentation/spec.md",
+      "count": 91,
+      "digest": "be87aa7a7832e699c26d07d077519b9b45df3b23e0f4882fb73c0578095be86f"
+    },
+    {
+      "path": "openspec/specs/chunk-persistence/spec.md",
+      "count": 48,
+      "digest": "7996aede84770b25fec77e8bca8a6cf138ed93c1a29ffd9d433bcbf972909cae"
+    },
+    {
+      "path": "openspec/specs/common-block-materials/spec.md",
+      "count": 96,
+      "digest": "5bc47d7f0e90f018c99004120d38ab3036ad66c60388e651c0b093edfba1034e"
+    },
+    {
+      "path": "openspec/specs/companion-agent-http-contract/spec.md",
+      "count": 51,
+      "digest": "3f6ee84f71d1283f9a8038979aa1085aa029be76ab51d4ea32662ae02157a418"
+    },
+    {
+      "path": "openspec/specs/companion-agent-mcp-tools/spec.md",
+      "count": 104,
+      "digest": "a0d83a167e033c954fef4b1120e1e6dbc0bbba571289f54aeaf4b94425f6e43e"
+    },
+    {
+      "path": "openspec/specs/companion-agent-memory/spec.md",
+      "count": 75,
+      "digest": "107bfcb49714ae6d8498b5ffc487010a47145b34e6f42866691066c5152313ca"
+    },
+    {
+      "path": "openspec/specs/companion-chat-protocol/spec.md",
+      "count": 73,
+      "digest": "1cb5c489857d51c2fcbfa1d625a4a47c4d00af63171d97540e1255598e12b3b7"
+    },
+    {
+      "path": "openspec/specs/companion-client-presentation/spec.md",
+      "count": 63,
+      "digest": "00f5a7d7c2d99756a80bfe7bd044d5b6fa7d0ade2522d8c31980366de62495c1"
+    },
+    {
+      "path": "openspec/specs/companion-dialogue/spec.md",
+      "count": 136,
+      "digest": "d591461d366b1122a3b175094114166889f5d1acf16cef11de7b1e9821be5bd0"
+    },
+    {
+      "path": "openspec/specs/companion-follow/spec.md",
+      "count": 37,
+      "digest": "bacaa31ede17dc60db92f489cf8905b87f90a207768c4c69cdb5edb13bdca32d"
+    },
+    {
+      "path": "openspec/specs/companion-identity-configuration/spec.md",
+      "count": 71,
+      "digest": "192c7dd18228589d73c0af1232389861b946a1a0edfbb32b9687df7dfd57aa16"
+    },
+    {
+      "path": "openspec/specs/companion-pathfinding/spec.md",
+      "count": 25,
+      "digest": "8b04837ee39e163e0832b84d0e7724a2dff46cff8ec0b7b0614408a561898fc1"
+    },
+    {
+      "path": "openspec/specs/companion-persistence/spec.md",
+      "count": 152,
+      "digest": "9f947a2a1e961509e171dc6fe2d0367f692c175d8a6610bb1b0cba6a7b294c15"
+    },
+    {
+      "path": "openspec/specs/companion-persona/spec.md",
+      "count": 34,
+      "digest": "f7c41bfa47446eb003f4c80314a38e8115a166f9d59d22131e7f00d835e47824"
+    },
+    {
+      "path": "openspec/specs/companion-planner/spec.md",
+      "count": 100,
+      "digest": "c7c7dd58965d11f19a1b2f550e1f01507b89e55b0a538fe818372decc026be29"
+    },
+    {
+      "path": "openspec/specs/companion-task-queue/spec.md",
+      "count": 62,
+      "digest": "1a64039eaee201122e1e3b8f6b50095568da2ed389877eda9d42236655f1681a"
+    },
+    {
+      "path": "openspec/specs/companion-world-actions/spec.md",
+      "count": 54,
+      "digest": "b9639cb4f47da4e3a6f5ed4d43b00dd5501df7d7fa5529a0cc72ff3f8c56f958"
+    },
+    {
+      "path": "openspec/specs/container-ui-presentation/spec.md",
+      "count": 69,
+      "digest": "c1a4c7d73d2d7bea20dbb4540ac703608631cc85d736a47784f8699d92433af8"
+    },
+    {
+      "path": "openspec/specs/cream-game-presentation/spec.md",
+      "count": 44,
+      "digest": "e0492883a7b352c52bc5fa70bf4b7d77fad038d52eab8c5bddb4c73b56de29e4"
+    },
+    {
+      "path": "openspec/specs/debug-panel/spec.md",
+      "count": 81,
+      "digest": "3bcbaea76c91cfa2ad126d0fda54d8d4db4078c909df082034960887fd42fbf0"
+    },
+    {
+      "path": "openspec/specs/deterministic-block-updates/spec.md",
+      "count": 54,
+      "digest": "435fcc8c5e509bcf6a25dcf1ae1da114bc73eba349c6b0c986ad5095d7b7f86f"
+    },
+    {
+      "path": "openspec/specs/deterministic-ore-generation/spec.md",
+      "count": 59,
+      "digest": "cc8d99771f11bd80fa0a386363b6d6787127ef8334d4c76cf4f4a43643210bfb"
+    },
+    {
+      "path": "openspec/specs/deterministic-tree-generation/spec.md",
+      "count": 54,
+      "digest": "929433778c332812c8bc8a9fe9f14a97a135daf68b849defb34202a9b1e6ec3b"
+    },
+    {
+      "path": "openspec/specs/dev-capture/spec.md",
+      "count": 86,
+      "digest": "dc3340306ef54a3126eba5de975dd66c144b82310320422b763397109b78c440"
+    },
+    {
+      "path": "openspec/specs/door/spec.md",
+      "count": 19,
+      "digest": "fb9269ea7f478126ee897935f3199319ca9973307722c7bfa15cc8b36e8c5137"
+    },
+    {
+      "path": "openspec/specs/first-person-viewmodel/spec.md",
+      "count": 121,
+      "digest": "e8fd5e6c89071e3910c555eaa676e459cffb0512e4db4d7fdb6bfd94fa472dfa"
+    },
+    {
+      "path": "openspec/specs/fluid-presentation/spec.md",
+      "count": 52,
+      "digest": "cfbfeb69ecbb524f4939720d04021ff63ce3fc3073b5f39993ac1994dc85d5ea"
+    },
+    {
+      "path": "openspec/specs/fluid-survival/spec.md",
+      "count": 97,
+      "digest": "e6609cf6367311d58ac52f805405474c268003feba89ddf0eede65b1f041bdf4"
+    },
+    {
+      "path": "openspec/specs/game-overlay-webview/spec.md",
+      "count": 54,
+      "digest": "1be1c9cc3597576e8f85e9c185f4ceac377f83f3f1c07585968864fc83c82dd6"
+    },
+    {
+      "path": "openspec/specs/hardware-performance-baselines/spec.md",
+      "count": 124,
+      "digest": "36618afe46b31c381889f9a258f4e71d629b74290c6630bf7b170a4e430f0c70"
+    },
+    {
+      "path": "openspec/specs/hostile-mob-persistence/spec.md",
+      "count": 57,
+      "digest": "e4952a28bfb9d7dcb18d83793168d7eaa370118389fbf4aaac3806868bd784e5"
+    },
+    {
+      "path": "openspec/specs/hostile-mob-protocol/spec.md",
+      "count": 59,
+      "digest": "ca9ff34ba136aaafa09b7b0778eab94386f54193e46a2dce67a3072733d9c144"
+    },
+    {
+      "path": "openspec/specs/local-audio-feedback/spec.md",
+      "count": 101,
+      "digest": "f62eff08c7bd2b965d9db6b5c9f5d8dd0b3988e79bc20f6cffb3af5d932a95ff"
+    },
+    {
+      "path": "openspec/specs/local-data-migration/spec.md",
+      "count": 67,
+      "digest": "cf3870489fff8f2fb12a79cb1dcebfa844a07dea20149ac944ce2a9090b0115c"
+    },
+    {
+      "path": "openspec/specs/mining-crack-presentation/spec.md",
+      "count": 71,
+      "digest": "485369b0f38f17726daf5883068fdf559d332b9ad969c6f3c25a68ee221d1df9"
+    },
+    {
+      "path": "openspec/specs/module-scoped-logging/spec.md",
+      "count": 25,
+      "digest": "b212a3ca879a633f9eeaf81918afcded760dfcb2dd13b5583dedf9ce117d9bee"
+    },
+    {
+      "path": "openspec/specs/multidimension-world/spec.md",
+      "count": 46,
+      "digest": "ace81fc3fe6050dbe3b5cec2bc3dec0b005b77e224c03ca31a21c6a3b61adf22"
+    },
+    {
+      "path": "openspec/specs/natural-grass-generation/spec.md",
+      "count": 59,
+      "digest": "2839a5e10860469aa1aeb273c074a505c778423ab55c518549b1f5d43bc77fa7"
+    },
+    {
+      "path": "openspec/specs/natural-material-generation/spec.md",
+      "count": 67,
+      "digest": "97e5c6bdbeac4a77fc4859a4a2f0f3aa78f2024578b58122c5aa187e88f90a05"
+    },
+    {
+      "path": "openspec/specs/oak-sapling-regrowth/spec.md",
+      "count": 166,
+      "digest": "1c20b46670f4ac900644f83573b475d5494827e1a57651b4465292510cd91b6a"
+    },
+    {
+      "path": "openspec/specs/passive-cattle-presentation/spec.md",
+      "count": 47,
+      "digest": "3f93274dbfc9ccd0dc0cfa9da6dfedbde7b24f8f0017dadbabd533bcafa40fb5"
+    },
+    {
+      "path": "openspec/specs/passive-cattle/spec.md",
+      "count": 77,
+      "digest": "3a54f851181e78f5d47d15cef01528d8a23e6a8af869619fe8e75caadac47993"
+    },
+    {
+      "path": "openspec/specs/passive-death-presentation/spec.md",
+      "count": 55,
+      "digest": "3c5958b93d52a34bf7ae3391f7a0fafd510a6511643629c94c5846677f969abf"
+    },
+    {
+      "path": "openspec/specs/passive-graze-lure/spec.md",
+      "count": 65,
+      "digest": "79fbc36d2e46f863d0331707ab308a5df1e112c490b3fed980b6861f1cceab24"
+    },
+    {
+      "path": "openspec/specs/passive-mob-persistence/spec.md",
+      "count": 53,
+      "digest": "c58bc657b9f06cb9e3e4fafbfd09dda9963f30f052be50ea7f3fa7faae50ab84"
+    },
+    {
+      "path": "openspec/specs/passive-mob-protocol/spec.md",
+      "count": 51,
+      "digest": "94599e239639ffdd86c16fac2131736e274a19e0320ea6a5aefbbdb190a28206"
+    },
+    {
+      "path": "openspec/specs/persistent-item-drops/spec.md",
+      "count": 170,
+      "digest": "7cdf38529bd3953cbbe7cfc2f3a000965d7dba8651b016822df83e7fff29017e"
+    },
+    {
+      "path": "openspec/specs/placeable-torches/spec.md",
+      "count": 88,
+      "digest": "932a0369a3691b2885282d396b02542207df2ced7619a4fadd45d0df98a6726e"
+    },
+    {
+      "path": "openspec/specs/plant-visual-presentation/spec.md",
+      "count": 42,
+      "digest": "e1d2bbaf36ef53d47cbf851baaba3b0e4a13e09dad4475392ecea8d8f66a7eaf"
+    },
+    {
+      "path": "openspec/specs/player-bow/spec.md",
+      "count": 53,
+      "digest": "6202fd280661e7566fa747e707d3f705855250376e305b98ad319ace47f1aafe"
+    },
+    {
+      "path": "openspec/specs/player-persistence/spec.md",
+      "count": 33,
+      "digest": "dbf907b355356d4bc45c535d3dfc04f88bf954e22ebd0068914dedd597cd595a"
+    },
+    {
+      "path": "openspec/specs/project-identity/spec.md",
+      "count": 51,
+      "digest": "d2765a8b344203cfa972573e2ff290e8f7a8d1304942826d349a5870e70bb1e9"
+    },
+    {
+      "path": "openspec/specs/ranged-hostile-mob/spec.md",
+      "count": 51,
+      "digest": "8784bc1c03125f46a647c288e794031e22cc4aa02c240bf485e76fc25e5a41ef"
+    },
+    {
+      "path": "openspec/specs/repository-code-organization/spec.md",
+      "count": 530,
+      "digest": "5c2f6d6220ddf33999110cc64edf733cb67633236690f8cf50040850cf0da747"
+    },
+    {
+      "path": "openspec/specs/rust-client-render-cutover/spec.md",
+      "count": 206,
+      "digest": "f0038f8291eb7fc003c94b6b2c2d20b3ce5f12764e865b874af024de47d3d968"
+    },
+    {
+      "path": "openspec/specs/rust-client-render-entities/spec.md",
+      "count": 63,
+      "digest": "46d4f1a7fa319b1f0bde047ab3c04cb9f7efd29752ba70fb63d9101d0bb63067"
+    },
+    {
+      "path": "openspec/specs/rust-client-render-terrain/spec.md",
+      "count": 37,
+      "digest": "ca69a061ceea51232c6bbecf69e36aacfbd184214bfbbe4143b9efb54e8c7bd1"
+    },
+    {
+      "path": "openspec/specs/rust-client-window/spec.md",
+      "count": 74,
+      "digest": "0e1b2b4a40008229b7adc9a615fe253cd2b8e2e0f45d270ff2f52a8e2daa9e9b"
+    },
+    {
+      "path": "openspec/specs/rust-engine-collision-raycast/spec.md",
+      "count": 50,
+      "digest": "e7a6962589f53c701d151f188a6ca16ad37cd33a05063c5c774b252d49e199e1"
+    },
+    {
+      "path": "openspec/specs/rust-engine-fluid/spec.md",
+      "count": 78,
+      "digest": "f1966bdf73f942e6c1a7264cf5f062a84c3786eb6de9439a76ab6361a7b2559f"
+    },
+    {
+      "path": "openspec/specs/rust-engine-lod-shell/spec.md",
+      "count": 102,
+      "digest": "cbf0c480263bf4fbba0a83cf463efe325e4d501d001de536a52aabd58005e0ce"
+    },
+    {
+      "path": "openspec/specs/rust-engine-mesh/spec.md",
+      "count": 109,
+      "digest": "b4ff3cc00eaabe999eb863a72e4785878a0d5c57c3d67e2a0cd0af9a57f54d2c"
+    },
+    {
+      "path": "openspec/specs/rust-engine-physics-step/spec.md",
+      "count": 55,
+      "digest": "793c4ce89720497848a48677b4abf7bca79c93bdbc768eeea187c005a2a27413"
+    },
+    {
+      "path": "openspec/specs/rust-engine-worldgen/spec.md",
+      "count": 86,
+      "digest": "505b07e36f0724bfdfe4c8e3608aa19d8b7d2cb1e701876feab37eb4e4d0e826"
+    },
+    {
+      "path": "openspec/specs/saturation-jitter/spec.md",
+      "count": 10,
+      "digest": "b9e134f559081ba85e8416bcdb03b99b70d7863a6ce6529aa76100c72354bc05"
+    },
+    {
+      "path": "openspec/specs/seasonal-time-temperature/spec.md",
+      "count": 49,
+      "digest": "de3e2e852de6e52e33d504cb59bfb876762b9bab89b745093c967540f078c83f"
+    },
+    {
+      "path": "openspec/specs/session-disconnect-reason/spec.md",
+      "count": 64,
+      "digest": "a14d6d7b73eb8ceea313a84bb917dfdf5d2a723d55b6d17efee9e49f7cecd341"
+    },
+    {
+      "path": "openspec/specs/settings-menu/spec.md",
+      "count": 113,
+      "digest": "e890f78d639e14742156ede9cc3c7cebccff363d6eda4ef9edff9d98500afdc7"
+    },
+    {
+      "path": "openspec/specs/short-block-presentation/spec.md",
+      "count": 33,
+      "digest": "5987a98a4a61e1c57dced9e797741291a4906800a495a324b74500ce8c661f39"
+    },
+    {
+      "path": "openspec/specs/sneak/spec.md",
+      "count": 58,
+      "digest": "8b4c365dab322ff50c4ca4dbe432505ebdc734f08cf46321fd75b29dad93ae25"
+    },
+    {
+      "path": "openspec/specs/snow-cover/spec.md",
+      "count": 69,
+      "digest": "03effe166d99b1f04d5ba2fb91c0a841c5e3854de31c5a70a6a5e79de81d5ccc"
+    },
+    {
+      "path": "openspec/specs/sprint/spec.md",
+      "count": 13,
+      "digest": "6fed3e73b9f66accc4741a833102ef1ed94a7442b9371cf19286e61b5f7eda40"
+    },
+    {
+      "path": "openspec/specs/stack-splitting/spec.md",
+      "count": 51,
+      "digest": "cbf14e8a5c0738f6cd2292671802a08db37769f95db2706fa3c5746ff94ea0fd"
+    },
+    {
+      "path": "openspec/specs/static-block-light/spec.md",
+      "count": 84,
+      "digest": "daf01355d4f507256dd0c46eef721a023c6f6ae6dee1525f603afc83b8421222"
+    },
+    {
+      "path": "openspec/specs/survival-hud-presentation/spec.md",
+      "count": 213,
+      "digest": "9fe10aa1b80969c6122fb76424d33a042b37030f51af1d9cd89092858e0863e2"
+    },
+    {
+      "path": "openspec/specs/test-timing-discipline/spec.md",
+      "count": 96,
+      "digest": "1fc1dd148a85bed0676af430f396a310fd0dd3e5dced3defc9ca8bd41fe4bce4"
+    },
+    {
+      "path": "openspec/specs/texture-pack-loading/spec.md",
+      "count": 60,
+      "digest": "3792a7d942dd1cef170e7232f117080417c99c8f001416c4f846483396d35052"
+    },
+    {
+      "path": "openspec/specs/tiered-swords-combat/spec.md",
+      "count": 88,
+      "digest": "abeebcd5d69171aaa158355e2ad7c8cd7ca9c2f84cd62b0715ac5f1711ff0298"
+    },
+    {
+      "path": "openspec/specs/tool-durability/spec.md",
+      "count": 201,
+      "digest": "6737ab5409011020cd9fae50d12633188d17f05c7ce5c7c714be1b969873ab14"
+    },
+    {
+      "path": "openspec/specs/tunable-constants/spec.md",
+      "count": 100,
+      "digest": "1b93a157c749f7189cdc7d222861d12a67a1b3f93f58638f901b72513afa1a99"
+    },
+    {
+      "path": "openspec/specs/visual-verification/spec.md",
+      "count": 429,
+      "digest": "bb57eeb3ebd912fb5994673e780cf88f4b882c36e82ae1d4f6d3db3c7a2a0532"
+    },
+    {
+      "path": "openspec/specs/voxel-visual-presentation/spec.md",
+      "count": 192,
+      "digest": "fa7d7e86d108623954ff6f1c554c0bc168e3062c6582757b297ce4f6227608dd"
+    },
+    {
+      "path": "openspec/specs/weather-camera-showcase/spec.md",
+      "count": 30,
+      "digest": "6b81038cc1fd0b1ddb4f9f76dd7e68448c820637d9482cc868c3e20804314b6b"
+    },
+    {
+      "path": "openspec/specs/webview-menu-ui/spec.md",
+      "count": 269,
+      "digest": "7a0ddb84cebe23b237fe27a024f024611e778a07cafda6895877154d18e3e26a"
+    },
+    {
+      "path": "openspec/specs/world-loading-screen/spec.md",
+      "count": 48,
+      "digest": "59058720b480423349fd5903b6054891bf8eb18b23247d297afbb1c14ee9bed4"
+    },
+    {
+      "path": "openspec/specs/world-streaming/spec.md",
+      "count": 61,
+      "digest": "05f7ffefb611123f3819dceb333b29166d8fd19c95fe385788261bb3ea21771b"
+    }
+  ]
+}
