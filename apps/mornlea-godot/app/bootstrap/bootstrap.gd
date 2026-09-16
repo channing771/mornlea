@@ -3,6 +3,7 @@ extends Node
 # Bootstrap intentionally owns diagnostics only; it never imports Python features or
 # starts networking before both native extensions have passed identity checks.
 const SETUP_REQUIRED_SCENE: PackedScene = preload("res://app/bootstrap/setup_required.tscn")
+const APP_ROOT_SCENE_PATH := "res://app/host/app_root.tscn"
 const EXPECTED_GODOT_VERSION := "4.7.2-stable"
 const PYTHON_DESCRIPTOR := "res://addons/py4godot/python.gdextension"
 const BRIDGE_DESCRIPTOR := "res://addons/mornlea_bridge/mornlea_bridge.gdextension"
@@ -46,6 +47,17 @@ func _ready() -> void:
 		"scripts/godot/build-python-runtime.sh --verify --offline"
 		+ " && scripts/godot/build-extension.sh --target %s --profile debug --verify" % target
 	)
+	if missing.is_empty() and mismatched.is_empty():
+		if _handoff_to_python():
+			print(
+				(
+					"[mornlea-bootstrap] state=ready target=%s missing=none mismatched=none"
+					+ " python=imported network=not-started"
+				)
+				% target
+			)
+			return
+		mismatched.append("python-host-load")
 	var setup_required := SETUP_REQUIRED_SCENE.instantiate()
 	add_child(setup_required)
 	setup_required.configure(target, missing, mismatched, prepare_command)
@@ -58,6 +70,19 @@ func _ready() -> void:
 		)
 		% [target, missing_text, mismatched_text, prepare_command]
 	)
+
+
+func _handoff_to_python() -> bool:
+	# The path is loaded only after both native distribution identities pass, so
+	# opening an incomplete checkout never parses or instantiates Python scripts.
+	var resource := ResourceLoader.load(APP_ROOT_SCENE_PATH, "PackedScene", ResourceLoader.CACHE_MODE_REUSE)
+	if not resource is PackedScene:
+		return false
+	var app_root := (resource as PackedScene).instantiate()
+	if app_root == null:
+		return false
+	add_child(app_root)
+	return true
 
 
 func _missing_artifacts() -> PackedStringArray:

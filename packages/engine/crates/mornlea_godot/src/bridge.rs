@@ -29,27 +29,27 @@ impl MornleaClientBridge {
     // Identity calls are deliberately allocation-free except for the Godot string
     // conversion and do not create a second path to engine or gameplay state.
     #[func]
-    fn client_core_abi_major(&self) -> i64 {
+    fn client_core_abi_major() -> i64 {
         CLIENT_CORE_ABI_MAJOR
     }
 
     #[func]
-    fn client_core_abi_minor(&self) -> i64 {
+    fn client_core_abi_minor() -> i64 {
         CLIENT_CORE_ABI_MINOR
     }
 
     #[func]
-    fn godot_api_major(&self) -> i64 {
+    fn godot_api_major() -> i64 {
         GODOT_API_MAJOR
     }
 
     #[func]
-    fn godot_api_minor(&self) -> i64 {
+    fn godot_api_minor() -> i64 {
         GODOT_API_MINOR
     }
 
     #[func]
-    fn godot_rust_version(&self) -> GString {
+    fn godot_rust_version() -> GString {
         GODOT_RUST_VERSION.into()
     }
 }

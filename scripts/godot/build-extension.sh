@@ -108,6 +108,20 @@ if [[ "${verify}" == "true" ]]; then
     printf 'Godot bridge identity verification failed.\n' >&2
     exit 1
   fi
+
+  if ! output="$("${script_dir}/godot.sh" \
+    --headless \
+    --path "${project_root}" \
+    --quit-after 300 \
+    res://tests/scenes/bridge_host_check.tscn 2>&1)"; then
+    printf '%s\n' "${output}" >&2
+    exit 1
+  fi
+  printf '%s\n' "${output}"
+  if [[ "${output}" == *"SCRIPT ERROR:"* || "${output}" == *"ERROR:"* || "${output}" != *"Python bridge host check passed."* ]]; then
+    printf 'Python bridge host verification failed.\n' >&2
+    exit 1
+  fi
 fi
 
 printf 'GDExtension built for %s/%s: %s\n' "${target}" "${profile}" "${destination_library}"

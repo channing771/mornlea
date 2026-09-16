@@ -92,7 +92,6 @@ func TestGodotBootstrapDiagnosesIncompleteDistribution(t *testing.T) {
 	for _, forbidden := range []string{
 		"res://features/",
 		"res://platform/",
-		"res://app/host/",
 		"StreamPeerTCP",
 		"HTTPClient",
 		"HTTPRequest",
@@ -112,6 +111,30 @@ func TestGodotBootstrapDiagnosesIncompleteDistribution(t *testing.T) {
 	} {
 		if !strings.Contains(smoke, required) {
 			t.Errorf("openable-smoke.sh is missing clean-state assertion %q", required)
+		}
+	}
+}
+
+func TestGodotPreparedBootstrapHandsOffToPythonDynamically(t *testing.T) {
+	root := repositoryRoot(t)
+	bootstrap := readBaselineDoc(t, root, filepath.Join("apps", "mornlea-godot", "app", "bootstrap", "bootstrap.gd"))
+	for _, required := range []string{
+		`const APP_ROOT_SCENE_PATH := "res://app/host/app_root.tscn"`,
+		"missing.is_empty() and mismatched.is_empty()",
+		"ResourceLoader.load(APP_ROOT_SCENE_PATH",
+		"state=ready",
+		"python=imported",
+	} {
+		if !strings.Contains(bootstrap, required) {
+			t.Errorf("prepared Bootstrap handoff is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		`preload("res://app/host/`,
+		`const APP_ROOT_SCENE: PackedScene`,
+	} {
+		if strings.Contains(bootstrap, forbidden) {
+			t.Errorf("permanent Bootstrap serializes Python host through %q", forbidden)
 		}
 	}
 }
@@ -281,6 +304,81 @@ func TestGodotPythonFeatureSkeletonsAndScriptOwnership(t *testing.T) {
 	}
 	if !strings.Contains(string(output), "features/world/illegal.gd") {
 		t.Fatalf("script-ownership failure did not identify the violating path:\n%s", output)
+	}
+}
+
+func TestGodotBridgeHostIsIdentityOnlyAndDesktopBound(t *testing.T) {
+	root := repositoryRoot(t)
+	descriptor := readBaselineDoc(t, root, filepath.Join("apps", "mornlea-godot", "addons", "mornlea_bridge", "mornlea_bridge.gdextension"))
+	for _, required := range []string{
+		`entry_symbol = "gdext_rust_init"`,
+		`compatibility_minimum = "4.7"`,
+		`macos.debug.arm64 = "res://addons/mornlea_bridge/bin/macos-universal/debug/libmornlea_godot.dylib"`,
+		`macos.release.arm64 = "res://addons/mornlea_bridge/bin/macos-universal/release/libmornlea_godot.dylib"`,
+		`macos.debug.x86_64 = "res://addons/mornlea_bridge/bin/macos-universal/debug/libmornlea_godot.dylib"`,
+		`macos.release.x86_64 = "res://addons/mornlea_bridge/bin/macos-universal/release/libmornlea_godot.dylib"`,
+		`linux.debug.x86_64 = "res://addons/mornlea_bridge/bin/linux-x86_64/debug/libmornlea_godot.so"`,
+		`linux.release.x86_64 = "res://addons/mornlea_bridge/bin/linux-x86_64/release/libmornlea_godot.so"`,
+		`windows.debug.x86_64 = "res://addons/mornlea_bridge/bin/windows-x86_64/debug/mornlea_godot.dll"`,
+		`windows.release.x86_64 = "res://addons/mornlea_bridge/bin/windows-x86_64/release/mornlea_godot.dll"`,
+	} {
+		if !strings.Contains(descriptor, required) {
+			t.Errorf("desktop GDExtension descriptor is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{"android", "ios", "web", "wasm", "console"} {
+		if strings.Contains(strings.ToLower(descriptor), forbidden) {
+			t.Errorf("desktop GDExtension descriptor contains unsupported selector %q", forbidden)
+		}
+	}
+
+	bridgeHost := readBaselineDoc(t, root, filepath.Join("apps", "mornlea-godot", "addons", "mornlea_bridge", "bridge_host.py"))
+	for _, required := range []string{
+		"class bridge_host(Node):",
+		"ClassDB.instance()",
+		`MornleaClientBridge`,
+		"def initialize_bridge",
+		"def host_protocol_version",
+		"def feature_family_version",
+		"def client_core_abi_version",
+		"def godot_api_version",
+		"def godot_rust_version",
+		"def bridge_identity",
+	} {
+		if !strings.Contains(bridgeHost, required) {
+			t.Errorf("Python bridge host is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{"ctypes", "cffi", "dlopen", "begin_connection", "submit_input", "frame_snapshot", "world_batch"} {
+		if strings.Contains(bridgeHost, forbidden) {
+			t.Errorf("identity-only Python bridge host contains premature data-plane token %q", forbidden)
+		}
+	}
+
+	appScene := readBaselineDoc(t, root, filepath.Join("apps", "mornlea-godot", "app", "host", "app_root.tscn"))
+	for _, required := range []string{"res://addons/mornlea_bridge/bridge_host.py", `[node name="BridgeHost" type="Node" parent="."]`} {
+		if !strings.Contains(appScene, required) {
+			t.Errorf("app-root scene is missing bridge-host wiring %q", required)
+		}
+	}
+	appRoot := readBaselineDoc(t, root, filepath.Join("apps", "mornlea-godot", "app", "host", "app_root.py"))
+	for _, required := range []string{`get_node("BridgeHost")`, `call("initialize_bridge")`, `bridge, 1)`} {
+		if !strings.Contains(appRoot, required) {
+			t.Errorf("app-root host handoff is missing %q", required)
+		}
+	}
+
+	buildScript := readBaselineDoc(t, root, filepath.Join("scripts", "godot", "build-extension.sh"))
+	for _, required := range []string{"aarch64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc", "bridge_host_check.tscn"} {
+		if !strings.Contains(buildScript, required) {
+			t.Errorf("desktop bridge build is missing %q", required)
+		}
+	}
+	pythonRuntime := readBaselineDoc(t, root, filepath.Join("scripts", "godot", "python-runtime-check.sh"))
+	for _, required := range []string{"--coexistence", "bridge_host_check.tscn", "Python bridge host check passed."} {
+		if !strings.Contains(pythonRuntime, required) {
+			t.Errorf("isolated bridge coexistence check is missing %q", required)
+		}
 	}
 }
 

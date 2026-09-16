@@ -14,17 +14,18 @@ func _run() -> void:
 	if not _failures.is_empty():
 		_finish()
 		return
-	var bridge: Object = ClassDB.instantiate("MornleaClientBridge")
-	_expect(bridge != null, "MornleaClientBridge could not be instantiated")
-	if bridge != null:
-		_expect(bridge.call("client_core_abi_major") == 1, "unexpected client-core ABI major")
-		_expect(bridge.call("client_core_abi_minor") == 0, "unexpected client-core ABI minor")
-		_expect(bridge.call("godot_api_major") == 4, "unexpected Godot API major")
-		_expect(bridge.call("godot_api_minor") == 7, "unexpected Godot API minor")
-		_expect(bridge.call("godot_rust_version") == "0.5.5", "unexpected godot-rust version")
+	_expect(_identity("client_core_abi_major") == 1, "unexpected client-core ABI major")
+	_expect(_identity("client_core_abi_minor") == 0, "unexpected client-core ABI minor")
+	_expect(_identity("godot_api_major") == 4, "unexpected Godot API major")
+	_expect(_identity("godot_api_minor") == 7, "unexpected Godot API minor")
+	_expect(_identity("godot_rust_version") == "0.5.5", "unexpected godot-rust version")
 	var engine_version := Engine.get_version_info()
 	_expect(engine_version.major == 4 and engine_version.minor == 7, "runtime Godot API is not 4.7")
 	_finish()
+
+
+func _identity(method: StringName) -> Variant:
+	return ClassDB.class_call_static("MornleaClientBridge", method)
 
 
 func _expect(condition: bool, message: String) -> void:

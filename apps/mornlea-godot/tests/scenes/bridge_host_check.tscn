@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://tests/scripts/bridge_host_check.py" id="1_check"]
+[ext_resource type="Script" path="res://addons/mornlea_bridge/bridge_host.py" id="2_bridge"]
+
+[node name="BridgeHostCheck" type="Node"]
+script = ExtResource("1_check")
+
+[node name="BridgeHost" type="Node" parent="."]
+script = ExtResource("2_bridge")

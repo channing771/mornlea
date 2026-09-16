@@ -38,13 +38,17 @@ trap cleanup EXIT
 
 usage() {
   printf '%s\n' \
-    'usage: scripts/godot/python-runtime-check.sh --qualify [--offline] [--target darwin-arm64] [--cache-dir ABSOLUTE_PATH]'
+    'usage: scripts/godot/python-runtime-check.sh (--qualify|--coexistence) [--offline] [--target darwin-arm64] [--cache-dir ABSOLUTE_PATH]'
 }
 
 while (($# > 0)); do
   case "$1" in
     --qualify)
       mode="qualify"
+      shift
+      ;;
+    --coexistence)
+      mode="coexistence"
       shift
       ;;
     --offline)
@@ -71,7 +75,8 @@ while (($# > 0)); do
   esac
 done
 
-[[ "${mode}" == "qualify" ]] || fail "--qualify is required"
+[[ "${mode}" == "qualify" || "${mode}" == "coexistence" ]] || \
+  fail "--qualify or --coexistence is required"
 [[ "${target}" == "darwin-arm64" ]] || fail "unsupported Py4Godot desktop target: ${target}"
 [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]] || \
   fail "unsupported Py4Godot desktop target: $(uname -s)-$(uname -m)"
@@ -141,6 +146,24 @@ run_isolated_executable() {
       "$@"
 }
 
+if [[ "${mode}" == "coexistence" ]]; then
+  "${script_dir}/build-extension.sh" --verify >/dev/null
+  coexistence_output="$(run_isolated --headless --path "${project_root}" --quit-after 120 \
+    res://tests/scenes/bridge_host_check.tscn 2>&1)" || {
+    printf '%s\n' "${coexistence_output}" >&2
+    fail "Py4Godot and mornlea_godot bridge-host coexistence probe failed"
+  }
+  [[ "${coexistence_output}" == *"Python bridge host check passed."* ]] || \
+    fail "Python bridge-host coexistence marker is missing"
+  [[ "${coexistence_output}" != *"ERROR:"* && "${coexistence_output}" != *"SCRIPT ERROR:"* ]] || {
+    printf '%s\n' "${coexistence_output}" >&2
+    fail "bridge-host coexistence probe reported an extension error"
+  }
+  [[ ! -e "${invocation_marker}" ]] || fail "an external Python or package installer was invoked"
+  printf 'Py4Godot and mornlea_godot coexist through the isolated Python bridge host.\n'
+  exit 0
+fi
+
 editor_output="$(run_isolated --headless --path "${project_root}" --editor --quit 2>&1)" || {
   printf '%s\n' "${editor_output}" >&2
   fail "editor failed to load the Python extension"
@@ -168,11 +191,11 @@ done
 
 "${script_dir}/build-extension.sh" --verify >/dev/null
 coexistence_output="$(run_isolated --headless --path "${project_root}" \
-  --script res://tests/scripts/bridge_identity_check.gd 2>&1)" || {
+  --quit-after 120 res://tests/scenes/bridge_host_check.tscn 2>&1)" || {
   printf '%s\n' "${coexistence_output}" >&2
   fail "Py4Godot and mornlea_godot coexistence probe failed"
 }
-[[ "${coexistence_output}" == *"Godot bridge identity check passed."* ]] || \
+[[ "${coexistence_output}" == *"Python bridge host check passed."* ]] || \
   fail "mornlea_godot coexistence marker is missing"
 [[ "${coexistence_output}" != *"ERROR:"* && "${coexistence_output}" != *"SCRIPT ERROR:"* ]] || {
   printf '%s\n' "${coexistence_output}" >&2

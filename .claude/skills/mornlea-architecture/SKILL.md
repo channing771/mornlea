@@ -26,6 +26,7 @@ Use this skill as a compact decision aid, not as a replacement for repository tr
 - Keep Godot Python production and development environments separate. Production dependencies remain explicitly empty unless independently approved; the embedded Py4Godot/CPython unit never receives Ruff, mypy, `uv`, `pip`, or developer packages. Lock development-only tools with the project `uv.lock` and type against local Py4Godot stubs rather than generated add-on modules.
 - Compose isolated Godot Python features through explicit catalog, manifest, scene, and resource paths. Do not depend on the project root being in `sys.path`, directory scanning, unrestricted dynamic imports, or sibling implementation imports; Godot owns discovery and Python owns the typed host lifecycle behind those resources.
 - Keep dynamic Godot resource ownership correct in the Py4Godot binding adapter or audited derivative. Host and feature code must not carry manual reference-count workarounds for generated-wrapper defects; repair and qualify those defects at the binding boundary so load, instantiate, reset, deactivate, and teardown remain leak-free.
+- With the current qualified Py4Godot derivative, Python must not use `ClassDB.instantiate()` for project GDExtension classes: it returns an unusable generic wrapper without an owned native pointer. Keep identity-only calls static through Godot `ClassDB`; any later Python-held native instance requires a binding-boundary repair plus lifecycle qualification before feature code may consume it.
 
 ## Visual and documentation direction
 
