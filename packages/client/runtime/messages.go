@@ -52,13 +52,16 @@ const (
 
 // `MessageOutcome` is the deterministic host-neutral result of one dequeued server message.
 // `Message` remains available when `Handled` is false so staged extraction cannot discard a
-// message class that a later runtime task still owns, notably authoritative `PlayerState`.
+// message class that a later runtime task still owns.
 type MessageOutcome struct {
-	Message   network.ServerMessage
-	Handled   bool
-	Changes   MirrorChanges
-	Container ContainerTransition
-	World     client.MirrorUpdate
+	Message           network.ServerMessage
+	Handled           bool
+	Changes           MirrorChanges
+	Container         ContainerTransition
+	World             client.MirrorUpdate
+	PredictionChanged bool
+	Reconcile         ReconcileResult
+	Prediction        PredictionSnapshot
 }
 
 // `MirrorState` is a copied, read-only view of every non-world authoritative mirror owned by the
@@ -115,23 +118,6 @@ func newSessionMirrors() *sessionMirrors {
 	}
 }
 
-func (mirrors *sessionMirrors) reset() {
-	// `client.Mirror` has no mutating reset because its chunk maps are constructor-owned; replacing
-	// it makes the session boundary explicit and prevents retained resync state from crossing epochs.
-	mirrors.world = client.NewMirror()
-	mirrors.inventory.Reset()
-	mirrors.crafting.Reset()
-	mirrors.chest.Reset()
-	mirrors.furnace.Reset()
-	mirrors.chat.Reset()
-	mirrors.itemDrops.Reset()
-	mirrors.remotePlayers.Reset()
-	mirrors.companions.Reset()
-	mirrors.hostiles.Reset()
-	mirrors.passives.Reset()
-	mirrors.projectiles.Reset()
-}
-
 // `DrainMessages` performs at most `budget` non-blocking receiver polls and appends one ordered
 // outcome per dequeued message. Remaining receiver work is deliberately left for a later frame.
 func (runtime *Runtime) DrainMessages(dst []MessageOutcome, budget int) ([]MessageOutcome, error) {
@@ -177,6 +163,13 @@ func (runtime *Runtime) applyMessageLocked(message network.ServerMessage) (Messa
 	outcome := MessageOutcome{Message: message, Handled: true}
 	mirrors := runtime.mirrors
 	switch message := message.(type) {
+	case network.PlayerState:
+		return runtime.applyPlayerStateLocked(outcome, message)
+	case *network.PlayerState:
+		if message == nil {
+			return outcome, errors.New("runtime: nil player state")
+		}
+		return runtime.applyPlayerStateLocked(outcome, *message)
 	case network.InventoryState:
 		if err := mirrors.inventory.Apply(message); err != nil {
 			return outcome, err
@@ -350,6 +343,11 @@ func (runtime *Runtime) applyMessageLocked(message network.ServerMessage) (Messa
 		if err != nil {
 			return outcome, err
 		}
+		if update.Resync != nil {
+			// Resync and player input share one session-wide sequence. The host may send this
+			// already-numbered immutable request but never allocates protocol identity itself.
+			update.Resync.Sequence = runtime.nextSequenceLocked()
+		}
 		outcome.Changes = flags
 		outcome.World = update
 		return outcome, nil
@@ -383,23 +381,26 @@ func blockChangesValue(message network.ServerMessage) (network.BlockChanges, boo
 	return network.BlockChanges{}, false
 }
 
-// `ResetMirrors` establishes a fresh session epoch without retaining any confirmed world, UI, or
-// entity fact. Host-owned presentation and device state remains outside this reset boundary.
+// `ResetMirrors` establishes a fresh session epoch without retaining confirmed mirrors, prediction,
+// input intent, or sequence state. Host-owned presentation and device state remains outside this
+// reset boundary.
 func (runtime *Runtime) ResetMirrors() {
 	if runtime == nil {
 		return
 	}
 	runtime.sessionMu.Lock()
 	defer runtime.sessionMu.Unlock()
-	runtime.resetMirrorsLocked()
+	runtime.resetSessionLocked()
 }
 
-func (runtime *Runtime) resetMirrorsLocked() {
-	if runtime.mirrors == nil {
-		runtime.mirrors = newSessionMirrors()
-		return
-	}
-	runtime.mirrors.reset()
+func (runtime *Runtime) resetSessionLocked() {
+	// Replace session-owned objects rather than mutating published copies. Hosts may safely retain
+	// earlier `MirrorState` and `PredictionSnapshot` values across an epoch transition.
+	runtime.mirrors = newSessionMirrors()
+	runtime.predictor = client.NewPredictor()
+	runtime.semanticInput = SemanticInput{}
+	runtime.sequence = 0
+	runtime.playerTick = 0
 }
 
 // `MirrorState` returns copied confirmed mirror values in deterministic entity order.

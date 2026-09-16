@@ -61,6 +61,13 @@ type Receiver interface {
 	Err() error
 }
 
+// `inputSender` is a non-owning outbound view of the logged-in endpoint. The receiver remains the
+// sole close owner; retaining this interface only lets prediction send protocol input with the
+// caller's explicit context until a later bounded outbound queue takes over frame stepping.
+type inputSender interface {
+	Send(context.Context, network.ClientMessage) error
+}
+
 // `RemoteDependencies` permits deterministic remote-construction tests without replacing the production protocol implementation.
 // A custom `Login` MUST close its input stream on error and transfer stream ownership to its non-nil endpoint on success; a nil function selects the existing constructor.
 type RemoteDependencies struct {
@@ -116,6 +123,10 @@ type Runtime struct {
 	phase         ConnectionPhase
 	sessionMu     sync.Mutex
 	mirrors       *sessionMirrors
+	predictor     *client.Predictor
+	semanticInput SemanticInput
+	sequence      uint64
+	playerTick    uint64
 	sessionClosed bool
 
 	resources  []Resource
@@ -124,6 +135,7 @@ type Runtime struct {
 	closeErr   error
 
 	receiver  Receiver
+	sender    inputSender
 	worldSeed uint64
 
 	terminalMu  sync.Mutex
@@ -182,17 +194,20 @@ func NewRemote(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, fmt.Errorf("runtime: create receiver: %w", err)
 	}
 
-	return newLoggedInRuntime(receiver, worldSeed), nil
+	return newLoggedInRuntime(receiver, endpoint, worldSeed), nil
 }
 
 // `newLoggedInRuntime` centralizes ownership transfer after a successful login without exposing a premature local-mode API.
-func newLoggedInRuntime(receiver Receiver, worldSeed uint64) *Runtime {
+// `sender` aliases the receiver-owned endpoint and MUST NOT be added to `resources` or closed separately.
+func newLoggedInRuntime(receiver Receiver, sender inputSender, worldSeed uint64) *Runtime {
 	return &Runtime{
 		phase:     ConnectionPhaseLoading,
 		resources: []Resource{receiver},
 		receiver:  receiver,
+		sender:    sender,
 		worldSeed: worldSeed,
 		mirrors:   newSessionMirrors(),
+		predictor: client.NewPredictor(),
 	}
 }
 
@@ -225,6 +240,7 @@ func New(options Options) (*Runtime, error) {
 		phase:     ConnectionPhaseNotReady,
 		resources: resources,
 		mirrors:   newSessionMirrors(),
+		predictor: client.NewPredictor(),
 	}, nil
 }
 
@@ -258,7 +274,7 @@ func (runtime *Runtime) Close() error {
 	runtime.closeOnce.Do(func() {
 		runtime.sessionMu.Lock()
 		runtime.sessionClosed = true
-		runtime.resetMirrorsLocked()
+		runtime.resetSessionLocked()
 		runtime.sessionMu.Unlock()
 
 		runtime.phaseMu.Lock()

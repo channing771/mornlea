@@ -20,7 +20,7 @@ func TestMessagesDrainBudgetAndMirrorTranscript(t *testing.T) {
 		network.ChestState{Chest: chest},
 		network.CraftingState{Size: 3},
 	}}
-	runtime := newLoggedInRuntime(receiver, 0)
+	runtime := newLoggedInRuntime(receiver, nil, 0)
 	t.Cleanup(func() { _ = runtime.Close() })
 
 	outcomes, err := runtime.DrainMessages(nil, 2)
@@ -58,23 +58,26 @@ func TestMessagesDrainBudgetAndMirrorTranscript(t *testing.T) {
 	}
 }
 
-func TestMessagesPreserveUnhandledPlayerStateForLaterRouting(t *testing.T) {
-	runtime := newLoggedInRuntime(&messageTestReceiver{}, 0)
+func TestMessagesRoutePlayerStateIntoPrediction(t *testing.T) {
+	runtime := newLoggedInRuntime(&messageTestReceiver{}, nil, 0)
 	message := network.PlayerState{ServerTick: 7, Dimension: core.Overworld}
 	outcome, err := runtime.ApplyMessage(message)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if outcome.Handled || outcome.Changes != 0 || outcome.Container != ContainerTransitionNone {
-		t.Fatalf("PlayerState outcome = %+v, want preserved and unhandled", outcome)
+	if !outcome.Handled || !outcome.PredictionChanged || outcome.Changes != 0 || outcome.Container != ContainerTransitionNone {
+		t.Fatalf("PlayerState outcome = %+v, want handled prediction change", outcome)
 	}
 	if got, ok := outcome.Message.(network.PlayerState); !ok || got.ServerTick != message.ServerTick {
 		t.Fatalf("preserved message = %#v, want %#v", outcome.Message, message)
 	}
+	if outcome.Prediction.Ready {
+		t.Fatal("not-ready PlayerState published a ready prediction")
+	}
 }
 
 func TestMessagesRejectInvalidMirrorStateAtomically(t *testing.T) {
-	runtime := newLoggedInRuntime(&messageTestReceiver{}, 0)
+	runtime := newLoggedInRuntime(&messageTestReceiver{}, nil, 0)
 	valid := network.InventoryState{}
 	if _, err := runtime.ApplyMessage(valid); err != nil {
 		t.Fatal(err)
@@ -98,7 +101,7 @@ func TestMessagesDrainDoesNotPublishRejectedOutcome(t *testing.T) {
 	invalid := network.InventoryState{}
 	invalid.Inventory.Hotbar.Selected = core.HotbarSlots
 	receiver := &messageTestReceiver{messages: []network.ServerMessage{invalid}}
-	runtime := newLoggedInRuntime(receiver, 0)
+	runtime := newLoggedInRuntime(receiver, nil, 0)
 
 	outcomes, err := runtime.DrainMessages(nil, 1)
 	if err == nil {
@@ -110,7 +113,7 @@ func TestMessagesDrainDoesNotPublishRejectedOutcome(t *testing.T) {
 }
 
 func TestMessagesWorldOutcomeDistinguishesAppliedBlockChanges(t *testing.T) {
-	runtime := newLoggedInRuntime(&messageTestReceiver{}, 0)
+	runtime := newLoggedInRuntime(&messageTestReceiver{}, nil, 0)
 	sections := make([]network.SectionData, core.SectionsPerChunk)
 	for index := range sections {
 		sections[index] = network.SectionData{Y: int32(index), Storage: network.SectionSingle, Single: core.AirID}
@@ -141,7 +144,7 @@ func TestMessagesWorldOutcomeDistinguishesAppliedBlockChanges(t *testing.T) {
 }
 
 func TestMessagesContainerCloseOnlyTransitionsMatchingView(t *testing.T) {
-	runtime := newLoggedInRuntime(&messageTestReceiver{}, 0)
+	runtime := newLoggedInRuntime(&messageTestReceiver{}, nil, 0)
 	chest := core.ContainerRef{Dimension: core.Overworld, Kind: core.ContainerKindChest, Generation: 1}
 	other := core.FurnaceRef{Dimension: core.Overworld, Generation: 1}
 	if _, err := runtime.ApplyMessage(network.ChestState{Chest: chest}); err != nil {
@@ -164,7 +167,7 @@ func TestMessagesContainerCloseOnlyTransitionsMatchingView(t *testing.T) {
 }
 
 func TestMirrorStateReturnsDetachedSlices(t *testing.T) {
-	runtime := newLoggedInRuntime(&messageTestReceiver{}, 0)
+	runtime := newLoggedInRuntime(&messageTestReceiver{}, nil, 0)
 	playerID := testRemoteIdentity(t).PlayerID
 	message := network.ChatEvent{
 		EventID: 1, PlayerID: playerID, PlayerName: "Pilot",
@@ -182,7 +185,7 @@ func TestMirrorStateReturnsDetachedSlices(t *testing.T) {
 }
 
 func TestMirrorResetOnCloseCannotBeRepopulated(t *testing.T) {
-	runtime := newLoggedInRuntime(&messageTestReceiver{}, 0)
+	runtime := newLoggedInRuntime(&messageTestReceiver{}, nil, 0)
 	if _, err := runtime.ApplyMessage(network.InventoryState{}); err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +256,7 @@ func TestMirrorResetClearsEverySessionOwnedMirror(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			runtime := newLoggedInRuntime(&messageTestReceiver{}, 0)
+			runtime := newLoggedInRuntime(&messageTestReceiver{}, nil, 0)
 			outcome, err := runtime.ApplyMessage(test.message)
 			if err != nil {
 				t.Fatalf("ApplyMessage(%T): %v", test.message, err)
