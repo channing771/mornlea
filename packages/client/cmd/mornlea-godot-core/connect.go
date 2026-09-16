@@ -132,11 +132,12 @@ const (
 )
 
 // clientSession is the per-session connection state owned by one session
-// table slot. All fields are guarded by `mu`; the object identity is fixed at
-// slot claim, so exports resolve the pointer through the table and then
-// synchronize here. The connect goroutine locks only `mu` (never the table
-// lock), so the lock order is table -> session everywhere and teardown never
-// deadlocks.
+// table slot. All fields are guarded by `mu` except `stepMu`, which is its own
+// leaf lock owned by the step family (see step.go); the object identity is
+// fixed at slot claim, so exports resolve the pointer through the table and
+// then synchronize here. The connect goroutine locks only `mu` (never the
+// table lock), so the lock order is table -> session everywhere and teardown
+// never deadlocks.
 type clientSession struct {
 	mu          sync.Mutex
 	state       connectState
@@ -144,6 +145,16 @@ type clientSession struct {
 	terminalErr error
 	cancel      context.CancelFunc
 	done        chan struct{}
+	// `stepMu` serializes the step family's single-driver discipline. It is
+	// acquired only by the step export and never while `mu` is held, so the
+	// step -> session lock order cannot invert against table -> session.
+	stepMu sync.Mutex
+	// The latest completed step result plus its presence flag are retained
+	// under `mu` for the world and frame pull families; see step.go for the
+	// single-producer retention ruling. Retention deliberately survives
+	// teardown so a terminal frame stays pullable after a disconnect.
+	stepResult    runtime.StepResult
+	hasStepResult bool
 }
 
 // begin starts one establishment. Only an idle session may begin: a second

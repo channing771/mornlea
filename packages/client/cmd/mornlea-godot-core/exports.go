@@ -13,7 +13,8 @@ import "unsafe"
 // The exported C surface of the client core. Each wrapper only converts raw
 // C arguments to the Go views its core function expects; every validation
 // decision, panic conversion, and output write lives in the testable core
-// functions (`coreCreate`, `coreDestroy`, `coreStatusIdentity`,
+// functions (`coreCreate`, `coreDestroy`, `coreConnectBegin`, `coreConnectPoll`,
+// `coreDisconnect`, `coreSubmitInput`, `coreStep`, `coreStatusIdentity`, and
 // `coreAbiVersion`). The wrappers never retain a caller pointer after the
 // call returns: the handle table owns all producer state.
 //
@@ -66,6 +67,15 @@ func mornlea_client_core_submit_input(handle C.uint64_t, buffer *C.uint8_t, leng
 	return C.uint32_t(coreSubmitInput(
 		uint64(handle),
 		(*byte)(unsafe.Pointer(buffer)),
+		uint32(length),
+	))
+}
+
+//export mornlea_client_core_step
+func mornlea_client_core_step(handle C.uint64_t, request *C.uint8_t, length C.uint32_t) C.uint32_t {
+	return C.uint32_t(coreStep(
+		uint64(handle),
+		(*byte)(unsafe.Pointer(request)),
 		uint32(length),
 	))
 }
