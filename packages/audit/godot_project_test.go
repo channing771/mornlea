@@ -387,8 +387,16 @@ func TestGodotLifecycleSmokeContract(t *testing.T) {
 	smoke := readBaselineDoc(t, root, filepath.Join("scripts", "godot", "smoke.sh"))
 	for _, required := range []string{
 		"--iterations",
+		"--isolated-python",
 		"build-python-runtime.sh",
 		"build-extension.sh",
+		"sandbox-exec",
+		"(deny network*)",
+		"PYTHONPATH",
+		"--mornlea-smoke-token=",
+		"pgrep -f",
+		"*.crash",
+		"*.ips",
 		"[mornlea-lifecycle] rust-init=scene",
 		"[mornlea-lifecycle] rust-init=main-loop",
 		"[mornlea-lifecycle] python-init=host",
