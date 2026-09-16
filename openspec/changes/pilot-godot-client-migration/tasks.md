@@ -44,7 +44,7 @@
 - [x] 4.6 Connect mesher scheduling/draining, the ready queue, backpressure, and section revision to runtime, continuing to call engine ABI v11 through `packages/client/mesh` and `packages/shared/nativeabi`. Test stale results, overflow, reset, and budgets before implementation. Verify with `go test ./packages/client/runtime -run 'Mesh|Section|Budget' -race -count=1` and `go test ./packages/client/client -run Mesher -race -count=1`.
 - [x] 4.7 Implement explicit `Step(elapsed,messageBudget,meshBudget)` in runtime. Each step publishes at most one `FrameSnapshot` and budgeted `WorldBatch`, MUST NOT read an implicit wall clock, and MUST NOT block on network. Verify with `go test ./packages/client/runtime -run 'Step|Bounded|NoWallClock' -race -count=1`.
 - [x] 4.8 Incrementally make the old `app.Frame` remote-message, prediction, and mesh paths consume runtime, retaining the current renderer/window/UI/audio and local Host assembly. Run characterization parity after each ownership loop moves. Verify with `go test ./packages/client/cmd/mornlea/app -race -count=1` and `make visual-check`.
-- [ ] 4.9 Add source/dependency audits in `packages/audit` that prohibit runtime/presentation from importing server, Godot, the client C ABI, Darwin, WebGPU, or device I/O. Verify with `go test ./packages/audit -run 'ClientRuntime|GodotBoundary' -count=1`.
+- [x] 4.9 Add source/dependency audits in `packages/audit` that prohibit runtime/presentation from importing server, Godot, the client C ABI, Darwin, WebGPU, or device I/O. Verify with `go test ./packages/audit -run 'ClientRuntime|GodotBoundary' -count=1`.
 
 ## 5. P3a: Define and implement client-core ABI v1
 
