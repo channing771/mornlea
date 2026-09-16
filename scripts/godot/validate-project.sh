@@ -7,7 +7,7 @@ project_root="${MORNLEA_GODOT_PROJECT_ROOT:-${repository_root}/apps/mornlea-godo
 failures=0
 
 usage() {
-  printf 'usage: %s [--script-ownership]\n' "${0##*/}" >&2
+  printf 'usage: %s [--script-ownership] [--desktop-only-fixtures] [--python-isolation-fixtures]\n' "${0##*/}" >&2
 }
 
 reject() {
@@ -202,14 +202,50 @@ validate_python_boundary() {
   done < <(find "${project_root}" -type f \( -name '*.py' -o -name '*.pyi' \) -print0)
   ((${#production_python[@]} > 0)) || return
 
-  if findings="$(rg -n --pcre2 '^\s*(?:from|import)\s+(?:aiohttp|cffi|ctypes|ensurepip|ftplib|http|mornlea_client_core|mornlea_engine|packages\.agent|pip|requests|socket|subprocess|urllib|uv|websockets)(?:\b|\.)' "${production_python[@]}")"; then
+  if findings="$(rg -n --pcre2 '^\s*(?:from|import)\s+(?:aiohttp|cffi|ctypes|ensurepip|ftplib|http|mornlea_client_core|mornlea_engine|packages\.agent|pip|requests|sitecustomize|socket|subprocess|urllib|usercustomize|uv|venv|websockets)(?:\b|\.)' "${production_python[@]}")"; then
     printf '%s\n' "${findings}" >&2
     reject "forbidden Python runtime dependency"
   fi
-  if findings="$(rg -n --pcre2 '\b(?:sys\.path\.(?:append|extend|insert)|site\.addsitedir|os\.(?:popen|system|exec\w*|spawn\w*)|(?:pip|ensurepip)\.|(?:urlopen|urlretrieve)\s*\(|requests\.(?:get|post|put|patch)\s*\()' "${production_python[@]}")"; then
+  if findings="$(rg -n --pcre2 "\\b(?:sys\\.path\\.(?:append|extend|insert)|site\\.(?:addsitedir|getusersitepackages)|site\\.(?:USER_SITE|ENABLE_USER_SITE)|os\\.(?:popen|system|exec\\w*|spawn\\w*)|(?:pip|ensurepip|venv)\\.|importlib\\.import_module\\s*\\(\\s*['\\\"](?:pip|ensurepip|uv)['\\\"]|(?:urlopen|urlretrieve)\\s*\\(|requests\\.(?:get|post|put|patch)\\s*\\()" "${production_python[@]}")"; then
     printf '%s\n' "${findings}" >&2
     reject "forbidden Python runtime search, installer, process, or download call"
   fi
+}
+
+validate_desktop_only() {
+  local source_path relative_path findings input_map
+
+  # Source closure rejects unsupported device and lifecycle declarations before
+  # any build or export tool can select platform artifacts.
+  if [[ -d "${project_root}/platform" ]]; then
+    while IFS= read -r -d '' source_path; do
+      relative_path="${source_path#${project_root}/}"
+      [[ "${relative_path}" == "platform/desktop" ]] || \
+        reject "unsupported mobile lifecycle or platform adapter: ${relative_path}"
+    done < <(find "${project_root}/platform" -mindepth 1 -maxdepth 1 -type d -print0)
+  fi
+
+  input_map="$(awk '
+    /^\[input\][[:space:]]*$/ { active=1; next }
+    /^\[/ { active=0 }
+    active { print }
+  ' "${project_root}/project.godot")"
+  if findings="$(printf '%s\n' "${input_map}" | rg -n -i '(?:touch(?:screen)?|screen_(?:touch|drag)|accelerometer|gyroscope|magnetometer|gravity_sensor|virtual_joystick)')"; then
+    printf '%s\n' "${findings}" >&2
+    reject "unsupported touch or mobile-sensor input"
+  fi
+
+  while IFS= read -r -d '' source_path; do
+    relative_path="${source_path#${project_root}/}"
+    case "${relative_path}" in
+      tests/*|addons/py4godot/*|.godot/*|.venv/*|.ruff_cache/*)
+        continue
+        ;;
+    esac
+    if [[ "${relative_path}" =~ (^|/)(mobile|android|ios|web|console)[_/-]?(lifecycle|pause|resume)?\.(gd|py)$ ]]; then
+      reject "unsupported mobile lifecycle or platform adapter: ${relative_path}"
+    fi
+  done < <(find "${project_root}" -type f \( -name '*.gd' -o -name '*.py' \) -print0)
 }
 
 validate_gdscript_runtime_boundary() {
@@ -347,18 +383,172 @@ validate_export_closure() {
   done < <(find "${project_root}/features" "${project_root}/platform/desktop" -type f -name feature.tres -print0 2>/dev/null || true)
 }
 
+run_full_validation() {
+  failures=0
+  validate_project_root
+  validate_resource_closure
+  validate_uid_policy
+  validate_script_ownership
+  validate_comment_language
+  validate_python_boundary
+  validate_gdscript_runtime_boundary
+  validate_desktop_only
+  validate_export_closure
+  ((failures == 0))
+}
+
+new_fixture_root() {
+  local fixture
+  # Mutation probes synthesize only the valid source closure, so the gate stays
+  # independent from generated native and embedded-Python artifacts.
+  fixture="$(mktemp -d "${TMPDIR:-/tmp}/mornlea-godot-validate.XXXXXX")"
+  mkdir -p "${fixture}/app/bootstrap" "${fixture}/app/host" "${fixture}/addons/mornlea_bridge"
+  printf '%s\n' \
+    '.godot/' \
+    '.venv/' \
+    '.ruff_cache/' \
+    'addons/mornlea_bridge/bin/' \
+    'addons/py4godot/' \
+    '__pycache__/' \
+    '*.py[cod]' > "${fixture}/.gitignore"
+  printf '%s\n' \
+    'config_version=5' \
+    '' \
+    '[application]' \
+    'run/main_scene="res://app/bootstrap/bootstrap.tscn"' > "${fixture}/project.godot"
+  printf '%s\n' \
+    '[preset.0]' \
+    'name="Mornlea macOS"' \
+    'platform="macOS"' \
+    'runnable=true' \
+    'export_filter="all_resources"' \
+    'include_filter="app/**/*.py,features/**/*.py,platform/desktop/**/*.py,addons/mornlea_bridge/*.py,assets/generated/**"' \
+    'exclude_filter="tests/**,typing/**,.venv/**,.ruff_cache/**,pyproject.toml,uv.lock,README*,app/bootstrap/setup_required.*,assets/provenance/**,assets/generated/**/*.provenance.json,assets/generated/**/PROVENANCE.json,addons/mornlea_bridge/bin/linux-x86_64/**,addons/mornlea_bridge/bin/windows-x86_64/**,addons/py4godot/cpython-*-linux*/**,addons/py4godot/cpython-*-windows*/**"' \
+    'export_path=""' \
+    '' \
+    '[preset.0.options]' > "${fixture}/export_presets.cfg"
+  printf '%s\n' 'extends Node' '# Bootstrap owns dependency diagnostics before Python can load.' > "${fixture}/app/bootstrap/bootstrap.gd"
+  printf '%s\n' 'uid://bootstrapfixture' > "${fixture}/app/bootstrap/bootstrap.gd.uid"
+  printf '%s\n' 'extends Control' '# Setup diagnostics never own gameplay behavior.' > "${fixture}/app/bootstrap/setup_required.gd"
+  printf '%s\n' 'uid://setupfixture' > "${fixture}/app/bootstrap/setup_required.gd.uid"
+  printf '%s\n' \
+    '[configuration]' \
+    'entry_symbol = "gdext_rust_init"' \
+    '' \
+    '[libraries]' \
+    'macos.debug.arm64 = "res://addons/mornlea_bridge/bin/macos-universal/debug/libmornlea_godot.dylib"' > "${fixture}/addons/mornlea_bridge/mornlea_bridge.gdextension"
+  printf '%s\n' 'uid://bridgefixture' > "${fixture}/addons/mornlea_bridge/mornlea_bridge.gdextension.uid"
+  printf '%s\n' 'from __future__ import annotations' '# Python owns feature lifecycle after Bootstrap hands off.' > "${fixture}/app/host/app_root.py"
+  printf '%s\n' "${fixture}"
+}
+
+expect_fixture_rejection() {
+  local name="$1"
+  local expected="$2"
+  local mutation="$3"
+  local fixture output status
+  fixture="$(new_fixture_root)"
+  case "${mutation}" in
+    export:*)
+      printf '\n[preset.1]\nname="fixture"\nplatform="%s"\n' "${mutation#export:}" >> "${fixture}/export_presets.cfg"
+      ;;
+    action:*)
+      printf '\n[input]\n%s={\n}\n' "${mutation#action:}" >> "${fixture}/project.godot"
+      ;;
+    lifecycle)
+      mkdir -p "${fixture}/platform/mobile"
+      printf 'from __future__ import annotations\n' > "${fixture}/platform/mobile/lifecycle.py"
+      ;;
+    selector:*)
+      printf '\n%s = "res://addons/mornlea_bridge/bin/unsupported/library"\n' "${mutation#selector:}" >> "${fixture}/addons/mornlea_bridge/mornlea_bridge.gdextension"
+      ;;
+    python:system-path)
+      mkdir -p "${fixture}/features/world"
+      printf "from __future__ import annotations\nimport sys\nsys.path.append('/usr/local/lib/python3.14')\n" > "${fixture}/features/world/fixture.py"
+      ;;
+    python:user-site)
+      mkdir -p "${fixture}/features/world"
+      printf 'from __future__ import annotations\nimport site\nsite.getusersitepackages()\n' > "${fixture}/features/world/fixture.py"
+      ;;
+    python:installer)
+      mkdir -p "${fixture}/features/world"
+      printf "from __future__ import annotations\nimport importlib\nimportlib.import_module('pip').main(['install', 'fixture'])\n" > "${fixture}/features/world/fixture.py"
+      ;;
+    *)
+      rm -rf "${fixture}"
+      printf 'unknown validation fixture mutation: %s\n' "${mutation}" >&2
+      return 2
+      ;;
+  esac
+  project_root="${fixture}"
+  set +e
+  output="$(run_full_validation 2>&1)"
+  status=$?
+  set -e
+  rm -rf "${fixture}"
+  if ((status == 0)) || [[ "${output}" != *"${expected}"* ]]; then
+    printf 'fixture %s was not rejected as expected:\n%s\n' "${name}" "${output}" >&2
+    return 1
+  fi
+  printf 'fixture rejected: %s\n' "${name}"
+}
+
+validate_desktop_only_fixtures() {
+  local platform selector action
+  for platform in Android iOS Web 'Nintendo Switch'; do
+    expect_fixture_rejection "${platform} export preset" "unsupported export platform" "export:${platform}"
+  done
+  for selector in android.debug.arm64 ios.debug.arm64 web.debug.wasm32 switch.debug.arm64; do
+    expect_fixture_rejection "${selector} selector" "unsupported platform selector" "selector:${selector}"
+  done
+  for action in touch_primary accelerometer_x; do
+    expect_fixture_rejection "${action} input" "unsupported touch or mobile-sensor input" "action:${action}"
+  done
+  expect_fixture_rejection "mobile lifecycle" "unsupported mobile lifecycle or platform adapter" lifecycle
+}
+
+validate_python_isolation_fixtures() {
+  expect_fixture_rejection "system Python path" "forbidden Python runtime search" python:system-path
+  expect_fixture_rejection "user site-package dependency" "forbidden Python runtime search" python:user-site
+  expect_fixture_rejection "runtime installer call" "forbidden Python runtime search" python:installer
+}
+
 mode="full"
-if (($# > 1)); then
+desktop_only_fixtures=0
+python_isolation_fixtures=0
+if (($# > 2)); then
   usage
   exit 2
 fi
-if (($# == 1)); then
-  [[ "$1" == "--script-ownership" ]] || {
-    usage
-    exit 2
-  }
-  mode="script-ownership"
-fi
+for argument in "$@"; do
+  case "${argument}" in
+    --script-ownership)
+      [[ "${mode}" == "full" && ${desktop_only_fixtures} == 0 && ${python_isolation_fixtures} == 0 ]] || {
+        usage
+        exit 2
+      }
+      mode="script-ownership"
+      ;;
+    --desktop-only-fixtures)
+      [[ "${mode}" == "full" && ${desktop_only_fixtures} == 0 ]] || {
+        usage
+        exit 2
+      }
+      desktop_only_fixtures=1
+      ;;
+    --python-isolation-fixtures)
+      [[ "${mode}" == "full" && ${python_isolation_fixtures} == 0 ]] || {
+        usage
+        exit 2
+      }
+      python_isolation_fixtures=1
+      ;;
+    *)
+      usage
+      exit 2
+      ;;
+  esac
+done
 
 [[ -d "${project_root}" ]] || {
   printf 'Godot project root is missing: %s\n' "${project_root}" >&2
@@ -373,14 +563,15 @@ if [[ "${mode}" == "script-ownership" ]]; then
   exit 0
 fi
 
-validate_project_root
-validate_resource_closure
-validate_uid_policy
-validate_script_ownership
-validate_comment_language
-validate_python_boundary
-validate_gdscript_runtime_boundary
-validate_export_closure
+if ((desktop_only_fixtures)); then
+  validate_desktop_only_fixtures
+fi
+if ((python_isolation_fixtures)); then
+  validate_python_isolation_fixtures
+fi
+if ((desktop_only_fixtures || python_isolation_fixtures)); then
+  exit 0
+fi
 
-((failures == 0)) || exit 1
+run_full_validation || exit 1
 printf 'Godot project closure validation passed.\n'

@@ -163,22 +163,51 @@ func TestGodotExportClosureExcludesDevelopmentResources(t *testing.T) {
 }
 
 func TestGodotDesktopOnlyRejectsUnsupportedTargets(t *testing.T) {
-	fixture := newGodotClosureFixture(t)
-	presets := strings.ReplaceAll(readGodotFixtureFile(t, filepath.Join(fixture, "export_presets.cfg")), `platform="macOS"`, `platform="Android"`)
-	writeGodotFixtureFile(t, filepath.Join(fixture, "export_presets.cfg"), presets)
-	output, err := runGodotProjectValidator(t, fixture)
-	if err == nil || !strings.Contains(output, "unsupported export platform") {
-		t.Fatalf("validator accepted a mobile export preset:\n%s", output)
+	for _, platform := range []string{"Android", "iOS", "Web", "Nintendo Switch"} {
+		t.Run(platform+" export preset", func(t *testing.T) {
+			fixture := newGodotClosureFixture(t)
+			presets := strings.ReplaceAll(readGodotFixtureFile(t, filepath.Join(fixture, "export_presets.cfg")), `platform="macOS"`, `platform="`+platform+`"`)
+			writeGodotFixtureFile(t, filepath.Join(fixture, "export_presets.cfg"), presets)
+			output, err := runGodotProjectValidator(t, fixture)
+			if err == nil || !strings.Contains(output, "unsupported export platform") {
+				t.Fatalf("validator accepted a non-desktop export preset:\n%s", output)
+			}
+		})
 	}
 
-	fixture = newGodotClosureFixture(t)
-	descriptorPath := filepath.Join(fixture, "addons", "mornlea_bridge", "mornlea_bridge.gdextension")
-	descriptor := readGodotFixtureFile(t, descriptorPath)
-	descriptor += "\nandroid.debug.arm64 = \"res://addons/mornlea_bridge/bin/android/libmornlea_godot.so\"\n"
-	writeGodotFixtureFile(t, descriptorPath, descriptor)
-	output, err = runGodotProjectValidator(t, fixture)
-	if err == nil || !strings.Contains(output, "unsupported platform selector") {
-		t.Fatalf("validator accepted a mobile GDExtension selector:\n%s", output)
+	for _, selector := range []string{"android.debug.arm64", "ios.debug.arm64", "web.debug.wasm32", "switch.debug.arm64"} {
+		t.Run(selector+" GDExtension selector", func(t *testing.T) {
+			fixture := newGodotClosureFixture(t)
+			descriptorPath := filepath.Join(fixture, "addons", "mornlea_bridge", "mornlea_bridge.gdextension")
+			descriptor := readGodotFixtureFile(t, descriptorPath)
+			descriptor += "\n" + selector + " = \"res://addons/mornlea_bridge/bin/unsupported/libmornlea_godot.so\"\n"
+			writeGodotFixtureFile(t, descriptorPath, descriptor)
+			output, err := runGodotProjectValidator(t, fixture)
+			if err == nil || !strings.Contains(output, "unsupported platform selector") {
+				t.Fatalf("validator accepted a non-desktop GDExtension selector:\n%s", output)
+			}
+		})
+	}
+
+	for _, action := range []string{"touch_primary", "accelerometer_x"} {
+		t.Run(action+" input action", func(t *testing.T) {
+			fixture := newGodotClosureFixture(t)
+			projectPath := filepath.Join(fixture, "project.godot")
+			project := readGodotFixtureFile(t, projectPath)
+			project += "\n[input]\n" + action + "={\n}\n"
+			writeGodotFixtureFile(t, projectPath, project)
+			output, err := runGodotProjectValidator(t, fixture)
+			if err == nil || !strings.Contains(output, "unsupported touch or mobile-sensor input") {
+				t.Fatalf("validator accepted a non-desktop input action:\n%s", output)
+			}
+		})
+	}
+
+	fixture := newGodotClosureFixture(t)
+	writeGodotFixtureFile(t, filepath.Join(fixture, "platform", "mobile", "lifecycle.py"), "from __future__ import annotations\n")
+	output, err := runGodotProjectValidator(t, fixture)
+	if err == nil || !strings.Contains(output, "unsupported mobile lifecycle or platform adapter") {
+		t.Fatalf("validator accepted a mobile lifecycle adapter:\n%s", output)
 	}
 }
 
@@ -191,6 +220,9 @@ func TestGodotPythonBoundaryRejectsAmbientRuntimeResolution(t *testing.T) {
 		{name: "runtime installer", source: "from __future__ import annotations\nimport pip\n", expected: "forbidden Python runtime dependency"},
 		{name: "runtime download", source: "from __future__ import annotations\nimport urllib.request\n", expected: "forbidden Python runtime dependency"},
 		{name: "ambient path mutation", source: "from __future__ import annotations\nimport sys\nsys.path.append('/tmp')\n", expected: "forbidden Python runtime search"},
+		{name: "system Python path", source: "from __future__ import annotations\nimport sys\nsys.path.append('/usr/local/lib/python3.14')\n", expected: "forbidden Python runtime search"},
+		{name: "user site-package dependency", source: "from __future__ import annotations\nimport site\nsite.getusersitepackages()\n", expected: "forbidden Python runtime search"},
+		{name: "runtime installer call", source: "from __future__ import annotations\nimport importlib\nimportlib.import_module('pip').main(['install', 'example'])\n", expected: "forbidden Python runtime search"},
 		{name: "non-English comment", source: "from __future__ import annotations\n# 禁止的架构注释。\n", expected: "non-English source comment"},
 	}
 	for _, mutation := range mutations {
