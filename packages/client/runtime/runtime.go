@@ -154,8 +154,11 @@ type Runtime struct {
 	cameraTargetReset bool
 	// Meshing remains entirely CPU-side: `client.Mesher` reaches engine ABI v11 only through the
 	// existing `mesh` and `nativeabi` ownership chain, while runtime owns scheduling and publication.
+	// `ownsMesher` distinguishes a runtime-created worker pool from an adopted host mesher that
+	// must survive runtime close.
 	meshOptions      MeshOptions
 	mesher           *client.Mesher
+	ownsMesher       bool
 	meshReady        meshReadyQueue
 	meshEpoch        uint64
 	sectionRevisions map[core.SectionKey]uint64

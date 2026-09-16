@@ -94,27 +94,38 @@ type WorldChunkState struct {
 
 // `sessionMirrors` is the complete authoritative mirror set owned by one runtime session.
 // It is intentionally private: hosts consume later immutable presentation snapshots rather than
-// mutating these mirrors around the runtime's validation and reset discipline.
+// mutating these mirrors around the runtime's validation and reset discipline. The four
+// value-shaped mirrors are held by pointer so an adopted session shares the host's own
+// fields instead of a diverging copy.
 type sessionMirrors struct {
 	world         *client.Mirror
-	inventory     client.InventoryMirror
-	crafting      client.CraftingMirror
-	chest         client.ChestMirror
-	furnace       client.FurnaceMirror
-	chat          client.ChatEvents
+	inventory     *client.InventoryMirror
+	crafting      *client.CraftingMirror
+	chest         *client.ChestMirror
+	furnace       *client.FurnaceMirror
+	chat          *client.ChatEvents
 	itemDrops     *client.ItemDrops
 	remotePlayers *client.RemotePlayers
-	companions    client.Companions
-	hostiles      client.Hostiles
-	passives      client.Passives
-	projectiles   client.Projectiles
+	companions    *client.Companions
+	hostiles      *client.Hostiles
+	passives      *client.Passives
+	projectiles   *client.Projectiles
 }
 
 func newSessionMirrors() *sessionMirrors {
 	return &sessionMirrors{
 		world:         client.NewMirror(),
+		inventory:     &client.InventoryMirror{},
+		crafting:      &client.CraftingMirror{},
+		chest:         &client.ChestMirror{},
+		furnace:       &client.FurnaceMirror{},
+		chat:          &client.ChatEvents{},
 		itemDrops:     client.NewItemDrops(),
 		remotePlayers: client.NewRemotePlayers(),
+		companions:    &client.Companions{},
+		hostiles:      &client.Hostiles{},
+		passives:      &client.Passives{},
+		projectiles:   &client.Projectiles{},
 	}
 }
 

@@ -39,8 +39,16 @@ func (a *Application) requestTrustedObserverCenter(center core.ChunkPos) error {
 	return a.server.SetTrustedObserverCenter(core.Overworld, center)
 }
 
+// nextSequence allocates the next protocol sequence number through the adopted
+// runtime so host-originated commands share one sequence space with runtime-
+// owned player input and chunk resyncs. The app field mirrors the last value so
+// a later re-adoption seeds the runtime without resetting the space.
 func (a *Application) nextSequence() uint64 {
-	a.sequence++
+	session := a.ensureSessionRuntime()
+	if session == nil {
+		return 0
+	}
+	a.sequence = session.NextSequence()
 	return a.sequence
 }
 
@@ -183,13 +191,12 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		activeScheduler = vista.scheduler
 		vista.pump(workMax)
 	} else {
-		a.mesher.Schedule(a.mirror, workMax)
-		for _, result := range a.mesher.Drain(a.mirror, workMax) {
-			if result.Dimension != core.Overworld {
-				continue
-			}
-			a.scheduler.SetConnectivity(result.Pos, result.Conn)
-			a.scheduler.QueueSection(result.Pos, result.Quads)
+		// Game-phase meshing advances through the adopted runtime, which owns
+		// the budgets, ready queue, and epochs; the existing scheduler only
+		// consumes the drained section results and keeps its upload semantics
+		// (near-first budget plus center trimming).
+		if err := a.advanceSessionMeshes(workMax); err != nil {
+			return false, err
 		}
 		a.scheduler.FlushUploads(a.center)
 	}

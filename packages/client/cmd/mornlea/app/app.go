@@ -15,6 +15,7 @@ import (
 	"github.com/channing771/mornlea/packages/client/mesh"
 	"github.com/channing771/mornlea/packages/client/render"
 	"github.com/channing771/mornlea/packages/client/render/hud"
+	clientruntime "github.com/channing771/mornlea/packages/client/runtime"
 	"github.com/channing771/mornlea/packages/server/server"
 	"github.com/channing771/mornlea/packages/shared/companion"
 	"github.com/channing771/mornlea/packages/shared/config"
@@ -226,7 +227,18 @@ type Application struct {
 	mirror          *client.Mirror
 	predictor       *client.Predictor
 	mesher          *client.Mesher
-	camera          client.Camera
+	// sessionRuntime is the lazily adopted runtime that routes protocol
+	// messages, prediction, and mesh scheduling onto the session objects above
+	// (see app_runtime.go). sessionAdoption records which objects the runtime
+	// was adopted from; a mismatch (world re-assembly, test/capture mirror
+	// swaps) forces a fresh adoption on the next use.
+	sessionRuntime  *clientruntime.Runtime
+	sessionAdoption sessionAdoption
+	// drainOutcomes and meshSections are per-frame reuse buffers for the bounded
+	// runtime drain and mesh publication; both stay bounded by their budgets.
+	drainOutcomes []clientruntime.MessageOutcome
+	meshSections  []clientruntime.MeshSectionResult
+	camera        client.Camera
 	// cameraMode 是本地三态视角（0=第一人称、1=第三人称背面、2=第三人称
 	// 正面）：纯本地呈现状态，随 F5 上升沿循环，不进服务端消息与权威字段；
 	// 会话重置与世界重装配不碰它，跨世界保留，退出世界时经 persistCameraMode

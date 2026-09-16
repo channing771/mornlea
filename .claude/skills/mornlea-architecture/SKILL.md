@@ -14,6 +14,7 @@ Use this skill as a compact decision aid, not as a replacement for repository tr
 - Go owns application/domain orchestration and the CPU side of presentation. `mornlea_engine` remains the sole production numerical implementation for the kernels it owns. GPU and host APIs stay outside Go packages.
 - Cross-language calls use the established versioned bridges. Validate identity, layout, pointers, lengths, alignment, overlap, capacity, and failure atomicity before publishing results. Do not add a production fallback beside a native implementation.
 - The per-step client frame aggregate is an immutable semantic value in `packages/client/presentation` (`FrameSnapshot`). Every host and any client-core ABI frame family consume that record instead of growing a second host-private or renderer-specific frame encoding.
+- A host with already-constructed session state consumes `packages/client/runtime` through the adoption seam instead of duplicating mirror, predictor, mesher, or sequence ownership; both Memory and remote TCP paths keep one behavior source, and payload-less drop operations never consume publication capacity reserved for upserts.
 - Messages and slices become immutable after a successful cross-goroutine send. Tick, network, render, bridge, and upload hot paths use explicit bounded work and avoid blocking I/O.
 
 ## Godot client direction

@@ -3,6 +3,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"time"
@@ -10,9 +11,9 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/packages/client/client"
+	clientruntime "github.com/channing771/mornlea/packages/client/runtime"
 	"github.com/channing771/mornlea/packages/shared/companion"
 	"github.com/channing771/mornlea/packages/shared/core"
-	"github.com/channing771/mornlea/packages/shared/network"
 	"github.com/channing771/mornlea/packages/shared/physics"
 )
 
@@ -520,24 +521,46 @@ func (a *Application) applyInteractiveInput(
 		Sneaking:  allowActions && movement.Sneaking,
 		Sprinting: allowActions && movement.Sprinting,
 	}
-	before, _ := a.predictor.State()
-	if err := a.predictor.Advance(
-		elapsed,
-		control,
-		client.MirrorCollisionSource{Mirror: a.mirror, Dimension: core.Overworld},
-		a.nextSequence,
-		func(input network.PlayerInput) error { return a.send(input) },
-	); err != nil {
+	// Prediction advances through the adopted runtime: it owns sequence
+	// allocation, fixed steps, and the outbound input seam, applying them to the
+	// same predictor object the readiness gate above observed.
+	session := a.ensureSessionRuntime()
+	if session == nil {
+		return
+	}
+	before := session.Prediction()
+	if !before.Ready {
+		return
+	}
+	if err := session.SubmitInput(clientruntime.SemanticInput{
+		MoveX:     control.MoveX,
+		MoveZ:     control.MoveZ,
+		Jump:      control.Jump,
+		Yaw:       control.Yaw,
+		Pitch:     control.Pitch,
+		Mining:    control.Mining,
+		Eating:    control.Eating,
+		Sprinting: control.Sprinting,
+		Sneaking:  control.Sneaking,
+	}); err != nil {
+		slog.Warn("提交语义输入失败", "error", err)
+	}
+	// The synchronous runtime seam reuses the legacy per-input 100ms send
+	// deadline; `elapsed` keeps the interactive loop's 100ms clamp above.
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	after, err := session.AdvancePrediction(ctx, elapsed)
+	a.sequence = session.Sequence()
+	if err != nil {
 		slog.Warn("推进玩家预测失败", "error", err)
 	}
 	// 踩雪音效与踢雪尘在本地预测推进后就地观测（app_snow.go）：读一次落足格，
 	// 步频出声、事件沿写入本帧踢雪输入，供随后的 `RenderFrame` 装配消费。
-	after, _ := a.predictor.State()
-	a.observeSnowFeedback(before, after, control)
-	if feet, ok := a.predictor.PresentationPosition(elapsed); ok {
+	a.observeSnowFeedback(before.State, after.State, control)
+	if after.PresentationReady {
 		// 相机视线高度必须与服务端交互射线原点使用同一份参数，否则玩家瞄准的方块
 		// 与服务端判定的方块不是同一个。
-		a.camera.Pos = feet.Add(mgl32.Vec3{0, physics.ActiveTunables().EyeHeight, 0})
+		a.camera.Pos = after.PresentationPosition.Add(mgl32.Vec3{0, physics.ActiveTunables().EyeHeight, 0})
 		a.center = CameraChunk(a.camera.Pos)
 	}
 }
