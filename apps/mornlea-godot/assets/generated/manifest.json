@@ -431,6 +431,11 @@
       "bytes": 16437364
     },
     {
+      "path": "fonts/NotoSansCJKsc-Regular.otf.import",
+      "sha256": "ce187524c7da6af64ab6fee8ef76d6cf1443e398ba77a7fb1c50e77a445eb3b6",
+      "bytes": 811
+    },
+    {
       "path": "fonts/NotoSansCJKsc-Regular.provenance.json",
       "sha256": "26459b24c33391b81226aa277d18862fe13b951b5651d61f90f1f8a2979cf83f",
       "bytes": 503

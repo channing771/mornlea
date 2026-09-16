@@ -18,6 +18,7 @@ Use this skill as a compact decision aid, not as a replacement for repository tr
 ## Godot client direction
 
 - `apps/mornlea-godot/` is the stable Godot project root. `project.godot` and the pure Godot bootstrap remain stable as the pilot grows into a production client.
+- Treat the source project and every export preset as explicit resource closures. Keep one root `project.godot`; reject parent or absolute resource references, escaping or broken source symlinks, implicit autoload state, ignored UID/import sidecars, and generated editor cache state in Git. Each preset may target macOS, Windows, or Linux desktop only and must exclude tests, development tooling, setup diagnostics, provenance, catalog-unselected features, and every non-target native/Python library family. Add target-specific closure rules when another desktop preset is introduced instead of weakening the common gate.
 - `app/` is a feature-agnostic host. Coarse independently replaceable vertical capabilities live under `features/`; ordinary scenes and leaf components do not receive plugin manifests.
 - Product assembly flows one way: launch profile → feature catalog → feature manifest → required client-core feature families → client-core registry.
 - Godot and GDScript own scene composition, desktop input adaptation, UI, rendering resources, and presentation. They do not own protocol decoding, authoritative mirrors, prediction rules, saves, or numerical gameplay kernels.

@@ -1,5 +1,6 @@
 .godot/
 .venv/
+.ruff_cache/
 addons/mornlea_bridge/bin/
 addons/py4godot/
 __pycache__/

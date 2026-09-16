@@ -95,6 +95,19 @@ func TestGodotAssetSyncIsDeterministicAndRejectsManualFiles(t *testing.T) {
 			t.Errorf("asset manifest inputs are missing %s", required)
 		}
 	}
+	outputPaths := make([]string, 0, len(manifest.Outputs))
+	for _, output := range manifest.Outputs {
+		outputPaths = append(outputPaths, output.Path)
+	}
+	if !slices.Contains(outputPaths, "fonts/NotoSansCJKsc-Regular.otf.import") {
+		t.Error("asset manifest outputs are missing the deterministic Godot font import sidecar")
+	}
+	fontImport := readBaselineDoc(t, root, filepath.Join("apps", "mornlea-godot", "assets", "generated", "fonts", "NotoSansCJKsc-Regular.otf.import"))
+	for _, required := range []string{`uid="uid://`, `source_file="res://assets/generated/fonts/NotoSansCJKsc-Regular.otf"`, "allow_system_fallback=false"} {
+		if !strings.Contains(fontImport, required) {
+			t.Errorf("deterministic font import policy is missing %q", required)
+		}
+	}
 
 	runGodotAssetSync(t, script, "", "--check", true)
 	first := filepath.Join(t.TempDir(), "generated")

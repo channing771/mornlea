@@ -28,6 +28,44 @@ const (
 	atlasHeight           = 16
 	atlasMipLevels        = 5
 	manifestName          = "manifest.json"
+	fontImportName        = "NotoSansCJKsc-Regular.otf.import"
+	fontImportMetadata    = `[remap]
+
+importer="font_data_dynamic"
+type="FontFile"
+uid="uid://et7oghf10wjg"
+path="res://.godot/imported/NotoSansCJKsc-Regular.otf-e98c491611140aed2e70770cc4359f87.fontdata"
+
+[deps]
+
+source_file="res://assets/generated/fonts/NotoSansCJKsc-Regular.otf"
+dest_files=["res://.godot/imported/NotoSansCJKsc-Regular.otf-e98c491611140aed2e70770cc4359f87.fontdata"]
+
+[params]
+
+Rendering=null
+antialiasing=1
+generate_mipmaps=false
+disable_embedded_bitmaps=true
+multichannel_signed_distance_field=false
+msdf_pixel_range=8
+msdf_size=48
+allow_system_fallback=false
+force_autohinter=false
+modulate_color_glyphs=false
+hinting=3
+subpixel_positioning=4
+keep_rounding_remainders=true
+oversampling=0.0
+Fallbacks=null
+fallbacks=[]
+Compress=null
+compress=true
+preload=[]
+language_support={}
+script_support={}
+opentype_features={}
+`
 )
 
 var registeredFontFiles = []string{
@@ -164,6 +202,14 @@ func materialize(repositoryRoot, stageRoot string) error {
 		); err != nil {
 			return err
 		}
+	}
+	// The import sidecar fixes font identity and import policy across clean
+	// workspaces instead of delegating those decisions to an editor cache.
+	if err := writeFile(
+		filepath.Join(stageRoot, "fonts", fontImportName),
+		[]byte(fontImportMetadata),
+	); err != nil {
+		return err
 	}
 	materialRoot := filepath.Join(assetsRoot, "packs", "pastelcraft")
 	for _, name := range retainedMaterialNotices {
