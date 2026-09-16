@@ -1,0 +1,459 @@
+{
+  "schema_version": 1,
+  "generator": "packages/client/cmd/mornlea-godot-assets",
+  "input_revision": {
+    "assets_git_tree": "ced29dd2ab2cf77796cdfc43d8dc3a4876d514be",
+    "fonts_git_tree": "8d3ac392aaf29419a01a18775e6f5425fda6367f"
+  },
+  "input_checksum": "a287a03efbd4ada644b28c7d712e78d4e5ceddede3fd34ea24b77222c63bb181",
+  "inputs": [
+    {
+      "path": "packages/client/assets/ITEM_ICONS.md",
+      "sha256": "bb3d344eeeb6319f64903c704a42f336c14926dfe7be2e8fedf40a5d1dc183da",
+      "bytes": 1287
+    },
+    {
+      "path": "packages/client/assets/atlas.go",
+      "sha256": "552b33d12b43f5c9ca28a28b981572a4106c70b0d251b7abc17221f7c159d162",
+      "bytes": 2005
+    },
+    {
+      "path": "packages/client/assets/atlas_test.go",
+      "sha256": "165bfeda8a4f225fc493160dd854f9e26b16c069623694e594feaf14db8c00c5",
+      "bytes": 5904
+    },
+    {
+      "path": "packages/client/assets/avatar.go",
+      "sha256": "f88b704b05996435a36df00203c58c7af53f0eb277627ed0709e3705afad1cce",
+      "bytes": 3056
+    },
+    {
+      "path": "packages/client/assets/avatar_test.go",
+      "sha256": "a36a86eabef6273040b5e19d21d309c8332a5f1303b6a20366c08d0d6e670b3b",
+      "bytes": 1150
+    },
+    {
+      "path": "packages/client/assets/bed_test.go",
+      "sha256": "2348cac9dad6cc36b2e0086d61457506903e249a2162f8a321e21eb4d04e5ef4",
+      "bytes": 13255
+    },
+    {
+      "path": "packages/client/assets/blocks.go",
+      "sha256": "79fdac926b1a503ce37f4cddcb9e5c420eddaa4b868fe5ef2acbc1cd7b304a77",
+      "bytes": 36493
+    },
+    {
+      "path": "packages/client/assets/blocks_test.go",
+      "sha256": "89d37f54a338bd088588ba9f747db60c7a5ab1874ee2caefe322e0c7bbdde1ad",
+      "bytes": 36144
+    },
+    {
+      "path": "packages/client/assets/cattle.go",
+      "sha256": "36135cf6211445b72b7da84f5baedc9413fbaebfb22be433b2fa56ca64ab9aef",
+      "bytes": 5967
+    },
+    {
+      "path": "packages/client/assets/cattle_test.go",
+      "sha256": "6e7f0a8b40b6b8828a2c47ec076e7c2d7f03458b6830c7b48f0ca43b6a762d27",
+      "bytes": 10845
+    },
+    {
+      "path": "packages/client/assets/crack.go",
+      "sha256": "bfa514e6609dd13803de24da3fe6ce7f56ae916f08c4803690e76af5ec2d4e62",
+      "bytes": 13382
+    },
+    {
+      "path": "packages/client/assets/crack_test.go",
+      "sha256": "3e2cca6611cbc612b85c6f90a9e0105e2c1799e2766653ec9c60050be2a3c0e8",
+      "bytes": 9514
+    },
+    {
+      "path": "packages/client/assets/default_pack.go",
+      "sha256": "3f1739b7fc2825201cf5dd9c4361da30021270b9ba47af1daaf112de269a56c3",
+      "bytes": 861
+    },
+    {
+      "path": "packages/client/assets/default_pack_test.go",
+      "sha256": "57fe3df71931d2d99387e197f72d14a40caaba35f512b06508a8fe614c500711",
+      "bytes": 25120
+    },
+    {
+      "path": "packages/client/assets/farmland_layers_test.go",
+      "sha256": "165c930d3f6dd516480e72732d8c376fa994f10168ed634c7db29c3c125801d8",
+      "bytes": 3010
+    },
+    {
+      "path": "packages/client/assets/item_icons.go",
+      "sha256": "ecd83ce8807f207ebfa17a8434f412cc02bfb55f36b3f0483a97304bf165983f",
+      "bytes": 22835
+    },
+    {
+      "path": "packages/client/assets/item_icons_test.go",
+      "sha256": "a4ea9d528a48099c903812d40cd4c9a22b870e554a82703292fc3f919d82d78c",
+      "bytes": 7529
+    },
+    {
+      "path": "packages/client/assets/item_prisms_test.go",
+      "sha256": "e4d4e47f06d96c95713991b3216ba6f944573542ab6fa9aaa8839e39724168d1",
+      "bytes": 2219
+    },
+    {
+      "path": "packages/client/assets/item_tools.go",
+      "sha256": "cd47bb8018b75e1033193fe4eaf6dd39f83e1ca1e957e545acc14817bbcc8fcc",
+      "bytes": 7304
+    },
+    {
+      "path": "packages/client/assets/item_tools_test.go",
+      "sha256": "1814389bd19b07a18c5e0c4c1a681c815e2bc9a6dc6c557c24bcee950e246ba5",
+      "bytes": 11227
+    },
+    {
+      "path": "packages/client/assets/pack.go",
+      "sha256": "9eecdd05bf7c278b0da34dc426bc94bb57c0430b985388bd8f23120909140454",
+      "bytes": 3805
+    },
+    {
+      "path": "packages/client/assets/pack_test.go",
+      "sha256": "3192417f105e5f1d3ef87481fdf6686e61f30d91f50dfa819cd9b19c6498b845",
+      "bytes": 12980
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/ATTRIBUTION.md",
+      "sha256": "055886d7cf7b089cfa6f0892c7b758f1581a057b65fd2b1098f2b8f5f66fe917",
+      "bytes": 5112
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/LICENSE.txt",
+      "sha256": "8bf97eb82f6ae8f62059b8142d77fa8d7911c16eff29ea4c1de087324fb54b67",
+      "bytes": 1066
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/PROVENANCE.json",
+      "sha256": "cf9987a7b9ee7af0ba8d894561387a217ab715c07b6744d88343d08634e78770",
+      "bytes": 10516
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/pack.json",
+      "sha256": "5768ba6e6f147ad5976013e96b79de05888de85f51fc1393efb7d561a97f7559",
+      "bytes": 46
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/bedrock.png",
+      "sha256": "aadde2598058f3ba574fff159721fc2bbe6115c6045ad8101991e9fb2e47f433",
+      "bytes": 404
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/brick.png",
+      "sha256": "9f9b65b189af13d13a9c0cfb5676d24c52f153cecbf19e5bd4c2bfa7d5809fd8",
+      "bytes": 486
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/carrot_0.png",
+      "sha256": "d4c9e2b94487fa97457052c3f0f8076b5fd9f340e83b1d134bd426b461270999",
+      "bytes": 199
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/carrot_1.png",
+      "sha256": "a575abbe1401dc7f3d5e6ef8958e4b65206d307e74f45619749769956a2cd304",
+      "bytes": 182
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/carrot_2.png",
+      "sha256": "cb2d4b6c3b1b66b1b8e9d55701a2554ba5d29ce9140daebcd503fdc50058183e",
+      "bytes": 254
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/carrot_3.png",
+      "sha256": "b00af51b52bb46008725632627c7463c78991b986e7e9c9db6b384191d09eee1",
+      "bytes": 277
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/clay.png",
+      "sha256": "a528dae6c2316693e1044373a76d4abf55c71db515bb5914e465ccf40ec05d28",
+      "bytes": 353
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/coal_ore.png",
+      "sha256": "c2742cb339e37bb7b22bb6d12eb9dd8b303d534e7fd7bd982ef7d0a3a5af873e",
+      "bytes": 524
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/cobblestone.png",
+      "sha256": "11b2fd468a59cf62eeeec9479cca836f959ce824156ff120fecd7c469d3fbe4d",
+      "bytes": 446
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/cooked_beef.png",
+      "sha256": "fc3c9f5bf88d196ef2f557b5035bc725462dd7861ed643e73406215d9b758316",
+      "bytes": 258
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/dirt.png",
+      "sha256": "944dbed5c954448daeebeacc99df500a73877e3df38f5af13b512d7040119c9c",
+      "bytes": 472
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/farmland_dry.png",
+      "sha256": "86288cb81671f989113ea4cb26dc1a291e54af46d7d134f69c51a5a9e56a0cf8",
+      "bytes": 244
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/farmland_wet.png",
+      "sha256": "6cd95314ad2ecad725a7a632a888290ec807672835ab5c1646dd4678dbcda251",
+      "bytes": 360
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/furnace.png",
+      "sha256": "ab9c9e0edc8e2a182f7343ec2e01d8ae50f7d5c327bd9e20fcd32cbca27645a4",
+      "bytes": 374
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/glass.png",
+      "sha256": "60a39f15b91ac0d48822583fa50ff965fca8d65349e1708ca72c4a76841b15cb",
+      "bytes": 257
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/grass_side.png",
+      "sha256": "728610a71c1f87905d364403860477917b3141c3821338c83477cd254c1b55fe",
+      "bytes": 563
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/gravel.png",
+      "sha256": "ee49a4c80f4d3ff2d6302b1206f497aab7e1ea9d0c21b8e3d4c2011e5f6a0abe",
+      "bytes": 502
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/iron_block.png",
+      "sha256": "7b8b29277b1e9b9a7f032869ae32cef8bd3a88bfef6f5dcbd9d9bee67a9d2631",
+      "bytes": 288
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/iron_ore.png",
+      "sha256": "416e84a0007ec6bf69d8fb575a86220359dae1740b8e4113c4cc9f491d40ecfc",
+      "bytes": 450
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/mossy_cobblestone.png",
+      "sha256": "5f5a32aa9f0ba522722494335950a51ba4a3f097f7d48fa7ab815806ea456206",
+      "bytes": 648
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/oak_log_side.png",
+      "sha256": "5b745fc3276a50370986d92509daa38b543207b5a629a23c1cc29dc1ef54f508",
+      "bytes": 444
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/oak_log_top.png",
+      "sha256": "5bf7ea69add7217929e5dfbc66637f5a657c4b1da165022ce5786d5695beb51e",
+      "bytes": 360
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/oak_planks.png",
+      "sha256": "a0fec8a8d1343627946fd8d13676a2799f5cf3bf5a7f04c403bce1987167512d",
+      "bytes": 359
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/potato_0.png",
+      "sha256": "0268638661548598c7ea8a8325ed648cf857ea674ba423d21817659bde6e29fb",
+      "bytes": 114
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/potato_1.png",
+      "sha256": "f91c17368d1b991515684ec150a851d7cd3ea8f55aa4bcc76b68c5ad6bd61727",
+      "bytes": 129
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/potato_2.png",
+      "sha256": "74344eaa37065e5418798a813ca9e279f92a4182fc1d98b2b246f15d76e14183",
+      "bytes": 142
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/potato_3.png",
+      "sha256": "5523bee2b068314239ed9f717c79940bc0f300eea047fd86fe4444bfcbeb00d9",
+      "bytes": 183
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/raw_beef.png",
+      "sha256": "f2b3eba0d7f3b6440badbee5f6a49e664b74795bdf04c55fa3c2b0c307ab6eb2",
+      "bytes": 360
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/sand.png",
+      "sha256": "550aceb8e783485b50414c15400d775ed05e32b2ab8bcb254d4165615677bf66",
+      "bytes": 352
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/smooth_stone.png",
+      "sha256": "4cfbee2faf35e78a5806c589830d3c66e350e71584e9129aeb539f57fbf9453c",
+      "bytes": 329
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/snow_side.png",
+      "sha256": "7915e0201336fe70b1a1217c5fc29d18410b645e764c020d62b58eb235930858",
+      "bytes": 300
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/snow_top.png",
+      "sha256": "7915e0201336fe70b1a1217c5fc29d18410b645e764c020d62b58eb235930858",
+      "bytes": 300
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/stone.png",
+      "sha256": "d38bb1e9b2b5d7ee728293d278fe39f4f47e3f1667db6f7cd7c9a91643352097",
+      "bytes": 428
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/stone_brick.png",
+      "sha256": "041a556a178bca7c4c82b276b2d4235c0a91a800ea8e6acb0c3ea1d6dd643712",
+      "bytes": 346
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/torch.png",
+      "sha256": "6eb257fa75759f5f8855477a6d31cf40fdefc7158d8949862a0079af4e627f86",
+      "bytes": 147
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/wheat_0.png",
+      "sha256": "3295899f2e7f386c453b06dd315039070755ea39cb5f4f1f6da4fd2d6ad2905a",
+      "bytes": 118
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/wheat_1.png",
+      "sha256": "549c3fd80e7ce90d97ff6afa6d6ea5ff112584d44b5ce6d577bd9d2bf9acf0ea",
+      "bytes": 152
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/wheat_2.png",
+      "sha256": "1df862099e5940e7f330e774988d761a4b9d8c3cb532ac0968ea62a52b5df3e0",
+      "bytes": 197
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/wheat_3.png",
+      "sha256": "171a6fa07864131c6c6d42e5c733be776c8c88ac215aa3c72354386558790c14",
+      "bytes": 180
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/wheat_4.png",
+      "sha256": "f0a8c1ae347731a3594ccc86e5c8faa57f7328e0a086095ddfa0476703c6df89",
+      "bytes": 193
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/wheat_5.png",
+      "sha256": "93c04ea610e39102e0dd9ba3ae18a81da92337cb98f2fef8a821698a6bb47135",
+      "bytes": 196
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/wheat_6.png",
+      "sha256": "1ea5170a50adf35cacb1794a6d46bee5267e57d470557680b4984f5b7e965de6",
+      "bytes": 192
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/wheat_7.png",
+      "sha256": "9ae74e3e6011fb0771307f1e4aaf2f57ae078d1bd2ea9cf792a6a1820377a261",
+      "bytes": 410
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/white_wool.png",
+      "sha256": "0c909d490dfbcc89e8c1d067292cb8d20bbd5ebffe9734988db4efd55b9c83a2",
+      "bytes": 164
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/workbench_side.png",
+      "sha256": "3d8a23e669bac1918e89fc931cb6347b8269862a885234f180ffb4c5303abbb4",
+      "bytes": 590
+    },
+    {
+      "path": "packages/client/assets/packs/pastelcraft/textures/workbench_top.png",
+      "sha256": "cf4a1bd61cce0be130cdce3566c3bf765ed4cc496dc784b38a3ebe0afb33fbe7",
+      "bytes": 433
+    },
+    {
+      "path": "packages/client/assets/procedural.go",
+      "sha256": "dbca7e9b1f6070ce82cc586b7eded9dbfd56beb9e40d3c8aa251f5dfdfe37650",
+      "bytes": 28875
+    },
+    {
+      "path": "packages/client/assets/procedural_test.go",
+      "sha256": "21060bdd0343478f13b5b9f3395d1121364154089406ac5a186cda0f7439acce",
+      "bytes": 20238
+    },
+    {
+      "path": "packages/client/assets/sapling_test.go",
+      "sha256": "cfac066692ee3ba0466b1b337c6e761637437046beec5d60c61ddd476cb62b96",
+      "bytes": 8629
+    },
+    {
+      "path": "packages/client/assets/short_grass_test.go",
+      "sha256": "6fe6403f73689f17c244fe63864353e8dca6fa71c553c559b1bd7ab95cf3d8be",
+      "bytes": 3972
+    },
+    {
+      "path": "packages/client/assets/snow_layer_test.go",
+      "sha256": "7f5535ec672910f8ec2d60a61f22c14fcf11bf908f2a5f5614c40ad195e9ce69",
+      "bytes": 7620
+    },
+    {
+      "path": "packages/client/render/assets/NotoSansCJKsc-Regular.otf",
+      "sha256": "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b",
+      "bytes": 16437364
+    },
+    {
+      "path": "packages/client/render/assets/NotoSansCJKsc-Regular.provenance.json",
+      "sha256": "26459b24c33391b81226aa277d18862fe13b951b5651d61f90f1f8a2979cf83f",
+      "bytes": 503
+    },
+    {
+      "path": "packages/client/render/assets/OFL.txt",
+      "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2",
+      "bytes": 4301
+    }
+  ],
+  "atlas": {
+    "path": "atlas.rgba8",
+    "format": "RGBA8",
+    "width": 16,
+    "height": 16,
+    "layers": 173,
+    "mip_levels": 5,
+    "storage_order": "layer-major,mip-major",
+    "sha256": "f0de32dcbc3023fb66a06f0a73435eaa578422bcfbb1902c3da7ddece4075a43",
+    "bytes": 235972
+  },
+  "outputs": [
+    {
+      "path": "atlas.rgba8",
+      "sha256": "f0de32dcbc3023fb66a06f0a73435eaa578422bcfbb1902c3da7ddece4075a43",
+      "bytes": 235972
+    },
+    {
+      "path": "fonts/NotoSansCJKsc-Regular.otf",
+      "sha256": "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b",
+      "bytes": 16437364
+    },
+    {
+      "path": "fonts/NotoSansCJKsc-Regular.provenance.json",
+      "sha256": "26459b24c33391b81226aa277d18862fe13b951b5651d61f90f1f8a2979cf83f",
+      "bytes": 503
+    },
+    {
+      "path": "fonts/OFL.txt",
+      "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2",
+      "bytes": 4301
+    },
+    {
+      "path": "licenses/pastelcraft/ATTRIBUTION.md",
+      "sha256": "055886d7cf7b089cfa6f0892c7b758f1581a057b65fd2b1098f2b8f5f66fe917",
+      "bytes": 5112
+    },
+    {
+      "path": "licenses/pastelcraft/LICENSE.txt",
+      "sha256": "8bf97eb82f6ae8f62059b8142d77fa8d7911c16eff29ea4c1de087324fb54b67",
+      "bytes": 1066
+    },
+    {
+      "path": "licenses/pastelcraft/PROVENANCE.json",
+      "sha256": "cf9987a7b9ee7af0ba8d894561387a217ab715c07b6744d88343d08634e78770",
+      "bytes": 10516
+    }
+  ]
+}

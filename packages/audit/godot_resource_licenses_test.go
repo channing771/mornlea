@@ -123,8 +123,8 @@ func approvedGodotResourceLicenseRows() []godotResourceLicenseRow {
 		{Category: "GDExtension binding", Component: "godot-rust", Source: "https://github.com/godot-rust/gdext", License: "MIT"},
 		{Category: "Scripting runtime", Component: "Py4Godot", Source: "https://github.com/niklas2902/py4godot", License: "MIT"},
 		{Category: "Interpreter", Component: "CPython runtime", Source: "https://github.com/python/cpython", License: "Python Software Foundation License Version 2"},
-		{Category: "Font", Component: "No project-bundled font", Source: "Godot Engine built-in default", License: "No separate project asset"},
-		{Category: "Material", Component: "Mornlea generated materials", Source: "packages/client/assets", License: "MIT (project-owned)"},
+		{Category: "Font", Component: "Noto Sans CJK SC Regular", Source: "https://github.com/notofonts/noto-cjk", License: "OFL-1.1"},
+		{Category: "Material", Component: "Mornlea registered atlas", Source: "packages/client/assets", License: "Project-owned, MIT, and CC0-1.0"},
 		{Category: "Shader", Component: "Mornlea project shaders", Source: "apps/mornlea-godot", License: "MIT (project-owned)"},
 		{Category: "Plugin", Component: "mornlea_bridge", Source: "packages/engine/crates/mornlea_godot", License: "MIT (project-owned)"},
 	}

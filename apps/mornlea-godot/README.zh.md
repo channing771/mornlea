@@ -2,7 +2,7 @@
 doc_id: godot-client-project
 language: zh
 counterpart: README.md
-revision: 2026-09-16.4
+revision: 2026-09-16.5
 ---
 
 # Mornlea Godot 客户端
@@ -40,6 +40,17 @@ scripts/godot/build-extension.sh --target aarch64-apple-darwin --profile debug -
 scripts/godot/openable-smoke.sh --without-native
 scripts/godot/openable-smoke.sh --without-python
 ```
+
+## 资源同步
+
+注册 atlas 的权威来源继续是 `packages/client/assets`，注册的 Noto Sans CJK 字体继续以 `packages/client/render/assets` 为权威来源。使用以下命令物化 Godot 项目内的衍生资源：
+
+```bash
+scripts/godot/sync-assets.sh
+scripts/godot/sync-assets.sh --check
+```
+
+生成目录包含按材质层优先、mip 层次次优先排列的 RGBA8 atlas、注册字体及其 OFL/来源文件、保留的材质许可证记录，以及确定性清单。清单记录源 Git 树、每个输入的校验和、聚合输入校验和、atlas 布局与每个输出的校验和。不得编辑 `assets/generated/` 下的文件，也不得手工添加文件；检查器会拒绝缺失、改写、符号链接及手写内容。
 
 ## Python 开发检查
 

@@ -2,7 +2,7 @@
 doc_id: godot-client-project
 language: en
 counterpart: README.zh.md
-revision: 2026-09-16.4
+revision: 2026-09-16.5
 ---
 
 # Mornlea Godot Client
@@ -40,6 +40,17 @@ Exercise both clean-state diagnostic paths without modifying the project checkou
 scripts/godot/openable-smoke.sh --without-native
 scripts/godot/openable-smoke.sh --without-python
 ```
+
+## Asset synchronization
+
+`packages/client/assets` remains authoritative for the registered atlas, and `packages/client/render/assets` remains authoritative for the registered Noto Sans CJK font. Materialize their Godot-local derivatives with:
+
+```bash
+scripts/godot/sync-assets.sh
+scripts/godot/sync-assets.sh --check
+```
+
+The generated directory contains the layer-major, mip-major RGBA8 atlas, the registered font and its OFL/provenance files, retained material license records, and a deterministic manifest. The manifest records the source Git trees, every input checksum, one aggregate input checksum, atlas layout, and every output checksum. Do not edit or add files under `assets/generated/`; the checker rejects missing, changed, symbolic-link, and hand-authored files.
 
 ## Python development checks
 
