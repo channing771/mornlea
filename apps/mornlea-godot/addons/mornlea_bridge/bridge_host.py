@@ -63,6 +63,16 @@ class bridge_host(Node):
             return ""
         return _call_text(ClassDB.instance(), "godot_rust_version")
 
+    def lifecycle_stage(self) -> str:
+        if not self._initialized:
+            return "inactive"
+        return _call_text(ClassDB.instance(), "lifecycle_stage")
+
+    def supports_godot_api(self, major: int, minor: int) -> bool:
+        if not self._initialized:
+            return False
+        return _call_bool(ClassDB.instance(), "supports_godot_api", major, minor)
+
     def bridge_identity(self) -> str:
         if not self._initialized:
             return ""
@@ -76,12 +86,16 @@ class bridge_host(Node):
         return self._last_error
 
     def _identity_mismatch(self) -> str:
+        if not self.supports_godot_api(4, 7):
+            return "MornleaClientBridge rejected Godot API 4.7"
         if self.client_core_abi_version() != _EXPECTED_CLIENT_CORE_ABI:
             return "MornleaClientBridge client-core ABI is not 1.0"
         if self.godot_api_version() != _EXPECTED_GODOT_API:
             return "MornleaClientBridge Godot API is not 4.7"
         if self.godot_rust_version() != _EXPECTED_GODOT_RUST_VERSION:
             return "MornleaClientBridge godot-rust version is not 0.5.5"
+        if self.lifecycle_stage() != "main-loop":
+            return "MornleaClientBridge is outside the Godot main-loop stage"
         return ""
 
     def _pair_version(self, major_method: str, minor_method: str) -> str:
@@ -109,3 +123,8 @@ def _call_int(database: ClassDB, method: str) -> int | None:
 def _call_text(database: ClassDB, method: str) -> str:
     value = database.class_call_static(_NATIVE_CLASS, method)
     return value if isinstance(value, str) else ""
+
+
+def _call_bool(database: ClassDB, method: str, *arguments: object) -> bool:
+    value = database.class_call_static(_NATIVE_CLASS, method, *arguments)
+    return value if isinstance(value, bool) else False

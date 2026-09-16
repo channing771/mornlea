@@ -19,6 +19,11 @@ class bridge_host_check(Node):
         )
         _expect(bridge.call("godot_api_version") == "4.7", "Godot API mismatch", failures)
         _expect(bridge.call("godot_rust_version") == "0.5.5", "godot-rust mismatch", failures)
+        _expect(bridge.call("supports_godot_api", 4, 7) is True, "Godot API rejected", failures)
+        _expect(
+            bridge.call("supports_godot_api", 4, 6) is False, "wrong Godot API accepted", failures
+        )
+        _expect(bridge.call("lifecycle_stage") == "main-loop", "lifecycle stage mismatch", failures)
         _expect(
             bridge.call("bridge_identity") == "client-core=1.0;godot=4.7;godot-rust=0.5.5",
             "composed bridge identity mismatch",

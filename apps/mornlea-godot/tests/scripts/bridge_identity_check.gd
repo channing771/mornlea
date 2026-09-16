@@ -19,6 +19,15 @@ func _run() -> void:
 	_expect(_identity("godot_api_major") == 4, "unexpected Godot API major")
 	_expect(_identity("godot_api_minor") == 7, "unexpected Godot API minor")
 	_expect(_identity("godot_rust_version") == "0.5.5", "unexpected godot-rust version")
+	_expect(_identity("lifecycle_stage") == "main-loop", "unexpected extension lifecycle stage")
+	_expect(
+		ClassDB.class_call_static("MornleaClientBridge", "supports_godot_api", 4, 7),
+		"pinned Godot API was rejected"
+	)
+	_expect(
+		not ClassDB.class_call_static("MornleaClientBridge", "supports_godot_api", 4, 6),
+		"wrong Godot API was accepted"
+	)
 	var engine_version := Engine.get_version_info()
 	_expect(engine_version.major == 4 and engine_version.minor == 7, "runtime Godot API is not 4.7")
 	_finish()

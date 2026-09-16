@@ -382,6 +382,38 @@ func TestGodotBridgeHostIsIdentityOnlyAndDesktopBound(t *testing.T) {
 	}
 }
 
+func TestGodotLifecycleSmokeContract(t *testing.T) {
+	root := repositoryRoot(t)
+	smoke := readBaselineDoc(t, root, filepath.Join("scripts", "godot", "smoke.sh"))
+	for _, required := range []string{
+		"--iterations",
+		"build-python-runtime.sh",
+		"build-extension.sh",
+		"[mornlea-lifecycle] rust-init=scene",
+		"[mornlea-lifecycle] rust-init=main-loop",
+		"[mornlea-lifecycle] python-init=host",
+		"[mornlea-lifecycle] python-deinit=features",
+		"[mornlea-lifecycle] python-deinit=bridge",
+		"[mornlea-lifecycle] rust-deinit=main-loop",
+		"[mornlea-lifecycle] rust-deinit=scene",
+		"leaked at exit",
+	} {
+		if !strings.Contains(smoke, required) {
+			t.Errorf("Godot lifecycle smoke is missing %q", required)
+		}
+	}
+	appRoot := readBaselineDoc(t, root, filepath.Join("apps", "mornlea-godot", "app", "host", "app_root.py"))
+	for _, required := range []string{
+		"[mornlea-lifecycle] python-init=host",
+		"[mornlea-lifecycle] python-deinit=features",
+		"[mornlea-lifecycle] python-deinit=bridge",
+	} {
+		if !strings.Contains(appRoot, required) {
+			t.Errorf("Python host lifecycle is missing marker %q", required)
+		}
+	}
+}
+
 func TestGodotFeatureHostIsPythonOwnedAndExplicit(t *testing.T) {
 	root := repositoryRoot(t)
 	projectRoot := filepath.Join(root, "apps", "mornlea-godot")

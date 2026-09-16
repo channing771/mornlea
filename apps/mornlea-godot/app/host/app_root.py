@@ -18,12 +18,15 @@ class app_root(Node):
         host = self.get_node("FeatureHost")
         result = host.call("activate_catalog", "res://config/feature_catalog.tres", bridge, 1)
         print(f"[mornlea-host] catalog={result}")
+        print("[mornlea-lifecycle] python-init=host")
 
     def _exit_tree(self) -> None:
         # Explicit teardown keeps feature order deterministic during project reloads.
         host = self.get_node_or_null("FeatureHost")
         if host is not None:
             host.call("deactivate_features")
+            print("[mornlea-lifecycle] python-deinit=features")
         bridge = self.get_node_or_null("BridgeHost")
         if bridge is not None:
             bridge.call("release_bridge")
+            print("[mornlea-lifecycle] python-deinit=bridge")

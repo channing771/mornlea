@@ -1,11 +1,25 @@
 use godot::classes::{IRefCounted, RefCounted};
 use godot::prelude::*;
 
+use crate::lifecycle;
+
 const CLIENT_CORE_ABI_MAJOR: i64 = 1;
 const CLIENT_CORE_ABI_MINOR: i64 = 0;
 const GODOT_API_MAJOR: i64 = 4;
 const GODOT_API_MINOR: i64 = 7;
 const GODOT_RUST_VERSION: &str = "0.5.5";
+#[cfg(test)]
+pub(crate) const BRIDGE_CLASS_NAME: &str = "MornleaClientBridge";
+#[cfg(test)]
+pub(crate) const IDENTITY_METHODS: [&str; 7] = [
+    "client_core_abi_major",
+    "client_core_abi_minor",
+    "godot_api_major",
+    "godot_api_minor",
+    "godot_rust_version",
+    "lifecycle_stage",
+    "supports_godot_api",
+];
 
 /// Minimal identity surface used to qualify the Godot/Rust integration boundary.
 ///
@@ -51,6 +65,16 @@ impl MornleaClientBridge {
     #[func]
     fn godot_rust_version() -> GString {
         GODOT_RUST_VERSION.into()
+    }
+
+    #[func]
+    fn lifecycle_stage() -> GString {
+        lifecycle::current_stage().into()
+    }
+
+    #[func]
+    fn supports_godot_api(major: i64, minor: i64) -> bool {
+        lifecycle::supports_godot_api(major, minor)
     }
 }
 
