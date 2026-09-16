@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://app/host/app_root.py" id="1_root"]
+[ext_resource type="Script" path="res://app/host/feature_host.py" id="2_host"]
+
+[node name="AppRoot" type="Node"]
+script = ExtResource("1_root")
+
+[node name="FeatureHost" type="Node" parent="."]
+script = ExtResource("2_host")

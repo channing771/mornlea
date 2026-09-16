@@ -1,0 +1,14 @@
+[gd_resource type="Resource" format=3]
+
+[resource]
+resource_name = "optional_bridge"
+metadata/feature_id = "optional_bridge"
+metadata/host_protocol_major = 1
+metadata/host_protocol_minor = 0
+metadata/entry_scene_path = "res://tests/fixtures/features/stub_success.tscn"
+metadata/dependencies = PackedStringArray()
+metadata/required_bridge_families = PackedStringArray("missing@1.0")
+metadata/required = false
+metadata/enabled = true
+metadata/budget_class = "light"
+metadata/reset_policy = "reset"

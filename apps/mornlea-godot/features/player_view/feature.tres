@@ -1,0 +1,14 @@
+[gd_resource type="Resource" format=3]
+
+[resource]
+resource_name = "player_view"
+metadata/feature_id = "player_view"
+metadata/host_protocol_major = 1
+metadata/host_protocol_minor = 0
+metadata/entry_scene_path = "res://features/player_view/feature_root.tscn"
+metadata/dependencies = PackedStringArray("platform.desktop.input", "session")
+metadata/required_bridge_families = PackedStringArray("input@1.0", "frame@1.0")
+metadata/required = false
+metadata/enabled = false
+metadata/budget_class = "standard"
+metadata/reset_policy = "reset"

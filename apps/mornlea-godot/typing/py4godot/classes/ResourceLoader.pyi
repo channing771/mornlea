@@ -1,0 +1,6 @@
+from py4godot.classes.Object import Object
+
+class ResourceLoader(Object):
+    @staticmethod
+    def instance() -> ResourceLoader: ...
+    def load(self, path: str, type_hint: str = "", cache_mode: int = 1) -> Object | None: ...

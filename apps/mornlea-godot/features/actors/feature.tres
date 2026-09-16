@@ -1,0 +1,14 @@
+[gd_resource type="Resource" format=3]
+
+[resource]
+resource_name = "actors"
+metadata/feature_id = "actors"
+metadata/host_protocol_major = 1
+metadata/host_protocol_minor = 0
+metadata/entry_scene_path = "res://features/actors/feature_root.tscn"
+metadata/dependencies = PackedStringArray("session")
+metadata/required_bridge_families = PackedStringArray("frame@1.0")
+metadata/required = false
+metadata/enabled = false
+metadata/budget_class = "standard"
+metadata/reset_policy = "reset"

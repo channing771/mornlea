@@ -1,0 +1,14 @@
+[gd_resource type="Resource" format=3]
+
+[resource]
+resource_name = "session"
+metadata/feature_id = "session"
+metadata/host_protocol_major = 1
+metadata/host_protocol_minor = 0
+metadata/entry_scene_path = "res://features/session/feature_root.tscn"
+metadata/dependencies = PackedStringArray("platform.desktop.lifecycle")
+metadata/required_bridge_families = PackedStringArray("lifecycle@1.0", "connection@1.0", "status@1.0")
+metadata/required = false
+metadata/enabled = false
+metadata/budget_class = "light"
+metadata/reset_policy = "recreate"

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" format=3]
+
+[resource]
+resource_name = "ui"
+metadata/feature_id = "ui"
+metadata/host_protocol_major = 1
+metadata/host_protocol_minor = 0
+metadata/entry_scene_path = "res://features/ui/feature_root.tscn"
+metadata/dependencies = PackedStringArray("session")
+metadata/required_bridge_families = PackedStringArray("frame@1.0")
+metadata/required = false
+metadata/enabled = false
+metadata/budget_class = "light"
+metadata/reset_policy = "reset"
