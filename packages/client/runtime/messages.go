@@ -149,14 +149,19 @@ func (runtime *Runtime) ApplyMessage(message network.ServerMessage) (MessageOutc
 		return outcome, errors.New("runtime: nil server message")
 	}
 	runtime.sessionMu.Lock()
-	defer runtime.sessionMu.Unlock()
 	if runtime.sessionClosed {
+		runtime.sessionMu.Unlock()
 		return outcome, errors.New("runtime: client session is closed")
 	}
 	if runtime.mirrors == nil {
 		runtime.mirrors = newSessionMirrors()
 	}
-	return runtime.applyMessageLocked(message)
+	outcome, err := runtime.applyMessageLocked(message)
+	runtime.sessionMu.Unlock()
+	if err != nil && errors.Is(err, errMeshPipeline) {
+		runtime.stopForMeshFailure(err)
+	}
+	return outcome, err
 }
 
 func (runtime *Runtime) applyMessageLocked(message network.ServerMessage) (MessageOutcome, error) {
@@ -350,6 +355,9 @@ func (runtime *Runtime) applyMessageLocked(message network.ServerMessage) (Messa
 		}
 		outcome.Changes = flags
 		outcome.World = update
+		if err := runtime.applyMeshUpdateLocked(update); err != nil {
+			return MessageOutcome{Message: outcome.Message, Handled: true}, err
+		}
 		return outcome, nil
 	}
 
@@ -389,11 +397,14 @@ func (runtime *Runtime) ResetMirrors() {
 		return
 	}
 	runtime.sessionMu.Lock()
-	defer runtime.sessionMu.Unlock()
-	runtime.resetSessionLocked()
+	mesher := runtime.resetSessionLocked(false)
+	runtime.sessionMu.Unlock()
+	if mesher != nil {
+		mesher.Close()
+	}
 }
 
-func (runtime *Runtime) resetSessionLocked() {
+func (runtime *Runtime) resetSessionLocked(closeMesher bool) *client.Mesher {
 	// Replace session-owned objects rather than mutating published copies. Hosts may safely retain
 	// earlier `MirrorState` and `PredictionSnapshot` values across an epoch transition.
 	runtime.mirrors = newSessionMirrors()
@@ -406,6 +417,7 @@ func (runtime *Runtime) resetSessionLocked() {
 	runtime.cameraYaw = 0
 	runtime.cameraPitch = 0
 	runtime.cameraTargetReset = false
+	return runtime.resetMeshingLocked(closeMesher)
 }
 
 // `MirrorState` returns copied confirmed mirror values in deterministic entity order.

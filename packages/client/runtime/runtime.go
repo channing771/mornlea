@@ -11,6 +11,7 @@ import (
 
 	"github.com/channing771/mornlea/packages/client/client"
 	"github.com/channing771/mornlea/packages/client/presentation"
+	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
 	"github.com/channing771/mornlea/packages/shared/network/protocol"
 	networktcp "github.com/channing771/mornlea/packages/shared/network/tcp"
@@ -85,6 +86,9 @@ type Options struct {
 	ViewDistance       uint8
 	ReceiverCapacity   int
 	RemoteDependencies RemoteDependencies
+	// `Mesh` is optional so lifecycle and transcript tests can assemble a session without native
+	// mesh workers. Production presentation hosts configure it before draining server messages.
+	Mesh *MeshOptions
 }
 
 // `Validate` rejects configurations that cannot safely begin construction without opening a resource.
@@ -95,6 +99,11 @@ func (options Options) Validate() error {
 	for index, factory := range options.Dependencies.Resources {
 		if isNilInterface(factory) {
 			return fmt.Errorf("runtime: resource factory %d is nil", index)
+		}
+	}
+	if options.Mesh != nil {
+		if err := options.Mesh.Validate(); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -113,6 +122,11 @@ func (options Options) validateRemote() error {
 	}
 	if options.ReceiverCapacity < 1 {
 		return errors.New("runtime: receiver capacity must be positive")
+	}
+	if options.Mesh != nil {
+		if err := options.Mesh.Validate(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -138,6 +152,14 @@ type Runtime struct {
 	// `cameraTargetReset` suppresses exactly the next published target after an authoritative
 	// reset, matching the legacy frame boundary even when the corrected pose is unchanged.
 	cameraTargetReset bool
+	// Meshing remains entirely CPU-side: `client.Mesher` reaches engine ABI v11 only through the
+	// existing `mesh` and `nativeabi` ownership chain, while runtime owns scheduling and publication.
+	meshOptions      MeshOptions
+	mesher           *client.Mesher
+	meshReady        meshReadyQueue
+	meshEpoch        uint64
+	sectionRevisions map[core.SectionKey]uint64
+	meshChunks       map[core.ChunkKey]struct{}
 
 	resources  []Resource
 	closeOnce  sync.Once
@@ -204,7 +226,13 @@ func NewRemote(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, fmt.Errorf("runtime: create receiver: %w", err)
 	}
 
-	return newLoggedInRuntime(receiver, endpoint, worldSeed), nil
+	runtime := newLoggedInRuntime(receiver, endpoint, worldSeed)
+	if options.Mesh != nil {
+		if err := runtime.ConfigureMeshing(*options.Mesh); err != nil {
+			return nil, errors.Join(err, runtime.Close())
+		}
+	}
+	return runtime, nil
 }
 
 // `newLoggedInRuntime` centralizes ownership transfer after a successful login without exposing a premature local-mode API.
@@ -247,13 +275,19 @@ func New(options Options) (*Runtime, error) {
 		resources = append(resources, resource)
 	}
 
-	return &Runtime{
+	runtime := &Runtime{
 		phase:            ConnectionPhaseNotReady,
 		resources:        resources,
 		mirrors:          newSessionMirrors(),
 		predictor:        client.NewPredictor(),
 		cameraProjection: DefaultCameraProjection(),
-	}, nil
+	}
+	if options.Mesh != nil {
+		if err := runtime.ConfigureMeshing(*options.Mesh); err != nil {
+			return nil, errors.Join(err, runtime.Close())
+		}
+	}
+	return runtime, nil
 }
 
 // `Phase` returns the current presentation-visible connection phase.
@@ -286,8 +320,11 @@ func (runtime *Runtime) Close() error {
 	runtime.closeOnce.Do(func() {
 		runtime.sessionMu.Lock()
 		runtime.sessionClosed = true
-		runtime.resetSessionLocked()
+		mesher := runtime.resetSessionLocked(true)
 		runtime.sessionMu.Unlock()
+		if mesher != nil {
+			mesher.Close()
+		}
 
 		runtime.phaseMu.Lock()
 		resources := runtime.resources
