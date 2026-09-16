@@ -331,6 +331,50 @@ jobs:
           grep -F 'flag: help requested' /tmp/mornlea-server-help.txt
           ! grep -E 'error while loading shared libraries|cannot open shared object' /tmp/mornlea-server-help.txt
 
+  godot:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 记录开始时间
+        run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+      # macOS runners do not preinstall ripgrep and the Godot project
+      # validation script needs it. Keep ripgrep usage inside that script:
+      # the repository identity audit rejects an inline ripgrep invocation
+      # in this workflow file.
+      - name: 安装 ripgrep
+        run: brew install ripgrep
+      # rust-toolchain.toml pins the toolchain identity; the godot gates drive
+      # build-extension.sh, which needs cargo from that pinned toolchain.
+      - name: Rust 工具链身份
+        run: |
+          cd packages/engine
+          rustup show active-toolchain
+          rustc --version
+          cargo --version
+      - name: 拉取钉版 Godot
+        run: scripts/godot/fetch.sh
+      # ONLINE first materialization of the embedded Python runtime; --offline
+      # is only valid on a warm cache. The script enforces the pinned Apple
+      # clang 21.0.0 and macOS SDK 26.5 toolchain identity.
+      - name: 物化钉版 Godot Python 运行时
+        run: scripts/godot/build-python-runtime.sh --verify
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.5'
+      - name: Godot 项目结构门禁
+        run: make godot-project-check
+      - name: Godot Python 门禁
+        run: make godot-python-check
+      - name: Godot 冒烟门禁
+        run: make godot-smoke
+      - name: 记录 godot 信息
+        if: ${{ always() }}
+        run: |
+          {
+            echo "godot seconds: $(( $(date +%s) - CI_START_EPOCH ))"
+            echo "runner: ${RUNNER_OS}/$(uname -m)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   test:
     if: ${{ always() }}
     needs: [native-macos, quality, frontend, go-race, integration, linux-server]
