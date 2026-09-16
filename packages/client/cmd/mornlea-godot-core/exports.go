@@ -61,6 +61,15 @@ func mornlea_client_core_disconnect(handle C.uint64_t) C.uint32_t {
 	return C.uint32_t(coreDisconnect(uint64(handle)))
 }
 
+//export mornlea_client_core_submit_input
+func mornlea_client_core_submit_input(handle C.uint64_t, buffer *C.uint8_t, length C.uint32_t) C.uint32_t {
+	return C.uint32_t(coreSubmitInput(
+		uint64(handle),
+		(*byte)(unsafe.Pointer(buffer)),
+		uint32(length),
+	))
+}
+
 //export mornlea_client_core_status_identity
 func mornlea_client_core_status_identity(handle C.uint64_t, out *C.uint8_t, capacity C.uint32_t, outRequiredBytes *C.uint32_t) C.uint32_t {
 	return C.uint32_t(coreStatusIdentity(
