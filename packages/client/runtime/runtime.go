@@ -2,12 +2,18 @@
 package runtime
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 
+	"github.com/channing771/mornlea/packages/client/client"
 	"github.com/channing771/mornlea/packages/client/presentation"
+	"github.com/channing771/mornlea/packages/shared/network"
+	"github.com/channing771/mornlea/packages/shared/network/protocol"
+	networktcp "github.com/channing771/mornlea/packages/shared/network/tcp"
 )
 
 // `ConnectionPhase` is the session lifecycle that `runtime` exposes to a presentation host.
@@ -47,10 +53,31 @@ type Dependencies struct {
 	Resources []ResourceFactory
 }
 
-// `Options` defines the platform-independent inputs accepted by `New`.
-// The initial `runtime` deliberately accepts only generic lifecycle dependencies; connection details arrive later.
+// `Receiver` owns a logged-in endpoint and exposes its bounded inbound queue to later runtime work.
+// The interface keeps remote assembly platform-independent while preserving `client.Receiver` as the sole receiver implementation.
+type Receiver interface {
+	Resource
+	TryRecv() (network.ServerMessage, bool)
+	Err() error
+}
+
+// `RemoteDependencies` permits deterministic remote-construction tests without replacing the production protocol implementation.
+// A custom `Login` MUST close its input stream on error and transfer stream ownership to its non-nil endpoint on success; a nil function selects the existing constructor.
+type RemoteDependencies struct {
+	Dial        func(context.Context, string) (network.ClientPacketStream, error)
+	Login       func(context.Context, network.ClientPacketStream, network.Identity, uint8) (network.ClientEndpoint, uint64, error)
+	NewReceiver func(network.ClientEndpoint, int) (Receiver, error)
+}
+
+// `Options` defines the platform-independent inputs accepted by `New` and `NewRemote`.
+// Remote fields identify an explicit dedicated-server session; the future local assembly can reuse the private logged-in endpoint seam.
 type Options struct {
-	Dependencies Dependencies
+	Dependencies       Dependencies
+	RemoteAddress      string
+	Identity           network.Identity
+	ViewDistance       uint8
+	ReceiverCapacity   int
+	RemoteDependencies RemoteDependencies
 }
 
 // `Validate` rejects configurations that cannot safely begin construction without opening a resource.
@@ -66,14 +93,103 @@ func (options Options) Validate() error {
 	return nil
 }
 
+func (options Options) validateRemote() error {
+	if strings.TrimSpace(options.RemoteAddress) == "" {
+		return errors.New("runtime: remote address is required")
+	}
+	if err := protocol.ValidateClientPacket(protocol.StateLogin, protocol.LoginStart{
+		PlayerID:     options.Identity.PlayerID,
+		DisplayName:  options.Identity.DisplayName,
+		ViewDistance: options.ViewDistance,
+	}); err != nil {
+		return fmt.Errorf("runtime: invalid remote login options: %w", err)
+	}
+	if options.ReceiverCapacity < 1 {
+		return errors.New("runtime: receiver capacity must be positive")
+	}
+	return nil
+}
+
 // `Runtime` owns an ordered set of platform-independent resources for one client session.
 type Runtime struct {
 	phaseMu sync.RWMutex
 	phase   ConnectionPhase
 
-	resources []Resource
-	closeOnce sync.Once
-	closeErr  error
+	resources  []Resource
+	closeOnce  sync.Once
+	closeErrMu sync.RWMutex
+	closeErr   error
+
+	receiver  Receiver
+	worldSeed uint64
+
+	terminalMu  sync.Mutex
+	terminalErr error
+}
+
+// `NewRemote` synchronously assembles a remote session through the established TCP and v44 login implementations.
+// On login failure, the existing login state machine retains stream ownership and closes it; after success, only the receiver owns the endpoint.
+func NewRemote(ctx context.Context, options Options) (*Runtime, error) {
+	if ctx == nil {
+		return nil, errors.New("runtime: nil remote context")
+	}
+	if err := options.validateRemote(); err != nil {
+		return nil, err
+	}
+
+	dependencies := options.RemoteDependencies
+	if dependencies.Dial == nil {
+		dependencies.Dial = networktcp.DialTCP
+	}
+	if dependencies.Login == nil {
+		dependencies.Login = network.LoginClientWithSeed
+	}
+	if dependencies.NewReceiver == nil {
+		dependencies.NewReceiver = func(endpoint network.ClientEndpoint, capacity int) (Receiver, error) {
+			return client.NewReceiver(endpoint, capacity), nil
+		}
+	}
+
+	stream, err := dependencies.Dial(ctx, options.RemoteAddress)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: dial remote %q: %w", options.RemoteAddress, err)
+	}
+	if isNilInterface(stream) {
+		return nil, errors.New("runtime: remote dial returned nil stream")
+	}
+
+	endpoint, worldSeed, err := dependencies.Login(ctx, stream, options.Identity, options.ViewDistance)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: remote login: %w", err)
+	}
+	if isNilInterface(endpoint) {
+		return nil, errors.Join(errors.New("runtime: remote login returned nil endpoint"), stream.Close())
+	}
+
+	receiver, err := dependencies.NewReceiver(endpoint, options.ReceiverCapacity)
+	if err != nil || isNilInterface(receiver) {
+		if !isNilInterface(receiver) {
+			err = errors.Join(err, receiver.Close())
+		} else {
+			err = errors.Join(err, endpoint.Close())
+		}
+		if err == nil {
+			err = errors.New("runtime: receiver factory returned nil receiver")
+		}
+		return nil, fmt.Errorf("runtime: create receiver: %w", err)
+	}
+
+	return newLoggedInRuntime(receiver, worldSeed), nil
+}
+
+// `newLoggedInRuntime` centralizes ownership transfer after a successful login without exposing a premature local-mode API.
+func newLoggedInRuntime(receiver Receiver, worldSeed uint64) *Runtime {
+	return &Runtime{
+		phase:     ConnectionPhaseLoading,
+		resources: []Resource{receiver},
+		receiver:  receiver,
+		worldSeed: worldSeed,
+	}
 }
 
 // `New` validates every option before opening resources, then transfers successful resources to `runtime`.
@@ -109,9 +225,26 @@ func New(options Options) (*Runtime, error) {
 
 // `Phase` returns the current presentation-visible connection phase.
 func (runtime *Runtime) Phase() ConnectionPhase {
+	runtime.observeReceiverTerminalError()
 	runtime.phaseMu.RLock()
 	defer runtime.phaseMu.RUnlock()
 	return runtime.phase
+}
+
+// `WorldSeed` returns the immutable authoritative seed received during the current successful login.
+func (runtime *Runtime) WorldSeed() uint64 {
+	return runtime.worldSeed
+}
+
+// `Err` reports a terminal receiver failure after releasing the receiver-owned endpoint.
+func (runtime *Runtime) Err() error {
+	runtime.observeReceiverTerminalError()
+	runtime.terminalMu.Lock()
+	terminalErr := runtime.terminalErr
+	runtime.terminalMu.Unlock()
+	runtime.closeErrMu.RLock()
+	defer runtime.closeErrMu.RUnlock()
+	return errors.Join(terminalErr, runtime.closeErr)
 }
 
 // `Close` releases resources in strict reverse construction order exactly once.
@@ -124,9 +257,27 @@ func (runtime *Runtime) Close() error {
 		runtime.phase = ConnectionPhaseDisconnected
 		runtime.phaseMu.Unlock()
 
+		runtime.closeErrMu.Lock()
 		runtime.closeErr = closeResourcesReverse(resources)
+		runtime.closeErrMu.Unlock()
 	})
+	runtime.closeErrMu.RLock()
+	defer runtime.closeErrMu.RUnlock()
 	return runtime.closeErr
+}
+
+func (runtime *Runtime) observeReceiverTerminalError() {
+	if runtime.receiver == nil {
+		return
+	}
+	if err := runtime.receiver.Err(); err != nil {
+		runtime.terminalMu.Lock()
+		if runtime.terminalErr == nil {
+			runtime.terminalErr = err
+		}
+		runtime.terminalMu.Unlock()
+		_ = runtime.Close()
+	}
 }
 
 func closeResourcesReverse(resources []Resource) error {
