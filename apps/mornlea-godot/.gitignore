@@ -1,0 +1,6 @@
+.godot/
+.venv/
+addons/mornlea_bridge/bin/
+addons/py4godot/
+__pycache__/
+*.py[cod]

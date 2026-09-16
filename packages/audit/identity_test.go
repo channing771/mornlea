@@ -177,7 +177,11 @@ func TestNativeEngineLibraryIdentity(t *testing.T) {
 		}
 	}
 
-	requireIdentity("packages/engine/Cargo.toml", `members = ["crates/mornlea_engine", "crates/mornlea_client"]`, "crates/mornlea_mesh")
+	requireIdentity("packages/engine/Cargo.toml", `members = [
+    "crates/mornlea_engine",
+    "crates/mornlea_client",
+    "crates/mornlea_godot",
+]`, "crates/mornlea_mesh")
 	requireIdentity("packages/engine/crates/mornlea_engine/Cargo.toml", `name = "mornlea_engine"`, `name = "mornlea_mesh"`)
 	requireIdentity("packages/engine/crates/mornlea_engine/build.rs", "@rpath/libmornlea_engine.dylib", "libmornlea_mesh.dylib")
 	requireIdentity("Makefile", "libmornlea_engine.dylib", "libmornlea_mesh.dylib")

@@ -1,0 +1,24 @@
+; Engine configuration file.
+; Edit this file through the Godot editor when possible.
+
+config_version=5
+
+[application]
+
+config/name="Mornlea Godot Pilot"
+config/description="Desktop-only presentation pilot for the Mornlea client"
+run/main_scene="res://app/bootstrap/bootstrap.tscn"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/size/window_width_override=1280
+window/size/window_height_override=720
+window/stretch/mode="canvas_items"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+textures/default_filters/use_nearest_mipmap_filter=false
+textures/vram_compression/import_etc2_astc=true

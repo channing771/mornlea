@@ -1,0 +1,16 @@
+[configuration]
+
+entry_symbol = "gdext_rust_init"
+compatibility_minimum = "4.7"
+reloadable = true
+
+[libraries]
+
+macos.debug.arm64 = "res://addons/mornlea_bridge/bin/macos-universal/debug/libmornlea_godot.dylib"
+macos.release.arm64 = "res://addons/mornlea_bridge/bin/macos-universal/release/libmornlea_godot.dylib"
+macos.debug.x86_64 = "res://addons/mornlea_bridge/bin/macos-universal/debug/libmornlea_godot.dylib"
+macos.release.x86_64 = "res://addons/mornlea_bridge/bin/macos-universal/release/libmornlea_godot.dylib"
+linux.debug.x86_64 = "res://addons/mornlea_bridge/bin/linux-x86_64/debug/libmornlea_godot.so"
+linux.release.x86_64 = "res://addons/mornlea_bridge/bin/linux-x86_64/release/libmornlea_godot.so"
+windows.debug.x86_64 = "res://addons/mornlea_bridge/bin/windows-x86_64/debug/mornlea_godot.dll"
+windows.release.x86_64 = "res://addons/mornlea_bridge/bin/windows-x86_64/release/mornlea_godot.dll"

@@ -1,0 +1,83 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://app/bootstrap/setup_required.gd" id="1_setup"]
+
+[node name="SetupRequired" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_setup")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.035, 0.043, 0.055, 1)
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 48.0
+offset_top = 48.0
+offset_right = -48.0
+offset_bottom = -48.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Content" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 18
+alignment = 1
+
+[node name="Title" type="Label" parent="Margin/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.92, 0.95, 1, 1)
+theme_override_font_sizes/font_size = 32
+text = "Mornlea Godot Pilot"
+
+[node name="Status" type="Label" parent="Margin/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.78, 0.36, 1)
+theme_override_font_sizes/font_size = 20
+text = "Runtime setup is required"
+
+[node name="Detail" type="Label" parent="Margin/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.76, 0.84, 1)
+text = "The stable project root is open. Prepare the isolated Python runtime and desktop bridge before starting the pilot."
+autowrap_mode = 2
+
+[node name="Target" type="Label" parent="Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.76, 0.84, 1)
+text = "Target: detecting"
+
+[node name="Missing" type="Label" parent="Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.76, 0.84, 1)
+text = "Missing: detecting"
+autowrap_mode = 2
+
+[node name="Mismatched" type="Label" parent="Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.76, 0.84, 1)
+text = "Identity mismatch: detecting"
+autowrap_mode = 2
+
+[node name="Command" type="Label" parent="Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.58, 0.84, 0.72, 1)
+text = "Preparation command: detecting"
+autowrap_mode = 2
