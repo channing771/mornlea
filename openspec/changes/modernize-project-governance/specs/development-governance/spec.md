@@ -10,9 +10,11 @@ The repository SHALL support an OpenAI-native orchestration mode and a strict SD
 
 Both modes MUST preserve the approved OpenSpec scope, test-first implementation where behavior changes, file ownership, required validation, recorded rulings, and explicit user authorization boundaries. Orchestration freedom MUST NOT be interpreted as permission to skip a required gate or expand the task.
 
-OpenAI-native mode MUST default to main-agent execution and MUST run no more than two subagents concurrently. Small or low-context work SHOULD remain with the main agent. Delegation is reserved for a bounded feature, research, or review context whose size, noise, specialization, or independence would materially pollute the main agent's working context. Parallel speed or an unused subagent slot alone MUST NOT justify delegation.
+OpenAI-native mode MUST use an isolation-first execution policy and MUST run no more than two subagents concurrently. A bounded task SHOULD use a fresh isolated agent when it requires independent repository discovery, multi-file reasoning, specialized review, or a long work trace whose main-context retention cost exceeds its handoff and integration cost. Work SHOULD remain with the controller only when it is tiny, tightly coupled to the controller's current edit, or cheaper to complete than to specify and integrate. Parallel speed, independent file ownership, or an unused subagent slot alone MUST NOT justify delegation. Every delegate MUST receive a concise task brief and fresh or minimal context rather than a full conversation copy by default.
 
 Before the first subagent delegation in a task, the controller MUST use the synchronized project-owned `adaptive-model-router` policy against the live host capability set. It SHALL assess reasoning difficulty, consequence, context breadth, tool horizon, required capabilities, validation strength, and user priorities. It SHALL treat code quality and token efficiency as coequal objectives, select the lowest-cost model and reasoning effort credibly sufficient for the isolated subtask, obey explicit user constraints and the router's provider ceilings, and escalate only after observable insufficiency. It MUST NOT assign the highest available model or effort by default, under-route consequential work merely to reduce tokens, rely on a static remembered catalog, or restart already-running agents merely to optimize their model.
+
+The router MAY select the repository-owned Z Code `GLM-5.3` bridge as an external isolated agent when its read-only probe verifies the exact enabled provider and model. The bridge MUST NOT be described as extending the Codex native delegation surface. It MUST support a fresh run and follow-up communication by returned session ID, MUST emit machine-readable results, MUST keep provider credentials out of project files and output, and MUST count against the same two-agent concurrency ceiling. An editing worker MUST have an isolated worktree or exclusive non-overlapping files. A failed probe MUST make the route ineligible without changing Z Code configuration or sending a paid discovery request.
 
 At the end of each implementation round, the controller MUST review routing for over-routing, under-routing, avoidable retry or escalation, context-transfer cost, validation quality, and token use. It MUST synchronize both project router copies when verified evidence supports a stable cross-task improvement. It MUST NOT add task history, volatile availability lists, or unverified model preferences. If no reusable improvement qualifies, the change ledger SHALL record `Model router: no change` with a concise reason.
 
@@ -23,11 +25,12 @@ At the end of each implementation round, the controller MUST review routing for 
 - **THEN** repository guidance SHALL permit the controller to implement without creating a per-task implementer/reviewer pair
 - **AND** the same scope, tests, validation, ledger, and completion evidence SHALL remain required
 
-#### Scenario: Verified OpenAI controller delegates selectively
+#### Scenario: Verified OpenAI controller isolates a bounded context
 
-- **GIVEN** a verified OpenAI controller identifies a bounded feature or review context whose details would materially pollute the main agent's working context, and the user has not prohibited subagents
-- **WHEN** it chooses to use subagents
+- **GIVEN** a verified OpenAI controller identifies a bounded feature or review context whose main-context retention cost exceeds the handoff and integration cost, and the user has not prohibited subagents
+- **WHEN** it selects the execution shape
 - **THEN** the standing project policy SHALL permit delegation without an additional user confirmation or subagent-specific prompt
+- **AND** the controller SHOULD prefer a fresh isolated agent with a concise task brief
 - **AND** the controller SHALL define the isolated context boundary, ownership, integration point, and expected validation
 - **AND** repository guidance MUST NOT force a fixed number or sequence of subagents beyond higher-priority runtime constraints
 
@@ -58,6 +61,21 @@ At the end of each implementation round, the controller MUST review routing for 
 - **WHEN** the controller prepares the delegation
 - **THEN** it MUST discover the live eligible models and effort levels through `adaptive-model-router`
 - **AND** SHALL choose the least costly sufficient configuration rather than the highest available configuration
+
+#### Scenario: Router selects the configured Z Code worker
+
+- **GIVEN** the selected `adaptive-model-router` skill's `scripts/zcode-agent.mjs probe` reports the enabled `GLM-5.3` provider and the native agent model enum does not expose that model
+- **WHEN** the router selects Z Code for a bounded isolated task
+- **THEN** the controller SHALL invoke the external bridge with a concise task brief and MUST NOT claim that `GLM-5.3` is on the native delegation surface
+- **AND** the controller SHALL use the returned session ID for targeted follow-up instead of replaying the worker's prior context
+- **AND** no provider credential SHALL appear in repository files, standard output, or error output
+
+#### Scenario: Z Code capability probe fails
+
+- **GIVEN** the Z Code CLI, provider, credential, or exact model is unavailable
+- **WHEN** the controller probes the bridge before delegation
+- **THEN** the bridge SHALL fail without modifying desktop configuration or issuing a model inference
+- **AND** the router SHALL select another eligible worker or retain the task in the controller
 
 #### Scenario: Routed subagent proves insufficient
 

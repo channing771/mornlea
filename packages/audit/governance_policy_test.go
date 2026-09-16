@@ -76,10 +76,11 @@ func TestDelegationBudgetAndAdaptiveModelRouting(t *testing.T) {
 
 func TestDelegationBudgetGuardDetectsDrift(t *testing.T) {
 	valid := strings.Join([]string{
-		"Main-agent execution is the default",
+		"isolation-first",
 		"At most two subagents may run concurrently",
-		"material context isolation",
+		"main-context retention",
 		"Do not delegate merely for parallel speed",
+		"concise task brief",
 		"`adaptive-model-router`",
 		"live host capability set",
 		"lowest-cost model and reasoning effort credibly sufficient",
@@ -109,10 +110,11 @@ func delegationPolicyViolations(text string) []string {
 
 func delegationPolicyFragments() []string {
 	return []string{
-		"Main-agent execution is the default",
+		"isolation-first",
 		"At most two subagents may run concurrently",
-		"material context isolation",
+		"main-context retention",
 		"Do not delegate merely for parallel speed",
+		"concise task brief",
 		"`adaptive-model-router`",
 		"live host capability set",
 		"lowest-cost model and reasoning effort credibly sufficient",

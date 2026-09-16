@@ -1,7 +1,7 @@
 interface:
   display_name: "Adaptive Model Router"
-  short_description: "Route work for quality and token efficiency"
-  default_prompt: "Use $adaptive-model-router to select a sufficient, token-efficient model and reasoning effort for this Mornlea task."
+  short_description: "Route isolated work across native and Z Code agents"
+  default_prompt: "Use $adaptive-model-router to select a sufficient, token-efficient native or Z Code worker for this isolated Mornlea task."
 
 policy:
   allow_implicit_invocation: true

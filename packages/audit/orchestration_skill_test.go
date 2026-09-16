@@ -27,11 +27,36 @@ func TestProjectAdaptiveModelRouterSkillsMatch(t *testing.T) {
 		"SKILL.md",
 		"agents/openai.yaml",
 		"references/capability-discovery.md",
+		"scripts/zcode-agent.mjs",
+		"scripts/zcode-agent.test.mjs",
+		"scripts/zcode-live-agent.mjs",
+		"scripts/zcode-live-agent.test.mjs",
 	} {
 		codex := readOrchestrationPolicyFile(t, filepath.Join(root, ".codex", projectModelRouterSkillPath, filepath.FromSlash(relative)))
 		claude := readOrchestrationPolicyFile(t, filepath.Join(root, ".claude", projectModelRouterSkillPath, filepath.FromSlash(relative)))
 		if !bytes.Equal(codex, claude) {
 			t.Errorf("project-owned Codex and Claude model-router files must match: %s", relative)
+		}
+	}
+}
+
+func TestProjectRouterOwnsZCodeBridgeRuntime(t *testing.T) {
+	root := repositoryRoot(t)
+	for _, relative := range []string{
+		"zcode-agent.mjs",
+		"zcode-agent.test.mjs",
+		"zcode-live-agent.mjs",
+		"zcode-live-agent.test.mjs",
+	} {
+		for _, skillRoot := range []string{".codex", ".claude"} {
+			path := filepath.Join(root, skillRoot, projectModelRouterSkillPath, "scripts", relative)
+			if _, err := os.Stat(path); err != nil {
+				t.Errorf("model-router skill runtime is missing %s: %v", path, err)
+			}
+		}
+		legacy := filepath.Join(root, "scripts", "agents", relative)
+		if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+			t.Errorf("Z Code bridge runtime must not remain outside the skill: %s", legacy)
 		}
 	}
 }
@@ -58,6 +83,55 @@ func TestProjectAdaptiveModelRouterPolicy(t *testing.T) {
 			if !strings.Contains(source, fragment) {
 				t.Errorf("%s does not state project router rule %q", relative, fragment)
 			}
+		}
+	}
+}
+
+func TestProjectOrchestrationPrefersContextIsolation(t *testing.T) {
+	root := repositoryRoot(t)
+	for _, relative := range []string{
+		"AGENTS.md",
+		"openspec/config.yaml",
+		".codex/skills/mornlea-implementation-orchestration/SKILL.md",
+		".claude/skills/mornlea-implementation-orchestration/SKILL.md",
+	} {
+		source := string(readOrchestrationPolicyFile(t, filepath.Join(root, filepath.FromSlash(relative))))
+		for _, fragment := range []string{
+			"isolation-first",
+			"main-context retention",
+			"concise task brief",
+		} {
+			if !strings.Contains(source, fragment) {
+				t.Errorf("%s does not state context-isolation rule %q", relative, fragment)
+			}
+		}
+	}
+}
+
+func TestProjectRouterDefinesZCodeBridge(t *testing.T) {
+	root := repositoryRoot(t)
+	router := string(readOrchestrationPolicyFile(t, filepath.Join(root, ".codex", projectModelRouterSkillPath, "SKILL.md")))
+	for _, fragment := range []string{
+		"GLM-5.3",
+		"scripts/zcode-agent.mjs",
+		"router_skill_dir",
+		"external isolated agent",
+		"native delegation surface",
+		"session ID",
+		"live-probe --cwd",
+		"start --cwd",
+		"--reasoning high",
+		"wait --worker",
+		"steer --worker",
+		"--command-id",
+		"stable command ID",
+		"`guide`",
+		"`queue`",
+		"`startNow`",
+		"cannot inject an unsolicited turn",
+	} {
+		if !strings.Contains(router, fragment) {
+			t.Errorf("project model router does not define ZCode bridge rule %q", fragment)
 		}
 	}
 }
@@ -96,6 +170,12 @@ func modelRouterPolicyFragments() []string {
 		"over-routing",
 		"under-routing",
 		"Model router: no change",
+		"task and capability fit: 35%",
+		"validation strength: 20%",
+		"lifecycle and intervention integration: 15%",
+		"main-context isolation benefit: 15%",
+		"total token or quota efficiency: 10%",
+		"startup and expected completion latency: 5%",
 	}
 }
 

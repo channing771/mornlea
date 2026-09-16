@@ -7,9 +7,10 @@ Use this reference only when model availability and reasoning-effort support can
 Treat the invocation boundary as the source of truth for what can run now:
 
 1. Inspect native `spawn`, `delegate`, `worker`, `agent`, or model-request tool metadata. Enumerated model and effort values are authoritative for that call surface.
-2. Call a read-only capability or model inventory operation if the host provides one.
-3. If a provider's list-models response contains only identifiers, consult current official documentation or machine-readable model metadata for reasoning effort, modalities, context, and tool support.
-4. Use local CLI help or a dry-run command only when it is provider-supported and does not modify configuration or incur inference cost.
+2. For the repository-owned Z Code worker, resolve the selected `adaptive-model-router` skill root and run its packaged `scripts/zcode-agent.mjs probe`. Before a live route, also run the same skill-local executable with `live-probe --cwd /absolute/worktree` so private app-server protocol drift fails before inference. These redacted results are authoritative only for the configured `GLM-5.3` external surface; they do not extend the native model enum.
+3. Call a read-only capability or model inventory operation if another host provides one.
+4. If a provider's list-models response contains only identifiers, consult current official documentation or machine-readable model metadata for reasoning effort, modalities, context, and tool support.
+5. Use local CLI help or a dry-run command only when it is provider-supported and does not modify configuration or incur inference cost.
 
 Never scrape account secrets, print credentials, or use an unrelated account to fill gaps. Community tables and remembered model-family behavior are hints for where to look, not authoritative capability evidence.
 
@@ -20,6 +21,7 @@ Build a temporary record for each available option:
 ```yaml
 model_id: exact-provider-identifier
 availability_source: native-tool | provider-api | local-cli | official-docs
+backend: native | zcode-cli | other-external
 reasoning:
   values: [exact, supported, labels]
   default: exact-label-or-unknown
@@ -46,6 +48,8 @@ Omit unsupported fields or mark them `unknown`; do not manufacture comparable nu
 ## Reconcile conflicting sources
 
 - Native runtime rejection or a current invocation schema overrides general documentation for immediate availability.
+- A successful Z Code bridge probe proves only that bridge's external worker; it never proves native delegation support.
+- A successful provider probe does not prove live supervision compatibility; the installed app-server must also pass the bridge's behavioral contract check.
 - Account-scoped inventory overrides a public catalog for access.
 - Official per-model documentation overrides family-name inference for reasoning-effort support.
 - A product-specific policy ceiling filters otherwise available options; availability never overrides the ceiling.
