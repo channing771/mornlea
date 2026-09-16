@@ -128,6 +128,16 @@ type Runtime struct {
 	sequence      uint64
 	playerTick    uint64
 	sessionClosed bool
+	// Camera preference is local presentation state. Its eye pose is derived from the predicted
+	// player under `sessionMu`, so neither a device nor a host render transform can become state.
+	cameraMode       client.CameraMode
+	cameraF5WasDown  bool
+	cameraYaw        float32
+	cameraPitch      float32
+	cameraProjection CameraProjection
+	// `cameraTargetReset` suppresses exactly the next published target after an authoritative
+	// reset, matching the legacy frame boundary even when the corrected pose is unchanged.
+	cameraTargetReset bool
 
 	resources  []Resource
 	closeOnce  sync.Once
@@ -201,13 +211,14 @@ func NewRemote(ctx context.Context, options Options) (*Runtime, error) {
 // `sender` aliases the receiver-owned endpoint and MUST NOT be added to `resources` or closed separately.
 func newLoggedInRuntime(receiver Receiver, sender inputSender, worldSeed uint64) *Runtime {
 	return &Runtime{
-		phase:     ConnectionPhaseLoading,
-		resources: []Resource{receiver},
-		receiver:  receiver,
-		sender:    sender,
-		worldSeed: worldSeed,
-		mirrors:   newSessionMirrors(),
-		predictor: client.NewPredictor(),
+		phase:            ConnectionPhaseLoading,
+		resources:        []Resource{receiver},
+		receiver:         receiver,
+		sender:           sender,
+		worldSeed:        worldSeed,
+		mirrors:          newSessionMirrors(),
+		predictor:        client.NewPredictor(),
+		cameraProjection: DefaultCameraProjection(),
 	}
 }
 
@@ -237,10 +248,11 @@ func New(options Options) (*Runtime, error) {
 	}
 
 	return &Runtime{
-		phase:     ConnectionPhaseNotReady,
-		resources: resources,
-		mirrors:   newSessionMirrors(),
-		predictor: client.NewPredictor(),
+		phase:            ConnectionPhaseNotReady,
+		resources:        resources,
+		mirrors:          newSessionMirrors(),
+		predictor:        client.NewPredictor(),
+		cameraProjection: DefaultCameraProjection(),
 	}, nil
 }
 

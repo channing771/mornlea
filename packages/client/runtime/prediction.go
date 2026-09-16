@@ -71,6 +71,10 @@ func (runtime *Runtime) SubmitInput(input SemanticInput) error {
 		return errors.New("runtime: client session is closed")
 	}
 	runtime.semanticInput = input
+	// The host submits an explicit semantic pose. Device delta accumulation stays outside runtime,
+	// while the copied look state remains the sole source for prediction and presentation rays.
+	runtime.cameraYaw = input.Yaw
+	runtime.cameraPitch = input.Pitch
 	return nil
 }
 
@@ -150,6 +154,15 @@ func (runtime *Runtime) applyPlayerStateLocked(
 		ResetView: result.ResetView,
 		Yaw:       result.Yaw,
 		Pitch:     result.Pitch,
+	}
+	if result.ResetView {
+		// Authoritative resets own the view orientation as well as the predicted player position.
+		// Camera mode is deliberately not reset: it is a local preference, not session authority.
+		runtime.cameraYaw = result.Yaw
+		runtime.cameraPitch = result.Pitch
+	}
+	if message.Reset {
+		runtime.cameraTargetReset = true
 	}
 	outcome.Prediction = runtime.predictionSnapshotLocked(0)
 	return outcome, nil

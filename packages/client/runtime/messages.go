@@ -401,6 +401,11 @@ func (runtime *Runtime) resetSessionLocked() {
 	runtime.semanticInput = SemanticInput{}
 	runtime.sequence = 0
 	runtime.playerTick = 0
+	// Reset removes the derived eye pose and target inputs. Keep mode and its edge latch because
+	// they are local presentation preference state, matching the existing client across worlds.
+	runtime.cameraYaw = 0
+	runtime.cameraPitch = 0
+	runtime.cameraTargetReset = false
 }
 
 // `MirrorState` returns copied confirmed mirror values in deterministic entity order.
