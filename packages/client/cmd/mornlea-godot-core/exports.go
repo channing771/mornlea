@@ -39,6 +39,28 @@ func mornlea_client_core_destroy(handle C.uint64_t) C.uint32_t {
 	return C.uint32_t(coreDestroy(uint64(handle)))
 }
 
+//export mornlea_client_core_connect_begin
+func mornlea_client_core_connect_begin(handle C.uint64_t, address *C.uint8_t, addressLen C.uint32_t) C.uint32_t {
+	return C.uint32_t(coreConnectBegin(
+		uint64(handle),
+		(*byte)(unsafe.Pointer(address)),
+		uint32(addressLen),
+	))
+}
+
+//export mornlea_client_core_connect_poll
+func mornlea_client_core_connect_poll(handle C.uint64_t, outPhase *C.uint32_t) C.uint32_t {
+	return C.uint32_t(coreConnectPoll(
+		uint64(handle),
+		(*uint32)(unsafe.Pointer(outPhase)),
+	))
+}
+
+//export mornlea_client_core_disconnect
+func mornlea_client_core_disconnect(handle C.uint64_t) C.uint32_t {
+	return C.uint32_t(coreDisconnect(uint64(handle)))
+}
+
 //export mornlea_client_core_status_identity
 func mornlea_client_core_status_identity(handle C.uint64_t, out *C.uint8_t, capacity C.uint32_t, outRequiredBytes *C.uint32_t) C.uint32_t {
 	return C.uint32_t(coreStatusIdentity(

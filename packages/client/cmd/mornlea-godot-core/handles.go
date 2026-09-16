@@ -10,9 +10,11 @@ import (
 // This file owns the identity/lifecycle half of the client-core export
 // surface: a fixed-capacity session handle table plus the create logic with
 // the validation-order contract ABI identity -> requested feature families ->
-// handle and pointer arguments -> content. Every function here is
-// deterministic: no clock, no I/O, no network, and no unbounded allocation
-// participates in the handle path.
+// handle and pointer arguments -> content. Every table operation here is
+// deterministic and bounded: no clock, no I/O, and no unbounded allocation.
+// Slots additionally carry the per-session connection state object, but all
+// establishment work lives in connect.go on the session's own goroutine; the
+// table only gates access to that object.
 
 // pilotSessionCapacity is the fixed capacity of the sole session handle
 // table. The pilot data plane has exactly one consumer, the mornlea_godot
@@ -48,10 +50,15 @@ const (
 	sessionSlotRetired
 )
 
-// sessionSlot is one fixed table entry.
+// sessionSlot is one fixed table entry. `session` holds the slot-owned
+// connection state object (see connect.go); the table allocates it at slot
+// claim, clears it at retirement, and every connection export resolves it
+// through the table so the handle lifecycle stays the single gate to session
+// state.
 type sessionSlot struct {
 	state      sessionState
 	generation uint64
+	session    *clientSession
 }
 
 // sessionTable is the bounded, race-safe owner of every live session. All
@@ -87,8 +94,9 @@ func sessionHandleGeneration(handle uint64) uint64 {
 
 // create claims the first free or retired slot and returns its new handle.
 // The generation is bumped on every claim, so a value destroyed earlier never
-// aliases the new session. A full table returns `StatusInvalidState` and
-// consumes nothing.
+// aliases the new session, and the claim allocates the slot's connection
+// state object. A full table returns `StatusInvalidState` and consumes
+// nothing.
 func (table *sessionTable) create() (uint64, Status) {
 	table.mu.Lock()
 	defer table.mu.Unlock()
@@ -98,6 +106,7 @@ func (table *sessionTable) create() (uint64, Status) {
 		}
 		table.slots[index].generation++
 		table.slots[index].state = sessionSlotLive
+		table.slots[index].session = &clientSession{}
 		table.liveCount++
 		return makeSessionHandle(index, table.slots[index].generation), StatusOK
 	}
@@ -109,21 +118,30 @@ func (table *sessionTable) create() (uint64, Status) {
 // retires and a retired slot with a matching generation answers `StatusOK`
 // again; any other value (never-issued slot, free slot, or stale generation
 // after the slot was reused) was never a live identity of the current
-// generation and reports `StatusInvalidHandle`.
+// generation and reports `StatusInvalidHandle`. Retiring a live slot also
+// tears its connection down through `clientSession.disconnect` — canceling
+// and joining an in-flight connect — outside the table lock, so a destroy
+// during establishment leaves no connect goroutine or runtime behind.
 func (table *sessionTable) destroy(handle uint64) Status {
 	table.mu.Lock()
-	defer table.mu.Unlock()
 	slot := &table.slots[sessionSlotIndex(handle)]
+	var session *clientSession
+	status := StatusInvalidHandle
 	switch {
 	case slot.state == sessionSlotLive && slot.generation == sessionHandleGeneration(handle):
 		slot.state = sessionSlotRetired
+		session = slot.session
+		slot.session = nil
 		table.liveCount--
-		return StatusOK
+		status = StatusOK
 	case slot.state == sessionSlotRetired && slot.generation == sessionHandleGeneration(handle):
-		return StatusOK
-	default:
-		return StatusInvalidHandle
+		status = StatusOK
 	}
+	table.mu.Unlock()
+	if session != nil {
+		session.disconnect()
+	}
+	return status
 }
 
 // requireLive reports whether a handle names a live session. A retired
@@ -137,6 +155,50 @@ func (table *sessionTable) requireLive(handle uint64) Status {
 	switch {
 	case slot.state == sessionSlotLive && slot.generation == sessionHandleGeneration(handle):
 		return StatusOK
+	case slot.state == sessionSlotRetired && slot.generation == sessionHandleGeneration(handle):
+		return StatusInvalidState
+	default:
+		return StatusInvalidHandle
+	}
+}
+
+// sessionFor resolves a live session's connection state object with the same
+// handle ruling as `requireLive`: a live match returns the object, a retired
+// tombstone with a matching generation reports `StatusInvalidState`, and
+// anything else reports `StatusInvalidHandle`. The returned object stays
+// valid after the lock (its identity is fixed at claim), so callers may race
+// with a concurrent destroy safely; `clientSession` methods are their own
+// synchronization point.
+func (table *sessionTable) sessionFor(handle uint64) (*clientSession, Status) {
+	table.mu.Lock()
+	defer table.mu.Unlock()
+	slot := &table.slots[sessionSlotIndex(handle)]
+	switch {
+	case slot.state == sessionSlotLive && slot.generation == sessionHandleGeneration(handle):
+		return slot.session, StatusOK
+	case slot.state == sessionSlotRetired && slot.generation == sessionHandleGeneration(handle):
+		return nil, StatusInvalidState
+	default:
+		return nil, StatusInvalidHandle
+	}
+}
+
+// beginSessionConnect resolves the handle and runs `start` while the table
+// lock is held, making a connect start atomic with slot retirement: a
+// concurrent destroy either observes the session before any connect goroutine
+// exists (joining nothing) or a begun establishment it must cancel and join.
+// This closes the check-then-act window a bare `sessionFor` lookup would
+// leave between handle validation and goroutine start. `start` performs only
+// bounded validation and the goroutine spawn, and the connect goroutine locks
+// only the session mutex, never the table lock, so the table -> session lock
+// order cannot invert.
+func (table *sessionTable) beginSessionConnect(handle uint64, start func(*clientSession) Status) Status {
+	table.mu.Lock()
+	defer table.mu.Unlock()
+	slot := &table.slots[sessionSlotIndex(handle)]
+	switch {
+	case slot.state == sessionSlotLive && slot.generation == sessionHandleGeneration(handle):
+		return start(slot.session)
 	case slot.state == sessionSlotRetired && slot.generation == sessionHandleGeneration(handle):
 		return StatusInvalidState
 	default:
