@@ -112,8 +112,11 @@ func (options Options) validateRemote() error {
 
 // `Runtime` owns an ordered set of platform-independent resources for one client session.
 type Runtime struct {
-	phaseMu sync.RWMutex
-	phase   ConnectionPhase
+	phaseMu       sync.RWMutex
+	phase         ConnectionPhase
+	sessionMu     sync.Mutex
+	mirrors       *sessionMirrors
+	sessionClosed bool
 
 	resources  []Resource
 	closeOnce  sync.Once
@@ -189,6 +192,7 @@ func newLoggedInRuntime(receiver Receiver, worldSeed uint64) *Runtime {
 		resources: []Resource{receiver},
 		receiver:  receiver,
 		worldSeed: worldSeed,
+		mirrors:   newSessionMirrors(),
 	}
 }
 
@@ -220,6 +224,7 @@ func New(options Options) (*Runtime, error) {
 	return &Runtime{
 		phase:     ConnectionPhaseNotReady,
 		resources: resources,
+		mirrors:   newSessionMirrors(),
 	}, nil
 }
 
@@ -251,6 +256,11 @@ func (runtime *Runtime) Err() error {
 // Concurrent callers wait for the same shutdown and receive the same aggregated error.
 func (runtime *Runtime) Close() error {
 	runtime.closeOnce.Do(func() {
+		runtime.sessionMu.Lock()
+		runtime.sessionClosed = true
+		runtime.resetMirrorsLocked()
+		runtime.sessionMu.Unlock()
+
 		runtime.phaseMu.Lock()
 		resources := runtime.resources
 		runtime.resources = nil
