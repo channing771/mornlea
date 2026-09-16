@@ -2,7 +2,9 @@ package archcheck_test
 
 import (
 	"errors"
+	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -150,6 +152,135 @@ func TestGodotDesktopOnlyFeatureSkeleton(t *testing.T) {
 		} else if !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("inspect unsupported Godot platform directory %s: %v", relative, err)
 		}
+	}
+}
+
+func TestGodotPythonFeatureSkeletonsAndScriptOwnership(t *testing.T) {
+	root := repositoryRoot(t)
+	projectRoot := filepath.Join(root, "apps", "mornlea-godot")
+	skeletons := map[string]string{
+		"features/actors":            "actors_feature",
+		"features/player_view":       "player_view_feature",
+		"features/session":           "session_feature",
+		"features/ui":                "ui_feature",
+		"features/world":             "world_feature",
+		"platform/desktop/audio":     "desktop_audio_feature",
+		"platform/desktop/input":     "desktop_input_feature",
+		"platform/desktop/lifecycle": "desktop_lifecycle_feature",
+	}
+	registeredManifests := make(map[string]bool, len(skeletons))
+	for directory, className := range skeletons {
+		manifest := filepath.ToSlash(filepath.Join(directory, "feature.tres"))
+		registeredManifests[manifest] = true
+		scriptName := className + ".py"
+		scriptPath := filepath.Join(projectRoot, filepath.FromSlash(directory), scriptName)
+		script := readBaselineDoc(t, root, filepath.Join("apps", "mornlea-godot", filepath.FromSlash(directory), scriptName))
+		for _, required := range []string{
+			"class " + className + "(Node):",
+			"def validate_feature",
+			"def bind_host",
+			"def activate_feature",
+			"def reset_feature",
+			"def deactivate_feature",
+		} {
+			if !strings.Contains(script, required) {
+				t.Errorf("Python feature skeleton %s is missing %q", scriptPath, required)
+			}
+		}
+		scene := readBaselineDoc(t, root, filepath.Join("apps", "mornlea-godot", filepath.FromSlash(directory), "feature_root.tscn"))
+		resourcePath := "res://" + filepath.ToSlash(filepath.Join(directory, scriptName))
+		if !strings.Contains(scene, resourcePath) || !strings.Contains(scene, "script = ExtResource") {
+			t.Errorf("feature scene %s does not attach %s", directory, resourcePath)
+		}
+	}
+
+	// A manifest is reserved for a replaceable coarse boundary, not an internal scene.
+	for _, top := range []string{"features", "platform"} {
+		err := filepath.WalkDir(filepath.Join(projectRoot, top), func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() || entry.Name() != "feature.tres" {
+				return nil
+			}
+			relative, err := filepath.Rel(projectRoot, path)
+			if err != nil {
+				return err
+			}
+			if !registeredManifests[filepath.ToSlash(relative)] {
+				t.Errorf("ordinary component owns an unregistered feature manifest: %s", relative)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	allowedGDScript := map[string]bool{
+		"app/bootstrap/bootstrap.gd":      true,
+		"app/bootstrap/setup_required.gd": true,
+	}
+	err := filepath.WalkDir(projectRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			switch entry.Name() {
+			case ".godot", ".venv", "tests":
+				return filepath.SkipDir
+			}
+			if path == filepath.Join(projectRoot, "addons", "py4godot") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".gd" {
+			return nil
+		}
+		relative, err := filepath.Rel(projectRoot, path)
+		if err != nil {
+			return err
+		}
+		if !allowedGDScript[filepath.ToSlash(relative)] {
+			t.Errorf("production GDScript exists outside the bootstrap allowlist: %s", relative)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	validatorPath := filepath.Join(root, "scripts", "godot", "validate-project.sh")
+	info, err := os.Stat(validatorPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm()&0o111 == 0 {
+		t.Error("validate-project.sh must be executable")
+	}
+	validator := readBaselineDoc(t, root, filepath.Join("scripts", "godot", "validate-project.sh"))
+	for _, required := range []string{"--script-ownership", "app/bootstrap/bootstrap.gd", "app/bootstrap/setup_required.gd"} {
+		if !strings.Contains(validator, required) {
+			t.Errorf("validate-project.sh is missing script-ownership rule %q", required)
+		}
+	}
+	fixtureRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(fixtureRoot, "features", "world"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	illegalPath := filepath.Join(fixtureRoot, "features", "world", "illegal.gd")
+	if err := os.WriteFile(illegalPath, []byte("extends Node\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(validatorPath, "--script-ownership")
+	command.Env = append(os.Environ(), "MORNLEA_GODOT_PROJECT_ROOT="+fixtureRoot)
+	output, err := command.CombinedOutput()
+	if err == nil {
+		t.Fatal("script-ownership validation accepted production GDScript outside Bootstrap")
+	}
+	if !strings.Contains(string(output), "features/world/illegal.gd") {
+		t.Fatalf("script-ownership failure did not identify the violating path:\n%s", output)
 	}
 }
 
