@@ -47,13 +47,16 @@ var stepRuntime = func(established *runtime.Runtime, elapsed time.Duration, mess
 // mutex; see the retention ruling above for the overwrite semantics. Each
 // retention also starts a fresh world-pull generation, so the pull family
 // marks consumption against the new result rather than inheriting the
-// consumed marker of the overwritten one (see world.go).
+// consumed marker of the overwritten one (see world.go), and accumulates the
+// result's inbound message count into the status family's session total (see
+// status.go).
 func (session *clientSession) retainStepResult(result runtime.StepResult) {
 	session.mu.Lock()
 	defer session.mu.Unlock()
 	session.stepResult = result
 	session.hasStepResult = true
 	session.stepGeneration++
+	session.messagesProcessedTotal += uint64(result.MessagesProcessed)
 }
 
 // retainedStep returns the latest completed step result and whether any step

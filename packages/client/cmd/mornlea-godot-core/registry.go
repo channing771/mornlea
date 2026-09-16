@@ -164,7 +164,9 @@ func clientCoreFamilyTable() []RegistryDescriptor {
 		{Family: FamilyWorld, Version: WorldVersion, RecordLimit: MaxWorldBatchOperations},
 		// Bounded entity records plus the variable target-name payload.
 		{Family: FamilyFrame, Version: FrameVersion, RecordLimit: MaxEntityRecords},
-		// Bounded status pull; the record layout arrives with the status export.
+		// Bounded status pull; the fixed record layout now lives in status.go,
+		// and the descriptor keeps zero `RecordBytes` this generation because
+		// both language pin suites pin this table (see status.go).
 		{Family: FamilyStatus, Version: StatusVersion, RecordLimit: MaxStatusRecords},
 	}
 }

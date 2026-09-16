@@ -160,6 +160,15 @@ type clientSession struct {
 	// teardown so a terminal frame stays pullable after a disconnect.
 	stepResult    runtime.StepResult
 	hasStepResult bool
+	// `terminalClass` is the status family's terminal-cause classification of
+	// `terminalErr`, recorded at the two terminal record sites (establishment
+	// failure and receiver death) and guarded by `mu`; a clean user disconnect
+	// records neither error nor class, which is the none classification.
+	terminalClass uint32
+	// `messagesProcessedTotal` accumulates the inbound message counts of
+	// every retained step result for the status family's counter record; it
+	// is guarded by `mu` and updated with each retention.
+	messagesProcessedTotal uint64
 	// World-pull bookkeeping guarded by `mu`: `stepGeneration` increments on
 	// every step-result retention and `worldPulledGeneration` names the
 	// generation whose world batch the world pull already consumed. The
@@ -193,10 +202,10 @@ func (session *clientSession) begin(address string) Status {
 // terminal transition (a disconnect or destroy raced the establishment), the
 // goroutine owns releasing a runtime that slipped through despite the
 // cancellation; otherwise a failure records the terminal cause (dial error,
-// v44 version rejection, receiver construction failure) and a success
-// publishes the runtime for polling. `establishSession` converts any
-// producer-internal panic into the terminal error so no panic escapes a
-// session goroutine.
+// v44 version rejection, receiver construction failure) with its status-family
+// classification, and a success publishes the runtime for polling.
+// `establishSession` converts any producer-internal panic into the terminal
+// error so no panic escapes a session goroutine.
 func (session *clientSession) establish(ctx context.Context, address string) {
 	defer close(session.done)
 	established, err := establishSession(ctx, address)
@@ -209,6 +218,7 @@ func (session *clientSession) establish(ctx context.Context, address string) {
 		}
 	case err != nil:
 		session.terminalErr = err
+		session.terminalClass = classifyEstablishmentTerminal(err)
 		session.state = connectStateTerminal
 		session.cancel()
 		session.mu.Unlock()
@@ -234,40 +244,54 @@ func establishSession(ctx context.Context, address string) (established *runtime
 // poll reports the current connection state into the phase out-parameter.
 // Live states write the phase word and return `StatusOK`; the terminal state
 // returns `StatusDisconnected` and writes nothing, so the status itself is
-// the disconnect signal (failure atomicity). While online, the phase is
-// delegated to `runtime.Runtime.Phase`; a runtime that died from a receiver
-// terminal error transitions the session to terminal here.
+// the disconnect signal (failure atomicity). The observation itself is shared
+// with the status family through `phaseWord`.
 func (session *clientSession) poll(outPhase *uint32) Status {
+	phase, status := session.phaseWord()
+	if status != StatusOK {
+		return status
+	}
+	*outPhase = phase
+	return StatusOK
+}
+
+// phaseWord reports the session's current connection phase word using the
+// connect family's `ConnectPhase*` vocabulary. It is the single connection
+// observation shared by the connect poll and the status family's phase record
+// (see status.go), so both families observe one lifecycle. While online the
+// word delegates to `runtime.Runtime.Phase`, and a runtime that died from a
+// receiver terminal error transitions the session to terminal here. The
+// terminal outcome returns `StatusDisconnected` with the implied
+// `ConnectPhaseDisconnected` word: the connect poll keeps its no-write failure
+// atomicity, while the status family publishes the same word as a record.
+func (session *clientSession) phaseWord() (uint32, Status) {
 	session.mu.Lock()
-	switch session.state {
+	state := session.state
+	established := session.runtime
+	session.mu.Unlock()
+	switch state {
 	case connectStateIdle:
-		session.mu.Unlock()
-		*outPhase = ConnectPhaseNotReady
-		return StatusOK
+		return ConnectPhaseNotReady, StatusOK
 	case connectStateEstablishing:
-		session.mu.Unlock()
-		*outPhase = ConnectPhaseConnecting
-		return StatusOK
+		return ConnectPhaseConnecting, StatusOK
 	case connectStateOnline:
-		established := session.runtime
-		session.mu.Unlock()
 		phase := established.Phase()
 		if phase != runtime.ConnectionPhaseDisconnected {
-			*outPhase = uint32(phase)
-			return StatusOK
+			return uint32(phase), StatusOK
 		}
 		session.recordRuntimeTerminal(established)
-		return StatusDisconnected
+		return ConnectPhaseDisconnected, StatusDisconnected
 	default:
-		session.mu.Unlock()
-		return StatusDisconnected
+		return ConnectPhaseDisconnected, StatusDisconnected
 	}
 }
 
 // recordRuntimeTerminal records a receiver-driven disconnect observed through
 // `runtime.Runtime.Phase`, which closes the runtime itself before reporting
 // the disconnected phase. A teardown that claimed the terminal transition
-// first keeps its own (clean) cause.
+// first keeps its own (clean) cause. The terminal class is recorded by
+// provenance: this site exists only on the receiver-death path, so the class
+// is `TerminalCauseReceiver` regardless of the receiver's own error value.
 func (session *clientSession) recordRuntimeTerminal(established *runtime.Runtime) {
 	err := established.Err()
 	session.mu.Lock()
@@ -275,6 +299,7 @@ func (session *clientSession) recordRuntimeTerminal(established *runtime.Runtime
 		session.state = connectStateTerminal
 		session.runtime = nil
 		session.terminalErr = err
+		session.terminalClass = TerminalCauseReceiver
 		if session.cancel != nil {
 			session.cancel()
 		}
