@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "name": "version-error",
+  "description": "A canonical handshake payload carrying protocol v43, which the protocol v44 decoder must reject before login.",
+  "summary_sha256": "cec804e31bfbcd167e9a44807e13b68797e1f11c6d0e799f9660205376a6aa97",
+  "frames": [
+    {
+      "label": "unsupported-client-version",
+      "direction": "client_to_server",
+      "state": "handshake",
+      "packet_id": 0,
+      "payload_hex": "2b",
+      "expect": {
+        "result": "error",
+        "reject_by": "protocol",
+        "error_contains": "unsupported client protocol version 43"
+      }
+    }
+  ]
+}

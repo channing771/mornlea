@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "name": "overflow",
+  "description": "A RemotePlayerStates header declaring eight records, above the fixed protocol capacity of seven, without allocating records.",
+  "summary_sha256": "f6cca91a4121300051794deae744dc75178abfb8cd1bd8c91363c22ea8c070fb",
+  "frames": [
+    {
+      "label": "remote-player-count-overflow",
+      "direction": "server_to_client",
+      "state": "play",
+      "packet_id": 9,
+      "payload_hex": "010000000000000008",
+      "expect": {
+        "result": "error",
+        "reject_by": "codec",
+        "error_contains": "remote player state count is outside 1..7"
+      }
+    }
+  ]
+}

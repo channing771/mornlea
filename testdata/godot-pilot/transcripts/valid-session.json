@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "name": "valid-session",
+  "description": "Canonical protocol v44 remote-session frames for login, initial world state, movement, authoritative correction, chunk updates, remote players, weather, HUD values, and disconnect.",
+  "summary_sha256": "240af789b47b07bdec9818e6b7666c18a7991f0bb6c716e96e4f20aa8d480198",
+  "frames": [
+    {
+      "label": "client-hello",
+      "direction": "client_to_server",
+      "state": "handshake",
+      "packet_id": 0,
+      "payload_hex": "2c",
+      "expect": {
+        "result": "valid",
+        "packet_type": "protocol.ClientHello",
+        "summary": "protocol=44"
+      }
+    },
+    {
+      "label": "server-hello",
+      "direction": "server_to_client",
+      "state": "handshake",
+      "packet_id": 0,
+      "payload_hex": "2c",
+      "expect": {
+        "result": "valid",
+        "packet_type": "protocol.ServerHello",
+        "summary": "protocol=44"
+      }
+    },
+    {
+      "label": "login-start",
+      "direction": "client_to_server",
+      "state": "login",
+      "packet_id": 0,
+      "payload_hex": "00112233445546778899aabbccddeeff0550696c6f740c",
+      "expect": {
+        "result": "valid",
+        "packet_type": "protocol.LoginStart",
+        "summary": "player=00112233-4455-4677-8899-aabbccddeeff,name=\"Pilot\",view=12"
+      }
+    },
+    {
+      "label": "login-success",
+      "direction": "server_to_client",
+      "state": "login",
+      "packet_id": 0,
+      "payload_hex": "00112233445546778899aabbccddeeff0807060504030201",
+      "expect": {
+        "result": "valid",
+        "packet_type": "protocol.LoginSuccess",
+        "summary": "player=00112233-4455-4677-8899-aabbccddeeff,world_seed=72623859790382856"
+      }
+    },
+    {
+      "label": "initial-snapshot",
+      "direction": "server_to_client",
+      "state": "play",
+      "packet_id": 0,
+      "payload_hex": "750000008200000028b52ffd0400a9030000000000feffffff03000000070000000000000018000002000100000002000000030000000400000005000000060000000700000008000000090000000a0000000b0000000c0000000d0000000e0000000f0000001000000011000000120000001300000014000000150000001600000017000000d209f70b",
+      "expect": {
+        "result": "valid",
+        "packet_type": "protocol.ChunkSnapshot",
+        "summary": "dimension=0,chunk=-2/3,revision=7,sections=24,payload_bytes=48"
+      }
+    },
+    {
+      "label": "movement-input",
+      "direction": "client_to_server",
+      "state": "play",
+      "packet_id": 0,
+      "payload_hex": "2900000000000000ff01010000c03f000080be00000100",
+      "expect": {
+        "result": "valid",
+        "packet_type": "protocol.PlayerInput",
+        "summary": "sequence=41,move=-1/1,jump=true,yaw=1.5,pitch=-0.25,mining=false,eating=false,sprinting=true,sneaking=false"
+      }
+    },
+    {
+      "label": "authoritative-correction-weather-hud",
+      "direction": "server_to_client",
+      "state": "play",
+      "packet_id": 3,
+      "payload_hex": "84030000000000002900000000000000000000000000fcc100808242000043420000003e000080be0000003f0000a03f0000c0be01010100000000000000000000000000000000000011f4000d014101fb32020000000000010281f90c",
+      "expect": {
+        "result": "valid",
+        "packet_type": "protocol.PlayerState",
+        "summary": "tick=900,ack=41,dimension=0,position=-31.5/65.25/48.75,velocity=0.125/-0.25/0.5,yaw=1.25,pitch=-0.375,ready=true,reset=true,health=17,hunger=13,oxygen=244,time=144123,weather=1,season=2,season_progress=129,temperature=-7,armor=12"
+      }
+    },
+    {
+      "label": "chunk-update",
+      "direction": "server_to_client",
+      "state": "play",
+      "packet_id": 1,
+      "payload_hex": "00000000feffffff030000000700000000000000080000000000000002e1ffffff40000000300000000300e2ffffff40000000300000000400",
+      "expect": {
+        "result": "valid",
+        "packet_type": "protocol.BlockChanges",
+        "summary": "dimension=0,chunk=-2/3,revision=7->8,changes=2"
+      }
+    },
+    {
+      "label": "remote-player-spawn",
+      "direction": "server_to_client",
+      "state": "play",
+      "packet_id": 7,
+      "payload_hex": "102132435465478798a9bacbdcedfe0f04526865618503000000000000000000000000e4c100008242000049420000c0bf0000803e",
+      "expect": {
+        "result": "valid",
+        "packet_type": "protocol.RemotePlayerSpawn",
+        "summary": "player=10213243-5465-4787-98a9-bacbdcedfe0f,name=\"Rhea\",tick=901,dimension=0,position=-28.5/65/50.25,yaw=-1.5,pitch=0.25"
+      }
+    },
+    {
+      "label": "remote-player-state",
+      "direction": "server_to_client",
+      "state": "play",
+      "packet_id": 9,
+      "payload_hex": "860300000000000001102132435465478798a9bacbdcedfe0f000000000000e0c10000824200004a420000a0bf0000003e00",
+      "expect": {
+        "result": "valid",
+        "packet_type": "protocol.RemotePlayerStates",
+        "summary": "tick=902,players=1,first=10213243-5465-4787-98a9-bacbdcedfe0f"
+      }
+    },
+    {
+      "label": "remote-player-despawn",
+      "direction": "server_to_client",
+      "state": "play",
+      "packet_id": 8,
+      "payload_hex": "102132435465478798a9bacbdcedfe0f",
+      "expect": {
+        "result": "valid",
+        "packet_type": "protocol.RemotePlayerDespawn",
+        "summary": "player=10213243-5465-4787-98a9-bacbdcedfe0f"
+      }
+    },
+    {
+      "label": "disconnect",
+      "direction": "server_to_client",
+      "state": "play",
+      "packet_id": 6,
+      "payload_hex": "030b6d61696e74656e616e6365",
+      "expect": {
+        "result": "valid",
+        "packet_type": "protocol.Disconnect",
+        "summary": "code=3,message=\"maintenance\""
+      }
+    }
+  ]
+}
