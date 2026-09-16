@@ -149,12 +149,25 @@ type clientSession struct {
 	// acquired only by the step export and never while `mu` is held, so the
 	// step -> session lock order cannot invert against table -> session.
 	stepMu sync.Mutex
+	// `worldMu` serializes the world pull family's two-phase drain (see
+	// world.go). It is acquired only by the world pull export and never while
+	// `mu` or `stepMu` is held, mirroring `stepMu`'s discipline so the
+	// pull -> session lock order cannot invert against table -> session.
+	worldMu sync.Mutex
 	// The latest completed step result plus its presence flag are retained
 	// under `mu` for the world and frame pull families; see step.go for the
 	// single-producer retention ruling. Retention deliberately survives
 	// teardown so a terminal frame stays pullable after a disconnect.
 	stepResult    runtime.StepResult
 	hasStepResult bool
+	// World-pull bookkeeping guarded by `mu`: `stepGeneration` increments on
+	// every step-result retention and `worldPulledGeneration` names the
+	// generation whose world batch the world pull already consumed. The
+	// generation pair gives the pull family a monotonic identity for the
+	// retained result without borrowing frame-revision semantics; see
+	// world.go for the consumption protocol.
+	stepGeneration        uint64
+	worldPulledGeneration uint64
 }
 
 // begin starts one establishment. Only an idle session may begin: a second

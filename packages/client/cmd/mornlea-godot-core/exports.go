@@ -14,9 +14,10 @@ import "unsafe"
 // C arguments to the Go views its core function expects; every validation
 // decision, panic conversion, and output write lives in the testable core
 // functions (`coreCreate`, `coreDestroy`, `coreConnectBegin`, `coreConnectPoll`,
-// `coreDisconnect`, `coreSubmitInput`, `coreStep`, `coreStatusIdentity`, and
-// `coreAbiVersion`). The wrappers never retain a caller pointer after the
-// call returns: the handle table owns all producer state.
+// `coreDisconnect`, `coreSubmitInput`, `coreStep`, `coreWorldPull`,
+// `coreStatusIdentity`, and `coreAbiVersion`). The wrappers never retain a
+// caller pointer after the call returns: the handle table owns all producer
+// state.
 //
 // Build note: this package is built with -buildmode=c-shared by the
 // shared-library build script; the exported symbols below are that library's
@@ -77,6 +78,16 @@ func mornlea_client_core_step(handle C.uint64_t, request *C.uint8_t, length C.ui
 		uint64(handle),
 		(*byte)(unsafe.Pointer(request)),
 		uint32(length),
+	))
+}
+
+//export mornlea_client_core_world_pull
+func mornlea_client_core_world_pull(handle C.uint64_t, out *C.uint8_t, capacity C.uint32_t, outRequiredBytes *C.uint32_t) C.uint32_t {
+	return C.uint32_t(coreWorldPull(
+		uint64(handle),
+		(*byte)(unsafe.Pointer(out)),
+		uint32(capacity),
+		(*uint32)(unsafe.Pointer(outRequiredBytes)),
 	))
 }
 
