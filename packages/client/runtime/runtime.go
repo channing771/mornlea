@@ -172,6 +172,12 @@ type Runtime struct {
 
 	terminalMu  sync.Mutex
 	terminalErr error
+
+	// `step` carries the cross-call state of the explicit bounded frame pipeline owned by
+	// `Step`: published-frame identity, confirmed environment inputs, bounded remote-entity
+	// interpolation samples, and the asynchronous outbound worker. It is created lazily under
+	// `sessionMu` and lives for the whole runtime lifetime; see `step.go`.
+	step *stepState
 }
 
 // `NewRemote` synchronously assembles a remote session through the established TCP and v44 login implementations.
