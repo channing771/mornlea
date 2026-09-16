@@ -10,6 +10,15 @@
 //! equals the header, in both directions, so the two sides cannot drift apart
 //! silently.
 
+// This mirror is deliberately ahead of its non-test consumers: the Rust FFI
+// and bridge surfaces that read these constants and structs land with the
+// later client-core tasks, and until then only the pinning tests below
+// reference most items. Allow `dead_code` module-wide so the constants-only
+// mirror does not fail `cargo clippy --all-targets -- -D warnings` before
+// those consumers exist; remove this allowance once production code consumes
+// the module directly.
+#![allow(dead_code)]
+
 /// Client-core ABI major version. A new major is required whenever an existing
 /// layout or semantic changes; compatible additions raise the minor only.
 pub const ABI_MAJOR: u32 = 1;

@@ -1,5 +1,6 @@
 mod abi;
 mod bridge;
+mod feature_negotiation;
 mod lifecycle;
 
 use godot::prelude::*;
