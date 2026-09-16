@@ -15,6 +15,7 @@ Use this skill as a compact decision aid, not as a replacement for repository tr
 - Cross-language calls use the established versioned bridges. Validate identity, layout, pointers, lengths, alignment, overlap, capacity, and failure atomicity before publishing results. Do not add a production fallback beside a native implementation.
 - The per-step client frame aggregate is an immutable semantic value in `packages/client/presentation` (`FrameSnapshot`). Every host and any client-core ABI frame family consume that record instead of growing a second host-private or renderer-specific frame encoding.
 - A host with already-constructed session state consumes `packages/client/runtime` through the adoption seam instead of duplicating mirror, predictor, mesher, or sequence ownership; both Memory and remote TCP paths keep one behavior source, and payload-less drop operations never consume publication capacity reserved for upserts.
+- The client-core ABI's canonical surface is the header at `packages/client/cmd/mornlea-godot-core/include/mornlea_client_core.h`: Go derives its constants through cgo, Rust mirrors constants and `#[repr(C)]` layouts while parsing the same header text, and both sides enforce both-direction define-set equality so a define can never drift silently between the two consumers.
 - Messages and slices become immutable after a successful cross-goroutine send. Tick, network, render, bridge, and upload hot paths use explicit bounded work and avoid blocking I/O.
 
 ## Godot client direction

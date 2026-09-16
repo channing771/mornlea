@@ -1,10 +1,9 @@
 use godot::classes::{IRefCounted, RefCounted};
 use godot::prelude::*;
 
+use crate::abi;
 use crate::lifecycle;
 
-const CLIENT_CORE_ABI_MAJOR: i64 = 1;
-const CLIENT_CORE_ABI_MINOR: i64 = 0;
 const GODOT_API_MAJOR: i64 = 4;
 const GODOT_API_MINOR: i64 = 7;
 const GODOT_RUST_VERSION: &str = "0.5.5";
@@ -42,14 +41,16 @@ impl IRefCounted for MornleaClientBridge {
 impl MornleaClientBridge {
     // Identity calls are deliberately allocation-free except for the Godot string
     // conversion and do not create a second path to engine or gameplay state.
+    // The client-core identity comes from the header-pinned abi module, so a
+    // header bump moves the Godot-visible identity with it.
     #[func]
     fn client_core_abi_major() -> i64 {
-        CLIENT_CORE_ABI_MAJOR
+        i64::from(abi::ABI_MAJOR)
     }
 
     #[func]
     fn client_core_abi_minor() -> i64 {
-        CLIENT_CORE_ABI_MINOR
+        i64::from(abi::ABI_MINOR)
     }
 
     #[func]
@@ -80,14 +81,12 @@ impl MornleaClientBridge {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        CLIENT_CORE_ABI_MAJOR, CLIENT_CORE_ABI_MINOR, GODOT_API_MAJOR, GODOT_API_MINOR,
-        GODOT_RUST_VERSION,
-    };
+    use super::{GODOT_API_MAJOR, GODOT_API_MINOR, GODOT_RUST_VERSION};
+    use crate::abi::{ABI_MAJOR, ABI_MINOR};
 
     #[test]
     fn bridge_identity_matches_pinned_dependencies() {
-        assert_eq!((CLIENT_CORE_ABI_MAJOR, CLIENT_CORE_ABI_MINOR), (1, 0));
+        assert_eq!((i64::from(ABI_MAJOR), i64::from(ABI_MINOR)), (1, 0));
         assert_eq!((GODOT_API_MAJOR, GODOT_API_MINOR), (4, 7));
         assert_eq!(GODOT_RUST_VERSION, "0.5.5");
     }
