@@ -58,6 +58,7 @@ func TestGodotPythonToolingIsLockedAndRuntimeFree(t *testing.T) {
 
 	for _, relative := range []string{
 		"typing/py4godot/classes/__init__.pyi",
+		"typing/py4godot/classes/Control.pyi",
 		"typing/py4godot/classes/Node.pyi",
 		"typing/py4godot/classes/Object.pyi",
 		"typing/py4godot/classes/PackedScene.pyi",

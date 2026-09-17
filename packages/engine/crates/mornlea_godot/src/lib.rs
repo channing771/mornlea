@@ -5,6 +5,7 @@ mod client_core;
 mod feature_negotiation;
 mod lifecycle;
 mod pull_buffers;
+mod status_decode;
 
 use godot::prelude::*;
 

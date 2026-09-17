@@ -55,7 +55,7 @@ var godotForbiddenImportRoots = []string{
 // and forwards the bridge object; only features may invoke these names.
 var godotGameplayBridgeCallRegex = regexp.MustCompile(
 	`"(session_create|session_connect|session_poll|session_submit|session_step|` +
-		`session_close|pull_world|pull_frame|pull_status|pull_identity)"`,
+		`session_close|session_status_typed|pull_world|pull_frame|pull_status|pull_identity)"`,
 )
 
 // Concrete feature identities declared by the production catalog; a host file

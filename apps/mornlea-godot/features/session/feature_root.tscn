@@ -2,5 +2,9 @@
 
 [ext_resource type="Script" path="res://features/session/session_feature.py" id="1_script"]
 
-[node name="SessionFeature" type="Node"]
+[node name="SessionFeature" type="Control"]
 script = ExtResource("1_script")
+
+[node name="PhaseLabel" type="Label" parent="."]
+
+[node name="ErrorLabel" type="Label" parent="."]

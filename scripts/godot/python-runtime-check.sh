@@ -38,7 +38,7 @@ trap cleanup EXIT
 
 usage() {
   printf '%s\n' \
-    'usage: scripts/godot/python-runtime-check.sh (--qualify|--coexistence|--bridge-contract|--host-open-session) [--offline] [--target darwin-arm64] [--cache-dir ABSOLUTE_PATH]'
+    'usage: scripts/godot/python-runtime-check.sh (--qualify|--coexistence|--bridge-contract|--host-open-session|--session-feature) [--offline] [--target darwin-arm64] [--cache-dir ABSOLUTE_PATH]'
 }
 
 while (($# > 0)); do
@@ -57,6 +57,10 @@ while (($# > 0)); do
       ;;
     --host-open-session)
       mode="host-open-session"
+      shift
+      ;;
+    --session-feature)
+      mode="session-feature"
       shift
       ;;
     --offline)
@@ -83,8 +87,8 @@ while (($# > 0)); do
   esac
 done
 
-[[ "${mode}" == "qualify" || "${mode}" == "coexistence" || "${mode}" == "bridge-contract" || "${mode}" == "host-open-session" ]] || \
-  fail "--qualify, --coexistence, --bridge-contract, or --host-open-session is required"
+[[ "${mode}" == "qualify" || "${mode}" == "coexistence" || "${mode}" == "bridge-contract" || "${mode}" == "host-open-session" || "${mode}" == "session-feature" ]] || \
+  fail "--qualify, --coexistence, --bridge-contract, --host-open-session, or --session-feature is required"
 [[ "${target}" == "darwin-arm64" ]] || fail "unsupported Py4Godot desktop target: ${target}"
 [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]] || \
   fail "unsupported Py4Godot desktop target: $(uname -s)-$(uname -m)"
@@ -216,6 +220,31 @@ if [[ "${mode}" == "host-open-session" ]]; then
   }
   [[ ! -e "${invocation_marker}" ]] || fail "an external Python or package installer was invoked"
   printf 'mornlea_godot host open-session teardown verified offline: the host-held session closes through bridge drop before Rust deinitialization.\n'
+  exit 0
+fi
+
+if [[ "${mode}" == "session-feature" ]]; then
+  # Drive the real production session feature end to end offline: the check
+  # scene activates the production catalog through the real feature host,
+  # asserts the initial not-ready display, requests one connection toward a
+  # deliberately refused loopback address, observes the Connecting-to-
+  # terminal transition, pins the stable dial error display, exercises the
+  # latched/reset/clean-close states, and deactivates the feature again.
+  "${script_dir}/build-core.sh" --verify >/dev/null
+  "${script_dir}/build-extension.sh" --verify >/dev/null
+  session_output="$(run_isolated --headless --path "${project_root}" --quit-after 300 \
+    res://tests/scenes/session_feature_check.tscn 2>&1)" || {
+    printf '%s\n' "${session_output}" >&2
+    fail "mornlea_godot session-feature probe failed"
+  }
+  [[ "${session_output}" == *"Python session feature check passed."* ]] || \
+    fail "session-feature success marker is missing"
+  [[ "${session_output}" != *"ERROR:"* && "${session_output}" != *"SCRIPT ERROR:"* ]] || {
+    printf '%s\n' "${session_output}" >&2
+    fail "session-feature probe reported an extension error"
+  }
+  [[ ! -e "${invocation_marker}" ]] || fail "an external Python or package installer was invoked"
+  printf 'mornlea_godot session feature verified offline: production catalog activation, phase display transitions, stable dial error, reset, and clean close.\n'
   exit 0
 fi
 

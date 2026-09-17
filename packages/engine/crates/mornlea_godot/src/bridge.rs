@@ -9,6 +9,7 @@ use crate::client_core::{
 use crate::feature_negotiation::PILOT_FAMILIES;
 use crate::lifecycle;
 use crate::pull_buffers::{PullBufferSet, pull_via_buffer};
+use crate::status_decode::{TypedStatus, decode_status_record};
 
 const GODOT_API_MAJOR: i64 = 4;
 const GODOT_API_MINOR: i64 = 7;
@@ -124,6 +125,17 @@ impl BridgeSession {
         let calls = self.calls.as_ref();
         let buffer = self.buffers.for_family(family);
         pull_via_buffer(calls, family, handle, buffer)
+    }
+
+    /// Pull the status record set and decode it into its typed semantic
+    /// fields. This is the Python-facing status surface: record decoding is
+    /// Rust-owned (design decision 4 of the pilot migration), so consumers
+    /// receive typed values and never record bytes. Every failure — a
+    /// missing session, a producer error word, or a record set the decoder
+    /// rejects — surfaces as the failing status word.
+    pub(crate) fn status_typed(&mut self) -> Result<TypedStatus, u32> {
+        self.pull(PullFamily::Status)
+            .and_then(|record| decode_status_record(&record))
     }
 
     /// Release the session idempotently: the first close destroys the handle
@@ -350,6 +362,49 @@ impl MornleaClientBridge {
         self.pull_dictionary(PullFamily::Status)
     }
 
+    /// The status family's typed semantic view as one dictionary with
+    /// `status` plus `phase`, `terminal_cause`, `steps_completed`, and
+    /// `messages_processed` (the record kinds 1..4 of the status family,
+    /// decoded Rust-side per the pilot's typed-values-only boundary for
+    /// Python). The semantic fields are meaningful only when `status` is
+    /// zero; every failure reports the status word with the fields zeroed,
+    /// so a consumer can never mistake a failure for fabricated state.
+    #[func]
+    fn session_status_typed(&mut self) -> VarDictionary {
+        let decoded = if Self::on_main_thread() {
+            self.session.status_typed()
+        } else {
+            Err(abi::STATUS_INTERNAL)
+        };
+        let mut result = VarDictionary::new();
+        match decoded {
+            Ok(typed) => {
+                result.set("status", i64::from(abi::STATUS_OK));
+                result.set("phase", i64::from(typed.phase));
+                result.set("terminal_cause", i64::from(typed.terminal_cause));
+                // The counters are bounded by the step budgets in practice;
+                // the saturation guard keeps the u64-to-i64 narrowing honest
+                // if that bound is ever exceeded.
+                result.set(
+                    "steps_completed",
+                    i64::try_from(typed.steps_completed).unwrap_or(i64::MAX),
+                );
+                result.set(
+                    "messages_processed",
+                    i64::try_from(typed.messages_processed).unwrap_or(i64::MAX),
+                );
+            }
+            Err(word) => {
+                result.set("status", i64::from(word));
+                result.set("phase", 0);
+                result.set("terminal_cause", 0);
+                result.set("steps_completed", 0);
+                result.set("messages_processed", 0);
+            }
+        }
+        result
+    }
+
     /// Read the producer identity record: the same dictionary shape.
     #[func]
     fn pull_identity(&mut self) -> VarDictionary {
@@ -411,6 +466,7 @@ mod tests {
         production_core_calls,
     };
     use crate::feature_negotiation::PILOT_FAMILIES;
+    use crate::status_decode::{TypedStatus, test_status_record};
     use std::cell::RefCell;
     use std::rc::Rc;
 
@@ -650,6 +706,7 @@ mod tests {
         assert_eq!(session.submit(&[]), STATUS_INVALID_STATE);
         assert_eq!(session.step(0, 0, 0), STATUS_INVALID_STATE);
         assert_eq!(session.pull(PullFamily::World), Err(STATUS_INVALID_STATE));
+        assert_eq!(session.status_typed(), Err(STATUS_INVALID_STATE));
         assert_eq!(session.close(), STATUS_OK);
     }
 
@@ -755,6 +812,7 @@ mod tests {
         let pulls = core.state().pull_calls;
         assert_eq!(session.poll(), (STATUS_INVALID_STATE, 0));
         assert_eq!(session.pull(PullFamily::World), Err(STATUS_INVALID_STATE));
+        assert_eq!(session.status_typed(), Err(STATUS_INVALID_STATE));
         assert_eq!(session.connect("127.0.0.1:9"), STATUS_INVALID_STATE);
         assert_eq!(session.submit(&[]), STATUS_INVALID_STATE);
         assert_eq!(session.step(0, 0, 0), STATUS_INVALID_STATE);
@@ -876,7 +934,75 @@ mod tests {
     fn bridge_lifecycle_pull_without_a_session_reports_invalid_state() {
         let (mut session, core) = scripted_session();
         assert_eq!(session.pull(PullFamily::Status), Err(STATUS_INVALID_STATE));
+        assert_eq!(session.status_typed(), Err(STATUS_INVALID_STATE));
         assert_eq!(core.state().pull_calls, 0);
+    }
+
+    #[test]
+    fn bridge_lifecycle_status_typed_decodes_the_pulled_record_set() {
+        let (mut session, core) = scripted_session();
+        assert_eq!(session.create(), STATUS_OK);
+        let record = test_status_record(5, 1, 7, 900);
+        core.script_pulls(
+            &[
+                PullOutcome::Capacity {
+                    required: record.len() as u32,
+                },
+                PullOutcome::Complete {
+                    written: record.len() as u32,
+                },
+            ],
+            &record,
+        );
+        // One two-phase pull, then the pure Rust-side decode: Python would
+        // receive the typed dictionary, never these record bytes.
+        assert_eq!(
+            session.status_typed(),
+            Ok(TypedStatus {
+                phase: 5,
+                terminal_cause: 1,
+                steps_completed: 7,
+                messages_processed: 900,
+            })
+        );
+        assert_eq!(core.state().pull_calls, 2);
+    }
+
+    #[test]
+    fn bridge_lifecycle_status_typed_fails_closed_on_drift_and_errors() {
+        let (mut session, core) = scripted_session();
+        assert_eq!(session.create(), STATUS_OK);
+
+        // A record set the decoder rejects reports the internal word.
+        let mut drifted = test_status_record(5, 1, 7, 900);
+        drifted[0..4].copy_from_slice(&abi::MAGIC_FRAME.to_le_bytes());
+        core.script_pulls(
+            &[
+                PullOutcome::Capacity {
+                    required: drifted.len() as u32,
+                },
+                PullOutcome::Complete {
+                    written: drifted.len() as u32,
+                },
+            ],
+            &drifted,
+        );
+        assert_eq!(session.status_typed(), Err(STATUS_INTERNAL));
+
+        // An empty record (a no-content producer outcome) cannot carry the
+        // phase record the family always promises; it fails closed too.
+        core.script_pulls(&[PullOutcome::Complete { written: 0 }], &[]);
+        assert_eq!(session.status_typed(), Err(STATUS_INTERNAL));
+
+        // A producer error word surfaces unchanged through the typed path.
+        core.script_pulls(
+            &[
+                PullOutcome::Capacity { required: 8 },
+                PullOutcome::Status(STATUS_INVALID_STATE),
+            ],
+            &[],
+        );
+        assert_eq!(session.status_typed(), Err(STATUS_INVALID_STATE));
     }
 
     #[test]
@@ -958,6 +1084,20 @@ mod tests {
                 session.pull(PullFamily::Status),
                 Err(word),
                 "pull word {word}"
+            );
+            // The typed surface scripts its own two-phase pair: the query
+            // fails with the same word before any decode runs.
+            core.script_pulls(
+                &[
+                    PullOutcome::Capacity { required: 8 },
+                    PullOutcome::Status(word),
+                ],
+                &[],
+            );
+            assert_eq!(
+                session.status_typed(),
+                Err(word),
+                "typed status word {word}"
             );
         }
     }

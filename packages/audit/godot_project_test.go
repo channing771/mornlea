@@ -151,11 +151,22 @@ func TestGodotDesktopOnlyFeatureSkeleton(t *testing.T) {
 		"platform/desktop/lifecycle/feature.tres",
 		"platform/desktop/audio/feature.tres",
 	}
+	// The session pilot feature is implemented and selected by the production
+	// catalog; the remaining roots are still reserved skeletons and must stay
+	// explicitly disabled until their own implementation tasks enable them.
+	implemented := map[string]bool{"features/session/feature.tres": true}
 	catalog := readBaselineDoc(t, root, filepath.Join("apps", "mornlea-godot", "config", "feature_catalog.tres"))
 	for _, relative := range manifestPaths {
 		fullPath := filepath.Join("apps", "mornlea-godot", filepath.FromSlash(relative))
 		manifest := readBaselineDoc(t, root, fullPath)
-		if !strings.Contains(manifest, "enabled = false") {
+		if implemented[relative] {
+			if !strings.Contains(manifest, "enabled = true") {
+				t.Errorf("implemented Godot feature %s must stay enabled", relative)
+			}
+			if !strings.Contains(manifest, "metadata/required = true") {
+				t.Errorf("implemented pilot feature %s must be required by the catalog plan", relative)
+			}
+		} else if !strings.Contains(manifest, "enabled = false") {
 			t.Errorf("unimplemented Godot skeleton %s must stay explicitly disabled", relative)
 		}
 		if !strings.Contains(catalog, "res://"+relative) {
@@ -191,6 +202,9 @@ func TestGodotPythonFeatureSkeletonsAndScriptOwnership(t *testing.T) {
 		"platform/desktop/input":     "desktop_input_feature",
 		"platform/desktop/lifecycle": "desktop_lifecycle_feature",
 	}
+	// The session pilot feature renders a Control scene, so its script bases
+	// on the generated Control class; every reserved skeleton stays Node.
+	scriptBases := map[string]string{"features/session": "Control"}
 	registeredManifests := make(map[string]bool, len(skeletons))
 	for directory, className := range skeletons {
 		manifest := filepath.ToSlash(filepath.Join(directory, "feature.tres"))
@@ -198,8 +212,12 @@ func TestGodotPythonFeatureSkeletonsAndScriptOwnership(t *testing.T) {
 		scriptName := className + ".py"
 		scriptPath := filepath.Join(projectRoot, filepath.FromSlash(directory), scriptName)
 		script := readBaselineDoc(t, root, filepath.Join("apps", "mornlea-godot", filepath.FromSlash(directory), scriptName))
+		base := scriptBases[directory]
+		if base == "" {
+			base = "Node"
+		}
 		for _, required := range []string{
-			"class " + className + "(Node):",
+			"class " + className + "(" + base + "):",
 			"def validate_feature",
 			"def bind_host",
 			"def activate_feature",

@@ -38,6 +38,7 @@ HOST_GAMEPLAY_BRIDGE_METHODS = frozenset(
         "session_submit",
         "session_step",
         "session_close",
+        "session_status_typed",
         "pull_world",
         "pull_frame",
         "pull_status",

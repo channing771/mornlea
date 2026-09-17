@@ -66,8 +66,9 @@ const FRAME_TARGET_RECORD_BYTES: usize = 16;
 const FRAME_PHASE_ERROR_RECORD_BYTES: usize = 8;
 
 /// Fixed wire size of every status record, pinned against the producer's
-/// `StatusRecordBytes`.
-const STATUS_RECORD_BYTES: usize = 16;
+/// `StatusRecordBytes`. Shared with the Rust-side status decode (see
+/// `status_decode`), which consumes the same record-set vocabulary.
+pub(crate) const STATUS_RECORD_BYTES: usize = 16;
 
 /// Records in the pilot status record set (phase, terminal cause, steps
 /// completed, messages processed), pinned against the producer's
