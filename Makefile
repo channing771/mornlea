@@ -21,7 +21,7 @@ ARGS ?=
 # dev-check、vet）显式循环该列表，防止新模块成为 ./... 盲区。
 GO_TEST_MODULES := ./packages/contracts ./packages/shared ./packages/server ./packages/client ./packages/tools ./packages/audit
 
-.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck comment-language-check fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev godot-project-check godot-python-check godot-smoke
+.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck comment-language-check fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev godot-asset-check godot-project-check godot-python-check godot-smoke
 
 run test test-multiplayer bench-multiplayer visual-check visual-update: rust
 build: rust
@@ -47,6 +47,7 @@ help:
 		'  make frontend-check   菜单 WebView 前端门禁(冻结安装+typecheck+vitest+构建+dist 一致)' \
 		'  make companion-agent-check 运行伙伴 Agent locked 安装、格式、静态检查、类型检查与 Python 单测' \
 		'  make companion-agent-integration 运行无外网 Go/Python 伙伴 Agent 真进程合同' \
+		'  make godot-asset-check   Optional pilot gate: verify generated Godot assets match their inputs' \
 		'  make godot-project-check Optional pilot gate: validate the Godot project structure' \
 		'  make godot-python-check  Optional pilot gate: locked Godot Python static and unit checks' \
 		'  make godot-smoke         Optional pilot gate: 100-iteration isolated Godot headless smoke' \
@@ -221,6 +222,9 @@ agent-ui-dev:
 # godot-*: optional pilot gates for the Godot client migration. They touch the
 # Godot/Python runtime ONLY when explicitly invoked; legacy targets (build,
 # test, run and friends) must not depend on them or probe scripts/godot.
+godot-asset-check:
+	scripts/godot/sync-assets.sh --check
+
 godot-project-check:
 	scripts/godot/validate-project.sh
 
