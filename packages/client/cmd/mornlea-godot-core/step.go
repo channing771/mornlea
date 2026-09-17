@@ -13,21 +13,38 @@ import (
 
 // This file owns the step family export surface: the frozen MCS1 request
 // record (see include/mornlea_client_core.h) decoded from an owned copy into
-// exactly one bounded `runtime.Runtime.Step` call, and the per-session
-// retention of the resulting `runtime.StepResult` for the later world and
-// frame pull families. The export performs only bounded work and never waits
-// on the network or a GPU.
+// one bounded step drive against the online runtime — a mesh-scheduling pass
+// (`AdvanceMeshes`) followed by exactly one `runtime.Runtime.Step` call, each
+// half bounded by the caller's single mesh budget, so the per-call total is at
+// most twice that budget and still bounded — plus the per-session retention of
+// the resulting `runtime.StepResult` for the later world and frame pull
+// families. The export performs only bounded work and never waits on the
+// network or a GPU.
 
-// stepRuntime executes one bounded step against the online runtime. It is a
-// variable so tests can record the decoded arguments, script step failure, and
-// inject panics through the seam; it is never redefined outside tests. The
-// production body is the bounded semantics of `runtime.Runtime.Step`: it never
-// reads a wall clock and never waits on the network, because every blocking
-// transport send belongs to the runtime's asynchronous outbound worker and the
-// step path itself only performs non-blocking enqueue operations (the queue
-// send selects with a `default` arm and reports a full queue as an error), so
-// this export returns exactly when `Step` returns.
+// stepRuntime executes one bounded step drive against the online runtime. It
+// is a variable so tests can record the decoded arguments, script step
+// failure, and inject panics through the seam; it is never redefined outside
+// tests. The production body is the bounded semantics of
+// `runtime.Runtime.AdvanceMeshes` plus `runtime.Runtime.Step`: neither reads
+// a wall clock and neither waits on the network, because every blocking
+// transport send belongs to the runtime's asynchronous outbound worker and
+// the step path itself only performs non-blocking enqueue operations (the
+// queue send selects with a `default` arm and reports a full queue as an
+// error), so this export returns exactly when both halves return.
+//
+// Mesh scheduling composition: the legacy application drives
+// `AdvanceMeshes` from its own frame loop, but the pilot core has no such
+// host, and `Step` only drains already-scheduled results into the world
+// batch. One pilot step therefore first advances mesh scheduling under the
+// same mesh budget (try-style worker scheduling and result draining, never
+// a worker wait) and then steps; without this the pilot's world family
+// would never publish a batch. Each half stays inside the caller's single
+// mesh budget, bounding the whole export at twice that budget in section
+// operations.
 var stepRuntime = func(established *runtime.Runtime, elapsed time.Duration, messageBudget, meshBudget int) (runtime.StepResult, error) {
+	if err := established.AdvanceMeshes(meshBudget); err != nil {
+		return runtime.StepResult{}, err
+	}
 	return established.Step(elapsed, messageBudget, meshBudget)
 }
 
@@ -68,9 +85,12 @@ func (session *clientSession) retainedStep() (runtime.StepResult, bool) {
 	return session.stepResult, session.hasStepResult
 }
 
-// coreStep validates one step request and drives exactly one bounded runtime
-// step. It is the testable core behind the exported step symbol; the raw
-// pointer arguments mirror the C surface.
+// coreStep validates one step request and drives one bounded runtime step
+// pass — the `stepRuntime` seam's mesh-scheduling call followed by exactly
+// one `runtime.Runtime.Step`, each half under the caller's single mesh
+// budget (at most twice that budget per export call). It is the testable
+// core behind the exported step symbol; the raw pointer arguments mirror
+// the C surface.
 //
 // Validation order, each phase returning before the next runs:
 //  1. Handle lifecycle (table): an unknown value reports

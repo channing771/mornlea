@@ -43,6 +43,10 @@ HOST_GAMEPLAY_BRIDGE_METHODS = frozenset(
         "pull_frame",
         "pull_status",
         "pull_identity",
+        "terrain_attach",
+        "terrain_ingest_world",
+        "terrain_frame",
+        "terrain_sections_json",
     }
 )
 

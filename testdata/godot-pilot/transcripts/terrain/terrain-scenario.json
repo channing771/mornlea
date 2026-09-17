@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "name": "terrain-scenario",
+  "description": "Deterministic terrain scenario for the Godot headless terrain check. Round one logs the pilot in, publishes an initial stone-floor chunk snapshot at revision 1, applies a block delta to revision 2 that places one stone block on top of the floor, forgets the chunk, and disconnects. Round two simulates world re-entry with a fresh snapshot of the same chunk at revision 3 and disconnects again. All chunk-bearing frames are synthesized protocol-legal packets; the recorded valid-session corpus was not reused because its LoginSuccess echoes a different pilot identity and its chunk frames carry a different scenario chunk, while the login identity must be derived from the received LoginStart.",
+  "stage_interval_ms": 1000,
+  "world_seed": 72623859790382856,
+  "player_position": [0.5, -32, 0.5],
+  "rounds": [
+    {
+      "name": "first-entry",
+      "stages": [
+        {
+          "label": "player-ready",
+          "send": "player_state"
+        },
+        {
+          "label": "initial-snapshot",
+          "send": "chunk_snapshot",
+          "dimension": 0,
+          "chunk": [0, 0],
+          "revision": 1,
+          "sections": "stone_floor"
+        },
+        {
+          "label": "chunk-delta",
+          "send": "block_changes",
+          "dimension": 0,
+          "chunk": [0, 0],
+          "base_revision": 1,
+          "new_revision": 2,
+          "changes": [
+            {
+              "position": [8, -48, 8],
+              "block": "stone"
+            }
+          ]
+        },
+        {
+          "label": "forget-chunk",
+          "send": "forget_chunks",
+          "dimension": 0,
+          "chunks": [[0, 0]]
+        },
+        {
+          "label": "disconnect",
+          "send": "disconnect",
+          "code": 3,
+          "message": "terrain scenario round one complete"
+        }
+      ]
+    },
+    {
+      "name": "re-entry",
+      "stages": [
+        {
+          "label": "player-ready",
+          "send": "player_state"
+        },
+        {
+          "label": "re-entry-snapshot",
+          "send": "chunk_snapshot",
+          "dimension": 0,
+          "chunk": [0, 0],
+          "revision": 3,
+          "sections": "stone_floor"
+        },
+        {
+          "label": "disconnect",
+          "send": "disconnect",
+          "code": 3,
+          "message": "terrain scenario re-entry complete"
+        }
+      ]
+    }
+  ]
+}

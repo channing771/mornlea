@@ -11,25 +11,29 @@ import (
 	"testing"
 )
 
-// The three Godot pilot entry points are opt-in gates: they may touch the
+// The Godot pilot entry points are opt-in gates: they may touch the
 // Godot/Python runtime only when a developer or the dedicated CI job invokes
 // them explicitly. This guard pins both halves of that boundary: the entry
 // points must exist with the exact verified script invocations, and every
 // legacy make/CI entry (build, test, run, companion-agent-check) must stay
 // free of any scripts/godot probe or godot-* dependency edge.
 var godotEntrypointTargets = []string{
+	"godot-asset-check",
 	"godot-project-check",
 	"godot-python-check",
 	"godot-smoke",
+	"godot-terrain-check",
 }
 
 // godotEntrypointRecipes pins the exact script invocation each gate must run;
 // godot-smoke additionally requires the isolated Python flag so the smoke
 // cycle can never silently fall back to a host interpreter.
 var godotEntrypointRecipes = map[string][]string{
+	"godot-asset-check":   {"scripts/godot/sync-assets.sh --check"},
 	"godot-project-check": {"scripts/godot/validate-project.sh"},
 	"godot-python-check":  {"scripts/godot/python-check.sh --locked"},
 	"godot-smoke":         {"scripts/godot/smoke.sh --iterations 100", "--isolated-python"},
+	"godot-terrain-check": {"scripts/godot/godot-terrain-check.sh"},
 }
 
 const godotEntrypointTestRootEnv = "MORNLEA_GODOT_ENTRYPOINT_TEST_ROOT"

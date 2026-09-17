@@ -78,6 +78,14 @@ scripts/godot/feature-contract-check.sh --extensibility-probe
 scripts/godot/feature-contract-check.sh --bridge-integration
 ```
 
+## 转录地形检查
+
+世界功能的原生地形管线（紧凑 quad 解码、网格预备 worker、RenderingServer RID 表与每帧预算）通过一个无头检查端到端验证：检查把确定性的 protocol v44 场景回放进真实的试点会话。转录助手（`packages/client/cmd/mornlea-godot-transcripts`）在回环地址上提供 `testdata/godot-pilot/transcripts/terrain/` 下的场景：第一轮发布初始区块快照、方块增量、区块遗忘与断开；第二轮模拟重新进入世界。检查场景激活生产目录、经会话功能连接，并在每个阶段后断言桥的结构化地形摘要，包括遗忘与断开/重置后没有残留区段。运行方式：
+
+```bash
+make godot-terrain-check
+```
+
 ## 架构边界
 
 Godot 只负责桌面窗口、键盘鼠标采集、呈现、试点 UI 与 Godot 资源生命周期。Go 客户端运行时继续负责协议 v44、镜像、预测、语义帧状态与有界网络处理。网格、光照、碰撞、射线检测和物理由 engine ABI v11 中的数值实现继续负责。权威 Go 服务器仍是世界与玩家真值的唯一所有者。

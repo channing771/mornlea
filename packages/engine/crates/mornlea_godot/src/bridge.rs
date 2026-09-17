@@ -1,4 +1,8 @@
-use godot::classes::{INode, Node};
+use godot::classes::image::Format as ImageFormat;
+use godot::classes::rendering_server::TextureLayeredType;
+use godot::classes::{
+    FileAccess, INode, Json, Node, Node3D, RenderingServer, ResourceLoader, ShaderMaterial,
+};
 use godot::prelude::*;
 
 use crate::abi;
@@ -10,10 +14,33 @@ use crate::feature_negotiation::PILOT_FAMILIES;
 use crate::lifecycle;
 use crate::pull_buffers::{PullBufferSet, pull_via_buffer};
 use crate::status_decode::{TypedStatus, decode_status_record};
+use crate::terrain_bridge::{
+    BridgeTerrain, TerrainFrameSummary, TerrainIngestSummary, TerrainInputs,
+};
+use crate::terrain_budget::TerrainBudgetStage;
+use crate::terrain_resources::{TerrainMaterials, TerrainRenderer, production_render_backend};
 
 const GODOT_API_MAJOR: i64 = 4;
 const GODOT_API_MINOR: i64 = 7;
 const GODOT_RUST_VERSION: &str = "0.5.5";
+
+// Pinned atlas identity the Rust-side loader validates before building the
+// layered texture: the same fields the world feature's Python bind pins
+// (schema version, pixel format, layer size, mip count, storage order, and
+// pixel file name). The manifest's byte-level currency is enforced by the
+// asset gate; this validation fails closed on identity drift only.
+const ATLAS_MANIFEST_SCHEMA_VERSION: i64 = 1;
+const ATLAS_FORMAT: &str = "RGBA8";
+const ATLAS_LAYER_SIZE: i64 = 16;
+const ATLAS_MIP_LEVELS: i64 = 5;
+const ATLAS_STORAGE_ORDER: &str = "layer-major,mip-major";
+const ATLAS_MANIFEST_PATH: &str = "res://assets/generated/manifest.json";
+const ATLAS_PIXELS_PATH: &str = "res://assets/generated/atlas.rgba8";
+const ATLAS_LAYER_NAME: &str = "atlas.rgba8";
+/// Bytes of one atlas layer: the full 16x16 RGBA8 mip chain (256+64+16+4+1
+/// texels, four bytes each).
+const ATLAS_LAYER_BYTES: usize = 1364;
+
 #[cfg(test)]
 pub(crate) const BRIDGE_CLASS_NAME: &str = "MornleaClientBridge";
 #[cfg(test)]
@@ -39,6 +66,13 @@ pub(crate) struct BridgeSession {
     calls: Box<dyn CoreCalls>,
     handle: Option<ClientHandle>,
     buffers: PullBufferSet,
+    /// The bridge-owned terrain pipeline, attached once by the world
+    /// feature's activation. Survives producer-session closes (its `reset`
+    /// rides every close) so re-entry reuses the same stage under a
+    /// strictly greater stage epoch. The atlas texture RID stays with the
+    /// node layer because freeing it is an engine call this Godot-free
+    /// struct must never make.
+    terrain: Option<BridgeTerrain>,
 }
 
 impl BridgeSession {
@@ -47,6 +81,7 @@ impl BridgeSession {
             calls,
             handle: None,
             buffers: PullBufferSet::default(),
+            terrain: None,
         }
     }
 
@@ -142,13 +177,62 @@ impl BridgeSession {
     /// (which also cancels and joins an in-flight connection) and every later
     /// close is a local no-op that still reports success. The buffers' served
     /// identities reset so a later session's fresh epoch space cannot be
-    /// mistaken for a stale one.
+    /// mistaken for a stale one. The terrain stage resets on every close:
+    /// world re-entry and teardown both ride this one path, and the stage's
+    /// strictly monotonic epochs keep the retired session's in-flight work
+    /// from ever resurfacing.
     pub(crate) fn close(&mut self) -> u32 {
+        if let Some(terrain) = self.terrain.as_mut() {
+            terrain.reset();
+        }
         let Some(handle) = self.handle.take() else {
             return abi::STATUS_OK;
         };
         self.buffers.reset_served_identities();
         self.calls.destroy_session(handle)
+    }
+
+    /// Store an assembled terrain pipeline; the attach path (bridge node)
+    /// owns the Godot-resource half and hands the finished stage over.
+    pub(crate) fn attach_terrain(&mut self, terrain: BridgeTerrain) {
+        self.terrain = Some(terrain);
+    }
+
+    /// The attached inputs, for idempotent re-attachment checks.
+    pub(crate) fn terrain_inputs(&self) -> Option<&TerrainInputs> {
+        self.terrain.as_ref().map(|terrain| &terrain.inputs)
+    }
+
+    /// Pull the pending world batch and feed it through the terrain
+    /// pipeline. Fails with the local invalid-state word before any pull
+    /// when no pipeline is attached, so an unattached session never
+    /// consumes a batch it cannot render.
+    pub(crate) fn terrain_ingest(&mut self) -> Result<TerrainIngestSummary, u32> {
+        self.terrain.as_mut().ok_or(abi::STATUS_INVALID_STATE)?;
+        let record = self.pull(PullFamily::World)?;
+        self.terrain
+            .as_mut()
+            .expect("terrain checked above the pull")
+            .ingest(&record)
+    }
+
+    /// Pull the frame snapshot and drive exactly one terrain frame from the
+    /// derived camera. Like the ingest path, an unattached pipeline fails
+    /// before any pull.
+    pub(crate) fn terrain_frame(&mut self) -> Result<TerrainFrameSummary, u32> {
+        self.terrain.as_mut().ok_or(abi::STATUS_INVALID_STATE)?;
+        let record = self.pull(PullFamily::Frame)?;
+        self.terrain
+            .as_mut()
+            .expect("terrain checked above the pull")
+            .frame(&record)
+    }
+
+    /// The structural terrain summary JSON, or the local invalid-state
+    /// marker when no pipeline is attached.
+    pub(crate) fn terrain_summary(&self) -> Result<String, u32> {
+        let terrain = self.terrain.as_ref().ok_or(abi::STATUS_INVALID_STATE)?;
+        Ok(terrain.summary_json())
     }
 }
 
@@ -159,6 +243,15 @@ impl Drop for BridgeSession {
         // session is always destroyed before any library state goes away.
         self.close();
     }
+}
+
+/// One typed manifest-field reader: the engine's own JSON parse hands back
+/// a Variant, and every field is read through the typed conversion so a
+/// drifted manifest fails closed instead of decoding as zero.
+fn variant_field<T: godot::meta::FromGodot>(dictionary: &VarDictionary, name: &str) -> Option<T> {
+    dictionary
+        .get(name)
+        .and_then(|value| value.try_to::<T>().ok())
 }
 
 /// The project-owned native bridge: identity statics for qualification plus
@@ -175,6 +268,11 @@ impl Drop for BridgeSession {
 #[class(base=Node)]
 struct MornleaClientBridge {
     session: BridgeSession,
+    /// The layered atlas texture the terrain attach built. Bridge-owned and
+    /// freed when the node leaves the tree, after the session close reset
+    /// every table-owned RID; the borrowed material and scenario RIDs are
+    /// never freed (the resource cache and the scene own them).
+    terrain_atlas: Option<Rid>,
     #[base]
     base: Base<Node>,
 }
@@ -184,7 +282,19 @@ impl INode for MornleaClientBridge {
     fn init(base: Base<Node>) -> Self {
         Self {
             session: BridgeSession::new(production_core_calls()),
+            terrain_atlas: None,
             base,
+        }
+    }
+
+    fn exit_tree(&mut self) {
+        // Node teardown is the one owner-side moment the atlas may be
+        // freed: the session close inside has already reset the stage and
+        // freed every table-owned mesh and instance RID, and the rendering
+        // server still exists on this (main) thread.
+        self.session.close();
+        if let Some(atlas) = self.terrain_atlas.take() {
+            RenderingServer::singleton().free_rid(atlas);
         }
     }
 }
@@ -421,6 +531,158 @@ impl MornleaClientBridge {
         i64::from(self.session.close())
     }
 
+    /// Attach the native terrain renderer. Loads the three pinned
+    /// ShaderMaterials and validates they are shader materials, resolves
+    /// the scenario RID from the scenario-source Node3D's 3D world, builds
+    /// the layered atlas texture from the generated pixels after manifest
+    /// validation and assigns it to each material's `atlas` uniform, then
+    /// assembles the budget stage over the production `RenderingServer`
+    /// backend. Returns a dictionary with `status` (0 means attached) and,
+    /// on failure, a stable English `detail`. Re-attaching with the same
+    /// paths is an idempotent success; different paths fail closed with
+    /// the invalid-state word.
+    #[func]
+    fn terrain_attach(
+        &mut self,
+        opaque: GString,
+        cutout: GString,
+        water: GString,
+        scenario_source: GString,
+    ) -> VarDictionary {
+        let fail = |status: u32, detail: &str| {
+            let mut result = VarDictionary::new();
+            result.set("status", i64::from(status));
+            result.set("detail", &GString::from(detail));
+            result
+        };
+        if !Self::on_main_thread() {
+            return fail(
+                abi::STATUS_INTERNAL,
+                "the terrain attach ran off the main thread",
+            );
+        }
+        let inputs = TerrainInputs {
+            opaque: opaque.to_string(),
+            cutout: cutout.to_string(),
+            water: water.to_string(),
+            scenario: scenario_source.to_string(),
+        };
+        if let Some(existing) = self.session.terrain_inputs() {
+            if *existing == inputs {
+                let mut result = VarDictionary::new();
+                result.set("status", i64::from(abi::STATUS_OK));
+                result.set("detail", &GString::from(""));
+                return result;
+            }
+            return fail(
+                abi::STATUS_INVALID_STATE,
+                "the terrain renderer is already attached with different resources",
+            );
+        }
+        match self.attach_terrain_resources(&inputs) {
+            Ok((terrain, atlas)) => {
+                self.terrain_atlas = Some(atlas);
+                self.session.attach_terrain(terrain);
+                let mut result = VarDictionary::new();
+                result.set("status", i64::from(abi::STATUS_OK));
+                result.set("detail", &GString::from(""));
+                result
+            }
+            Err((status, detail)) => fail(status, &detail),
+        }
+    }
+
+    /// Pull the pending world batch once and feed it through the terrain
+    /// pipeline (bounded upserts and drops; see the terrain module for the
+    /// retention and drop bounds). Returns a dictionary with `status` plus
+    /// the typed ingest counters; without an attached pipeline the call
+    /// fails closed with the invalid-state word and consumes nothing.
+    #[func]
+    fn terrain_ingest_world(&mut self) -> VarDictionary {
+        let ingested = if Self::on_main_thread() {
+            self.session.terrain_ingest()
+        } else {
+            Err(abi::STATUS_INTERNAL)
+        };
+        let mut result = VarDictionary::new();
+        match ingested {
+            Ok(summary) => {
+                result.set("status", i64::from(abi::STATUS_OK));
+                result.set("operations", summary.operations as i64);
+                result.set("record_quad_bytes", summary.record_quad_bytes as i64);
+                result.set("upserts_submitted", summary.upserts_submitted as i64);
+                result.set("upserts_deferred", summary.upserts_deferred as i64);
+                result.set("upserts_replayed", summary.upserts_replayed as i64);
+                result.set("drops_applied", summary.drops_applied as i64);
+                result.set("drops_refused", summary.drops_refused as i64);
+                result.set("drops_deferred", summary.drops_deferred as i64);
+                result.set("drops_replayed", summary.drops_replayed as i64);
+                result.set("deferred_pending", summary.deferred_pending as i64);
+            }
+            Err(word) => {
+                result.set("status", i64::from(word));
+            }
+        }
+        result
+    }
+
+    /// Drive exactly one terrain frame from the pulled frame snapshot's
+    /// camera (floor of the camera position into section X/Z, the server's
+    /// own streaming rule). The world feature's responsibility is to call
+    /// this exactly once per `_process`; the summary dictionary carries the
+    /// derived camera and the stage's frame report.
+    #[func]
+    fn terrain_frame(&mut self) -> VarDictionary {
+        let driven = if Self::on_main_thread() {
+            self.session.terrain_frame()
+        } else {
+            Err(abi::STATUS_INTERNAL)
+        };
+        let mut result = VarDictionary::new();
+        match driven {
+            Ok(summary) => {
+                result.set("status", i64::from(abi::STATUS_OK));
+                result.set("camera_dimension", i64::from(summary.camera.dimension));
+                result.set("camera_x", i64::from(summary.camera.x));
+                result.set("camera_z", i64::from(summary.camera.z));
+                result.set(
+                    "reclaimed_sections",
+                    summary.report.reclaimed_sections as i64,
+                );
+                result.set(
+                    "reclamation_pending",
+                    i64::from(summary.report.reclamation_pending),
+                );
+                result.set("drained_results", summary.report.drained_results as i64);
+                result.set("uploads_applied", summary.report.uploads_applied as i64);
+                result.set("uploads_failed", summary.report.uploads_failed as i64);
+                result.set("uploads_discarded", summary.report.uploads_discarded as i64);
+            }
+            Err(word) => {
+                result.set("status", i64::from(word));
+            }
+        }
+        result
+    }
+
+    /// The structural terrain summary as JSON: the live section inventory
+    /// (dimension, section coordinates, revision, surface count) plus the
+    /// stage facts. This is the no-stale-section proof surface the headless
+    /// terrain check asserts against; without an attached pipeline the JSON
+    /// carries only the invalid-state status word.
+    #[func]
+    fn terrain_sections_json(&mut self) -> GString {
+        let summary = if Self::on_main_thread() {
+            self.session.terrain_summary()
+        } else {
+            Err(abi::STATUS_INTERNAL)
+        };
+        match summary {
+            Ok(json) => GString::from(json.as_str()),
+            Err(word) => GString::from(format!("{{\"status\":{}}}", word).as_str()),
+        }
+    }
+
     /// One pull as the typed dictionary every pull shares: the producer
     /// status word and a Godot-owned copy of the record bytes. The record is
     /// never a retained native buffer.
@@ -444,6 +706,196 @@ impl MornleaClientBridge {
             }
         }
         result
+    }
+
+    /// The resource half of the terrain attach, fail-closed with a status
+    /// word plus a stable English detail: load the three materials, resolve
+    /// the scenario RID, build and validate the layered atlas texture, and
+    /// assemble the budget stage over the production render backend. Every
+    /// borrowed RID (materials, scenario) is validated valid; the atlas RID
+    /// is the one resource the bridge itself owns.
+    fn attach_terrain_resources(
+        &self,
+        inputs: &TerrainInputs,
+    ) -> Result<(BridgeTerrain, Rid), (u32, String)> {
+        let rejected = |detail: String| (abi::STATUS_INPUT_REJECTED, detail);
+        let mut loader = ResourceLoader::singleton();
+        let mut load_material = |path: &str, surface: &str| -> Result<Rid, (u32, String)> {
+            let loaded = loader.load(path).ok_or_else(|| {
+                rejected(format!(
+                    "the {surface} terrain material could not be loaded"
+                ))
+            })?;
+            let material = loaded.try_cast::<ShaderMaterial>().map_err(|_| {
+                rejected(format!(
+                    "the {surface} terrain material is not a ShaderMaterial"
+                ))
+            })?;
+            let rid = material.get_rid();
+            if rid.is_invalid() {
+                return Err(rejected(format!(
+                    "the {surface} terrain material has no rendering-server RID"
+                )));
+            }
+            Ok(rid)
+        };
+        let opaque_rid = load_material(&inputs.opaque, "opaque")?;
+        let cutout_rid = load_material(&inputs.cutout, "cutout")?;
+        let water_rid = load_material(&inputs.water, "water")?;
+
+        let scenario_node = self
+            .to_gd()
+            .try_get_node_as::<Node3D>(inputs.scenario.as_str())
+            .ok_or_else(|| rejected("the terrain scenario node is missing".to_string()))?;
+        let world = scenario_node.get_world_3d().ok_or_else(|| {
+            rejected("the terrain scenario node is outside a 3D world".to_string())
+        })?;
+        let scenario_rid = world.get_scenario();
+        if scenario_rid.is_invalid() {
+            return Err(rejected(
+                "the terrain scenario node has no rendering scenario".to_string(),
+            ));
+        }
+
+        let atlas = Self::build_atlas_texture()?;
+        let mut server = RenderingServer::singleton();
+        for material in [opaque_rid, cutout_rid, water_rid] {
+            server.material_set_param(material, "atlas", &Variant::from(atlas));
+        }
+
+        let renderer = TerrainRenderer::new(
+            production_render_backend(),
+            scenario_rid,
+            TerrainMaterials {
+                opaque: opaque_rid,
+                cutout: cutout_rid,
+                water: water_rid,
+            },
+        );
+        // Ownership totality: the bridge owns the atlas RID from the moment
+        // the texture exists, so the one failure arm after that point (mesh
+        // worker spawn) frees the RID before returning instead of leaking it
+        // into engine shutdown. Every earlier failure arm precedes the
+        // texture build and owns nothing.
+        let stage = match TerrainBudgetStage::new(renderer) {
+            Ok(stage) => stage,
+            Err(word) => {
+                server.free_rid(atlas);
+                return Err((word, "the terrain mesh worker could not start".to_string()));
+            }
+        };
+        Ok((BridgeTerrain::assemble(stage, inputs.clone()), atlas))
+    }
+
+    /// Build the layered atlas texture from the generated pixel file after
+    /// manifest validation. The texture is a plain (non-sRGB) RGBA8 2D array
+    /// with the manifest's five precomputed mip levels per layer in the
+    /// manifest's layer-major, mip-major storage order: the pinned terrain
+    /// shaders sample `atlas` without a color hint and decode with their own
+    /// pow(2.2), so an sRGB-tagged upload would double-decode every texel.
+    fn build_atlas_texture() -> Result<Rid, (u32, String)> {
+        let rejected = |detail: String| (abi::STATUS_INPUT_REJECTED, detail) as (u32, String);
+        let manifest_text = FileAccess::get_file_as_string(ATLAS_MANIFEST_PATH);
+        let parsed = Json::parse_string(&manifest_text);
+        let dictionary = parsed
+            .try_to::<VarDictionary>()
+            .map_err(|_| rejected("the atlas manifest is not a JSON object".to_string()))?;
+        // Godot's JSON parse produces float variants for every JSON number,
+        // so numeric manifest fields are read as f64 and compared by value.
+        if variant_field::<f64>(&dictionary, "schema_version")
+            != Some(ATLAS_MANIFEST_SCHEMA_VERSION as f64)
+        {
+            return Err(rejected(
+                "the atlas manifest schema version is not supported".to_string(),
+            ));
+        }
+        let atlas = dictionary
+            .get("atlas")
+            .and_then(|value| value.try_to::<VarDictionary>().ok())
+            .ok_or_else(|| rejected("the atlas manifest has no atlas identity".to_string()))?;
+        for (name, expected, description) in [
+            ("format", ATLAS_FORMAT, "pixel format"),
+            ("storage_order", ATLAS_STORAGE_ORDER, "storage order"),
+            ("path", ATLAS_LAYER_NAME, "pixel file name"),
+        ] {
+            if variant_field::<GString>(&atlas, name)
+                .map(|value| value.to_string())
+                .as_deref()
+                != Some(expected)
+            {
+                return Err(rejected(format!(
+                    "the atlas manifest {description} is not {expected}"
+                )));
+            }
+        }
+        for (name, expected, description) in [
+            ("width", ATLAS_LAYER_SIZE, "layer width"),
+            ("height", ATLAS_LAYER_SIZE, "layer height"),
+            ("mip_levels", ATLAS_MIP_LEVELS, "mip level count"),
+        ] {
+            if variant_field::<f64>(&atlas, name) != Some(expected as f64) {
+                return Err(rejected(format!(
+                    "the atlas manifest {description} is not {expected}"
+                )));
+            }
+        }
+        let layers = variant_field::<f64>(&atlas, "layers")
+            .ok_or_else(|| rejected("the atlas manifest reports no layer count".to_string()))?;
+        if !(layers >= 1.0 && layers.fract() == 0.0) {
+            return Err(rejected(
+                "the atlas manifest reports no atlas layers".to_string(),
+            ));
+        }
+        let pixels = FileAccess::get_file_as_bytes(ATLAS_PIXELS_PATH);
+        let pixel_bytes = pixels.as_slice();
+        // Fail closed on the layer count before any image is built: the
+        // pixel file's own byte length divided by the per-layer mip-chain
+        // size is the only reachable layer count, so a corrupted huge
+        // integral float (or any mismatch) is a manifest violation instead
+        // of a build loop the caller cannot bound.
+        let layers_usize = pixel_bytes.len() / ATLAS_LAYER_BYTES;
+        if layers_usize < 1 || layers_usize as f64 != layers {
+            return Err(rejected(format!(
+                "the atlas manifest layer count {} disagrees with the pixel file's {} bytes ({} full layers)",
+                layers,
+                pixel_bytes.len(),
+                layers_usize
+            )));
+        }
+        if pixel_bytes.len() != layers_usize * ATLAS_LAYER_BYTES {
+            return Err(rejected(format!(
+                "the atlas pixel file carries {} bytes, want {} layers of {}",
+                pixel_bytes.len(),
+                layers,
+                ATLAS_LAYER_BYTES
+            )));
+        }
+        let mut images = Array::<Gd<godot::classes::Image>>::new();
+        for layer in 0..layers_usize {
+            let start = layer * ATLAS_LAYER_BYTES;
+            let data = PackedByteArray::from_iter(
+                pixel_bytes[start..start + ATLAS_LAYER_BYTES]
+                    .iter()
+                    .copied(),
+            );
+            let image = godot::classes::Image::create_from_data(
+                ATLAS_LAYER_SIZE as i32,
+                ATLAS_LAYER_SIZE as i32,
+                true,
+                ImageFormat::RGBA8,
+                &data,
+            )
+            .ok_or_else(|| rejected("an atlas layer could not be decoded".to_string()))?;
+            images.push(&image);
+        }
+        let atlas = RenderingServer::singleton()
+            .texture_2d_layered_create(&images, TextureLayeredType::LAYERED_2D_ARRAY);
+        if atlas.is_invalid() {
+            return Err(rejected(
+                "the layered atlas texture could not be created".to_string(),
+            ));
+        }
+        Ok(atlas)
     }
 
     /// The crate's main-thread check; instance methods answer off-thread
@@ -1188,5 +1640,157 @@ mod tests {
             &second,
         );
         assert_eq!(session.pull(PullFamily::World), Ok(second));
+    }
+
+    use crate::mesh_worker::SectionId;
+    use crate::quad_decode::TestQuad;
+    use crate::terrain_bridge::test_records::{frame_record_with_camera, world_record};
+    use crate::terrain_bridge::{BridgeTerrain, TerrainInputs};
+    use crate::terrain_budget::TerrainBudgetStage;
+    use crate::terrain_resources::render_script::ScriptedBackend;
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    const TEST_TIMEOUT: Duration = Duration::from_secs(20);
+    const POLL_STEP: Duration = Duration::from_millis(1);
+
+    fn attached_session() -> (BridgeSession, ScriptedCore) {
+        let (mut session, core) = scripted_session();
+        assert_eq!(session.create(), STATUS_OK);
+        let (renderer, _render_script) = ScriptedBackend::scripted_renderer();
+        let stage = TerrainBudgetStage::new(renderer).expect("stage starts");
+        let inputs = TerrainInputs {
+            opaque: "res://test/opaque.tres".into(),
+            cutout: "res://test/cutout.tres".into(),
+            water: "res://test/water.tres".into(),
+            scenario: "/root/ScenarioNode".into(),
+        };
+        session.attach_terrain(BridgeTerrain::assemble(stage, inputs));
+        (session, core)
+    }
+
+    fn section(x: i32, y: i32, z: i32, revision: u64) -> SectionId {
+        SectionId {
+            dimension: 0,
+            x,
+            y,
+            z,
+            revision,
+        }
+    }
+
+    /// Serve one world record through the scripted two-phase pull.
+    fn script_world(core: &ScriptedCore, record: &[u8]) {
+        core.script_pulls(
+            &[
+                PullOutcome::Capacity {
+                    required: record.len() as u32,
+                },
+                PullOutcome::Complete {
+                    written: record.len() as u32,
+                },
+            ],
+            record,
+        );
+    }
+
+    #[test]
+    fn bridge_terrain_surface_ingests_frames_and_resets_on_close() {
+        let (mut session, core) = attached_session();
+
+        // One world batch through the real pull path: an upsert plus a
+        // producer drop of an absent section.
+        let record = world_record(
+            1,
+            1,
+            &[(section(0, 0, 0, 1), vec![TestQuad::default().pack()])],
+            &[section(4, 0, 0, 1)],
+        );
+        script_world(&core, &record);
+        let summary = session
+            .terrain_ingest()
+            .expect("ingest through the pull path");
+        assert_eq!(summary.operations, 2);
+        assert_eq!(summary.upserts_submitted, 1);
+        assert_eq!(summary.drops_applied, 1);
+
+        // Drive frames until the section is live; each frame pull serves
+        // the same non-consuming frame record.
+        let frame = frame_record_with_camera(true, [8.0, -32.0, 8.0]);
+        let deadline = Instant::now() + TEST_TIMEOUT;
+        loop {
+            script_world(&core, &frame);
+            session.terrain_frame().expect("frame drives");
+            if session
+                .terrain_summary()
+                .expect("summary")
+                .contains("\"live_sections\":1")
+            {
+                break;
+            }
+            assert!(Instant::now() < deadline, "the section never went live");
+            thread::sleep(POLL_STEP);
+        }
+        let summary = session.terrain_summary().expect("summary");
+        assert!(summary.contains("\"revision\":1"));
+        assert!(summary.contains("\"x\":0"));
+        assert!(summary.contains("\"z\":0"));
+
+        // Close rides the terrain reset: strictly monotonic epoch, no live
+        // section, and the deferred remainder cleared.
+        assert_eq!(session.close(), STATUS_OK);
+        let json = session.terrain_summary().expect("summary survives close");
+        assert!(json.contains("\"live_sections\":0"));
+        assert!(json.contains("\"resets\":1"));
+        assert!(json.contains("\"epoch\":2"));
+
+        // After close the pull fails first, so the ingest reports the local
+        // invalid-state word without touching the stage.
+        assert_eq!(session.terrain_ingest(), Err(STATUS_INVALID_STATE));
+        assert_eq!(session.terrain_frame(), Err(STATUS_INVALID_STATE));
+
+        // Re-entry: a fresh producer session under the same stage ingests a
+        // lower revision legally because the reset RID table holds nothing.
+        assert_eq!(session.create(), STATUS_OK);
+        let reentry = world_record(
+            1,
+            1,
+            &[(section(0, 0, 0, 1), vec![TestQuad::default().pack()])],
+            &[],
+        );
+        script_world(&core, &reentry);
+        let summary = session.terrain_ingest().expect("re-entry ingest");
+        assert_eq!(summary.upserts_submitted, 1);
+        let deadline = Instant::now() + TEST_TIMEOUT;
+        loop {
+            script_world(&core, &frame);
+            session.terrain_frame().expect("re-entry frame drives");
+            if session
+                .terrain_summary()
+                .expect("summary")
+                .contains("\"live_sections\":1")
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "the re-entry section never went live"
+            );
+            thread::sleep(POLL_STEP);
+        }
+        assert_eq!(session.close(), STATUS_OK);
+    }
+
+    #[test]
+    fn bridge_terrain_surface_requires_attachment_before_pulling() {
+        let (mut session, core) = scripted_session();
+        assert_eq!(session.create(), STATUS_OK);
+        // Without an attached pipeline both typed paths fail with the local
+        // invalid-state word and consume no batch: the scripted pull queue
+        // below stays untouched.
+        assert_eq!(session.terrain_ingest(), Err(STATUS_INVALID_STATE));
+        assert_eq!(session.terrain_frame(), Err(STATUS_INVALID_STATE));
+        assert_eq!(core.state().pull_calls, 0);
+        assert_eq!(session.close(), STATUS_OK);
     }
 }

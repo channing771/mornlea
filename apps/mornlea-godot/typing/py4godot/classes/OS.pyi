@@ -1,0 +1,6 @@
+from py4godot.classes.Object import Object
+
+class OS(Object):
+    @staticmethod
+    def instance() -> OS: ...
+    def get_environment(self, variable: str) -> str: ...

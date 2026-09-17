@@ -80,14 +80,10 @@
 //! leak the thread or deadlock: the state lock is always released before
 //! the join, and the closed flag plus notification unblock every wait.
 
-// This module is deliberately ahead of its non-test consumers: the bridge
-// session that submits pulled world batches and the frame upload path land
-// with the later terrain tasks, and until then only the tests below
-// reference the service surface. Allow `dead_code` module-wide so the
-// worker does not fail `cargo clippy --all-targets -- -D warnings` before
-// those consumers exist; remove this allowance once production code owns
-// a worker instance.
-#![allow(dead_code)]
+// This module's `#![allow(dead_code)]` era ended when the bridge terrain
+// surface became its production consumer: the terrain budget stage owns a
+// worker through `MeshWorker::new`, so the service surface below is
+// production code except for the explicitly `#[cfg(test)]` seams.
 
 use std::collections::VecDeque;
 use std::panic::{AssertUnwindSafe, catch_unwind};

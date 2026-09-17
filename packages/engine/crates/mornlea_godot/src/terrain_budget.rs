@@ -103,14 +103,10 @@
 //! section) costs exactly the same two table-owned RIDs as a one-quad
 //! section.
 
-// This module is deliberately ahead of its non-test consumers: the
-// bridge session that owns the stage and drives frames from Godot
-// `_process` lands with the later terrain tasks, and until then only
-// the tests below reference the stage surface. Allow `dead_code`
-// module-wide so the stage does not fail
-// `cargo clippy --all-targets -- -D warnings` before that consumer
-// exists; remove this allowance once production code owns a stage.
-#![allow(dead_code)]
+// This module's `#![allow(dead_code)]` era ended when the bridge terrain
+// surface became its production consumer: the bridge session owns one
+// stage, submits pulled batches, drives one frame per Godot frame, and
+// reports the facts, so every stage surface below is production code.
 
 use std::time::{Duration, Instant};
 
@@ -123,7 +119,9 @@ use crate::terrain_resources::{SectionCoord, TerrainRenderer};
 /// validates it against the login protocol's 2..64 domain. The pinned
 /// Go core currently declares the login MINIMUM (2) with view-distance
 /// configuration deferred, so this constant is the baseline identity,
-/// not today's session value — see the radius note below.
+/// not today's session value — see the radius note below. Only the
+/// radius below and the pinning tests read it.
+#[cfg(test)]
 pub(crate) const VIEW_DISTANCE_CHUNKS: i64 = 32;
 
 /// The view radius reclamation and the drain filter use, in section
@@ -136,7 +134,7 @@ pub(crate) const VIEW_DISTANCE_CHUNKS: i64 = 32;
 /// so the bridge integration must derive or assert the declared value
 /// before reclamation is load-bearing. Chunk and section X/Z are the
 /// same coordinate, so no unit conversion applies.
-pub(crate) const VIEW_RADIUS_SECTIONS: i64 = VIEW_DISTANCE_CHUNKS + 1;
+pub(crate) const VIEW_RADIUS_SECTIONS: i64 = 32 + 1;
 
 /// Maximum whole-section upserts one frame may submit. See the module
 /// documentation for the derivation against the replaced client's
@@ -496,6 +494,12 @@ impl TerrainBudgetStage {
         }
         self.renderer.reset();
         self.resets += 1;
+    }
+
+    /// The live section inventory in coordinate order, forwarded to the
+    /// bridge's structural summary surface.
+    pub(crate) fn section_summaries(&self) -> Vec<crate::terrain_resources::SectionSummary> {
+        self.renderer.section_summaries()
     }
 
     /// The pilot-report accounting snapshot; see [`TerrainBudgetFacts`].

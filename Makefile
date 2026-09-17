@@ -21,7 +21,7 @@ ARGS ?=
 # dev-check、vet）显式循环该列表，防止新模块成为 ./... 盲区。
 GO_TEST_MODULES := ./packages/contracts ./packages/shared ./packages/server ./packages/client ./packages/tools ./packages/audit
 
-.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck comment-language-check fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev godot-asset-check godot-project-check godot-python-check godot-smoke
+.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck comment-language-check fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev godot-asset-check godot-project-check godot-python-check godot-smoke godot-terrain-check
 
 run test test-multiplayer bench-multiplayer visual-check visual-update: rust
 build: rust
@@ -51,6 +51,7 @@ help:
 		'  make godot-project-check Optional pilot gate: validate the Godot project structure' \
 		'  make godot-python-check  Optional pilot gate: locked Godot Python static and unit checks' \
 		'  make godot-smoke         Optional pilot gate: 100-iteration isolated Godot headless smoke' \
+		'  make godot-terrain-check  Optional pilot gate: headless transcript terrain scenario end to end' \
 		'  make fmt              格式化全部 Rust 与 Go 源码' \
 		'  make visual-check     跑视觉场景并与 golden 基线比对（SCENES= 只跑场景子集、GIFS=1 生成 GIF 供人工审查）' \
 		'  make visual-update    重新生成 golden 基线（VISUAL_OUT 覆盖输出目录，SCENES= 只更新所列场景）' \
@@ -233,3 +234,6 @@ godot-python-check:
 
 godot-smoke:
 	scripts/godot/smoke.sh --iterations 100 --isolated-python
+
+godot-terrain-check:
+	scripts/godot/godot-terrain-check.sh

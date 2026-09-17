@@ -151,10 +151,14 @@ func TestGodotDesktopOnlyFeatureSkeleton(t *testing.T) {
 		"platform/desktop/lifecycle/feature.tres",
 		"platform/desktop/audio/feature.tres",
 	}
-	// The session pilot feature is implemented and selected by the production
-	// catalog; the remaining roots are still reserved skeletons and must stay
-	// explicitly disabled until their own implementation tasks enable them.
-	implemented := map[string]bool{"features/session/feature.tres": true}
+	// The session and world pilot features are implemented and selected by
+	// the production catalog; the remaining roots are still reserved
+	// skeletons and must stay explicitly disabled until their own
+	// implementation tasks enable them.
+	implemented := map[string]bool{
+		"features/session/feature.tres": true,
+		"features/world/feature.tres":   true,
+	}
 	catalog := readBaselineDoc(t, root, filepath.Join("apps", "mornlea-godot", "config", "feature_catalog.tres"))
 	for _, relative := range manifestPaths {
 		fullPath := filepath.Join("apps", "mornlea-godot", filepath.FromSlash(relative))

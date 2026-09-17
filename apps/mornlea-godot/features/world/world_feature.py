@@ -3,9 +3,11 @@
 Division of labor (design decision 5 of the Godot client migration): this
 Python feature owns bounded lifecycle and configuration only. Packed-quad
 expansion, vertex buffers, rendering-server RIDs, and bulk resource
-submission belong to the Rust renderer the later terrain tasks attach to
-the TerrainNear compartment, so nothing here fabricates terrain state,
-expands meshes, or touches a RID.
+submission belong to the Rust renderer attached to the TerrainNear
+compartment, so nothing here fabricates terrain state, expands meshes, or
+touches a RID. Per frame this feature makes exactly two typed bridge calls
+(world ingestion and one terrain frame drive); every terrain decision,
+including the camera derivation and the drop bounding, stays Rust-side.
 
 Configuration is validated once per bind: every pinned material must load,
 reference its pinned shader resource, and still carry the pinned
@@ -20,6 +22,7 @@ instead of rendering with drifted parameters.
 from __future__ import annotations
 
 import json
+from typing import Protocol, runtime_checkable
 
 from py4godot.classes import gdclass
 from py4godot.classes.ClassDB import ClassDB
@@ -77,6 +80,21 @@ SHADER_CLASS_TOKENS = {
 }
 
 
+@runtime_checkable
+class _DictionaryView(Protocol):
+    """Minimal typed view of the bridge attach result dictionary."""
+
+    def __getitem__(self, key: str) -> object: ...
+
+
+def _word_of(value: object) -> int:
+    # Boolean values are rejected so a marshaling drift cannot masquerade as
+    # the status word the activation branches on.
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return -1
+
+
 @gdclass
 class world_feature(Node):
     """Own bounded world configuration; the Rust renderer owns the data plane."""
@@ -84,11 +102,27 @@ class world_feature(Node):
     _services: Node | None
     _terrain_near: Node | None
     _epoch: int
+    _active: bool
 
     def _ready(self) -> None:
         self._services = None
         self._terrain_near = None
         self._epoch = 0
+        self._active = False
+
+    def _process(self, _delta: float) -> None:
+        # The bounded per-frame surface: exactly two typed bridge calls,
+        # world ingestion and one terrain frame drive. Without an attached
+        # renderer or a live producer session both answer the decodable
+        # invalid-state word inside the bridge, so the offline frame stays
+        # offline-honest (no terrain without a session) at zero Python cost.
+        if not self._active:
+            return
+        bridge = self._services
+        if bridge is None:
+            return
+        bridge.call("terrain_ingest_world")
+        bridge.call("terrain_frame")
 
     def validate_feature(self, feature_id: str) -> str:
         return "" if feature_id == "world" else "unexpected world feature ID"
@@ -114,23 +148,49 @@ class world_feature(Node):
         return ""
 
     def activate_feature(self, epoch: int) -> str:
-        if self._services is None:
+        if self._services is None or self._terrain_near is None:
             return "activation before bind"
+        terrain_near = self._terrain_near
+        result = self._services.call(
+            "terrain_attach",
+            _call_text(terrain_near, "opaque_material_path"),
+            _call_text(terrain_near, "cutout_material_path"),
+            _call_text(terrain_near, "water_material_path"),
+            _node_path_text(terrain_near),
+        )
+        if not isinstance(result, _DictionaryView):
+            return "the native terrain renderer attach answer was not typed"
+        status = _word_of(result["status"])
+        if status != 0:
+            detail = result["detail"]
+            suffix = f": {detail}" if isinstance(detail, str) and detail else ""
+            return f"the native terrain renderer could not attach (status {status}){suffix}"
         self._epoch = epoch
-        # Activation creates no terrain state: section meshes, buffers, and
-        # RIDs are owned by the Rust renderer that later tasks attach here.
+        self._active = True
         return ""
 
     def reset_feature(self, epoch: int) -> None:
         # A host reset advances the epoch only; terrain state reset is owned
-        # by the native renderer, and this feature holds no observation to
-        # refresh.
+        # by the native renderer and rides the producer-session close, and
+        # this feature holds no observation to refresh.
         self._epoch = epoch
 
     def deactivate_feature(self) -> None:
+        self._active = False
         self._services = None
         self._terrain_near = None
         self._epoch = 0
+
+
+def _node_path_text(node: Node) -> str:
+    # The runtime's `NodePath` wrapper has no usable text conversion, so the
+    # path is rebuilt from its concatenated name components (the host's
+    # established helper pattern).
+    path = node.get_path()
+    names = str(path.get_concatenated_names())
+    if path.is_absolute():
+        return f"/{names}"
+    return names
 
 
 def _call_text(target: Node, method: str) -> str:

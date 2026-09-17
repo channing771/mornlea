@@ -62,13 +62,10 @@
 //! own; [`TerrainRenderer::facts`] is the pilot report's decodable
 //! accounting surface for those limits.
 
-// This module is deliberately ahead of its non-test consumers: the bridge
-// session that owns a renderer and the per-frame upload budget land with
-// the later terrain tasks, and until then only the tests below reference
-// the table surface. Allow `dead_code` module-wide so the table does not
-// fail `cargo clippy --all-targets -- -D warnings` before those consumers
-// exist; remove this allowance once production code owns a renderer.
-#![allow(dead_code)]
+// This module's `#![allow(dead_code)]` era ended when the bridge terrain
+// surface became its production consumer: every item below is either
+// production code (the table, the backend, the constructors the bridge
+// assembles through) or test-only through an explicit `#[cfg(test)]`.
 
 use std::collections::BTreeMap;
 
@@ -90,7 +87,10 @@ pub(crate) const SECTION_EDGE_BLOCKS: i32 = 16;
 /// Surface classes one section can carry: opaque, cutout, and water, in
 /// submission order. Surface submission order is stable (opaque, cutout,
 /// water) because the surface index inside the Godot mesh — and the
-/// failure-injection points of the tests — depend on it.
+/// failure-injection points of the tests — depend on it. The production
+/// paths decide order through `surface_plan`; the named count is the
+/// accounting bound the tests pin against.
+#[cfg(test)]
 pub(crate) const SECTION_SURFACE_CLASSES: usize = 3;
 
 /// The three per-surface-class material RIDs the terrain shaders of the
@@ -108,7 +108,7 @@ pub(crate) struct TerrainMaterials {
 /// `core.SectionKey`. The table keys its map on this coordinate; the
 /// presentation revision that rides along in [`SectionId`] is tracked per
 /// entry instead.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct SectionCoord {
     pub(crate) dimension: u32,
     pub(crate) x: i32,
@@ -369,6 +369,16 @@ pub(crate) struct RendererFacts {
     pub(crate) surfaces: usize,
 }
 
+/// The structural identity of one live section for the bridge's summary
+/// surface: the coordinate, the recorded presentation revision, and how
+/// many non-empty surface classes the section's mesh carries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct SectionSummary {
+    pub(crate) coord: SectionCoord,
+    pub(crate) revision: u64,
+    pub(crate) surfaces: usize,
+}
+
 /// The whole-section `RenderingServer` RID table; see the module
 /// documentation for the threading, atomicity, revision, and ownership
 /// contracts.
@@ -471,6 +481,9 @@ impl TerrainRenderer {
 
     /// The held section coordinates of one dimension, in coordinate
     /// order. Cheap by construction: a filtered walk of the ordered map.
+    /// The budget stage consumes the iterator form in production; this
+    /// snapshot form serves the tests that pin exact coordinate sets.
+    #[cfg(test)]
     pub(crate) fn sections_in_dimension(&self, dimension: u32) -> Vec<SectionCoord> {
         self.sections
             .keys()
@@ -479,12 +492,12 @@ impl TerrainRenderer {
             .collect()
     }
 
-    /// Lazily visit every held section coordinate of one dimension in
-    /// coordinate order without building a snapshot. The per-frame budget
-    /// stage consumes this for out-of-view reclamation: a `BTreeMap::range`
-    /// prefix over the dimension keeps the per-frame walk allocation-free
-    /// and linear in held sections, so per-frame consumption is never
-    /// quadratic and never copies the whole table into a throwaway `Vec`.
+    /// The held section coordinates of one dimension, in coordinate order,
+    /// without building a snapshot. The per-frame budget stage consumes
+    /// this for out-of-view reclamation: a `BTreeMap::range` prefix over
+    /// the dimension keeps the per-frame walk allocation-free and linear in
+    /// held sections, so per-frame consumption is never quadratic and never
+    /// copies the whole table into a throwaway `Vec`.
     pub(crate) fn sections_in_dimension_iter(
         &self,
         dimension: u32,
@@ -502,6 +515,20 @@ impl TerrainRenderer {
             z: i32::MAX,
         };
         self.sections.range(first..=last).map(|(coord, _)| *coord)
+    }
+
+    /// The structural identity of one live section for the bridge's summary
+    /// surface: the coordinate, the recorded presentation revision, and how
+    /// many non-empty surface classes the section's mesh carries.
+    pub(crate) fn section_summaries(&self) -> Vec<SectionSummary> {
+        self.sections
+            .iter()
+            .map(|(coord, entry)| SectionSummary {
+                coord: *coord,
+                revision: entry.revision,
+                surfaces: entry.surfaces,
+            })
+            .collect()
     }
 
     /// Owner-side reclamation: free one held section by coordinate alone,

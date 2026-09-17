@@ -9,6 +9,8 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
+	"github.com/channing771/mornlea/packages/client/assets"
+	"github.com/channing771/mornlea/packages/client/presentation"
 	"github.com/channing771/mornlea/packages/client/runtime"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
@@ -97,10 +99,39 @@ var remoteSessionDependencies = func() runtime.RemoteDependencies {
 	return runtime.RemoteDependencies{}
 }
 
+// Pilot meshing inputs. The world family publishes section batches only when
+// the runtime owns a mesher (`runtime.DrainWorldBatch` reports no batch for a
+// mesher-less runtime), so every online pilot session assembles one over the
+// placeholder-material registry — the mesher consumes only the registry's
+// atlas-layer assignments, never its generated pixels, so the pilot renders
+// with the real generated atlas the presentation host owns. Two workers keep
+// the near-ring pilot's section expansion off the caller thread while staying
+// a fixed, deterministic assembly cost, and the ready capacity is the frozen
+// maximal world batch so a full subscription burst never blocks publication.
+// The atlas revision is the neutral positive identity `AdoptMeshing` pins
+// when a host supplies no atlas of its own.
+const (
+	pilotMeshWorkers       = 2
+	pilotMeshReadyCapacity = presentation.MaxWorldBatchOperations
+)
+
+// pilotMeshOptions returns the runtime-owned mesh configuration every online
+// pilot session connects with. The registry is built per establishment: it is
+// bounded, deterministic, and owned by the runtime once handed over.
+func pilotMeshOptions() *runtime.MeshOptions {
+	return &runtime.MeshOptions{
+		Registry:      assets.NewRegistry(),
+		Workers:       pilotMeshWorkers,
+		ReadyCapacity: pilotMeshReadyCapacity,
+		AtlasRevision: presentation.AtlasRevision(1),
+	}
+}
+
 // openRemoteSession assembles one remote session through the platform
 // independent runtime. All blocking establishment work (DNS/TCP dial, v44
-// handshake, login, receiver start) happens inside `runtime.NewRemote` under
-// the caller's context, which is the sole cancellation path.
+// handshake, login, receiver start, mesh worker start) happens inside
+// `runtime.NewRemote` under the caller's context, which is the sole
+// cancellation path.
 func openRemoteSession(ctx context.Context, address string) (*runtime.Runtime, error) {
 	identity, err := pilotConnectIdentity()
 	if err != nil {
@@ -111,6 +142,7 @@ func openRemoteSession(ctx context.Context, address string) (*runtime.Runtime, e
 		Identity:           identity,
 		ViewDistance:       pilotConnectViewDistance,
 		ReceiverCapacity:   pilotConnectReceiverCapacity,
+		Mesh:               pilotMeshOptions(),
 		RemoteDependencies: remoteSessionDependencies(),
 	})
 }

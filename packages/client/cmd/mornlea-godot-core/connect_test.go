@@ -827,3 +827,31 @@ func TestConnectPilotLoginConfigurationIsValid(t *testing.T) {
 		t.Fatalf("pilot player ID literal %q does not parse: %v", pilotConnectPlayerIDText, err)
 	}
 }
+
+// TestConnectPilotMeshOptionsAreValid pins the meshing inputs every online
+// pilot session assembles with: the world family publishes section batches
+// only through a runtime-owned mesher, so the options must validate against
+// the runtime contract (registry present, positive worker count, ready
+// capacity inside the frozen world-batch bound, positive atlas revision).
+func TestConnectPilotMeshOptionsAreValid(t *testing.T) {
+	options := pilotMeshOptions()
+	if options == nil {
+		t.Fatal("pilot mesh options are missing")
+	}
+	if options.Registry == nil {
+		t.Fatal("pilot mesh options carry no block registry")
+	}
+	if err := options.Validate(); err != nil {
+		t.Fatalf("pilot mesh options are invalid: %v", err)
+	}
+	if options.Workers < 1 {
+		t.Fatalf("pilot mesh workers = %d, want positive", options.Workers)
+	}
+	if options.ReadyCapacity != presentation.MaxWorldBatchOperations {
+		t.Fatalf("pilot mesh ready capacity = %d, want the frozen maximal batch %d",
+			options.ReadyCapacity, presentation.MaxWorldBatchOperations)
+	}
+	if options.AtlasRevision == 0 {
+		t.Fatal("pilot mesh atlas revision must be positive")
+	}
+}

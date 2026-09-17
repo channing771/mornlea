@@ -78,6 +78,14 @@ scripts/godot/feature-contract-check.sh --extensibility-probe
 scripts/godot/feature-contract-check.sh --bridge-integration
 ```
 
+## Transcript terrain check
+
+The world feature's native terrain pipeline (packed-quad decode, mesh-prepare worker, RenderingServer RID table, and per-frame budgets) is proven end to end by a headless check that replays a deterministic protocol v44 scenario into a real pilot session. A transcript helper (`packages/client/cmd/mornlea-godot-transcripts`) serves the scenario under `testdata/godot-pilot/transcripts/terrain/` on loopback: round one publishes an initial chunk snapshot, a block delta, a chunk forget, and a disconnect; round two simulates world re-entry. The check scene activates the production catalog, connects through the session feature, and asserts the bridge's structural terrain summary after every stage, including that no stale section survives the forget and the disconnect/reset. Run it with:
+
+```bash
+make godot-terrain-check
+```
+
 ## Architecture boundary
 
 Godot owns desktop windowing, keyboard/mouse collection, presentation, pilot UI, and Godot resource lifecycles. The Go client runtime will continue to own protocol v44, mirrors, prediction, semantic frame state, and bounded network processing. Numerical mesh, lighting, collision, raycast, and physics remain in engine ABI v11. The authoritative Go server remains the only owner of world and player truth.

@@ -61,6 +61,7 @@ func TestGodotPythonToolingIsLockedAndRuntimeFree(t *testing.T) {
 		"typing/py4godot/classes/Control.pyi",
 		"typing/py4godot/classes/Node.pyi",
 		"typing/py4godot/classes/Node3D.pyi",
+		"typing/py4godot/classes/OS.pyi",
 		"typing/py4godot/classes/Object.pyi",
 		"typing/py4godot/classes/PackedScene.pyi",
 		"typing/py4godot/classes/Resource.pyi",
