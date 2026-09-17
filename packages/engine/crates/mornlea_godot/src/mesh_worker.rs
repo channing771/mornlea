@@ -9,8 +9,11 @@
 //! `quad_decode`, and the Godot main thread later submits prepared arrays
 //! under the terrain upload budget owned by the later budget work. Pure
 //! data in, pure data out: no unsafe code, no Godot types, no bridge, no
-//! RIDs, no clock, and no I/O — Godot objects are main-thread-only by
-//! crate rule, so nothing here may touch them.
+//! RIDs, and no I/O. The only clock this module reads is the per-job
+//! prepare-duration recording around the decode call — a reported
+//! observation that never gates any queue, ordering, or budget decision.
+//! Godot objects are main-thread-only by crate rule, so nothing here may
+//! touch them.
 //!
 //! Threading model: exactly one worker thread. Expansion of one section
 //! is bounded by the frozen per-section quad limit, and a single worker
@@ -90,6 +93,7 @@ use std::collections::VecDeque;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::{Builder, JoinHandle};
+use std::time::{Duration, Instant};
 
 use crate::abi;
 use crate::quad_decode::{self, SectionGeometry};
@@ -150,12 +154,18 @@ struct MeshJob {
 /// otherwise; nothing aliases worker-internal state. `input_quads` is the
 /// packed-quad count the result was prepared from: the pilot report's
 /// packed-input accounting reads it, and the completed queue charges the
-/// same retention cost the job paid on submit.
+/// same retention cost the job paid on submit. `prepare_duration` is the
+/// worker-side wall time of this section's decode, measured around the
+/// panic-isolated decode call on the worker thread — recording only, so
+/// the frame budget report can attribute prepare cost where it actually
+/// happens instead of estimating it on the main thread; it never gates
+/// any queue, ordering, or budget decision.
 #[derive(Debug)]
 pub(crate) struct PreparedSection {
     pub(crate) epoch: u64,
     pub(crate) id: SectionId,
     pub(crate) input_quads: usize,
+    pub(crate) prepare_duration: Duration,
     pub(crate) outcome: Result<SectionGeometry, u32>,
 }
 
@@ -486,11 +496,15 @@ fn serve(shared: Arc<Shared>, decode: DecodeFn) {
         // and no caller code runs under a mutex, so a panic here cannot
         // poison shared state. The panic becomes this job's stable
         // `STATUS_PANIC` result and the worker keeps serving, mirroring
-        // the lifecycle module's boundary conversion.
+        // the lifecycle module's boundary conversion. The elapsed measure
+        // spans exactly this decode, so the result's prepare-duration
+        // recording is the honest worker-side expansion time.
+        let decode_started = Instant::now();
         let outcome = match catch_unwind(AssertUnwindSafe(|| decode(&job.packed))) {
             Ok(decoded) => decoded,
             Err(_) => Err(abi::STATUS_PANIC),
         };
+        let prepare_duration = decode_started.elapsed();
         let mut state = lock_shared(&shared);
         if state.closed {
             return;
@@ -519,6 +533,7 @@ fn serve(shared: Arc<Shared>, decode: DecodeFn) {
                     epoch: job.epoch,
                     id: job.id,
                     input_quads: job.packed.len(),
+                    prepare_duration,
                     outcome,
                 });
                 break;

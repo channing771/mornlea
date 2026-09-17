@@ -479,6 +479,50 @@ impl TerrainRenderer {
             .collect()
     }
 
+    /// Lazily visit every held section coordinate of one dimension in
+    /// coordinate order without building a snapshot. The per-frame budget
+    /// stage consumes this for out-of-view reclamation: a `BTreeMap::range`
+    /// prefix over the dimension keeps the per-frame walk allocation-free
+    /// and linear in held sections, so per-frame consumption is never
+    /// quadratic and never copies the whole table into a throwaway `Vec`.
+    pub(crate) fn sections_in_dimension_iter(
+        &self,
+        dimension: u32,
+    ) -> impl Iterator<Item = SectionCoord> + '_ {
+        let first = SectionCoord {
+            dimension,
+            x: i32::MIN,
+            y: i32::MIN,
+            z: i32::MIN,
+        };
+        let last = SectionCoord {
+            dimension,
+            x: i32::MAX,
+            y: i32::MAX,
+            z: i32::MAX,
+        };
+        self.sections.range(first..=last).map(|(coord, _)| *coord)
+    }
+
+    /// Owner-side reclamation: free one held section by coordinate alone,
+    /// with no revision arbitration, and report whether a section was
+    /// freed. Producer operations go through [`TerrainRenderer::upsert_section`]
+    /// and [`TerrainRenderer::drop_section`] with revision discipline;
+    /// reclamation is the table owner reclaiming its own resources — the
+    /// same ownership action [`TerrainRenderer::reset`] performs on every
+    /// section at once — so no producer revision exists to compare and
+    /// none is consulted. Removing an absent section is a no-op returning
+    /// `false`.
+    pub(crate) fn reclaim_section(&mut self, coord: SectionCoord) -> bool {
+        if let Some(entry) = self.sections.remove(&coord) {
+            self.surfaces -= entry.surfaces;
+            self.free_section(&entry);
+            true
+        } else {
+            false
+        }
+    }
+
     /// The pilot-report accounting snapshot.
     pub(crate) fn facts(&self) -> RendererFacts {
         RendererFacts {
@@ -600,15 +644,18 @@ fn validate_geometry(geometry: &SectionGeometry) -> Result<(), u32> {
     Ok(())
 }
 
+/// Test-shared scripted render backend, in the bridge's `ScriptedCore`
+/// style. Shared by the RID-table tests below and the per-frame budget
+/// stage tests: both need the same correctness oracle — a backend that
+/// allocates monotonic fake RIDs, records an event and free history,
+/// panics on double frees, frees of foreign RIDs, and use-after-free, and
+/// injects submission failures. One implementation keeps the oracle
+/// knowledge written once.
 #[cfg(test)]
-mod tests {
-    use super::{
-        RenderBackend, RendererFacts, SECTION_EDGE_BLOCKS, SECTION_SURFACE_CLASSES, SectionCoord,
-        TerrainMaterials, TerrainRenderer,
-    };
+pub(crate) mod render_script {
+    use super::{RenderBackend, TerrainMaterials, TerrainRenderer};
     use crate::abi;
-    use crate::mesh_worker::SectionId;
-    use crate::quad_decode::{ExpandedVertex, QUAD_INDICES, SectionGeometry, SurfaceGeometry};
+    use crate::quad_decode::SurfaceGeometry;
     use godot::prelude::*;
     use std::cell::RefCell;
     use std::collections::BTreeSet;
@@ -617,16 +664,16 @@ mod tests {
     /// Borrowed caller-owned RIDs, far above the scripted allocator's
     /// range so an accidental table free of them cannot alias an
     /// allocated fake RID.
-    const SCRIPT_SCENARIO: Rid = Rid::new(900_000);
-    const SCRIPT_OPAQUE: Rid = Rid::new(900_001);
-    const SCRIPT_CUTOUT: Rid = Rid::new(900_002);
-    const SCRIPT_WATER: Rid = Rid::new(900_003);
+    pub(crate) const SCRIPT_SCENARIO: Rid = Rid::new(900_000);
+    pub(crate) const SCRIPT_OPAQUE: Rid = Rid::new(900_001);
+    pub(crate) const SCRIPT_CUTOUT: Rid = Rid::new(900_002);
+    pub(crate) const SCRIPT_WATER: Rid = Rid::new(900_003);
 
-    /// One recorded backend interaction; the tests assert on the event
+    /// One recorded backend interaction; tests assert on the event
     /// history to prove submission order, material wiring, instance
     /// origins, and the free sequence.
     #[derive(Clone, Debug, PartialEq)]
-    enum ScriptEvent {
+    pub(crate) enum ScriptEvent {
         MeshCreated {
             mesh: Rid,
         },
@@ -674,16 +721,16 @@ mod tests {
     /// copy while the test keeps scripting and inspecting the same
     /// state. The backend doubles as the correctness oracle — freeing an
     /// unknown or already-freed RID, or submitting to a freed mesh,
-    /// panics with a named message, so every test in this suite proves
-    /// the absence of double frees, leaks into the engine, and
+    /// panics with a named message, so every test using it proves the
+    /// absence of double frees, leaks into the engine, and
     /// use-after-free.
     #[derive(Clone)]
-    struct ScriptedBackend {
+    pub(crate) struct ScriptedBackend {
         state: Rc<RefCell<ScriptState>>,
     }
 
     impl ScriptedBackend {
-        fn new() -> Self {
+        pub(crate) fn new() -> Self {
             Self {
                 state: Rc::new(RefCell::new(ScriptState {
                     next_rid: 0,
@@ -698,39 +745,39 @@ mod tests {
         }
 
         /// Make the next mesh allocation fail once.
-        fn fail_mesh_create(&self) {
+        pub(crate) fn fail_mesh_create(&self) {
             self.state.borrow_mut().fail_mesh_create = true;
         }
 
         /// Make the `remaining`-th surface submission from now fail
         /// (0 = the very next one); earlier calls succeed.
-        fn fail_surface_in(&self, remaining: usize) {
+        pub(crate) fn fail_surface_in(&self, remaining: usize) {
             self.state.borrow_mut().fail_surface_in = Some(remaining);
         }
 
         /// Make the next instance registration fail once.
-        fn fail_instance(&self) {
+        pub(crate) fn fail_instance(&self) {
             self.state.borrow_mut().fail_instance = true;
         }
 
         /// Clear every injected failure.
-        fn recover(&self) {
+        pub(crate) fn recover(&self) {
             let mut state = self.state.borrow_mut();
             state.fail_mesh_create = false;
             state.fail_surface_in = None;
             state.fail_instance = false;
         }
 
-        fn events(&self) -> Vec<ScriptEvent> {
+        pub(crate) fn events(&self) -> Vec<ScriptEvent> {
             self.state.borrow().events.clone()
         }
 
-        fn is_alive(&self, rid: Rid) -> bool {
+        pub(crate) fn is_alive(&self, rid: Rid) -> bool {
             self.state.borrow().live.contains(&rid.to_u64())
         }
 
         /// The freed RID ids in free order.
-        fn free_history(&self) -> Vec<u64> {
+        pub(crate) fn free_history(&self) -> Vec<u64> {
             self.state
                 .borrow()
                 .events
@@ -743,16 +790,16 @@ mod tests {
         }
 
         /// Every id the backend ever allocated, in allocation order.
-        fn allocated(&self) -> Vec<u64> {
+        pub(crate) fn allocated(&self) -> Vec<u64> {
             self.state.borrow().allocated.clone()
         }
 
         /// The ids still holding a live fake resource.
-        fn live_ids(&self) -> Vec<u64> {
+        pub(crate) fn live_ids(&self) -> Vec<u64> {
             self.state.borrow().live.iter().copied().collect()
         }
 
-        fn renderer(&self) -> TerrainRenderer {
+        pub(crate) fn renderer(&self) -> TerrainRenderer {
             TerrainRenderer::new(
                 Box::new(self.clone()),
                 SCRIPT_SCENARIO,
@@ -762,6 +809,14 @@ mod tests {
                     water: SCRIPT_WATER,
                 },
             )
+        }
+
+        /// One scripted renderer plus the shared script handle, the
+        /// seam-test assembly shared by the table and budget suites.
+        pub(crate) fn scripted_renderer() -> (TerrainRenderer, ScriptedBackend) {
+            let backend = ScriptedBackend::new();
+            let renderer = backend.renderer();
+            (renderer, backend)
         }
     }
 
@@ -839,11 +894,25 @@ mod tests {
             state.events.push(ScriptEvent::Freed { rid });
         }
     }
+}
 
+#[cfg(test)]
+mod tests {
+    use super::render_script::{
+        SCRIPT_CUTOUT, SCRIPT_OPAQUE, SCRIPT_SCENARIO, SCRIPT_WATER, ScriptEvent, ScriptedBackend,
+    };
+    use super::{
+        RendererFacts, SECTION_EDGE_BLOCKS, SECTION_SURFACE_CLASSES, SectionCoord, TerrainRenderer,
+    };
+    use crate::abi;
+    use crate::mesh_worker::SectionId;
+    use crate::quad_decode::{ExpandedVertex, QUAD_INDICES, SectionGeometry, SurfaceGeometry};
+    use godot::prelude::*;
+
+    /// One scripted renderer plus its shared script handle: the
+    /// seam-test assembly of this suite.
     fn scripted_renderer() -> (TerrainRenderer, ScriptedBackend) {
-        let backend = ScriptedBackend::new();
-        let renderer = backend.renderer();
-        (renderer, backend)
+        ScriptedBackend::scripted_renderer()
     }
 
     fn vertex(layer: u16) -> ExpandedVertex {
