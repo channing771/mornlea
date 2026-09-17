@@ -34,6 +34,10 @@ The controller remains responsible for integration and completion evidence.
 
 After an independently verifiable task or small coherent feature node passes its focused gates, create a scoped Git commit before starting the next node. Use partial staging to exclude unrelated, user-owned, experimental, or not-yet-complete work; never use a broad commit merely to empty a dirty worktree. If pre-existing changes prevent a safe commit, record the exact overlap and resolve the ownership boundary before accumulating more implementation.
 
+## Parallel-Controller Handover
+
+Multiple controllers (Codex, Claude Code, ZCode) alternately advance the same change in one worktree. Before starting the next node, run the four-point orphan check: the task checkboxes, the change ledger's ruling/routing/evidence rows for the frontier task, untracked in-flight files, and in-flight file mtimes against the current clock (roughly 2–3 hours stale with no follow-up artifacts means adoptable). Adopt orphan artifacts as the requirement source only after empirical review: an orphan red test may itself carry contract violations, and a coherent orphan implementation still needs contract verification plus an independent review before closeout. Record the adoption ruling, corrections, and routing in the ledger by appending; never rewrite another controller's records, and re-read files that report stale reads after parallel edits.
+
 ## Round-End Governance Retrospective
 
 At the end of each implementation round, review verified ownership, dependency, lifecycle, concurrency, platform, visual, validation, and documentation findings. Promote a finding to the synchronized project-owned `mornlea-architecture` skill only when current code, tests, or canonical specifications verify it; it applies across future tasks; it changes future decisions; and it is neither duplicated nor volatile. Otherwise record `Architecture skill: no change` in the ledger.
