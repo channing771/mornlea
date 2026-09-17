@@ -20,6 +20,51 @@ NATIVE_ABI_MODULES = frozenset({"_ctypes", "cffi", "ctypes"})
 INSTALLER_MODULES = frozenset({"ensurepip", "pip", "uv"})
 PROCESS_MODULES = frozenset({"subprocess"})
 
+# Client-core wire magics from the frozen ABI header: the wire-text tags and
+# their little-endian 32-bit words. Production Godot scripts must never carry
+# them; the protocol stays owned by Go and Rust.
+WIRE_MAGIC_TEXTS = frozenset({"MCI1", "MCC1", "MCN1", "MCS1", "MCW1", "MCF1", "MCM1"})
+WIRE_MAGIC_WORDS = frozenset(
+    {0x3149434D, 0x3143434D, 0x314E434D, 0x3153434D, 0x3157434D, 0x3146434D, 0x314D434D}
+)
+
+# Bridge session and pull methods belong to feature data-plane ownership; the
+# host binds and forwards the bridge object but never invokes these itself.
+HOST_GAMEPLAY_BRIDGE_METHODS = frozenset(
+    {
+        "session_create",
+        "session_connect",
+        "session_poll",
+        "session_submit",
+        "session_step",
+        "session_close",
+        "pull_world",
+        "pull_frame",
+        "pull_status",
+        "pull_identity",
+    }
+)
+
+# Concrete feature identities and entry trees declared by the production
+# catalog; a host file naming one has stopped being catalog driven.
+HOST_FEATURE_PATH_PREFIXES = ("res://features/", "res://platform/")
+HOST_FEATURE_IDS = frozenset(
+    {
+        "session",
+        "player_view",
+        "world",
+        "actors",
+        "ui",
+        "platform.desktop.lifecycle",
+        "platform.desktop.input",
+        "platform.desktop.audio",
+    }
+)
+
+# Script scopes that carry stronger discipline than the general boundary.
+PRODUCTION_EXEMPT_PREFIXES = ("tests/", "typing/")
+HOST_SCRIPT_PREFIXES = ("app/host/", "app/bootstrap/")
+
 
 class Finding:
     def __init__(self, path: str, line: int, rule: str, detail: str) -> None:
@@ -63,8 +108,10 @@ def _module_rule(module: str) -> tuple[str, str] | None:
 
 
 class BoundaryVisitor(ast.NodeVisitor):
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, production: bool, host: bool) -> None:
         self.path = path
+        self.production = production
+        self.host = host
         self.findings: list[Finding] = []
 
     def _add(self, node: ast.AST, rule: str, detail: str) -> None:
@@ -85,10 +132,40 @@ class BoundaryVisitor(ast.NodeVisitor):
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         module = node.module or ""
         self._check_module(node, module)
+        if self.production and module == "struct":
+            # Importing pack/unpack directly is the same wire-codec surface as
+            # calling struct.pack; production scripts never encode binary
+            # records, so the import itself is the violation.
+            self._add(
+                node,
+                "forbidden-wire-record-codec",
+                f"from struct import {[alias.name for alias in node.names]}",
+            )
         for alias in node.names:
             self._check_module(
                 node, ".".join(part for part in (module, alias.name) if part)
             )
+        self.generic_visit(node)
+
+    def visit_Constant(self, node: ast.Constant) -> None:
+        if self.production:
+            if isinstance(node.value, str) and any(
+                magic in node.value for magic in WIRE_MAGIC_TEXTS
+            ):
+                self._add(node, "forbidden-protocol-magic", node.value)
+            if (
+                isinstance(node.value, int)
+                and not isinstance(node.value, bool)
+                and node.value in WIRE_MAGIC_WORDS
+            ):
+                self._add(node, "forbidden-protocol-magic", hex(node.value))
+        if self.host and isinstance(node.value, str):
+            if node.value in HOST_GAMEPLAY_BRIDGE_METHODS:
+                self._add(node, "host-gameplay-bridge-call", node.value)
+            if node.value.startswith(HOST_FEATURE_PATH_PREFIXES) or node.value in (
+                HOST_FEATURE_IDS
+            ):
+                self._add(node, "host-feature-reference", node.value)
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
@@ -111,6 +188,16 @@ class BoundaryVisitor(ast.NodeVisitor):
                 or node.func.attr.startswith("spawn")
             ):
                 self._add(node, "forbidden-process-execution", f"os.{node.func.attr}")
+            if (
+                self.production
+                and owner_name == "struct"
+                and node.func.attr in {"pack", "unpack", "Struct"}
+            ):
+                # Struct objects are included because their pack/unpack methods
+                # encode the same binary wire records.
+                self._add(
+                    node, "forbidden-wire-record-codec", f"struct.{node.func.attr}"
+                )
         self.generic_visit(node)
 
 
@@ -146,6 +233,8 @@ def scan_project(root: Path) -> list[Finding]:
     findings: list[Finding] = []
     for source_path in _source_paths(root):
         relative = source_path.relative_to(root).as_posix()
+        production = not relative.startswith(PRODUCTION_EXEMPT_PREFIXES)
+        host = relative.startswith(HOST_SCRIPT_PREFIXES)
         source = source_path.read_text(encoding="utf-8")
         findings.extend(_comment_findings(relative, source))
         try:
@@ -155,7 +244,7 @@ def scan_project(root: Path) -> list[Finding]:
                 Finding(relative, error.lineno or 1, "syntax-error", error.msg)
             )
             continue
-        visitor = BoundaryVisitor(relative)
+        visitor = BoundaryVisitor(relative, production, host)
         visitor.visit(tree)
         findings.extend(visitor.findings)
     return sorted(findings, key=Finding.sort_key)

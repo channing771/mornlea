@@ -23,12 +23,12 @@ class feature_contract_check(Node):
     def _ready(self) -> None:
         failures: list[str] = []
         host = self.get_node("FeatureHost")
-        bridge = self.get_node("StubBridge")
+        bridge_path = "../StubBridge"
         if "--extensibility-probe" in sys.argv:
-            _check_extensibility(host, bridge, failures)
+            _check_extensibility(host, bridge_path, failures)
         else:
-            _check_planning(host, bridge, failures)
-            _check_lifecycle(host, bridge, failures)
+            _check_planning(host, bridge_path, failures)
+            _check_lifecycle(host, bridge_path, failures)
         if failures:
             for failure in failures:
                 print(f"Python feature contract check failed: {failure}")
@@ -42,46 +42,46 @@ class feature_contract_check(Node):
         self.get_tree().quit(exit_code)
 
 
-def _check_planning(host: Node, bridge: Node, failures: list[str]) -> None:
+def _check_planning(host: Node, bridge_path: str, failures: list[str]) -> None:
     # These fixtures verify catalog semantics without relying on implementation imports.
-    valid = _plan(host, bridge, "valid")
+    valid = _plan(host, bridge_path, "valid")
     _expect(valid["ok"], "serialized valid catalog was rejected", failures)
     _expect(
         valid["order"] == ["alpha", "beta"],
         f"deterministic order differs: {valid['order']}",
         failures,
     )
-    duplicate = _plan(host, bridge, "duplicate")
+    duplicate = _plan(host, bridge_path, "duplicate")
     _expect(
         not duplicate["ok"] and _contains(duplicate["errors"], "duplicate"),
         "duplicate feature ID was accepted",
         failures,
     )
-    cycle = _plan(host, bridge, "cycle")
+    cycle = _plan(host, bridge_path, "cycle")
     _expect(
         not cycle["ok"] and _contains(cycle["errors"], "cycle"),
         "dependency cycle was accepted",
         failures,
     )
-    required_version = _plan(host, bridge, "required_version")
+    required_version = _plan(host, bridge_path, "required_version")
     _expect(
         not required_version["ok"] and _contains(required_version["errors"], "incompatible"),
         "required incompatible feature did not fail",
         failures,
     )
-    optional_version = _plan(host, bridge, "optional_version")
+    optional_version = _plan(host, bridge_path, "optional_version")
     _expect(
         optional_version["ok"] and optional_version["disabled"] == ["optional_new"],
         "optional incompatible feature was not isolated",
         failures,
     )
-    required_bridge = _plan(host, bridge, "required_bridge")
+    required_bridge = _plan(host, bridge_path, "required_bridge")
     _expect(
         not required_bridge["ok"] and _contains(required_bridge["errors"], "bridge family"),
         "missing required bridge family did not fail",
         failures,
     )
-    optional_bridge = _plan(host, bridge, "optional_bridge")
+    optional_bridge = _plan(host, bridge_path, "optional_bridge")
     _expect(
         optional_bridge["ok"] and optional_bridge["disabled"] == ["optional_bridge"],
         "missing optional bridge family was not isolated",
@@ -89,15 +89,15 @@ def _check_planning(host: Node, bridge: Node, failures: list[str]) -> None:
     )
 
 
-def _check_lifecycle(host: Node, bridge: Node, failures: list[str]) -> None:
+def _check_lifecycle(host: Node, bridge_path: str, failures: list[str]) -> None:
     # Required failure must roll back, while optional failure must remain isolated.
-    optional_failure = _activate(host, bridge, "optional_failure", 4)
+    optional_failure = _activate(host, bridge_path, "optional_failure", 4)
     _expect(
         optional_failure["ok"] and optional_failure["disabled"] == ["optional_failure"],
         "optional activation failure stopped the host",
         failures,
     )
-    required_failure = _activate(host, bridge, "required_failure", 4)
+    required_failure = _activate(host, bridge_path, "required_failure", 4)
     _expect(
         not required_failure["ok"] and _contains(required_failure["errors"], "activate"),
         "required activation failure did not stop the host",
@@ -108,7 +108,7 @@ def _check_lifecycle(host: Node, bridge: Node, failures: list[str]) -> None:
         "required activation failure retained active features",
         failures,
     )
-    complete = _activate(host, bridge, "valid", 7)
+    complete = _activate(host, bridge_path, "valid", 7)
     _expect(complete["ok"], "valid lifecycle activation failed", failures)
     host.call("reset_features", 8)
     host.call("deactivate_features")
@@ -130,9 +130,9 @@ def _check_lifecycle(host: Node, bridge: Node, failures: list[str]) -> None:
     _expect(trace == expected, f"lifecycle order differs: {trace}", failures)
 
 
-def _check_extensibility(host: Node, bridge: Node, failures: list[str]) -> None:
+def _check_extensibility(host: Node, bridge_path: str, failures: list[str]) -> None:
     # The synthetic resource is absent from Bootstrap and app_root.tscn by design.
-    result = _activate(host, bridge, "extensibility", 11)
+    result = _activate(host, bridge_path, "extensibility", 11)
     _expect(result["ok"], "synthetic optional feature was rejected", failures)
     _expect(
         cast(int, host.call("active_count")) == 1,
@@ -148,25 +148,25 @@ def _check_extensibility(host: Node, bridge: Node, failures: list[str]) -> None:
     host.call("deactivate_features")
 
 
-def _plan(host: Node, bridge: Node, fixture: str) -> PlanResult:
+def _plan(host: Node, bridge_path: str, fixture: str) -> PlanResult:
     raw = cast(
         str,
         host.call(
             "plan_catalog",
             f"res://tests/fixtures/catalogs/{fixture}.tres",
-            bridge,
+            bridge_path,
         ),
     )
     return cast(PlanResult, json.loads(raw))
 
 
-def _activate(host: Node, bridge: Node, fixture: str, epoch: int) -> PlanResult:
+def _activate(host: Node, bridge_path: str, fixture: str, epoch: int) -> PlanResult:
     raw = cast(
         str,
         host.call(
             "activate_catalog",
             f"res://tests/fixtures/catalogs/{fixture}.tres",
-            bridge,
+            bridge_path,
             epoch,
         ),
     )

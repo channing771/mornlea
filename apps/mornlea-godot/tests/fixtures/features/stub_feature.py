@@ -11,7 +11,12 @@ class stub_feature(Node):
             return "feature ID is empty"
         return ""
 
-    def bind_host(self, services: Node) -> str:
+    def bind_host(self, services_path: str) -> str:
+        # Features resolve the typed service object from the scene path the
+        # host hands over; project-class objects cannot cross module calls.
+        services = self.get_node(services_path)
+        if services is None:
+            return "typed bridge service is missing"
         if not services.has_method("bridge_identity"):
             return "typed bridge identity is missing"
         if services.call("bridge_identity") != "typed-test-bridge":

@@ -356,13 +356,13 @@ func TestGodotBridgeHostIsIdentityOnlyAndDesktopBound(t *testing.T) {
 	}
 
 	appScene := readBaselineDoc(t, root, filepath.Join("apps", "mornlea-godot", "app", "host", "app_root.tscn"))
-	for _, required := range []string{"res://addons/mornlea_bridge/bridge_host.py", `[node name="BridgeHost" type="Node" parent="."]`} {
+	for _, required := range []string{`[node name="ClientBridge" type="MornleaClientBridge" parent="."]`} {
 		if !strings.Contains(appScene, required) {
-			t.Errorf("app-root scene is missing bridge-host wiring %q", required)
+			t.Errorf("app-root scene is missing native bridge wiring %q", required)
 		}
 	}
 	appRoot := readBaselineDoc(t, root, filepath.Join("apps", "mornlea-godot", "app", "host", "app_root.py"))
-	for _, required := range []string{`get_node("BridgeHost")`, `call("initialize_bridge")`, `bridge, 1)`} {
+	for _, required := range []string{`get_node("ClientBridge")`, `"../ClientBridge"`} {
 		if !strings.Contains(appRoot, required) {
 			t.Errorf("app-root host handoff is missing %q", required)
 		}

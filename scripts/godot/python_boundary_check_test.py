@@ -33,10 +33,12 @@ class PythonBoundaryCheckTests(unittest.TestCase):
     def setUp(self) -> None:
         self.checker = load_checker()
 
-    def scan(self, source: str) -> set[str]:
+    def scan(self, source: str, relative: str = "feature.py") -> set[str]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "feature.py").write_text(source, encoding="utf-8")
+            target = root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(source, encoding="utf-8")
             return {finding.rule for finding in self.checker.scan_project(root)}
 
     def test_accepts_typed_py4godot_import_and_localized_string(self) -> None:
@@ -60,6 +62,56 @@ class PythonBoundaryCheckTests(unittest.TestCase):
         for source, expected in cases.items():
             with self.subTest(expected=expected):
                 self.assertIn(expected, self.scan(source))
+
+    def test_rejects_protocol_wire_markers_in_production_scripts(self) -> None:
+        cases = {
+            'MAGIC = "MCI1"\n': "forbidden-protocol-magic",
+            "MAGIC = 0x3149434D\n": "forbidden-protocol-magic",
+            'import struct\nRECORD = struct.unpack("<I", data)\n': (
+                "forbidden-wire-record-codec"
+            ),
+            'from struct import pack\nRECORD = pack("<I", 1)\n': (
+                "forbidden-wire-record-codec"
+            ),
+            'import struct\nCODEC = struct.Struct("<I")\n': (
+                "forbidden-wire-record-codec"
+            ),
+        }
+        for source, expected in cases.items():
+            with self.subTest(expected=expected):
+                self.assertIn(expected, self.scan(source))
+
+    def test_protocol_rules_exempt_test_and_typing_trees(self) -> None:
+        source = 'import struct\nRECORD = struct.unpack("<I", data)\nMAGIC = "MCI1"\n'
+        for relative in ("tests/scripts/probe.py", "typing/stubs.py"):
+            with self.subTest(relative=relative):
+                self.assertNotIn(
+                    "forbidden-wire-record-codec", self.scan(source, relative)
+                )
+                self.assertNotIn(
+                    "forbidden-protocol-magic", self.scan(source, relative)
+                )
+
+    def test_rejects_gameplay_bridge_calls_and_feature_references_in_host_scripts(
+        self,
+    ) -> None:
+        cases = {
+            'METHOD = "session_step"\n': "host-gameplay-bridge-call",
+            'PATH = "res://features/session/session_feature.tscn"\n': (
+                "host-feature-reference"
+            ),
+            'FEATURE = "world"\n': "host-feature-reference",
+        }
+        for source, expected in cases.items():
+            with self.subTest(expected=expected):
+                self.assertIn(expected, self.scan(source, "app/host/feature_host.py"))
+
+    def test_host_rules_do_not_fire_outside_host_scripts(self) -> None:
+        source = 'METHOD = "session_step"\n'
+        self.assertNotIn(
+            "host-gameplay-bridge-call",
+            self.scan(source, "features/session/session_feature.py"),
+        )
 
     def test_rejects_invalid_python(self) -> None:
         self.assertIn("syntax-error", self.scan("def broken(:\n"))

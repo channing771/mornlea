@@ -16,6 +16,17 @@ from py4godot.classes.Object import Object
 from py4godot.classes.PackedScene import PackedScene
 from py4godot.classes.Resource import Resource
 from py4godot.classes.ResourceLoader import ResourceLoader
+from py4godot.utils.smart_cast import (  # type: ignore[import-not-found]
+    register_cast_function,
+)
+
+# The pinned Py4Godot runtime cannot marshal a project-native-class object
+# across script-module method boundaries (the callee receives a bare `Object`
+# without its pointer), and patching that runtime is out of scope. The host and
+# every feature therefore acquire the native bridge node through `get_node`
+# with this identity cast, which is the established bridge acquisition pattern;
+# only scene paths cross module boundaries.
+register_cast_function("MornleaClientBridge", lambda bridge: bridge)
 
 HOST_PROTOCOL_MAJOR = 1
 HOST_PROTOCOL_MINOR = 0
@@ -88,27 +99,43 @@ class PlanResult:
 
 @gdclass
 class feature_host(Node):
-    """Own the bounded feature lifecycle while remaining feature agnostic."""
+    """Own the bounded feature lifecycle while remaining feature agnostic.
+
+    The host binds the scene-provided native bridge node as its typed service:
+    it acquires the object through `get_node` plus the identity cast above,
+    negotiates capability from the bridge's typed family table, and hands the
+    bridge's scene path to features so each acquires the same object itself.
+    Session methods belong to features alone, and no code here branches on
+    concrete feature identities.
+    """
 
     _instances: dict[str, Node]
     _active_order: list[str]
     _bridge: Node | None
+    _bridge_path: str
     _trace: list[str]
 
     def _ready(self) -> None:
         self._instances = {}
         self._active_order = []
         self._bridge = None
+        self._bridge_path = ""
         self._trace = []
 
     def _exit_tree(self) -> None:
         _deactivate(self)
 
-    def plan_catalog(self, catalog_path: str, bridge: Node) -> str:
+    def plan_catalog(self, catalog_path: str, bridge_path: str) -> str:
+        bridge = self.get_node(bridge_path)
+        if bridge is None:
+            return _missing_bridge_result(bridge_path).to_json()
         result, _ = _build_plan(catalog_path, bridge)
         return result.to_json()
 
-    def activate_catalog(self, catalog_path: str, bridge: Node, epoch: int) -> str:
+    def activate_catalog(self, catalog_path: str, bridge_path: str, epoch: int) -> str:
+        bridge = self.get_node(bridge_path)
+        if bridge is None:
+            return _missing_bridge_result(bridge_path).to_json()
         return _activate(self, catalog_path, bridge, epoch).to_json()
 
     def reset_features(self, epoch: int) -> None:
@@ -122,6 +149,10 @@ class feature_host(Node):
 
     def trace_json(self) -> str:
         return json.dumps(self._trace, separators=(",", ":"))
+
+
+def _missing_bridge_result(bridge_path: str) -> PlanResult:
+    return PlanResult(False, (f"bridge node is missing at {bridge_path}",), (), ())
 
 
 def _metadata(resource: Object, name: str, default: object) -> object:
@@ -208,31 +239,66 @@ def _call_text(target: Object, method: str, *arguments: object) -> str:
     return result if isinstance(result, str) else ""
 
 
-def _bridge_incompatibility(bridge: Node) -> str:
-    if not bridge.has_method("host_protocol_version"):
-        return "bridge is missing host protocol identity"
-    version = _call_text(bridge, "host_protocol_version")
-    if not _compatible_version(version, HOST_PROTOCOL_MAJOR, HOST_PROTOCOL_MINOR):
-        return f"bridge has incompatible host protocol {version or 'unknown'}"
-    return ""
+class FamilyTable:
+    """Parsed projection of the bridge's typed feature-family JSON table.
+
+    The table is keyed by the numeric registry family identifier as a string
+    (the bridge reports ``family`` as an integer), so a manifest requirement
+    must spell its family part as that numeric string, for example ``"2@1.0"``
+    for the connection family. The registry version word is a single contract
+    number, so it projects onto the requirement grammar as that major with an
+    implicit zero minor.
+    """
+
+    def __init__(self, versions: dict[str, tuple[int, int]]) -> None:
+        self.versions = versions
 
 
-def _family_incompatibility(bridge: Node, family_spec: str) -> str:
+def _bridge_family_table(bridge: Node) -> tuple[FamilyTable | None, str]:
+    # The bridge identity is its negotiated capability table, reported as one
+    # typed JSON value; the host never inspects identity records or packets.
+    if not bridge.has_method("feature_families_json"):
+        return None, "bridge is missing the feature family table identity"
+    table_text = _call_text(bridge, "feature_families_json")
+    try:
+        entries = json.loads(table_text)
+    except json.JSONDecodeError:
+        return None, "bridge reported an unreadable feature family table"
+    if not isinstance(entries, list):
+        return None, "bridge reported an unreadable feature family table"
+    versions: dict[str, tuple[int, int]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            return None, "bridge reported an unreadable feature family table"
+        family = entry.get("family")
+        version = entry.get("version")
+        if (
+            not isinstance(family, int)
+            or not isinstance(version, int)
+            or family <= 0
+            or version <= 0
+        ):
+            return None, "bridge reported an invalid feature family table entry"
+        versions[str(family)] = (version, 0)
+    return FamilyTable(versions), ""
+
+
+def _family_incompatibility(table: FamilyTable | None, family_spec: str) -> str:
     family_parts = family_spec.rsplit("@", 1)
     if len(family_parts) != 2:
         return f"has invalid bridge family requirement {family_spec}"
     required = _parse_version(family_parts[1])
     if required is None:
         return f"has invalid bridge family requirement {family_spec}"
-    if not bridge.has_method("feature_family_version"):
+    actual = table.versions.get(family_parts[0]) if table is not None else None
+    if actual is None:
         return f"requires unavailable bridge family {family_parts[0]}"
-    actual = _call_text(bridge, "feature_family_version", family_parts[0])
-    if not _compatible_version(actual, required[0], required[1]):
-        return f"requires unavailable bridge family {family_spec}"
+    if not _compatible_version(f"{actual[0]}.{actual[1]}", required[0], required[1]):
+        return f"requires newer bridge family {family_spec}"
     return ""
 
 
-def _manifest_incompatibility(manifest: FeatureManifest, bridge: Node) -> str:
+def _manifest_incompatibility(manifest: FeatureManifest, table: FamilyTable | None) -> str:
     if not manifest.enabled:
         return "is explicitly disabled"
     if (
@@ -250,7 +316,7 @@ def _manifest_incompatibility(manifest: FeatureManifest, bridge: Node) -> str:
     if manifest.reset_policy not in RESET_POLICIES:
         return f"has unknown reset policy {manifest.reset_policy}"
     for family_spec in manifest.required_bridge_families:
-        incompatibility = _family_incompatibility(bridge, family_spec)
+        incompatibility = _family_incompatibility(table, family_spec)
         if incompatibility:
             return incompatibility
     return ""
@@ -309,7 +375,7 @@ def _visit_feature(
 
 def _build_plan(catalog_path: str, bridge: Node) -> tuple[PlanResult, dict[str, FeatureManifest]]:
     manifests_list, errors = _load_catalog(catalog_path)
-    bridge_error = _bridge_incompatibility(bridge)
+    table, bridge_error = _bridge_family_table(bridge)
     if bridge_error:
         errors.append(bridge_error)
     disabled: list[str] = []
@@ -325,7 +391,7 @@ def _build_plan(catalog_path: str, bridge: Node) -> tuple[PlanResult, dict[str, 
             errors.append(f"duplicate feature ID: {manifest.feature_id}")
             continue
         manifests[manifest.feature_id] = manifest
-        incompatibility = _manifest_incompatibility(manifest, bridge)
+        incompatibility = _manifest_incompatibility(manifest, table)
         if incompatibility:
             _exclude_or_fail(manifest, incompatibility, errors, disabled, excluded)
     changed = True
@@ -385,7 +451,6 @@ def _feature_failure(
     host: feature_host,
     instance: Node,
     manifest: FeatureManifest,
-    bridge: Node,
     epoch: int,
 ) -> str:
     # Lifecycle methods are structural Godot contracts because Py4Godot scripts are
@@ -405,7 +470,10 @@ def _feature_failure(
     if failure:
         return f"validate failed: {failure}"
     host._trace.append(f"bind:{manifest.feature_id}")
-    failure = _call_text(instance, "bind_host", bridge)
+    # Features receive the bridge's absolute scene path because project-class
+    # objects cannot cross script-module method boundaries in the pinned
+    # runtime; each feature acquires the typed object through `get_node`.
+    failure = _call_text(instance, "bind_host", host._bridge_path)
     if failure:
         return f"bind failed: {failure}"
     host._trace.append(f"activate:{manifest.feature_id}:{epoch}")
@@ -419,12 +487,23 @@ def _release_instance(instance: Node) -> None:
     instance.queue_free()
 
 
+def _absolute_path_text(node: Node) -> str:
+    # The runtime's `NodePath` wrapper has no usable text conversion, so the
+    # path is rebuilt from its concatenated name components.
+    path = node.get_path()
+    names = str(path.get_concatenated_names())
+    if path.is_absolute():
+        return f"/{names}"
+    return names
+
+
 def _activate(host: feature_host, catalog_path: str, bridge: Node, epoch: int) -> PlanResult:
     # Each activation begins from a clean host so a failed prior catalog cannot leak
     # instances or bridge state into the next session epoch.
     _deactivate(host)
     host._trace = []
     host._bridge = bridge
+    host._bridge_path = _absolute_path_text(bridge)
     plan, manifests = _build_plan(catalog_path, bridge)
     if not plan.ok:
         return plan
@@ -461,7 +540,7 @@ def _activate(host: feature_host, catalog_path: str, bridge: Node, epoch: int) -
         if instance is not None:
             host._trace.append(f"instantiate:{feature_id}")
             host.add_child(instance)
-            failure = _feature_failure(host, instance, manifest, bridge, epoch)
+            failure = _feature_failure(host, instance, manifest, epoch)
         if failure:
             if instance is not None:
                 _release_instance(instance)
@@ -498,3 +577,4 @@ def _deactivate(host: feature_host) -> None:
     host._instances.clear()
     host._active_order.clear()
     host._bridge = None
+    host._bridge_path = ""

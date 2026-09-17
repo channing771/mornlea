@@ -1,4 +1,10 @@
-"""Expose the project-owned Rust bridge to Python through Godot reflection only."""
+"""Expose the project-owned Rust bridge to Python through Godot reflection only.
+
+Retirement ruling: the feature host binds the scene-held `MornleaClientBridge`
+node directly, so this static facade is no longer injected into production
+assembly. It remains as the subject of the coexistence qualification probe,
+which proves Py4Godot and the native bridge load together through reflection.
+"""
 
 from __future__ import annotations
 

@@ -38,7 +38,7 @@ trap cleanup EXIT
 
 usage() {
   printf '%s\n' \
-    'usage: scripts/godot/python-runtime-check.sh (--qualify|--coexistence|--bridge-contract) [--offline] [--target darwin-arm64] [--cache-dir ABSOLUTE_PATH]'
+    'usage: scripts/godot/python-runtime-check.sh (--qualify|--coexistence|--bridge-contract|--host-open-session) [--offline] [--target darwin-arm64] [--cache-dir ABSOLUTE_PATH]'
 }
 
 while (($# > 0)); do
@@ -53,6 +53,10 @@ while (($# > 0)); do
       ;;
     --bridge-contract)
       mode="bridge-contract"
+      shift
+      ;;
+    --host-open-session)
+      mode="host-open-session"
       shift
       ;;
     --offline)
@@ -79,8 +83,8 @@ while (($# > 0)); do
   esac
 done
 
-[[ "${mode}" == "qualify" || "${mode}" == "coexistence" || "${mode}" == "bridge-contract" ]] || \
-  fail "--qualify, --coexistence, or --bridge-contract is required"
+[[ "${mode}" == "qualify" || "${mode}" == "coexistence" || "${mode}" == "bridge-contract" || "${mode}" == "host-open-session" ]] || \
+  fail "--qualify, --coexistence, --bridge-contract, or --host-open-session is required"
 [[ "${target}" == "darwin-arm64" ]] || fail "unsupported Py4Godot desktop target: ${target}"
 [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]] || \
   fail "unsupported Py4Godot desktop target: $(uname -s)-$(uname -m)"
@@ -175,6 +179,43 @@ if [[ "${mode}" == "bridge-contract" ]]; then
   }
   [[ ! -e "${invocation_marker}" ]] || fail "an external Python or package installer was invoked"
   printf 'mornlea_godot bridge contract verified offline: producer identity, family table, session lifecycle, pulls, and typed values through the scene-held instance.\n'
+  exit 0
+fi
+
+if [[ "${mode}" == "host-open-session" ]]; then
+  # Discharge the bridge-lifecycle forward obligation from the session
+  # lifecycle review: unlike the contract scene, this probe drives the real
+  # feature host to create a producer session and connect toward a denied
+  # address, then quits WITHOUT an explicit close. The bridge node's
+  # drop-based release must land during scene teardown, before Rust
+  # deinitialization, with a clean exit and the full lifecycle marker order.
+  "${script_dir}/build-core.sh" --verify >/dev/null
+  "${script_dir}/build-extension.sh" --verify >/dev/null
+  host_output="$(run_isolated --headless --path "${project_root}" --quit-after 120 \
+    res://tests/scenes/host_open_session_quit_check.tscn 2>&1)" || {
+    printf '%s\n' "${host_output}" >&2
+    fail "mornlea_godot host open-session probe failed"
+  }
+  [[ "${host_output}" == *"Python host open-session quit check passed with the session left open."* ]] || \
+    fail "host open-session success marker is missing"
+  [[ "${host_output}" != *"ERROR:"* && "${host_output}" != *"SCRIPT ERROR:"* ]] || {
+    printf '%s\n' "${host_output}" >&2
+    fail "host open-session probe reported an extension error"
+  }
+  main_loop_init="$(awk -v needle="[mornlea-lifecycle] rust-init=main-loop" 'index($0, needle) { print NR; exit }' <<<"${host_output}")"
+  session_open="$(awk -v needle="Python host open-session quit check passed" 'index($0, needle) { print NR; exit }' <<<"${host_output}")"
+  main_loop_deinit="$(awk -v needle="[mornlea-lifecycle] rust-deinit=main-loop" 'index($0, needle) { print NR; exit }' <<<"${host_output}")"
+  scene_deinit="$(awk -v needle="[mornlea-lifecycle] rust-deinit=scene" 'index($0, needle) { print NR; exit }' <<<"${host_output}")"
+  [[ -n "${main_loop_init}" && -n "${session_open}" && -n "${main_loop_deinit}" && -n "${scene_deinit}" ]] || {
+    printf '%s\n' "${host_output}" >&2
+    fail "host open-session probe is missing a lifecycle marker"
+  }
+  ((main_loop_init < session_open && session_open < main_loop_deinit && main_loop_deinit < scene_deinit)) || {
+    printf '%s\n' "${host_output}" >&2
+    fail "host open-session lifecycle markers are out of order"
+  }
+  [[ ! -e "${invocation_marker}" ]] || fail "an external Python or package installer was invoked"
+  printf 'mornlea_godot host open-session teardown verified offline: the host-held session closes through bridge drop before Rust deinitialization.\n'
   exit 0
 fi
 
