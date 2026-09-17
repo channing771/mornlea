@@ -4,6 +4,7 @@ mod bridge;
 mod client_core;
 mod feature_negotiation;
 mod lifecycle;
+mod mesh_worker;
 mod pull_buffers;
 mod quad_decode;
 mod status_decode;

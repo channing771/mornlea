@@ -22,7 +22,8 @@
 //! forbids and Go's own trust boundary (`UnpackQuad`) treats as panics:
 //! bit 63 set (the layout's only spare bit and it must stay clear), a
 //! plant-set material on an axial face, and a cross-diagonal quad (face
-//! 6/7) with nonzero reserved bits 13..19. Through `decode_section` one
+//! 6/7) with nonzero reserved bits 13..19. Through one section decode
+//! (either entry point below), one
 //! invalid quad rejects the whole section, mirroring the all-or-nothing
 //! presentation batch. Violations that the 4-bit field widths make
 //! structurally impossible (x/y/z beyond 15, w/h beyond 16, ao/light beyond
@@ -50,17 +51,12 @@
 //! daylight-independent product plus the raw sky and block light nibbles;
 //! completing the blend is the Godot material's job.
 
-// This module is deliberately ahead of its non-test consumers: the terrain
-// worker and the RenderingServer upload path land with the later terrain
-// tasks, and until then only the tests below reference most items. Allow
-// `dead_code` module-wide so the decode does not fail
-// `cargo clippy --all-targets -- -D warnings` before those consumers
-// exist; remove this allowance once production code consumes the module.
-#![allow(dead_code)]
-
 use crate::abi;
 
-/// Bit offset of the section-local X cell coordinate (4 bits).
+/// Bit offset of the section-local X cell coordinate (4 bits). The
+/// production decode masks X literally (`& 0xF`, the zero-shift field), so
+/// the named offset is fixture vocabulary for the test packer.
+#[cfg(test)]
 pub(crate) const SHIFT_X: u32 = 0;
 /// Bit offset of the section-local Y cell coordinate (4 bits).
 pub(crate) const SHIFT_Y: u32 = 4;
@@ -106,21 +102,32 @@ pub(crate) const PLANT_MATERIAL_SHORT_GRASS: u16 = 68;
 pub(crate) const PLANT_MATERIAL_SAPLING: u16 = 164;
 /// Door material layer. Named by the mesh contract because it is the
 /// first non-plant layer after the crop range; its texture is fully
-/// opaque, so it classifies as opaque, not cutout.
+/// opaque, so it classifies as opaque, not cutout. Test-pinned contract
+/// vocabulary: no production path classifies by the door layer yet, so it
+/// stays test-only until the Godot material routing consumes it.
+#[cfg(test)]
 pub(crate) const DOOR_MATERIAL: u16 = 55;
 /// Water material layer. The one layer the producer routes into the
 /// translucent water stream; the pilot's combined per-section payload is
 /// re-split on exactly this value (see [`stream_of`]).
 pub(crate) const WATER_MATERIAL: u16 = 28;
 /// Dry-farmland material layer; farmland is a constant-corner short block.
+/// Consumed by the test-only routing alarm set below.
+#[cfg(test)]
 pub(crate) const FARMLAND_MATERIAL_FIRST: u16 = 29;
-/// Wet-farmland material layer.
+/// Wet-farmland material layer. Consumed by the test-only routing alarm
+/// set below.
+#[cfg(test)]
 pub(crate) const FARMLAND_MATERIAL_LAST: u16 = 30;
 /// Torch material layer; wall-torch slants are corner-height quads.
 pub(crate) const TORCH_MATERIAL: u16 = 59;
 /// First bed-surface material layer; beds are corner-height short blocks.
+/// Consumed by the test-only routing alarm set below.
+#[cfg(test)]
 pub(crate) const BED_MATERIAL_FIRST: u16 = 60;
-/// Last bed-surface material layer.
+/// Last bed-surface material layer. Consumed by the test-only routing
+/// alarm set below.
+#[cfg(test)]
 pub(crate) const BED_MATERIAL_LAST: u16 = 67;
 /// Leaves material layer; a cutout-class terrain material.
 pub(crate) const CUTOUT_MATERIAL_LEAVES: u16 = 12;
@@ -138,7 +145,10 @@ pub(crate) fn plant_material(material: u16) -> bool {
 /// and torch-slab layers the shader routes by material. Routing is
 /// completed by the corner-2 structural discriminator, so a short block
 /// outside these sets still expands correctly (the bed side boards rely on
-/// exactly that catch).
+/// exactly that catch). Test-pinned routing alarm: the production decode
+/// discriminates structurally (corner 2), so this set exists to detect
+/// cross-language layer drift and no production path calls it yet.
+#[cfg(test)]
 pub(crate) fn corner_height_material(material: u16) -> bool {
     (FARMLAND_MATERIAL_FIRST..=FARMLAND_MATERIAL_LAST).contains(&material)
         || material == TORCH_MATERIAL
@@ -416,16 +426,6 @@ pub(crate) fn stream_of(packed: u64) -> QuadStream {
     }
 }
 
-/// The unit vector of one axis: 0 = X, 1 = Y, 2 = Z, mirroring the
-/// shaders' `axis_vec`.
-fn axis_vec(axis: usize) -> [f32; 3] {
-    match axis {
-        0 => [1.0, 0.0, 0.0],
-        1 => [0.0, 1.0, 0.0],
-        _ => [0.0, 0.0, 1.0],
-    }
-}
-
 /// Axial-face vertex position: the cell corner offset by the positive-face
 /// step, plus the U and V corner parameters scaled by the quad's extent
 /// (1x1 for corner-height quads, `w`/`h` for merged quads).
@@ -555,7 +555,10 @@ pub(crate) struct SectionGeometry {
 /// stream. Fail-closed: an empty payload (the presentation contract
 /// requires at least one quad per upsert), a payload above the frozen
 /// per-section quad limit, or any single invalid quad rejects the whole
-/// section without producing partial geometry.
+/// section without producing partial geometry. Test-pinned entry: the
+/// pilot's combined payload goes through `decode_pilot_section`, so this
+/// two-stream entry stays test-only until a pre-split consumer arrives.
+#[cfg(test)]
 pub(crate) fn decode_section(stream: QuadStream, quads: &[u64]) -> Result<SectionGeometry, u32> {
     decode_split(quads, |_| stream)
 }
@@ -563,7 +566,7 @@ pub(crate) fn decode_section(stream: QuadStream, quads: &[u64]) -> Result<Sectio
 /// Decode and expand one section payload of the pilot's combined world
 /// family layout, splitting each quad to its producer stream with
 /// [`stream_of`] before classification. This is the entry point the
-/// terrain worker will use for the pulled per-section payloads.
+/// mesh-prepare worker uses for the pulled per-section payloads.
 pub(crate) fn decode_pilot_section(quads: &[u64]) -> Result<SectionGeometry, u32> {
     decode_split(quads, stream_of)
 }
@@ -599,10 +602,11 @@ fn decode_split(quads: &[u64], route: impl Fn(u64) -> QuadStream) -> Result<Sect
 
 /// Check one world batch's operation and packed-quad totals against the
 /// frozen presentation limits before any per-section decode spends work:
-/// at least one and at most [`abi::MAX_WORLD_BATCH_OPERATIONS`] sections,
-/// and at most [`abi::MAX_WORLD_BATCH_QUADS`] packed quads in total.
-pub(crate) fn check_world_batch(sections: usize, packed_quads: usize) -> Result<(), u32> {
-    if sections == 0 || sections > abi::MAX_WORLD_BATCH_OPERATIONS as usize {
+/// at least one and at most [`abi::MAX_WORLD_BATCH_OPERATIONS`] operations
+/// (upserts plus drops), and at most [`abi::MAX_WORLD_BATCH_QUADS`] packed
+/// quads in total.
+pub(crate) fn check_world_batch(operations: usize, packed_quads: usize) -> Result<(), u32> {
+    if operations == 0 || operations > abi::MAX_WORLD_BATCH_OPERATIONS as usize {
         return Err(abi::STATUS_INTERNAL);
     }
     if packed_quads > abi::MAX_WORLD_BATCH_QUADS as usize {
@@ -628,23 +632,23 @@ fn zero_vertex() -> ExpandedVertex {
 
 /// Build one packed quad bit-exactly, mirroring `mesh.Quad.Pack` and the
 /// engine's `Quad::pack`. Test-shared fixture in the `test_status_record`
-/// style: the decode tests below construct raw words through it so the
-/// bit-layout knowledge is written once, independent of the decode under
-/// test.
+/// style: the decode tests below and the mesh-prepare worker tests
+/// construct raw words through it so the bit-layout knowledge is written
+/// once, independent of the decode under test.
 #[cfg(test)]
 #[derive(Clone, Copy)]
-struct TestQuad {
-    x: u8,
-    y: u8,
-    z: u8,
-    w: u8,
-    h: u8,
-    corners: [u8; 4],
-    back: bool,
-    face: u8,
-    material: u16,
-    ao: u8,
-    light: u8,
+pub(crate) struct TestQuad {
+    pub(crate) x: u8,
+    pub(crate) y: u8,
+    pub(crate) z: u8,
+    pub(crate) w: u8,
+    pub(crate) h: u8,
+    pub(crate) corners: [u8; 4],
+    pub(crate) back: bool,
+    pub(crate) face: u8,
+    pub(crate) material: u16,
+    pub(crate) ao: u8,
+    pub(crate) light: u8,
 }
 
 #[cfg(test)]
@@ -671,7 +675,7 @@ impl TestQuad {
     /// Pack with the producer's exact three-way layout: cross diagonals
     /// borrow bits 12..19 for the front/back flag, corner-height quads for
     /// corners 0 and 1, and merged quads store `w-1`/`h-1`.
-    fn pack(self) -> u64 {
+    pub(crate) fn pack(self) -> u64 {
         let (low, high) = if self.face >= 6 {
             (u64::from(self.back) << SHIFT_PLANT_BACK, 0)
         } else if self.corners == [0; 4] {
