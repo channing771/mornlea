@@ -1,6 +1,7 @@
 mod abi;
 mod abi_matrix;
 mod bridge;
+mod client_core;
 mod feature_negotiation;
 mod lifecycle;
 
