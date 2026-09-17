@@ -8,6 +8,7 @@ use crate::client_core::{
 };
 use crate::feature_negotiation::PILOT_FAMILIES;
 use crate::lifecycle;
+use crate::pull_buffers::{PullBufferSet, pull_via_buffer};
 
 const GODOT_API_MAJOR: i64 = 4;
 const GODOT_API_MINOR: i64 = 7;
@@ -27,15 +28,16 @@ pub(crate) const IDENTITY_METHODS: [&str; 7] = [
 
 /// The Godot-independent lifecycle state of one bridge-held client session.
 ///
-/// The bridge holds at most one producer handle and no native buffer: pull
-/// results are copied into owned `Vec<u8>` values by the client-core seam
-/// before they reach this type, so nothing here needs destruction beyond the
-/// idempotent handle release. Every method returns the producer status
+/// The bridge holds at most one producer handle plus one set of reusable
+/// FFI-side pull buffers (see `crate::pull_buffers`): every pull still hands
+/// Python an owned `Vec<u8>` copy, so nothing here needs destruction beyond
+/// the idempotent handle release. Every method returns the producer status
 /// vocabulary (or the local invalid-state word for calls made without a
 /// session), mapping every status word without panicking.
 pub(crate) struct BridgeSession {
     calls: Box<dyn CoreCalls>,
     handle: Option<ClientHandle>,
+    buffers: PullBufferSet,
 }
 
 impl BridgeSession {
@@ -43,12 +45,15 @@ impl BridgeSession {
         Self {
             calls,
             handle: None,
+            buffers: PullBufferSet::default(),
         }
     }
 
     /// Create one producer session requesting the pinned pilot families at
     /// their pinned contract versions. A bridge holds at most one session, so
-    /// a second create without a close reports invalid state locally.
+    /// a second create without a close reports invalid state locally. The
+    /// buffers' served identities reset on success because wire epochs are
+    /// per producer session and a fresh session's epoch space restarts.
     pub(crate) fn create(&mut self) -> u32 {
         if self.handle.is_some() {
             return abi::STATUS_INVALID_STATE;
@@ -63,6 +68,7 @@ impl BridgeSession {
         {
             Ok(handle) => {
                 self.handle = Some(handle);
+                self.buffers.reset_served_identities();
                 abi::STATUS_OK
             }
             Err(word) => word,
@@ -109,22 +115,27 @@ impl BridgeSession {
         self.calls.step(handle, &request)
     }
 
-    /// Pull one family record through the two-phase protocol into an owned
-    /// byte vector.
+    /// Pull one family record through the two-phase protocol into the
+    /// family's reusable FFI-side buffer, returning an owned byte vector.
     pub(crate) fn pull(&mut self, family: PullFamily) -> Result<Vec<u8>, u32> {
         let Some(handle) = self.handle else {
             return Err(abi::STATUS_INVALID_STATE);
         };
-        client_core::pull_record(self.calls.as_ref(), family, handle)
+        let calls = self.calls.as_ref();
+        let buffer = self.buffers.for_family(family);
+        pull_via_buffer(calls, family, handle, buffer)
     }
 
     /// Release the session idempotently: the first close destroys the handle
     /// (which also cancels and joins an in-flight connection) and every later
-    /// close is a local no-op that still reports success.
+    /// close is a local no-op that still reports success. The buffers' served
+    /// identities reset so a later session's fresh epoch space cannot be
+    /// mistaken for a stale one.
     pub(crate) fn close(&mut self) -> u32 {
         let Some(handle) = self.handle.take() else {
             return abi::STATUS_OK;
         };
+        self.buffers.reset_served_identities();
         self.calls.destroy_session(handle)
     }
 }
@@ -429,6 +440,7 @@ mod tests {
         destroy_calls: usize,
         pull_calls: usize,
         poll_calls: usize,
+        pull_views: Vec<(usize, usize)>,
     }
 
     /// A scripted core-call table shared with the test through an `Rc`, so the
@@ -462,6 +474,7 @@ mod tests {
                     destroy_calls: 0,
                     pull_calls: 0,
                     poll_calls: 0,
+                    pull_views: Vec::new(),
                 })),
             }
         }
@@ -578,14 +591,18 @@ mod tests {
 
     impl ScriptedCore {
         /// The scripted primitive pull shared by every family: pop the next
-        /// scripted outcome and fill the caller buffer from the scripted
-        /// bytes on a completed write.
+        /// scripted outcome, record the caller buffer's address and span (the
+        /// reuse-accounting evidence for the buffer tests), and fill the
+        /// caller buffer from the scripted bytes on a completed write.
         fn scripted_pull(&self, handle: ClientHandle, buffer: &mut [u8]) -> PullOutcome {
             let mut state = self.state();
             if let Some(status) = require_live(&state, handle) {
                 return PullOutcome::Status(status);
             }
             state.pull_calls += 1;
+            state
+                .pull_views
+                .push((buffer.as_ptr() as usize, buffer.len()));
             let outcome = state
                 .pull_outcomes
                 .pop_front()
@@ -956,5 +973,80 @@ mod tests {
             ]
         );
         assert_eq!(encode_step_request(0, 0, 0)[0..4], [0x4D, 0x43, 0x53, 0x31]);
+    }
+
+    #[test]
+    fn bridge_lifecycle_pull_buffers_reuse_one_backing_across_session_pulls() {
+        let (mut session, core) = scripted_session();
+        assert_eq!(session.create(), STATUS_OK);
+        let record: Vec<u8> = (0..192u32).map(|byte| (byte % 251) as u8).collect();
+        for _ in 0..3 {
+            core.script_pulls(
+                &[
+                    PullOutcome::Capacity { required: 192 },
+                    PullOutcome::Complete { written: 192 },
+                ],
+                &record,
+            );
+            // The Python-facing value stays an owned copy: mutating it cannot
+            // corrupt the next pull even though the FFI-side backing is
+            // shared across pulls.
+            let mut pulled = session.pull(PullFamily::Identity).expect("record");
+            assert_eq!(pulled, record);
+            pulled.iter_mut().for_each(|byte| *byte = 0);
+        }
+        // Three two-phase pulls made six producer calls, and the three exact
+        // writes landed at one stable FFI-side backing address: no per-pull
+        // buffer allocation in the steady state.
+        let views = core.state().pull_views.clone();
+        assert_eq!(views.len(), 6);
+        let writes: Vec<(usize, usize)> = views
+            .iter()
+            .copied()
+            .filter(|(_, length)| *length > 0)
+            .collect();
+        assert_eq!(writes.len(), 3);
+        assert!(
+            writes.iter().all(|view| view.0 == writes[0].0),
+            "the session reuses one FFI backing address"
+        );
+    }
+
+    #[test]
+    fn bridge_lifecycle_pull_buffers_reset_identities_on_session_recreate() {
+        let (mut session, core) = scripted_session();
+        assert_eq!(session.create(), STATUS_OK);
+        let first = crate::pull_buffers::test_world_record(9, 1, 1, 0);
+        core.script_pulls(
+            &[
+                PullOutcome::Capacity {
+                    required: first.len() as u32,
+                },
+                PullOutcome::Complete {
+                    written: first.len() as u32,
+                },
+            ],
+            &first,
+        );
+        assert_eq!(session.pull(PullFamily::World), Ok(first));
+
+        // Close and create again: wire epochs are per producer session, so a
+        // fresh session's epoch space legitimately restarts below the old
+        // one and must not be refused as stale.
+        assert_eq!(session.close(), STATUS_OK);
+        assert_eq!(session.create(), STATUS_OK);
+        let second = crate::pull_buffers::test_world_record(1, 1, 1, 0);
+        core.script_pulls(
+            &[
+                PullOutcome::Capacity {
+                    required: second.len() as u32,
+                },
+                PullOutcome::Complete {
+                    written: second.len() as u32,
+                },
+            ],
+            &second,
+        );
+        assert_eq!(session.pull(PullFamily::World), Ok(second));
     }
 }

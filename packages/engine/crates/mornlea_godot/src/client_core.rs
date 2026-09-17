@@ -342,7 +342,12 @@ pub(crate) enum PullFamily {
 }
 
 impl PullFamily {
-    fn pull(self, calls: &dyn CoreCalls, handle: ClientHandle, buffer: &mut [u8]) -> PullOutcome {
+    pub(crate) fn pull(
+        self,
+        calls: &dyn CoreCalls,
+        handle: ClientHandle,
+        buffer: &mut [u8],
+    ) -> PullOutcome {
         match self {
             Self::World => calls.world_pull(handle, buffer),
             Self::Frame => calls.frame_pull(handle, buffer),
@@ -430,8 +435,11 @@ pub(crate) fn encode_step_request(
 
 /// An 8-byte-aligned byte buffer backed by `u64` words: every record buffer
 /// handed to the producer must carry the ABI alignment, and `Vec<u8>` does
-/// not guarantee it.
-struct AlignedBytes {
+/// not guarantee it. The default value holds no allocation; callers either
+/// fill it from bytes (input paths) or grow it to a declared span (the
+/// reusable pull buffers of `crate::pull_buffers`).
+#[derive(Default)]
+pub(crate) struct AlignedBytes {
     words: Vec<u64>,
     length: usize,
 }
@@ -451,13 +459,6 @@ impl AlignedBytes {
         }
     }
 
-    fn zeroed(length: usize) -> Self {
-        Self {
-            words: vec![0u64; length.div_ceil(size_of::<u64>())],
-            length,
-        }
-    }
-
     fn as_mut_ptr(&mut self) -> *mut u8 {
         self.words.as_mut_ptr().cast::<u8>()
     }
@@ -468,7 +469,7 @@ impl AlignedBytes {
 
     /// Copy out the first `length` bytes as an owned vector, leaving no view
     /// into the aligned backing alive.
-    fn to_owned_prefix(&self, length: usize) -> Vec<u8> {
+    pub(crate) fn to_owned_prefix(&self, length: usize) -> Vec<u8> {
         let count = length.min(self.length);
         let mut result = vec![0u8; count];
         // Safety: read-only access inside the live `words` allocation.
@@ -477,74 +478,55 @@ impl AlignedBytes {
         result.copy_from_slice(&view[..count]);
         result
     }
-}
 
-/// Drive one pull family through the two-phase capacity protocol and return
-/// the record as an owned byte vector: query the required size with a
-/// zero-capacity call, allocate the exact aligned buffer, and let the
-/// producer perform its one exact write. A zero required size is the
-/// documented no-record outcome (an empty vector); a record that grew
-/// between the query and the write allows exactly one retry with the fresh
-/// size, and any further contradiction fails closed with the internal status
-/// word. On the single Godot main thread no step can interleave, so the
-/// written length always equals the queried length; the driver still
-/// verifies it and fails closed on disagreement. The result owns its bytes:
-/// the producer keeps no caller pointer after a call and the bridge exposes
-/// no retained native buffer.
-pub(crate) fn pull_record(
-    calls: &dyn CoreCalls,
-    family: PullFamily,
-    handle: ClientHandle,
-) -> Result<Vec<u8>, u32> {
-    let required = match family.pull(calls, handle, &mut []) {
-        PullOutcome::Complete { written: 0 } => return Ok(Vec::new()),
-        // A completed write into a zero-capacity query contradicts the
-        // two-phase protocol; fail closed instead of guessing a length.
-        PullOutcome::Complete { .. } => return Err(abi::STATUS_INTERNAL),
-        PullOutcome::Capacity { required: 0 } => return Err(abi::STATUS_INTERNAL),
-        PullOutcome::Capacity { required } => required,
-        PullOutcome::Status(word) => return Err(word),
-    };
-    let mut buffer = AlignedBytes::zeroed(required as usize);
-    let written = match pull_once(calls, family, handle, &mut buffer) {
-        PullOutcome::Complete { written } => written as usize,
-        // Nothing was written; retry exactly once with the fresh size.
-        PullOutcome::Capacity { required: fresh } if fresh as usize > buffer.length => {
-            buffer = AlignedBytes::zeroed(fresh as usize);
-            match pull_once(calls, family, handle, &mut buffer) {
-                PullOutcome::Complete { written } => written as usize,
-                // A producer that signals capacity twice in a row after the
-                // one sanctioned retry is a contradiction.
-                _ => return Err(abi::STATUS_INSUFFICIENT_CAPACITY),
-            }
+    /// Set the exact-write span to `required` bytes, growing the backing to
+    /// the requirement at word granularity when capacity is insufficient and
+    /// never shrinking it (the largest span ever served defines the
+    /// steady-state footprint). Returns whether the backing grew.
+    pub(crate) fn reserve_span(&mut self, required: usize) -> bool {
+        let needed_words = required.div_ceil(size_of::<u64>());
+        if needed_words > self.words.len() {
+            self.words.resize(needed_words, 0);
+            self.length = required;
+            true
+        } else {
+            self.length = required;
+            false
         }
-        PullOutcome::Capacity { .. } => return Err(abi::STATUS_INSUFFICIENT_CAPACITY),
-        PullOutcome::Status(word) => return Err(word),
-    };
-    if written != buffer.length {
-        return Err(abi::STATUS_INTERNAL);
     }
-    Ok(buffer.to_owned_prefix(written))
-}
 
-/// One primitive pull call with the aligned byte view borrowed for exactly
-/// the call's duration.
-fn pull_once(
-    calls: &dyn CoreCalls,
-    family: PullFamily,
-    handle: ClientHandle,
-    buffer: &mut AlignedBytes,
-) -> PullOutcome {
-    let view = aligned_view(buffer);
-    family.pull(calls, handle, view)
-}
+    /// Run `call` with the writable byte view of the current span. The view
+    /// exists only inside the call, so no aliasing outlives the producer's
+    /// synchronous copy.
+    pub(crate) fn with_span_view<R>(&mut self, call: impl FnOnce(&mut [u8]) -> R) -> R {
+        debug_assert!(self.length <= self.words.len() * size_of::<u64>());
+        // Safety: the view stays inside the live `words` allocation, the
+        // span invariant is maintained by `reserve_span` and `from_bytes`,
+        // and the confined view cannot outlive this call.
+        let view = unsafe { core::slice::from_raw_parts_mut(self.as_mut_ptr(), self.length) };
+        call(view)
+    }
 
-/// Borrow the writable byte view of one aligned buffer. Safety: the view
-/// stays inside the buffer's live `words` allocation and the producer call it
-/// is handed to copies synchronously without retaining the pointer.
-fn aligned_view(buffer: &mut AlignedBytes) -> &mut [u8] {
-    // Safety: constructed lengths always satisfy `length <= words.len() * 8`.
-    unsafe { core::slice::from_raw_parts_mut(buffer.as_mut_ptr(), buffer.length) }
+    /// Read one little-endian `u64` at byte `offset` of the current span
+    /// without constructing a view; the header decoders read a handful of
+    /// fixed offsets only.
+    pub(crate) fn le_u64_at(&self, offset: usize) -> u64 {
+        debug_assert!(offset + size_of::<u64>() <= self.length);
+        let mut value = 0u64;
+        for index in 0..size_of::<u64>() {
+            let byte_index = offset + index;
+            let word = self.words[byte_index / size_of::<u64>()];
+            let shift = (byte_index % size_of::<u64>()) * 8;
+            value |= u64::from((word >> shift) as u8) << (index * 8);
+        }
+        value
+    }
+
+    /// Test-only byte capacity of the backing (word granularity).
+    #[cfg(test)]
+    pub(crate) fn capacity_bytes(&self) -> usize {
+        self.words.len() * size_of::<u64>()
+    }
 }
 
 /// The twelve producer exports as resolved function pointers. Field types

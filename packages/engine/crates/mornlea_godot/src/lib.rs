@@ -4,6 +4,7 @@ mod bridge;
 mod client_core;
 mod feature_negotiation;
 mod lifecycle;
+mod pull_buffers;
 
 use godot::prelude::*;
 
