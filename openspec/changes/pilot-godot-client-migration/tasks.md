@@ -76,7 +76,7 @@
 - [x] 7.4 Implement the `TerrainRenderer` RenderingServer RID table, keyed by dimension/X/Y/Z/revision, with whole-section upsert/drop and preservation of old resources on failure. From `packages/engine`, verify with `cargo test -p mornlea_godot terrain_resources --locked`.
 - [x] 7.5 Implement fixed per-frame terrain upload/drop budgets, out-of-view-distance reclamation, and session reset; prohibit one Node per block. Record packed/expanded bytes, prepare/upload duration, RID count, and peak count. From `packages/engine`, verify with `cargo test -p mornlea_godot terrain_budget --locked`.
 - [x] 7.6 Drive a Godot headless scene from transcripts through initial snapshot, chunk deltas, forget/reset, and world re-entry. Screenshots or structural summaries MUST prove that no stale section remains. Verify with `make godot-terrain-check`.
-- [ ] 7.7 Add a real-TCP dedicated-server terrain smoke test: start the existing `mornlea-server`, log the pilot in, wait for the same loaded criterion, run a fixed number of frames, exit, and reliably reap every child process. Verify with `scripts/godot/terrain-smoke.sh`.
+- [x] 7.7 Add a real-TCP dedicated-server terrain smoke test: start the existing `mornlea-server`, log the pilot in, wait for the same loaded criterion, run a fixed number of frames, exit, and reliably reap every child process. Verify with `scripts/godot/terrain-smoke.sh`.
 
 ## 8. P5: Connect remote input, prediction, camera, and target feedback
 

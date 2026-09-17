@@ -86,6 +86,14 @@ The world feature's native terrain pipeline (packed-quad decode, mesh-prepare wo
 make godot-terrain-check
 ```
 
+## Dedicated-server terrain smoke
+
+The same terrain chain is also proven against the real authoritative server, not a transcript. The smoke gate (`scripts/godot/terrain-smoke.sh`) builds `mornlea-server` into a per-run temporary directory, starts it on a deterministic loopback port with its world, config, and logs rooted in temporary paths so nothing touches repository saves, waits for its startup line, then runs the headless smoke scene. The scene activates the production catalog, logs the pilot into the real server, waits for the same loaded criterion as the transcript check's initial snapshot (confirmed session phase Play plus at least one live terrain section in the structural summary), runs a fixed 300-frame budget while failing loudly on any terrain error word after the loaded criterion, and proves the clean close leaves no stale section. The gate asserts the success marker, requires a clean SIGTERM shutdown of the server, and reaps every child through an exit trap with a survivors check. Run it with:
+
+```bash
+scripts/godot/terrain-smoke.sh
+```
+
 ## Architecture boundary
 
 Godot owns desktop windowing, keyboard/mouse collection, presentation, pilot UI, and Godot resource lifecycles. The Go client runtime will continue to own protocol v44, mirrors, prediction, semantic frame state, and bounded network processing. Numerical mesh, lighting, collision, raycast, and physics remain in engine ABI v11. The authoritative Go server remains the only owner of world and player truth.
