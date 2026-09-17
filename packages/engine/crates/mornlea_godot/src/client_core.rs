@@ -6,14 +6,25 @@
 //! export surface. Constants, record layouts, sizes, and alignments stay in
 //! [`crate::abi`] (pinned against `include/mornlea_client_core.h`); this
 //! module owns the extern declarations themselves, the typed handle and
-//! status wrappers the later bridge code passes across the boundary, and the
-//! diagnostic status-text table.
+//! status wrappers the bridge passes across the boundary, and the diagnostic
+//! status-text table.
 //!
-//! Scope boundary: the tests here validate the declarations only. No test
-//! loads or calls the produced shared library, because cargo tests must not
-//! depend on the dylib artifact's build ordering; symbol existence in the
-//! real library is proven by the build script's verify step and live-call
-//! behavior belongs to the bridge module that consumes this surface.
+//! Production wiring: the GDExtension must not link the producer artifact at
+//! build time, because the engine workspace builds from a clean checkout
+//! before any producer library exists (`make rust`), while the producer is
+//! materialized later by `scripts/godot/build-core.sh` beside this extension
+//! in `addons/mornlea_bridge/bin/`. Production therefore resolves the twelve
+//! exports dynamically: a one-shot loader locates this extension's own image
+//! directory, opens the colocated producer library, verifies its ABI major,
+//! and hands the bridge a typed function table. The declared extern block
+//! stays the pinned declaration mirror that the parity tests validate in both
+//! directions against `exports.go` and the header; the loader's resolved
+//! signatures are pinned against those same declarations.
+//!
+//! Test wiring: bridge lifecycle tests never load the producer library. The
+//! [`CoreCalls`] seam is the single call surface the bridge owns, so tests
+//! script a table with producer-vocabulary statuses while production wires
+//! the dynamic table through the same trait.
 //!
 //! Unsafe confinement: the `unsafe extern "C"` block below is the only unsafe
 //! code this module needs, and confinement for the whole crate is enforced by
@@ -22,16 +33,17 @@
 //! legitimately requires `unsafe impl`. The scan pins that exact exception
 //! and fails on any other `unsafe` token outside this file.
 
-// Like the `abi` and `feature_negotiation` mirrors, this module is ahead of
-// its non-test consumers: the bridge module that calls these exports through
-// the produced shared library lands with the later client-core integration
-// work, and until then only the tests below reference the declarations and
-// wrappers. Allow `dead_code` module-wide so the FFI surface does not fail
-// `cargo clippy --all-targets -- -D warnings` before that consumer exists;
-// remove this allowance once production code consumes the module directly.
+// The extern declarations and the diagnostic status text stay
+// declaration-only pins (production resolves the exports at runtime), and the
+// cargo-test configuration never loads the producer library, so parts of this
+// module remain unreferenced in some compilation profiles. Allow
+// `dead_code` module-wide so the pinned mirror does not fail
+// `cargo clippy --all-targets -- -D warnings` in those profiles.
 #![allow(dead_code)]
 
+use core::ffi::{c_char, c_int, c_void};
 use core::mem::{align_of, size_of};
+use std::sync::OnceLock;
 
 use crate::abi;
 
@@ -258,6 +270,694 @@ unsafe extern "C" {
     /// the minor in the low 32 bits; it takes no pointer arguments and
     /// cannot fail.
     fn mornlea_client_core_abi_version() -> u64;
+
+    // Dynamic-loader entry points of the platform runtime library (libSystem
+    // on macOS, libc on Linux resolve them without an explicit link
+    // attribute). They serve only the production table below: the extension
+    // resolves the colocated producer library at runtime instead of linking
+    // it at build time, because the workspace builds from a clean checkout
+    // before any producer library exists. A Windows distribution would need
+    // its own loader entry points; the pilot distributes macOS only.
+    fn dlopen(path: *const c_char, mode: c_int) -> *mut c_void;
+    fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+    fn dladdr(address: *const c_void, info: *mut DlInfo) -> c_int;
+}
+
+/// The `dladdr` result record of the platform dynamic loader, mirroring the
+/// system `<dlfcn.h>` layout; only `dli_fname` (the containing image's path)
+/// is consumed.
+#[repr(C)]
+struct DlInfo {
+    dli_fname: *const c_char,
+    dli_fbase: *mut c_void,
+    dli_sname: *const c_char,
+    dli_saddr: *const c_void,
+}
+
+/// `RTLD_NOW | RTLD_LOCAL` for the producer load: resolve every producer
+/// reference eagerly (a missing engine dependency fails the load instead of a
+/// later call) and keep the producer's symbols out of the global namespace so
+/// they cannot collide with Godot or Py4Godot symbols. Values are the darwin
+/// `dlfcn.h` constants.
+const RTLD_NOW: c_int = 0x2;
+const RTLD_LOCAL: c_int = 0x4;
+
+/// The file name of the producer library as materialized beside this
+/// extension by `scripts/godot/build-core.sh`.
+const PRODUCER_LIBRARY_NAME: &str = "libmornlea_client_core.dylib";
+
+/// A function whose address anchors `dladdr` to this extension image so the
+/// producer library can be resolved relative to the extension's own
+/// directory (the colocated-distribution contract). Never called.
+#[inline(never)]
+fn extension_image_anchor() {}
+
+/// One pull outcome of a single producer pull call, mapped from the raw
+/// status word: the two-phase capacity signal and the completed write carry
+/// their sizes, every other word (including out-of-range producer drift)
+/// stays a raw word so the consumer-side classification owns the reaction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PullOutcome {
+    /// `STATUS_OK`; `written` is the byte count the producer committed to the
+    /// caller's buffer.
+    Complete { written: u32 },
+    /// `STATUS_INSUFFICIENT_CAPACITY`; nothing was written and `required`
+    /// names the exact byte count of the current record.
+    Capacity { required: u32 },
+    /// Any other (possibly undefined) status word.
+    Status(u32),
+}
+
+/// The four pull families of the producer surface.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PullFamily {
+    /// Consuming drain of the retained world batch.
+    World,
+    /// Non-consuming per-step frame snapshot.
+    Frame,
+    /// Non-consuming status and metrics record set.
+    Status,
+    /// Non-consuming producer identity record.
+    Identity,
+}
+
+impl PullFamily {
+    fn pull(self, calls: &dyn CoreCalls, handle: ClientHandle, buffer: &mut [u8]) -> PullOutcome {
+        match self {
+            Self::World => calls.world_pull(handle, buffer),
+            Self::Frame => calls.frame_pull(handle, buffer),
+            Self::Status => calls.status_pull(handle, buffer),
+            Self::Identity => calls.identity_pull(handle, buffer),
+        }
+    }
+}
+
+/// The core-call seam: every bridge lifecycle operation goes through this
+/// trait with typed, pointer-free arguments, so the bridge never sees a raw
+/// pointer or a retained native buffer. Production wires the dynamically
+/// resolved producer table; bridge lifecycle tests script the same surface
+/// with producer-vocabulary statuses. Every method is panic-free on caller
+/// data and returns raw status words (`u32`) so undefined producer words
+/// surface unchanged instead of panicking a classification.
+pub(crate) trait CoreCalls {
+    /// The producer's packed ABI version (`major << 32 | minor`), or `None`
+    /// when this table cannot reach a producer at all.
+    fn abi_version(&self) -> Option<u64>;
+
+    /// `mornlea_client_core_create` with its request words owned by the
+    /// implementation. Each word packs a family identifier in the low 32
+    /// bits and the requested family contract version in the high 32 bits.
+    fn create_session(
+        &self,
+        abi_major: u32,
+        abi_minor: u32,
+        requested_families: &[u64],
+    ) -> Result<ClientHandle, u32>;
+
+    /// `mornlea_client_core_destroy`; idempotent for a handle the producer
+    /// issued.
+    fn destroy_session(&self, handle: ClientHandle) -> u32;
+
+    /// `mornlea_client_core_connect_begin`; the address bytes are copied by
+    /// the implementation and never retained.
+    fn connect_begin(&self, handle: ClientHandle, address: &[u8]) -> u32;
+
+    /// `mornlea_client_core_connect_poll`; the phase word on success, the
+    /// status word otherwise.
+    fn connect_poll(&self, handle: ClientHandle) -> Result<u32, u32>;
+
+    /// `mornlea_client_core_disconnect`.
+    fn disconnect_session(&self, handle: ClientHandle) -> u32;
+
+    /// `mornlea_client_core_submit_input`; the batch bytes are copied by the
+    /// implementation and never retained.
+    fn submit_input(&self, handle: ClientHandle, batch: &[u8]) -> u32;
+
+    /// `mornlea_client_core_step`; the frozen request record is copied by the
+    /// implementation and never retained.
+    fn step(&self, handle: ClientHandle, request: &[u8; abi::STEP_REQUEST_BYTES]) -> u32;
+
+    /// `mornlea_client_core_world_pull`.
+    fn world_pull(&self, handle: ClientHandle, buffer: &mut [u8]) -> PullOutcome;
+
+    /// `mornlea_client_core_frame_pull`.
+    fn frame_pull(&self, handle: ClientHandle, buffer: &mut [u8]) -> PullOutcome;
+
+    /// `mornlea_client_core_status_pull`.
+    fn status_pull(&self, handle: ClientHandle, buffer: &mut [u8]) -> PullOutcome;
+
+    /// `mornlea_client_core_status_identity`.
+    fn identity_pull(&self, handle: ClientHandle, buffer: &mut [u8]) -> PullOutcome;
+}
+
+/// Encode the frozen step-family request record (wire bytes read "MCS1"):
+/// magic, layout version, little-endian elapsed nanoseconds, and the two
+/// little-endian budgets. The producer owns every domain check; this encoder
+/// only lays out the pinned record.
+pub(crate) fn encode_step_request(
+    elapsed_ns: u64,
+    message_budget: u32,
+    mesh_budget: u32,
+) -> [u8; abi::STEP_REQUEST_BYTES] {
+    let mut record = [0u8; abi::STEP_REQUEST_BYTES];
+    record[0..4].copy_from_slice(&abi::MAGIC_STEP.to_le_bytes());
+    record[4..8].copy_from_slice(&abi::STEP_VERSION.to_le_bytes());
+    record[8..16].copy_from_slice(&elapsed_ns.to_le_bytes());
+    record[16..20].copy_from_slice(&message_budget.to_le_bytes());
+    record[20..24].copy_from_slice(&mesh_budget.to_le_bytes());
+    record
+}
+
+/// An 8-byte-aligned byte buffer backed by `u64` words: every record buffer
+/// handed to the producer must carry the ABI alignment, and `Vec<u8>` does
+/// not guarantee it.
+struct AlignedBytes {
+    words: Vec<u64>,
+    length: usize,
+}
+
+impl AlignedBytes {
+    fn from_bytes(bytes: &[u8]) -> Self {
+        let mut words = vec![0u64; bytes.len().div_ceil(size_of::<u64>())];
+        // Safety: `words` is a live `u64` allocation of at least `bytes.len()`
+        // bytes, and only this module constructs the aligned view.
+        let view = unsafe {
+            core::slice::from_raw_parts_mut(words.as_mut_ptr().cast::<u8>(), bytes.len())
+        };
+        view.copy_from_slice(bytes);
+        Self {
+            words,
+            length: bytes.len(),
+        }
+    }
+
+    fn zeroed(length: usize) -> Self {
+        Self {
+            words: vec![0u64; length.div_ceil(size_of::<u64>())],
+            length,
+        }
+    }
+
+    fn as_mut_ptr(&mut self) -> *mut u8 {
+        self.words.as_mut_ptr().cast::<u8>()
+    }
+
+    fn len(&self) -> u32 {
+        u32::try_from(self.length).unwrap_or(u32::MAX)
+    }
+
+    /// Copy out the first `length` bytes as an owned vector, leaving no view
+    /// into the aligned backing alive.
+    fn to_owned_prefix(&self, length: usize) -> Vec<u8> {
+        let count = length.min(self.length);
+        let mut result = vec![0u8; count];
+        // Safety: read-only access inside the live `words` allocation.
+        let view =
+            unsafe { core::slice::from_raw_parts(self.words.as_ptr().cast::<u8>(), self.length) };
+        result.copy_from_slice(&view[..count]);
+        result
+    }
+}
+
+/// Drive one pull family through the two-phase capacity protocol and return
+/// the record as an owned byte vector: query the required size with a
+/// zero-capacity call, allocate the exact aligned buffer, and let the
+/// producer perform its one exact write. A zero required size is the
+/// documented no-record outcome (an empty vector); a record that grew
+/// between the query and the write allows exactly one retry with the fresh
+/// size, and any further contradiction fails closed with the internal status
+/// word. On the single Godot main thread no step can interleave, so the
+/// written length always equals the queried length; the driver still
+/// verifies it and fails closed on disagreement. The result owns its bytes:
+/// the producer keeps no caller pointer after a call and the bridge exposes
+/// no retained native buffer.
+pub(crate) fn pull_record(
+    calls: &dyn CoreCalls,
+    family: PullFamily,
+    handle: ClientHandle,
+) -> Result<Vec<u8>, u32> {
+    let required = match family.pull(calls, handle, &mut []) {
+        PullOutcome::Complete { written: 0 } => return Ok(Vec::new()),
+        // A completed write into a zero-capacity query contradicts the
+        // two-phase protocol; fail closed instead of guessing a length.
+        PullOutcome::Complete { .. } => return Err(abi::STATUS_INTERNAL),
+        PullOutcome::Capacity { required: 0 } => return Err(abi::STATUS_INTERNAL),
+        PullOutcome::Capacity { required } => required,
+        PullOutcome::Status(word) => return Err(word),
+    };
+    let mut buffer = AlignedBytes::zeroed(required as usize);
+    let written = match pull_once(calls, family, handle, &mut buffer) {
+        PullOutcome::Complete { written } => written as usize,
+        // Nothing was written; retry exactly once with the fresh size.
+        PullOutcome::Capacity { required: fresh } if fresh as usize > buffer.length => {
+            buffer = AlignedBytes::zeroed(fresh as usize);
+            match pull_once(calls, family, handle, &mut buffer) {
+                PullOutcome::Complete { written } => written as usize,
+                // A producer that signals capacity twice in a row after the
+                // one sanctioned retry is a contradiction.
+                _ => return Err(abi::STATUS_INSUFFICIENT_CAPACITY),
+            }
+        }
+        PullOutcome::Capacity { .. } => return Err(abi::STATUS_INSUFFICIENT_CAPACITY),
+        PullOutcome::Status(word) => return Err(word),
+    };
+    if written != buffer.length {
+        return Err(abi::STATUS_INTERNAL);
+    }
+    Ok(buffer.to_owned_prefix(written))
+}
+
+/// One primitive pull call with the aligned byte view borrowed for exactly
+/// the call's duration.
+fn pull_once(
+    calls: &dyn CoreCalls,
+    family: PullFamily,
+    handle: ClientHandle,
+    buffer: &mut AlignedBytes,
+) -> PullOutcome {
+    let view = aligned_view(buffer);
+    family.pull(calls, handle, view)
+}
+
+/// Borrow the writable byte view of one aligned buffer. Safety: the view
+/// stays inside the buffer's live `words` allocation and the producer call it
+/// is handed to copies synchronously without retaining the pointer.
+fn aligned_view(buffer: &mut AlignedBytes) -> &mut [u8] {
+    // Safety: constructed lengths always satisfy `length <= words.len() * 8`.
+    unsafe { core::slice::from_raw_parts_mut(buffer.as_mut_ptr(), buffer.length) }
+}
+
+/// The twelve producer exports as resolved function pointers. Field types
+/// are pinned against the extern declarations by a source test; the field
+/// order follows [`EXPORT_SYMBOLS`].
+#[derive(Clone, Copy)]
+struct ProducerVTable {
+    create: unsafe extern "C" fn(u32, u32, *const u64, u32, *mut ClientHandle) -> Status,
+    destroy: unsafe extern "C" fn(ClientHandle) -> Status,
+    connect_begin: unsafe extern "C" fn(ClientHandle, *const u8, u32) -> Status,
+    connect_poll: unsafe extern "C" fn(ClientHandle, *mut u32) -> Status,
+    disconnect: unsafe extern "C" fn(ClientHandle) -> Status,
+    submit_input: unsafe extern "C" fn(ClientHandle, *const u8, u32) -> Status,
+    step: unsafe extern "C" fn(ClientHandle, *const u8, u32) -> Status,
+    world_pull: unsafe extern "C" fn(ClientHandle, *mut u8, u32, *mut u32) -> Status,
+    frame_pull: unsafe extern "C" fn(ClientHandle, *mut u8, u32, *mut u32) -> Status,
+    status_pull: unsafe extern "C" fn(ClientHandle, *mut u8, u32, *mut u32) -> Status,
+    status_identity: unsafe extern "C" fn(ClientHandle, *mut u8, u32, *mut u32) -> Status,
+    abi_version: unsafe extern "C" fn() -> u64,
+}
+
+/// Why the producer table is unavailable. Kept `Copy` so the cached load
+/// result can carry the reason without allocation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ProducerLoadFailure {
+    /// This extension's own image directory could not be resolved.
+    ImageUnknown,
+    /// The producer library is not present beside this extension.
+    LibraryAbsent,
+    /// A producer export symbol is missing from the loaded library.
+    SymbolMissing,
+    /// The loaded producer carries a different ABI major.
+    MajorMismatch { found: u32 },
+    /// The cargo-test configuration never loads the producer library.
+    TestBinary,
+}
+
+impl ProducerLoadFailure {
+    pub(crate) fn reason(self) -> &'static str {
+        match self {
+            Self::ImageUnknown => "extension image directory is unknown",
+            Self::LibraryAbsent => "producer library is absent beside the extension",
+            Self::SymbolMissing => "producer export symbol is missing",
+            Self::MajorMismatch { .. } => "producer ABI major does not match the pinned ABI",
+            Self::TestBinary => "test builds never load the producer library",
+        }
+    }
+}
+
+/// The cached one-shot producer load.
+#[derive(Clone, Copy)]
+enum ProducerTable {
+    Ready {
+        vtable: ProducerVTable,
+        packed_version: u64,
+    },
+    Failed(ProducerLoadFailure),
+}
+
+static PRODUCER_TABLE: OnceLock<ProducerTable> = OnceLock::new();
+
+/// The producer identity for the Godot-visible availability report: the
+/// packed version on success, or the load failure reason.
+pub(crate) struct ProducerIdentity {
+    pub(crate) packed_version: Option<u64>,
+    pub(crate) failure: Option<ProducerLoadFailure>,
+}
+
+pub(crate) fn producer_identity() -> ProducerIdentity {
+    match producer_table() {
+        ProducerTable::Ready { packed_version, .. } => ProducerIdentity {
+            packed_version: Some(packed_version),
+            failure: None,
+        },
+        ProducerTable::Failed(failure) => ProducerIdentity {
+            packed_version: None,
+            failure: Some(failure),
+        },
+    }
+}
+
+fn producer_table() -> ProducerTable {
+    *PRODUCER_TABLE.get_or_init(load_producer_table)
+}
+
+/// Resolve the colocated producer library once and verify its ABI major.
+/// The opened image stays loaded for the process lifetime by design: Godot
+/// extensions are never unloaded mid-run, `dlclose` would invalidate every
+/// vtable pointer still held by live bridge sessions, and a hot-reloaded
+/// extension image gets fresh statics and its own `dlopen` reference.
+fn load_producer_table() -> ProducerTable {
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    let Some(directory) = extension_directory() else {
+        return ProducerTable::Failed(ProducerLoadFailure::ImageUnknown);
+    };
+    let mut path_bytes = directory.into_os_string().into_vec();
+    path_bytes.push(b'/');
+    path_bytes.extend_from_slice(PRODUCER_LIBRARY_NAME.as_bytes());
+    path_bytes.push(0);
+    let library_path = std::ffi::OsString::from_vec(path_bytes);
+    // Safety: `library_path` is NUL-terminated by construction and `dlopen`
+    // only reads it.
+    let handle = unsafe {
+        dlopen(
+            library_path.as_bytes().as_ptr().cast::<c_char>(),
+            RTLD_NOW | RTLD_LOCAL,
+        )
+    };
+    if handle.is_null() {
+        return ProducerTable::Failed(ProducerLoadFailure::LibraryAbsent);
+    }
+    macro_rules! symbol {
+        ($name:literal) => {{
+            let bytes = concat!($name, "\0");
+            // Safety: the name is a static NUL-terminated string and `handle`
+            // is a live `dlopen` result. The transmute reinterprets the
+            // resolved address as the function pointer type pinned against
+            // the extern declarations.
+            let address = unsafe { dlsym(handle, bytes.as_ptr().cast::<c_char>()) };
+            if address.is_null() {
+                return ProducerTable::Failed(ProducerLoadFailure::SymbolMissing);
+            }
+            unsafe { core::mem::transmute::<*mut c_void, _>(address) }
+        }};
+    }
+    // The transmute target inside `symbol!` is inferred from the vtable
+    // field the result initializes, and the signature pin ties every field
+    // to its pinned declaration, so an explicit annotation would only
+    // duplicate the type text.
+    #[allow(clippy::missing_transmute_annotations)]
+    let vtable = ProducerVTable {
+        create: symbol!("mornlea_client_core_create"),
+        destroy: symbol!("mornlea_client_core_destroy"),
+        connect_begin: symbol!("mornlea_client_core_connect_begin"),
+        connect_poll: symbol!("mornlea_client_core_connect_poll"),
+        disconnect: symbol!("mornlea_client_core_disconnect"),
+        submit_input: symbol!("mornlea_client_core_submit_input"),
+        step: symbol!("mornlea_client_core_step"),
+        world_pull: symbol!("mornlea_client_core_world_pull"),
+        frame_pull: symbol!("mornlea_client_core_frame_pull"),
+        status_pull: symbol!("mornlea_client_core_status_pull"),
+        status_identity: symbol!("mornlea_client_core_status_identity"),
+        abi_version: symbol!("mornlea_client_core_abi_version"),
+    };
+    // Safety: the resolved symbol takes no arguments and returns a word.
+    let packed_version = unsafe { (vtable.abi_version)() };
+    let found_major = (packed_version >> 32) as u32;
+    if found_major != abi::ABI_MAJOR {
+        return ProducerTable::Failed(ProducerLoadFailure::MajorMismatch { found: found_major });
+    }
+    ProducerTable::Ready {
+        vtable,
+        packed_version,
+    }
+}
+
+/// The directory of this extension's own image, resolved through `dladdr` on
+/// a module-local anchor function.
+fn extension_directory() -> Option<std::path::PathBuf> {
+    let mut info = DlInfo {
+        dli_fname: core::ptr::null(),
+        dli_fbase: core::ptr::null_mut(),
+        dli_sname: core::ptr::null(),
+        dli_saddr: core::ptr::null(),
+    };
+    // Safety: `DlInfo` is the platform `Dl_info` layout and `dladdr` only
+    // writes into it for a valid in-image address.
+    let found = unsafe { dladdr(extension_image_anchor as *const c_void, &mut info) };
+    if found == 0 || info.dli_fname.is_null() {
+        return None;
+    }
+    // Safety: `dli_fname` is a NUL-terminated path owned by the loader for
+    // the lifetime of the image.
+    let file_name = unsafe { core::ffi::CStr::from_ptr(info.dli_fname) };
+    use std::os::unix::ffi::OsStrExt;
+    let path = std::path::PathBuf::from(std::ffi::OsStr::from_bytes(file_name.to_bytes()));
+    path.parent().map(std::path::Path::to_path_buf)
+}
+
+/// The production [`CoreCalls`] table over the dynamically resolved producer
+/// exports. Every method owns its aligned input buffers and copies pull
+/// results out of the aligned scratch before returning.
+struct ProducerCore {
+    vtable: ProducerVTable,
+}
+
+/// The [`CoreCalls`] table used when no producer library could be loaded:
+/// every call reports the internal status word (the obligation baseline for
+/// a producer-side failure with no narrower classification), so a session
+/// never retains partial state behind an absent producer.
+struct UnavailableCore {
+    failure: ProducerLoadFailure,
+}
+
+impl CoreCalls for ProducerCore {
+    fn abi_version(&self) -> Option<u64> {
+        // Safety: the resolved symbol takes no arguments and returns a word.
+        Some(unsafe { (self.vtable.abi_version)() })
+    }
+
+    fn create_session(
+        &self,
+        abi_major: u32,
+        abi_minor: u32,
+        requested_families: &[u64],
+    ) -> Result<ClientHandle, u32> {
+        let count = u32::try_from(requested_families.len()).unwrap_or(u32::MAX);
+        let mut out_handle = ClientHandle::from_word(0);
+        // Safety: `requested_families` is a live u64 slice for the duration
+        // of the synchronous call, and `out_handle` is a live out-parameter.
+        let status = unsafe {
+            (self.vtable.create)(
+                abi_major,
+                abi_minor,
+                requested_families.as_ptr(),
+                count,
+                &mut out_handle,
+            )
+        };
+        if status.is_ok() {
+            Ok(out_handle)
+        } else {
+            Err(status.as_word())
+        }
+    }
+
+    fn destroy_session(&self, handle: ClientHandle) -> u32 {
+        // Safety: the handle value is a plain word passed by copy.
+        unsafe { (self.vtable.destroy)(handle).as_word() }
+    }
+
+    fn connect_begin(&self, handle: ClientHandle, address: &[u8]) -> u32 {
+        let mut buffer = AlignedBytes::from_bytes(address);
+        // Safety: the aligned buffer is live for the synchronous call and the
+        // producer copies the bytes without retaining the pointer.
+        unsafe { (self.vtable.connect_begin)(handle, buffer.as_mut_ptr(), buffer.len()).as_word() }
+    }
+
+    fn connect_poll(&self, handle: ClientHandle) -> Result<u32, u32> {
+        let mut phase = 0u32;
+        // Safety: `phase` is a live out-parameter for the synchronous call.
+        let status = unsafe { (self.vtable.connect_poll)(handle, &mut phase) };
+        if status.is_ok() {
+            Ok(phase)
+        } else {
+            Err(status.as_word())
+        }
+    }
+
+    fn disconnect_session(&self, handle: ClientHandle) -> u32 {
+        // Safety: the handle value is a plain word passed by copy.
+        unsafe { (self.vtable.disconnect)(handle).as_word() }
+    }
+
+    fn submit_input(&self, handle: ClientHandle, batch: &[u8]) -> u32 {
+        let mut buffer = AlignedBytes::from_bytes(batch);
+        // Safety: the aligned buffer is live for the synchronous call and the
+        // producer copies the batch without retaining the pointer.
+        unsafe { (self.vtable.submit_input)(handle, buffer.as_mut_ptr(), buffer.len()).as_word() }
+    }
+
+    fn step(&self, handle: ClientHandle, request: &[u8; abi::STEP_REQUEST_BYTES]) -> u32 {
+        let mut buffer = AlignedBytes::from_bytes(request);
+        // Safety: the aligned buffer is live for the synchronous call and the
+        // producer copies the record without retaining the pointer.
+        unsafe { (self.vtable.step)(handle, buffer.as_mut_ptr(), buffer.len()).as_word() }
+    }
+
+    fn world_pull(&self, handle: ClientHandle, buffer: &mut [u8]) -> PullOutcome {
+        self.pull_via(
+            // Safety: the resolved export copies synchronously through the
+            // pointers `pull_via` owns for the call's duration.
+            |core, out, capacity, required| unsafe {
+                (core.vtable.world_pull)(handle, out, capacity, required)
+            },
+            buffer,
+        )
+    }
+
+    fn frame_pull(&self, handle: ClientHandle, buffer: &mut [u8]) -> PullOutcome {
+        self.pull_via(
+            // Safety: see `world_pull`.
+            |core, out, capacity, required| unsafe {
+                (core.vtable.frame_pull)(handle, out, capacity, required)
+            },
+            buffer,
+        )
+    }
+
+    fn status_pull(&self, handle: ClientHandle, buffer: &mut [u8]) -> PullOutcome {
+        self.pull_via(
+            // Safety: see `world_pull`.
+            |core, out, capacity, required| unsafe {
+                (core.vtable.status_pull)(handle, out, capacity, required)
+            },
+            buffer,
+        )
+    }
+
+    fn identity_pull(&self, handle: ClientHandle, buffer: &mut [u8]) -> PullOutcome {
+        self.pull_via(
+            // Safety: see `world_pull`.
+            |core, out, capacity, required| unsafe {
+                (core.vtable.status_identity)(handle, out, capacity, required)
+            },
+            buffer,
+        )
+    }
+}
+
+impl ProducerCore {
+    /// One pull call with the size out-parameter owned here. A zero-capacity
+    /// query passes a dangling aligned pointer, which the producer never
+    /// dereferences (its discipline only requires `out` for a positive
+    /// capacity).
+    fn pull_via(
+        &self,
+        call: impl FnOnce(&Self, *mut u8, u32, *mut u32) -> Status,
+        buffer: &mut [u8],
+    ) -> PullOutcome {
+        let mut required = 0u32;
+        let capacity = u32::try_from(buffer.len()).unwrap_or(u32::MAX);
+        let out = if buffer.is_empty() {
+            // Safety: a dangling-but-aligned pointer is never dereferenced at
+            // zero capacity per the producer's pointer discipline.
+            core::ptr::NonNull::<u8>::dangling().as_ptr()
+        } else {
+            buffer.as_mut_ptr()
+        };
+        let status = call(self, out, capacity, &mut required);
+        if status.is_ok() {
+            PullOutcome::Complete { written: capacity }
+        } else if status.as_word() == abi::STATUS_INSUFFICIENT_CAPACITY {
+            PullOutcome::Capacity { required }
+        } else {
+            PullOutcome::Status(status.as_word())
+        }
+    }
+}
+
+impl CoreCalls for UnavailableCore {
+    fn abi_version(&self) -> Option<u64> {
+        None
+    }
+
+    fn create_session(
+        &self,
+        _abi_major: u32,
+        _abi_minor: u32,
+        _requested_families: &[u64],
+    ) -> Result<ClientHandle, u32> {
+        Err(abi::STATUS_INTERNAL)
+    }
+
+    fn destroy_session(&self, _handle: ClientHandle) -> u32 {
+        abi::STATUS_INTERNAL
+    }
+
+    fn connect_begin(&self, _handle: ClientHandle, _address: &[u8]) -> u32 {
+        abi::STATUS_INTERNAL
+    }
+
+    fn connect_poll(&self, _handle: ClientHandle) -> Result<u32, u32> {
+        Err(abi::STATUS_INTERNAL)
+    }
+
+    fn disconnect_session(&self, _handle: ClientHandle) -> u32 {
+        abi::STATUS_INTERNAL
+    }
+
+    fn submit_input(&self, _handle: ClientHandle, _batch: &[u8]) -> u32 {
+        abi::STATUS_INTERNAL
+    }
+
+    fn step(&self, _handle: ClientHandle, _request: &[u8; abi::STEP_REQUEST_BYTES]) -> u32 {
+        abi::STATUS_INTERNAL
+    }
+
+    fn world_pull(&self, _handle: ClientHandle, _buffer: &mut [u8]) -> PullOutcome {
+        PullOutcome::Status(abi::STATUS_INTERNAL)
+    }
+
+    fn frame_pull(&self, _handle: ClientHandle, _buffer: &mut [u8]) -> PullOutcome {
+        PullOutcome::Status(abi::STATUS_INTERNAL)
+    }
+
+    fn status_pull(&self, _handle: ClientHandle, _buffer: &mut [u8]) -> PullOutcome {
+        PullOutcome::Status(abi::STATUS_INTERNAL)
+    }
+
+    fn identity_pull(&self, _handle: ClientHandle, _buffer: &mut [u8]) -> PullOutcome {
+        PullOutcome::Status(abi::STATUS_INTERNAL)
+    }
+}
+
+/// The production core-call table for new bridge sessions. Outside tests it
+/// wires the dynamically resolved producer exports (or the fail-closed
+/// unavailable table when the library could not be loaded); in cargo tests it
+/// stays the unavailable table because no test may load the producer
+/// artifact.
+#[cfg(not(test))]
+pub(crate) fn production_core_calls() -> Box<dyn CoreCalls> {
+    match producer_table() {
+        ProducerTable::Ready { vtable, .. } => Box::new(ProducerCore { vtable }),
+        ProducerTable::Failed(failure) => Box::new(UnavailableCore { failure }),
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn production_core_calls() -> Box<dyn CoreCalls> {
+    Box::new(UnavailableCore {
+        failure: ProducerLoadFailure::TestBinary,
+    })
 }
 
 #[cfg(test)]
@@ -628,6 +1328,33 @@ mod tests {
         "fn mornlea_client_core_abi_version() -> u64",
     ];
 
+    /// The exact extern declarations of the dynamic-loader entry points the
+    /// production table resolves the producer library with, normalized; they
+    /// live in the same extern block as the export mirror.
+    const PINNED_LOADER_DECLARATIONS: [&str; 3] = [
+        "fn dlopen(path: *const c_char, mode: c_int) -> *mut c_void",
+        "fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void",
+        "fn dladdr(address: *const c_void, info: *mut DlInfo) -> c_int",
+    ];
+
+    /// The producer vtable field for each export symbol, in
+    /// [`EXPORT_SYMBOLS`] order; the signature pin derives each field's
+    /// expected type from the matching pinned declaration.
+    const VTABLE_FIELD_SYMBOLS: [(&str, &str); 12] = [
+        ("create", "mornlea_client_core_create"),
+        ("destroy", "mornlea_client_core_destroy"),
+        ("connect_begin", "mornlea_client_core_connect_begin"),
+        ("connect_poll", "mornlea_client_core_connect_poll"),
+        ("disconnect", "mornlea_client_core_disconnect"),
+        ("submit_input", "mornlea_client_core_submit_input"),
+        ("step", "mornlea_client_core_step"),
+        ("world_pull", "mornlea_client_core_world_pull"),
+        ("frame_pull", "mornlea_client_core_frame_pull"),
+        ("status_pull", "mornlea_client_core_status_pull"),
+        ("status_identity", "mornlea_client_core_status_identity"),
+        ("abi_version", "mornlea_client_core_abi_version"),
+    ];
+
     #[test]
     fn client_core_export_symbols_match_the_go_producer() {
         let exported = exported_symbols();
@@ -641,7 +1368,11 @@ mod tests {
     #[test]
     fn client_core_extern_block_pins_every_declaration() {
         let declarations = extern_declarations();
-        assert_eq!(declarations.len(), PINNED_DECLARATIONS.len());
+        assert_eq!(
+            declarations.len(),
+            PINNED_DECLARATIONS.len() + PINNED_LOADER_DECLARATIONS.len(),
+            "the extern block holds the export mirror plus the loader entry points"
+        );
         for (index, (declaration, pinned)) in
             declarations.iter().zip(PINNED_DECLARATIONS).enumerate()
         {
@@ -651,13 +1382,92 @@ mod tests {
                 "extern declaration {index}"
             );
         }
-        // The declared names equal the pinned symbol list, which the symbol
+        // The export names equal the pinned symbol list, which the symbol
         // parity test separately proves equal to the producer's exports.
-        let names: Vec<&str> = declarations
+        let names: Vec<&str> = declarations[..PINNED_DECLARATIONS.len()]
             .iter()
             .map(|item| declaration_name(item))
             .collect();
         assert_eq!(names, EXPORT_SYMBOLS.to_vec());
+        for (declaration, pinned) in declarations[PINNED_DECLARATIONS.len()..]
+            .iter()
+            .zip(PINNED_LOADER_DECLARATIONS)
+        {
+            assert_eq!(declaration, &normalize_whitespace(pinned));
+        }
+    }
+
+    /// The vtable the production table resolves at runtime must carry exactly
+    /// the declared signatures, because the extern block itself is never
+    /// linked (the producer is opened beside the extension at runtime). The
+    /// expected type text is derived from the pinned declarations, so a
+    /// signature change on either side fails this pin.
+    #[test]
+    fn client_core_vtable_pins_every_resolved_signature() {
+        let body = vtable_struct_body();
+        let names = VTABLE_FIELD_SYMBOLS.map(|(field, _)| field);
+        for (index, field) in names.iter().enumerate() {
+            let opener = format!("{field}: ");
+            let start = body
+                .find(&opener)
+                .unwrap_or_else(|| panic!("vtable field {field} is missing"))
+                + opener.len();
+            let end = names
+                .get(index + 1)
+                .and_then(|next| body.find(&format!("{next}: ")))
+                .unwrap_or(body.len());
+            let declared = normalize_whitespace(&body[start..end]);
+            let declared = declared.trim_end_matches(',');
+            let expected = vtable_type_for_signature(PINNED_DECLARATIONS[index]);
+            assert_eq!(declared, expected, "vtable field {field}");
+        }
+        // The field-to-symbol mapping itself projects onto the pinned export
+        // order, so the loader resolves every field from the pinned list.
+        let symbols: Vec<&str> = VTABLE_FIELD_SYMBOLS
+            .iter()
+            .map(|(_, symbol)| *symbol)
+            .collect();
+        assert_eq!(symbols, EXPORT_SYMBOLS.to_vec());
+    }
+
+    /// The source text of the producer vtable struct, whose fields the
+    /// signature pin reads in declaration order.
+    fn vtable_struct_body() -> String {
+        let lines: Vec<&str> = MODULE_SOURCE.lines().collect();
+        let opener = lines
+            .iter()
+            .position(|line| line.trim() == "struct ProducerVTable {")
+            .expect("vtable struct opener");
+        let closer = lines[opener + 1..]
+            .iter()
+            .position(|line| line.trim() == "}")
+            .expect("vtable struct closer");
+        lines[opener + 1..opener + 1 + closer].join("\n")
+    }
+
+    /// Derive the vtable field type for one pinned declaration: the same
+    /// signature with argument names dropped and the `unsafe extern "C"`
+    /// calling convention prefixed.
+    fn vtable_type_for_signature(declaration: &str) -> String {
+        let signature = declaration
+            .strip_prefix("fn ")
+            .expect("declaration starts with fn");
+        let arguments_open = signature.find('(').expect("argument list");
+        let arguments_close = signature.rfind(')').expect("argument list closer");
+        let argument_types: Vec<&str> = signature[arguments_open + 1..arguments_close]
+            .split(", ")
+            .filter(|argument| !argument.is_empty())
+            .map(|argument| argument.split_once(": ").expect("typed argument").1)
+            .collect();
+        let return_type = signature[arguments_close + 1..]
+            .trim()
+            .trim_start_matches("-> ")
+            .trim();
+        format!(
+            "unsafe extern \"C\" fn({}) -> {}",
+            argument_types.join(", "),
+            return_type
+        )
     }
 
     #[test]

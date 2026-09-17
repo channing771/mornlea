@@ -38,7 +38,7 @@ trap cleanup EXIT
 
 usage() {
   printf '%s\n' \
-    'usage: scripts/godot/python-runtime-check.sh (--qualify|--coexistence) [--offline] [--target darwin-arm64] [--cache-dir ABSOLUTE_PATH]'
+    'usage: scripts/godot/python-runtime-check.sh (--qualify|--coexistence|--bridge-contract) [--offline] [--target darwin-arm64] [--cache-dir ABSOLUTE_PATH]'
 }
 
 while (($# > 0)); do
@@ -49,6 +49,10 @@ while (($# > 0)); do
       ;;
     --coexistence)
       mode="coexistence"
+      shift
+      ;;
+    --bridge-contract)
+      mode="bridge-contract"
       shift
       ;;
     --offline)
@@ -75,8 +79,8 @@ while (($# > 0)); do
   esac
 done
 
-[[ "${mode}" == "qualify" || "${mode}" == "coexistence" ]] || \
-  fail "--qualify or --coexistence is required"
+[[ "${mode}" == "qualify" || "${mode}" == "coexistence" || "${mode}" == "bridge-contract" ]] || \
+  fail "--qualify, --coexistence, or --bridge-contract is required"
 [[ "${target}" == "darwin-arm64" ]] || fail "unsupported Py4Godot desktop target: ${target}"
 [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]] || \
   fail "unsupported Py4Godot desktop target: $(uname -s)-$(uname -m)"
@@ -145,6 +149,34 @@ run_isolated_executable() {
       MORNLEA_EXTERNAL_RUNTIME_MARKER="${invocation_marker}" \
       "$@"
 }
+
+if [[ "${mode}" == "bridge-contract" ]]; then
+  # Materialize both native units fresh into the project distribution tree
+  # (the shared build-python-runtime.sh invocation above already materialized
+  # the pinned embedded Python runtime), then exercise the real producer
+  # contract end to end under the same isolated, network-denied, poisoned
+  # environment as the other modes. The check scene holds the native bridge
+  # node and drives it from Python through typed Godot values only. The
+  # online connect-success path belongs to the later playable smokes; with
+  # network denied this mode exercises the honest offline paths: async begin,
+  # bounded poll, cancel-and-join close, and the idempotent teardown.
+  "${script_dir}/build-core.sh" --verify >/dev/null
+  "${script_dir}/build-extension.sh" --verify >/dev/null
+  contract_output="$(run_isolated --headless --path "${project_root}" --quit-after 120 \
+    res://tests/scenes/bridge_contract_check.tscn 2>&1)" || {
+    printf '%s\n' "${contract_output}" >&2
+    fail "mornlea_godot bridge-contract probe failed"
+  }
+  [[ "${contract_output}" == *"Python bridge contract check passed."* ]] || \
+    fail "Python bridge-contract success marker is missing"
+  [[ "${contract_output}" != *"ERROR:"* && "${contract_output}" != *"SCRIPT ERROR:"* ]] || {
+    printf '%s\n' "${contract_output}" >&2
+    fail "bridge-contract probe reported an extension error"
+  }
+  [[ ! -e "${invocation_marker}" ]] || fail "an external Python or package installer was invoked"
+  printf 'mornlea_godot bridge contract verified offline: producer identity, family table, session lifecycle, pulls, and typed values through the scene-held instance.\n'
+  exit 0
+fi
 
 if [[ "${mode}" == "coexistence" ]]; then
   "${script_dir}/build-extension.sh" --verify >/dev/null
