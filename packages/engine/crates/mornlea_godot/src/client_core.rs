@@ -734,17 +734,25 @@ impl CoreCalls for ProducerCore {
         requested_families: &[u64],
     ) -> Result<ClientHandle, u32> {
         let count = u32::try_from(requested_families.len()).unwrap_or(u32::MAX);
+        let requested = if requested_families.is_empty() {
+            // The bridge always requests the full pilot family set, so this
+            // branch is a defensive guard making the empty-slice case total.
+            // An empty slice owns no allocation, and `as_ptr` would yield a
+            // dangling aligned address (8) — the same Go stack-scan hazard as
+            // the pull path (see `pull_via`): the producer's cgo boundary
+            // stores the pointer in Go pointer-typed stack variables, and the
+            // Go runtime aborts on addresses below its minimum legal pointer
+            // (4096). The producer rejects a zero count before reading the
+            // pointer, so null preserves the outcome.
+            core::ptr::null()
+        } else {
+            requested_families.as_ptr()
+        };
         let mut out_handle = ClientHandle::from_word(0);
         // Safety: `requested_families` is a live u64 slice for the duration
         // of the synchronous call, and `out_handle` is a live out-parameter.
         let status = unsafe {
-            (self.vtable.create)(
-                abi_major,
-                abi_minor,
-                requested_families.as_ptr(),
-                count,
-                &mut out_handle,
-            )
+            (self.vtable.create)(abi_major, abi_minor, requested, count, &mut out_handle)
         };
         if status.is_ok() {
             Ok(out_handle)
@@ -759,6 +767,17 @@ impl CoreCalls for ProducerCore {
     }
 
     fn connect_begin(&self, handle: ClientHandle, address: &[u8]) -> u32 {
+        if address.is_empty() {
+            // The producer rejects a zero-length address on its length before
+            // reading any pointer, but its cgo boundary still stores the
+            // pointer in Go pointer-typed stack variables, and an empty
+            // `AlignedBytes` owns no allocation, so `as_mut_ptr` would cross
+            // the dangling aligned address (8) — the same Go stack-scan
+            // hazard as the pull path (see `pull_via`), where the runtime
+            // aborts on addresses below its minimum legal pointer (4096).
+            // Null is the one placeholder the boundary always tolerates.
+            return unsafe { (self.vtable.connect_begin)(handle, core::ptr::null(), 0).as_word() };
+        }
         let mut buffer = AlignedBytes::from_bytes(address);
         // Safety: the aligned buffer is live for the synchronous call and the
         // producer copies the bytes without retaining the pointer.
@@ -782,6 +801,17 @@ impl CoreCalls for ProducerCore {
     }
 
     fn submit_input(&self, handle: ClientHandle, batch: &[u8]) -> u32 {
+        if batch.is_empty() {
+            // The producer rejects a zero-length batch on its length before
+            // reading any pointer, but its cgo boundary still stores the
+            // pointer in Go pointer-typed stack variables, and an empty
+            // `AlignedBytes` owns no allocation, so `as_mut_ptr` would cross
+            // the dangling aligned address (8) — the same Go stack-scan
+            // hazard as the pull path (see `pull_via`), where the runtime
+            // aborts on addresses below its minimum legal pointer (4096).
+            // Null is the one placeholder the boundary always tolerates.
+            return unsafe { (self.vtable.submit_input)(handle, core::ptr::null(), 0).as_word() };
+        }
         let mut buffer = AlignedBytes::from_bytes(batch);
         // Safety: the aligned buffer is live for the synchronous call and the
         // producer copies the batch without retaining the pointer.
@@ -839,9 +869,10 @@ impl CoreCalls for ProducerCore {
 
 impl ProducerCore {
     /// One pull call with the size out-parameter owned here. A zero-capacity
-    /// query passes a dangling aligned pointer, which the producer never
-    /// dereferences (its discipline only requires `out` for a positive
-    /// capacity).
+    /// query passes a null `out` pointer: the producer's pointer discipline
+    /// only requires `out` for a positive capacity, and null is the one
+    /// placeholder its Go runtime always tolerates (see the empty-buffer
+    /// branch below).
     fn pull_via(
         &self,
         call: impl FnOnce(&Self, *mut u8, u32, *mut u32) -> Status,
@@ -850,9 +881,15 @@ impl ProducerCore {
         let mut required = 0u32;
         let capacity = u32::try_from(buffer.len()).unwrap_or(u32::MAX);
         let out = if buffer.is_empty() {
-            // Safety: a dangling-but-aligned pointer is never dereferenced at
-            // zero capacity per the producer's pointer discipline.
-            core::ptr::NonNull::<u8>::dangling().as_ptr()
+            // A zero-capacity query reads no buffer byte, but the producer's
+            // cgo boundary still stores `out` in Go pointer-typed stack
+            // variables while the call runs, and the Go runtime's stack scan
+            // aborts the whole process when a pointer-typed slot holds any
+            // address below its minimum legal pointer (4096) — even one the
+            // call never dereferences. A non-null placeholder such as
+            // `NonNull::<u8>::dangling()` (address 1) is therefore a latent
+            // crash; null is accepted by every pull export at capacity zero.
+            core::ptr::null_mut()
         } else {
             buffer.as_mut_ptr()
         };
@@ -944,7 +981,10 @@ pub(crate) fn production_core_calls() -> Box<dyn CoreCalls> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ClientHandle, EXPORT_SYMBOLS, Status, status_text};
+    use super::{
+        ClientHandle, CoreCalls, EXPORT_SYMBOLS, ProducerCore, ProducerVTable, PullOutcome, Status,
+        status_text,
+    };
     use crate::abi::{
         self, IDENTITY_HEADER_BYTES, STATUS_ABI_MISMATCH, STATUS_COUNT, STATUS_DISCONNECTED,
         STATUS_INPUT_REJECTED, STATUS_INSUFFICIENT_CAPACITY, STATUS_INTERNAL,
@@ -952,6 +992,7 @@ mod tests {
         STATUS_PANIC, STEP_REQUEST_BYTES,
     };
     use core::mem::{align_of, size_of};
+    use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
     use std::collections::BTreeMap;
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -1601,5 +1642,201 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Raw `out` pointer and `capacity` of the most recent pull-shaped probe
+    /// call, raw input pointer and length of the most recent input-shaped
+    /// probe call (connect begin / submit input), and raw request pointer and
+    /// count of the most recent create probe — all recorded by the scripted
+    /// vtable below so the pointer discipline of the production call paths
+    /// can be pinned without loading the producer library.
+    static PROBE_OUT: AtomicUsize = AtomicUsize::new(usize::MAX);
+    static PROBE_CAPACITY: AtomicU32 = AtomicU32::new(u32::MAX);
+    static PROBE_INPUT_PTR: AtomicUsize = AtomicUsize::new(usize::MAX);
+    static PROBE_INPUT_LEN: AtomicU32 = AtomicU32::new(u32::MAX);
+    static PROBE_CREATE_PTR: AtomicUsize = AtomicUsize::new(usize::MAX);
+    static PROBE_CREATE_COUNT: AtomicU32 = AtomicU32::new(u32::MAX);
+
+    /// The fixed requirement the pull probe reports, so the mapped outcome is
+    /// deterministic.
+    const PROBE_REQUIRED: u32 = 80;
+
+    /// One pull-shaped probe with the resolved vtable signature: records the
+    /// raw `out` and `capacity` it was called with and answers the two-phase
+    /// capacity signal.
+    unsafe extern "C" fn probe_pull(
+        _handle: ClientHandle,
+        out: *mut u8,
+        capacity: u32,
+        required: *mut u32,
+    ) -> Status {
+        PROBE_OUT.store(out.addr(), Ordering::SeqCst);
+        PROBE_CAPACITY.store(capacity, Ordering::SeqCst);
+        // Safety: the production pull path always passes a live `required`
+        // out-parameter (`&mut required` in `pull_via`).
+        unsafe { *required = PROBE_REQUIRED };
+        Status::from_word(abi::STATUS_INSUFFICIENT_CAPACITY).expect("defined status word")
+    }
+
+    /// The internal status word, for the vtable stubs this test never drives.
+    fn internal_status() -> Status {
+        Status::from_word(abi::STATUS_INTERNAL).expect("defined status word")
+    }
+
+    unsafe extern "C" fn probe_abi_version() -> u64 {
+        (u64::from(abi::ABI_MAJOR) << 32) | u64::from(abi::ABI_MINOR)
+    }
+
+    /// One create-shaped probe: records the raw family-request pointer and
+    /// count it was called with. The pin only drives the empty-request path,
+    /// so the outcome is the internal status word.
+    unsafe extern "C" fn probe_create(
+        _abi_major: u32,
+        _abi_minor: u32,
+        requested_families: *const u64,
+        family_count: u32,
+        _out_handle: *mut ClientHandle,
+    ) -> Status {
+        PROBE_CREATE_PTR.store(requested_families.addr(), Ordering::SeqCst);
+        PROBE_CREATE_COUNT.store(family_count, Ordering::SeqCst);
+        internal_status()
+    }
+
+    unsafe extern "C" fn probe_unused_handle(_handle: ClientHandle) -> Status {
+        internal_status()
+    }
+
+    /// One input-shaped probe (the connect-begin and submit-input signature):
+    /// records the raw input pointer and length it was called with.
+    unsafe extern "C" fn probe_input(
+        _handle: ClientHandle,
+        buffer: *const u8,
+        length: u32,
+    ) -> Status {
+        PROBE_INPUT_PTR.store(buffer.addr(), Ordering::SeqCst);
+        PROBE_INPUT_LEN.store(length, Ordering::SeqCst);
+        internal_status()
+    }
+
+    unsafe extern "C" fn probe_unused_phase(_handle: ClientHandle, _out_phase: *mut u32) -> Status {
+        internal_status()
+    }
+
+    /// The step stub: the step record is a fixed-size slice, so it has no
+    /// empty-input case to pin.
+    unsafe extern "C" fn probe_unused_step(
+        _handle: ClientHandle,
+        _request: *const u8,
+        _length: u32,
+    ) -> Status {
+        internal_status()
+    }
+
+    /// A resolved-signature vtable whose pull and input slots probe; the
+    /// remaining slots are unreachable stubs because the pinned paths only
+    /// pull and submit.
+    fn probe_vtable() -> ProducerVTable {
+        ProducerVTable {
+            create: probe_create,
+            destroy: probe_unused_handle,
+            connect_begin: probe_input,
+            connect_poll: probe_unused_phase,
+            disconnect: probe_unused_handle,
+            submit_input: probe_input,
+            step: probe_unused_step,
+            world_pull: probe_pull,
+            frame_pull: probe_pull,
+            status_pull: probe_pull,
+            status_identity: probe_pull,
+            abi_version: probe_abi_version,
+        }
+    }
+
+    /// The zero-capacity pull query must pass a null `out` pointer, never a
+    /// non-null placeholder such as `NonNull::<u8>::dangling()` (address 1).
+    /// All four pull families share `pull_via`, so each is driven through the
+    /// probe. The producer's cgo boundary stores `out` in Go pointer-typed
+    /// stack variables while the call runs, and the Go runtime's stack scan
+    /// aborts the whole process during garbage collection when a pointer-typed
+    /// slot holds any address below the runtime's minimum legal pointer (4096)
+    /// — even a buffer the call never dereferences. Null is the one
+    /// placeholder the boundary always tolerates, and every pull export
+    /// accepts it at capacity zero. The positive-capacity half pins that a
+    /// real buffer address is still passed when content can be written.
+    #[test]
+    fn producer_pulls_pass_null_out_for_zero_capacity_and_buffer_for_positive() {
+        let core = ProducerCore {
+            vtable: probe_vtable(),
+        };
+        let handle = ClientHandle::from_word(8);
+        type PullFn = fn(&ProducerCore, ClientHandle, &mut [u8]) -> PullOutcome;
+        let pulls: [PullFn; 4] = [
+            |core, handle, buffer| core.world_pull(handle, buffer),
+            |core, handle, buffer| core.frame_pull(handle, buffer),
+            |core, handle, buffer| core.status_pull(handle, buffer),
+            |core, handle, buffer| core.identity_pull(handle, buffer),
+        ];
+        let mut empty: [u8; 0] = [];
+        for pull in pulls {
+            let outcome = pull(&core, handle, &mut empty);
+            assert_eq!(PROBE_OUT.load(Ordering::SeqCst), 0);
+            assert_eq!(PROBE_CAPACITY.load(Ordering::SeqCst), 0);
+            assert_eq!(
+                outcome,
+                PullOutcome::Capacity {
+                    required: PROBE_REQUIRED
+                }
+            );
+        }
+
+        let mut buffer = [0u8; 80];
+        let buffer_address = buffer.as_mut_ptr().addr();
+        for pull in pulls {
+            let outcome = pull(&core, handle, &mut buffer);
+            assert_eq!(PROBE_OUT.load(Ordering::SeqCst), buffer_address);
+            assert_eq!(PROBE_CAPACITY.load(Ordering::SeqCst), 80);
+            assert_eq!(
+                outcome,
+                PullOutcome::Capacity {
+                    required: PROBE_REQUIRED
+                }
+            );
+        }
+    }
+
+    /// The input paths share the pull path's Go stack-scan constraint: an
+    /// empty connect address, input batch, or family-request slice owns no
+    /// allocation, so its pointer accessor yields a dangling aligned address
+    /// (8), which the producer's Go runtime rejects in pointer-typed stack
+    /// slots below its minimum legal pointer (4096) — aborting the process
+    /// during garbage collection even though the producer rejects a zero
+    /// length before reading any pointer. Each empty input must therefore
+    /// pass null; a non-empty batch still passes a real aligned pointer.
+    #[test]
+    fn producer_inputs_pass_null_for_empty_slices() {
+        let core = ProducerCore {
+            vtable: probe_vtable(),
+        };
+        let handle = ClientHandle::from_word(8);
+
+        core.connect_begin(handle, &[]);
+        assert_eq!(PROBE_INPUT_PTR.load(Ordering::SeqCst), 0);
+        assert_eq!(PROBE_INPUT_LEN.load(Ordering::SeqCst), 0);
+
+        core.submit_input(handle, &[]);
+        assert_eq!(PROBE_INPUT_PTR.load(Ordering::SeqCst), 0);
+        assert_eq!(PROBE_INPUT_LEN.load(Ordering::SeqCst), 0);
+
+        let outcome = core.create_session(abi::ABI_MAJOR, abi::ABI_MINOR, &[]);
+        assert_eq!(PROBE_CREATE_PTR.load(Ordering::SeqCst), 0);
+        assert_eq!(PROBE_CREATE_COUNT.load(Ordering::SeqCst), 0);
+        assert_eq!(outcome, Err(abi::STATUS_INTERNAL));
+
+        let batch = [1u8, 2, 3, 4, 5, 6, 7, 8];
+        core.submit_input(handle, &batch);
+        let pointer = PROBE_INPUT_PTR.load(Ordering::SeqCst);
+        assert_ne!(pointer, 0);
+        assert_eq!(pointer % size_of::<u64>(), 0);
+        assert_eq!(PROBE_INPUT_LEN.load(Ordering::SeqCst), 8);
     }
 }
