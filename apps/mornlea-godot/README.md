@@ -70,11 +70,12 @@ After Bootstrap completes the dependency handoff, `app/host/app_root.py` and `ap
 
 The lifecycle is deterministic: validate the catalog, instantiate in sorted dependency order, validate the Python feature, inject one typed Godot bridge service, activate for an epoch, reset, and deactivate in reverse order. An incompatible or failed required feature stops assembly and releases already active features. An optional feature is disabled with an observable result, and dependents cannot silently activate through it. Feature scripts do not import sibling project modules or discover implementations dynamically; Godot resource paths provide bounded composition while the isolated interpreter keeps project directories out of `sys.path`.
 
-Run the embedded-Python contract and additive-extension checks with:
+Run the embedded-Python contract, additive-extension, and native-bridge integration checks with:
 
 ```bash
 scripts/godot/feature-contract-check.sh
 scripts/godot/feature-contract-check.sh --extensibility-probe
+scripts/godot/feature-contract-check.sh --bridge-integration
 ```
 
 ## Architecture boundary

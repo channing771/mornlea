@@ -70,11 +70,12 @@ Bootstrap 完成依赖交接后，由 `app/host/app_root.py` 与 `app/host/featu
 
 生命周期顺序是确定的：验证目录、按排序后的依赖顺序实例化、验证 Python 功能、注入唯一的类型化 Godot 桥接服务、按 epoch 激活、重置，并按反序停用。不兼容或启动失败的必需功能会终止装配并释放此前已激活的功能；可选功能会以可观察结果被禁用，其依赖者不能越过该状态静默启动。功能脚本不会导入同级项目模块，也不会动态发现实现；Godot 资源路径承担有界组合，同时隔离解释器继续确保项目目录不进入 `sys.path`。
 
-使用以下命令运行内嵌 Python 契约和增量扩展检查：
+使用以下命令运行内嵌 Python 契约、增量扩展与原生桥集成检查：
 
 ```bash
 scripts/godot/feature-contract-check.sh
 scripts/godot/feature-contract-check.sh --extensibility-probe
+scripts/godot/feature-contract-check.sh --bridge-integration
 ```
 
 ## 架构边界

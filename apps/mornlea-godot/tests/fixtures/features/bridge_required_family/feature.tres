@@ -1,0 +1,14 @@
+[gd_resource type="Resource" format=3]
+
+[resource]
+resource_name = "bridge_required_family"
+metadata/feature_id = "bridge_required_family"
+metadata/host_protocol_major = 1
+metadata/host_protocol_minor = 0
+metadata/entry_scene_path = "res://tests/fixtures/features/real_bridge_feature.tscn"
+metadata/dependencies = PackedStringArray()
+metadata/required_bridge_families = PackedStringArray("99@1.0")
+metadata/required = true
+metadata/enabled = true
+metadata/budget_class = "light"
+metadata/reset_policy = "reset"
