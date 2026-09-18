@@ -7,6 +7,7 @@ Use this reference only when model availability and reasoning-effort support can
 Treat the invocation boundary as the source of truth for what can run now:
 
 1. Inspect native `spawn`, `delegate`, `worker`, `agent`, or model-request tool metadata. Enumerated model and effort values are authoritative for that call surface.
+   - When the native surface exposes `grok-4.6` with `xhigh`, record that exact pair as the Grok candidate. Do not infer availability or effort support from a public catalog.
 2. For the repository-owned Z Code worker, resolve the selected `adaptive-model-router` skill root and run its packaged `scripts/zcode-agent.mjs probe`. Before a live route, also run the same skill-local executable with `live-probe --cwd /absolute/worktree` so private app-server protocol drift fails before inference. These redacted results are authoritative only for the configured `GLM-5.3` external surface; they do not extend the native model enum.
 3. For the repository-owned OpenCode worker, resolve the selected skill root and run its packaged `scripts/opencode-agent.mjs probe`. Before a live route, also run `live-probe --cwd /absolute/worktree`. These results are authoritative only for the exact `opencode-go/muse-spark-1.3-contributor` route, whose bridge permits `xhigh` and rejects every other provider, model, or reasoning variant.
 4. Call a read-only capability or model inventory operation if another host provides one.
@@ -26,6 +27,8 @@ Quota is a routing signal separate from model capability. Apply it only after th
 Treat a snapshot as unknown when it is malformed, older than 15 minutes, or has no positive `limit`. Unknown quota uses the neutral routing value rather than zero. A confirmed zero remaining quota or a provider rate-limit response is different: it temporarily removes Z Code from the candidate set until reset or a fresh positive snapshot. Quota discovery must remain read-only and must not send a paid model request.
 
 OpenCode uses the same read-only quota shape when its host exposes one, but its lower contributor entitlement gets `OpenCode prior = 0.92` and `quota factor = 0.90 + 0.20 × quota ratio`. Its effective score is `base score × OpenCode prior × quota factor × time factor`; the local Z Code blackout does not disable OpenCode. Missing or stale OpenCode quota is neutral ratio `0.50`, while confirmed zero remaining or a rate-limit response removes it until reset or a fresh positive snapshot. Apply the exact-route and `xhigh` filters before this score.
+
+Grok uses a native selection prior after the high-level OpenAI gate and exact capability filters: `Grok prior = 1.12` and `Grok score = base score × Grok prior`. This is higher than the Z Code prior and the maximum full-quota OpenCode modifier, so Grok wins an otherwise equivalent ordinary task. The prior is a routing preference rather than a measured accuracy claim; do not invent a Grok quota or apply one unless the live native host reports a current, non-secret signal.
 
 ## Normalize heterogeneous hosts
 

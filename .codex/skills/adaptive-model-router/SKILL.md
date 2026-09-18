@@ -1,6 +1,6 @@
 ---
 name: adaptive-model-router
-description: Select a sufficient live native or Z Code agent backend, model, and reasoning effort for isolated Mornlea work while protecting code quality, token efficiency, and current Z Code quota.
+description: Select a sufficient live native, Z Code, or OpenCode agent backend, model, and reasoning effort for isolated Mornlea work while protecting code quality, token efficiency, and provider quotas.
 ---
 
 # Adaptive Model Router
@@ -15,9 +15,11 @@ Treat the current invocation surface as authoritative. Read the native agent too
 
 When availability or effort support is unclear, read [capability discovery](references/capability-discovery.md). Keep discovery read-only: do not modify configuration, install providers, buy capacity, redeem credits, or send paid probes merely to compare options.
 
-## Route Native and Z Code Workers
+## Route Native, Z Code, and OpenCode Workers
 
-Prefer the native delegation surface when its eligible model is sufficient and native lifecycle, tool, or review integration materially reduces coordination cost. For architecture, feature-design, and other high-level system tasks, apply the mandatory OpenAI design gate before considering any Z Code score. For ordinary bounded work, Z Code may compete only when its probe passes, validation is strong, quota is not confirmed exhausted, and the local time is outside the disabled window. A model absent from the native tool enum cannot be injected by this skill.
+Prefer the native delegation surface when its eligible model is sufficient and native lifecycle, tool, or review integration materially reduces coordination cost. For architecture, feature-design, and other high-level system tasks, apply the mandatory OpenAI design gate before considering any non-OpenAI score. For ordinary bounded work, Z Code may compete only when its probe passes, validation is strong, quota is not confirmed exhausted, and the local time is outside the disabled window. A model absent from the native tool enum cannot be injected by this skill.
+
+The native delegation surface exposes `grok-4.6` with `xhigh` reasoning. Treat the exact pair as one eligible configuration and pass both values explicitly when the native tool accepts overrides. Do not infer Grok availability from a public catalog or substitute another Grok variant when the live native surface does not expose this exact pair.
 
 Z Code `GLM-5.3` is available through the `scripts/zcode-agent.mjs` runtime packaged with this skill as an external isolated agent, not as a model on the native delegation surface. The bridge reads the enabled desktop provider locally, passes its credential to the child process only, returns machine-readable JSON, and never copies the credential into project configuration or task output. Resolve `router_skill_dir` to the absolute directory containing the selected `adaptive-model-router/SKILL.md`; do not depend on a project-root bridge. Verify the route immediately before routing:
 
@@ -84,6 +86,27 @@ time factor = 1.00 outside the Z Code disabled window
 Use a fresh, read-only, non-secret OpenCode quota snapshot when the host exposes one. A valid snapshot has `used`, `limit`, or `remaining`, an `observed_at`, and an optional `reset_at`; derive missing `remaining` from `limit - used`. A malformed, missing, or more-than-15-minute-old snapshot is unknown quota and uses the neutral ratio `0.50`. Confirmed zero remaining or an actual OpenCode rate-limit response removes OpenCode until reset or a fresh positive snapshot. Missing quota telemetry alone does not mean zero quota. Apply the existing local `14:00–18:00` Z Code disabled-window filter before scoring; the window disables Z Code only, so OpenCode may still be considered outside the high-level OpenAI gate when its own probe is healthy and quota is not confirmed exhausted. Record the route, quota observation time, and eligibility reason without recording provider output or credentials.
 
 OpenCode live workers count against the same two-agent concurrency ceiling. Use `plan` for read-only exploration and review. Use `build`, `edit`, or `yolo` only with an isolated worktree or explicit exclusive-file ownership, and let the controller own integration and final validation. Preserve the worker session ID and use `send --session` for synchronous multi-turn continuation; use the live supervisor when the controller needs cursor-based progress, intervention, or queued follow-up work. The OpenCode session API exposes parent and child sessions and the bridge's `steer`/`queue` operations, which provide native-like multi-turn subagent communication without replaying prior context.
+
+## Grok 4.6 allocation policy
+
+Grok 4.6 is a native worker configuration with a fixed reasoning level:
+
+```text
+backend: native
+model: grok-4.6
+reasoning: xhigh
+```
+
+Use it for complex bounded repository exploration, multi-step tool work, ordinary implementation, debugging, code review, test diagnosis, and synthesis across several packages when the validation oracle is clear. Its high reasoning setting makes it suitable for ambiguous bounded work that benefits from sustained investigation. Prefer a lower native effort or a smaller eligible model for extraction, formatting, trivial deterministic edits, and short checks where `xhigh` would add cost without improving the result. Require an independent review or stronger validation for security-sensitive, irreversible, weak-oracle, or cross-boundary changes. Architecture, feature design, package ownership, lifecycle, concurrency, protocol, ABI, storage, and other durable system decisions still go through the OpenAI design gate before Grok can be considered.
+
+After eligibility filters and the OpenAI design gate, give Grok a higher but bounded selection prior:
+
+```text
+Grok prior = 1.12
+Grok score = base score × Grok prior
+```
+
+This prior is a routing preference, not a measured accuracy claim. It is deliberately higher than the current Z Code prior (`1.06`) and the maximum unknown/full-quota OpenCode modifier (`0.92 × 1.10`), so Grok wins when the remaining candidates have equivalent task fit, validation strength, lifecycle support, isolation benefit, quota efficiency, and latency. It does not override explicit user constraints, native availability, provider health, validation requirements, or the mandatory OpenAI gate. Do not invent a Grok quota value; apply a quota modifier only when the live native host reports a current, non-secret quota signal.
 
 ## High-level OpenAI design gate
 
@@ -161,7 +184,7 @@ Use semantic bands only as routing guidance, then select exact values exposed by
 
 ## Apply, Verify, and Adjust
 
-For a native worker, pass the exact selected model and effort through the native delegation surface. If the host returns resolved values, treat them as truth. Use a fresh or minimal context fork and a concise task brief; preserve only the evidence, paths, constraints, ownership, integration point, and acceptance criteria needed for a correct result. For the external Z Code worker, record the bridge probe, exact provider/model, mode, and returned session ID as the resolved route.
+For a native worker, pass the exact selected model and effort through the native delegation surface. For Grok, that means `grok-4.6` with `xhigh`; if the host returns resolved values, treat them as truth. Use a fresh or minimal context fork and a concise task brief; preserve only the evidence, paths, constraints, ownership, integration point, and acceptance criteria needed for a correct result. For the external Z Code and OpenCode workers, record the bridge probe, exact provider/model, mode, reasoning, and returned session ID as the resolved route.
 
 Escalate only one eligible capability or effort step after observable insufficiency, such as failed validation, unresolved contradictions, repeated planning failure, or material uncertainty. Prefer targeted verification and follow-up over restarting completed expensive work. Downshift later independent tasks when the work becomes repetitive or mechanically verifiable.
 
@@ -170,7 +193,7 @@ Record a compact routing decision in the change ledger when delegation occurs:
 ```text
 model: <exact resolved identifier or inherited>
 effort: <exact supported value or provider default>
-backend: <native or zcode-cli>
+backend: <native | zcode-cli | opencode-cli>
 basis: <task axes and capability source>
 fallback: <next eligible configuration if validation fails>
 ```

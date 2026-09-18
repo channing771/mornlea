@@ -144,6 +144,11 @@ func TestProjectRouterDefinesZCodeBridge(t *testing.T) {
 		"multi-turn",
 		"steer",
 		"queue",
+		"Grok 4.6",
+		"grok-4.6",
+		"reasoning: xhigh",
+		"Grok prior = 1.12",
+		"Grok score = base score × Grok prior",
 	} {
 		if !strings.Contains(router, fragment) {
 			t.Errorf("project model router does not define ZCode bridge rule %q", fragment)
@@ -224,6 +229,10 @@ func modelRouterPolicyFragments() []string {
 		"multi-turn",
 		"steer",
 		"queue",
+		"Grok 4.6 allocation policy",
+		"grok-4.6",
+		"Grok prior = 1.12",
+		"Grok score = base score × Grok prior",
 	}
 }
 
