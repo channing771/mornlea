@@ -11,6 +11,7 @@ use crate::client_core::{
     production_core_calls,
 };
 use crate::feature_negotiation::PILOT_FAMILIES;
+use crate::frame_decode::{TypedFrame, decode_frame_record};
 use crate::lifecycle;
 use crate::pull_buffers::{PullBufferSet, pull_via_buffer};
 use crate::status_decode::{TypedStatus, decode_status_record};
@@ -141,6 +142,56 @@ impl BridgeSession {
         self.calls.submit_input(handle, batch)
     }
 
+    /// Encode one complete semantic desktop intent into the producer-owned
+    /// MCN1 record. Python supplies only typed device state; wire identity,
+    /// event ordering, and numeric validation stay on this Rust boundary.
+    pub(crate) fn submit_semantic(
+        &mut self,
+        move_x: i64,
+        move_z: i64,
+        jump: bool,
+        mining: bool,
+        eating: bool,
+        sprinting: bool,
+        sneaking: bool,
+        yaw: f64,
+        pitch: f64,
+    ) -> u32 {
+        if !(-1..=1).contains(&move_x) || !(-1..=1).contains(&move_z) {
+            return abi::STATUS_INPUT_REJECTED;
+        }
+        let yaw = yaw as f32;
+        let pitch = pitch as f32;
+        if !yaw.is_finite()
+            || !pitch.is_finite()
+            || pitch.abs() > core::f32::consts::FRAC_PI_2 - 0.01
+        {
+            return abi::STATUS_INPUT_REJECTED;
+        }
+        let mut batch = vec![0u8; abi::INPUT_HEADER_BYTES + 7 * 16];
+        batch[0..4].copy_from_slice(&abi::MAGIC_INPUT.to_le_bytes());
+        batch[4..8].copy_from_slice(&abi::INPUT_VERSION.to_le_bytes());
+        batch[8..12].copy_from_slice(&7u32.to_le_bytes());
+        let mut event = |index: usize, action: u32, value: u32, aux: u32| {
+            let start = abi::INPUT_HEADER_BYTES + index * 16;
+            batch[start..start + 4].copy_from_slice(&action.to_le_bytes());
+            batch[start + 4..start + 8].copy_from_slice(&value.to_le_bytes());
+            batch[start + 8..start + 12].copy_from_slice(&aux.to_le_bytes());
+        };
+        event(0, 1, move_x as i32 as u32, move_z as i32 as u32);
+        event(1, 2, yaw.to_bits(), pitch.to_bits());
+        for (index, action, pressed) in [
+            (2, 3, jump),
+            (3, 4, mining),
+            (4, 5, eating),
+            (5, 6, sprinting),
+            (6, 7, sneaking),
+        ] {
+            event(index, action, u32::from(pressed), 0);
+        }
+        self.submit(&batch)
+    }
+
     /// Drive exactly one bounded step; the frozen request record is encoded
     /// by the client-core seam.
     pub(crate) fn step(&mut self, elapsed_ns: u64, message_budget: u32, mesh_budget: u32) -> u32 {
@@ -171,6 +222,14 @@ impl BridgeSession {
     pub(crate) fn status_typed(&mut self) -> Result<TypedStatus, u32> {
         self.pull(PullFamily::Status)
             .and_then(|record| decode_status_record(&record))
+    }
+
+    /// Pull and decode the retained frame into semantic camera and target
+    /// values. Record parsing stays Rust-owned so Python never depends on the
+    /// client-core wire layout or invents a value after a producer failure.
+    pub(crate) fn frame_typed(&mut self) -> Result<TypedFrame, u32> {
+        self.pull(PullFamily::Frame)
+            .and_then(|record| decode_frame_record(&record))
     }
 
     /// Release the session idempotently: the first close destroys the handle
@@ -437,6 +496,28 @@ impl MornleaClientBridge {
         i64::from(self.session.submit(&batch.to_vec()))
     }
 
+    /// Submit typed desktop intent without exposing MCN1 to Python.
+    #[func]
+    fn session_submit_semantic(
+        &mut self,
+        move_x: i64,
+        move_z: i64,
+        jump: bool,
+        mining: bool,
+        eating: bool,
+        sprinting: bool,
+        sneaking: bool,
+        yaw: f64,
+        pitch: f64,
+    ) -> i64 {
+        if !Self::on_main_thread() {
+            return i64::from(abi::STATUS_INTERNAL);
+        }
+        i64::from(self.session.submit_semantic(
+            move_x, move_z, jump, mining, eating, sprinting, sneaking, yaw, pitch,
+        ))
+    }
+
     /// Drive exactly one bounded step. Negative or oversized arguments wrap
     /// into the producer's rejection domains instead of panicking on the
     /// integer conversion.
@@ -510,6 +591,29 @@ impl MornleaClientBridge {
                 result.set("terminal_cause", 0);
                 result.set("steps_completed", 0);
                 result.set("messages_processed", 0);
+            }
+        }
+        result
+    }
+
+    /// Read the retained frame's typed camera, target, phase, and revision
+    /// values. A failed pull or decode returns only its status word and zeroed
+    /// fields, preserving the atomic presentation boundary.
+    #[func]
+    fn session_frame_typed(&mut self) -> VarDictionary {
+        let decoded = if Self::on_main_thread() {
+            self.session.frame_typed()
+        } else {
+            Err(abi::STATUS_INTERNAL)
+        };
+        let mut result = VarDictionary::new();
+        match decoded {
+            Ok(frame) => {
+                Self::put_typed_frame(&mut result, &frame, abi::STATUS_OK);
+            }
+            Err(word) => {
+                result.set("status", i64::from(word));
+                Self::put_typed_frame_defaults(&mut result);
             }
         }
         result
@@ -706,6 +810,54 @@ impl MornleaClientBridge {
             }
         }
         result
+    }
+
+    fn put_typed_frame_defaults(result: &mut VarDictionary) {
+        result.set("revision", 0i64);
+        result.set("epoch", 0i64);
+        result.set("camera_ready", false);
+        result.set("position_x", 0.0f64);
+        result.set("position_y", 0.0f64);
+        result.set("position_z", 0.0f64);
+        result.set("yaw", 0.0f64);
+        result.set("pitch", 0.0f64);
+        result.set("fov_y", 0.0f64);
+        result.set("aspect", 0.0f64);
+        result.set("near", 0.0f64);
+        result.set("far", 0.0f64);
+        result.set("target_visible", false);
+        result.set("target_x", 0i64);
+        result.set("target_y", 0i64);
+        result.set("target_z", 0i64);
+        result.set("target_name", String::new());
+        result.set("phase", 0i64);
+        result.set("error", 0i64);
+    }
+
+    fn put_typed_frame(result: &mut VarDictionary, frame: &TypedFrame, status: u32) {
+        result.set("status", i64::from(status));
+        result.set(
+            "revision",
+            i64::try_from(frame.revision).unwrap_or(i64::MAX),
+        );
+        result.set("epoch", i64::try_from(frame.epoch).unwrap_or(i64::MAX));
+        result.set("camera_ready", frame.camera_ready);
+        result.set("position_x", f64::from(frame.position[0]));
+        result.set("position_y", f64::from(frame.position[1]));
+        result.set("position_z", f64::from(frame.position[2]));
+        result.set("yaw", f64::from(frame.yaw));
+        result.set("pitch", f64::from(frame.pitch));
+        result.set("fov_y", f64::from(frame.fov_y));
+        result.set("aspect", f64::from(frame.aspect));
+        result.set("near", f64::from(frame.near));
+        result.set("far", f64::from(frame.far));
+        result.set("target_visible", frame.target_visible);
+        result.set("target_x", i64::from(frame.target_position[0]));
+        result.set("target_y", i64::from(frame.target_position[1]));
+        result.set("target_z", i64::from(frame.target_position[2]));
+        result.set("target_name", frame.target_name.clone());
+        result.set("phase", i64::from(frame.phase));
+        result.set("error", i64::from(frame.error));
     }
 
     /// The resource half of the terrain attach, fail-closed with a status
@@ -1477,6 +1629,35 @@ mod tests {
         assert_eq!(request[8..16], 16_666_667u64.to_le_bytes());
         assert_eq!(request[16..20], 64u32.to_le_bytes());
         assert_eq!(request[20..24], 32u32.to_le_bytes());
+    }
+
+    #[test]
+    fn bridge_lifecycle_semantic_submit_encodes_the_complete_desktop_intent() {
+        let (mut session, core) = scripted_session();
+        assert_eq!(session.create(), STATUS_OK);
+        core.state().submit_status = STATUS_OK;
+        assert_eq!(
+            session.submit_semantic(1, -1, true, true, false, true, false, 0.5, -0.2),
+            STATUS_OK
+        );
+        let batch = &core.state().submitted_batches[0];
+        assert_eq!(batch[0..4], abi::MAGIC_INPUT.to_le_bytes());
+        assert_eq!(batch[4..8], abi::INPUT_VERSION.to_le_bytes());
+        assert_eq!(u32::from_le_bytes(batch[8..12].try_into().unwrap()), 7);
+        assert_eq!(u32::from_le_bytes(batch[16..20].try_into().unwrap()), 1);
+        assert_eq!(u32::from_le_bytes(batch[20..24].try_into().unwrap()), 1);
+        assert_eq!(
+            u32::from_le_bytes(batch[24..28].try_into().unwrap()),
+            u32::MAX
+        );
+        assert_eq!(u32::from_le_bytes(batch[48..52].try_into().unwrap()), 3);
+        assert_eq!(u32::from_le_bytes(batch[52..56].try_into().unwrap()), 1);
+        assert_eq!(u32::from_le_bytes(batch[64..68].try_into().unwrap()), 4);
+        assert_eq!(u32::from_le_bytes(batch[68..72].try_into().unwrap()), 1);
+        assert_eq!(
+            session.submit_semantic(2, 0, false, false, false, false, false, 0.0, 0.0),
+            STATUS_INPUT_REJECTED
+        );
     }
 
     #[test]

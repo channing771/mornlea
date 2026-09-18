@@ -21,7 +21,7 @@ ARGS ?=
 # dev-check、vet）显式循环该列表，防止新模块成为 ./... 盲区。
 GO_TEST_MODULES := ./packages/contracts ./packages/shared ./packages/server ./packages/client ./packages/tools ./packages/audit
 
-.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck comment-language-check fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev godot-asset-check godot-project-check godot-python-check godot-smoke godot-terrain-check
+.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck comment-language-check fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev godot-asset-check godot-project-check godot-python-check godot-input-check godot-camera-check godot-target-check godot-disconnect-check godot-smoke godot-terrain-check
 
 run test test-multiplayer bench-multiplayer visual-check visual-update: rust
 build: rust
@@ -231,6 +231,18 @@ godot-project-check:
 
 godot-python-check:
 	scripts/godot/python-check.sh --locked
+
+godot-input-check:
+	scripts/godot/input-check.sh
+
+godot-camera-check:
+	scripts/godot/camera-check.sh
+
+godot-target-check:
+	scripts/godot/target-check.sh
+
+godot-disconnect-check:
+	go test ./packages/client/runtime -run 'Disconnect|Overflow|Shutdown' -race -count=1
 
 godot-smoke:
 	scripts/godot/smoke.sh --iterations 100 --isolated-python

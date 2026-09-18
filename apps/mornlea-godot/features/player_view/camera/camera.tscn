@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[node name="Camera" type="Node"]
+
+[node name="Camera3D" type="Camera3D" parent="."]
+current = false

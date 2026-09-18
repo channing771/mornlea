@@ -9,6 +9,23 @@ config/name="Mornlea Godot Pilot"
 config/description="Desktop-only presentation pilot for the Mornlea client"
 run/main_scene="res://app/bootstrap/bootstrap.tscn"
 
+[input]
+
+move_forward={"deadzone":0.5,"events":[Object(InputEventKey,"physical_keycode":87)]}
+move_back={"deadzone":0.5,"events":[Object(InputEventKey,"physical_keycode":83)]}
+move_left={"deadzone":0.5,"events":[Object(InputEventKey,"physical_keycode":65)]}
+move_right={"deadzone":0.5,"events":[Object(InputEventKey,"physical_keycode":68)]}
+jump={"deadzone":0.5,"events":[Object(InputEventKey,"physical_keycode":32)]}
+sprint={"deadzone":0.5,"events":[Object(InputEventKey,"physical_keycode":4194325)]}
+sneak={"deadzone":0.5,"events":[Object(InputEventKey,"physical_keycode":4194326)]}
+primary={"deadzone":0.5,"events":[Object(InputEventMouseButton,"button_index":1)]}
+secondary={"deadzone":0.5,"events":[Object(InputEventMouseButton,"button_index":2)]}
+hotbar={"deadzone":0.5,"events":[]}
+f5={"deadzone":0.5,"events":[Object(InputEventKey,"physical_keycode":4194309)]}
+escape={"deadzone":0.5,"events":[Object(InputEventKey,"physical_keycode":4194305)]}
+toggle_camera={"deadzone":0.5,"events":[Object(InputEventKey,"physical_keycode":4194309)]}
+ui_cancel={"deadzone":0.5,"events":[Object(InputEventKey,"physical_keycode":4194305)]}
+
 [display]
 
 window/size/viewport_width=1280

@@ -6,7 +6,7 @@ import json
 from typing import Any, cast
 
 from py4godot.classes import gdclass
-from py4godot.classes.core import PackedByteArray  # type: ignore[import-not-found]
+from py4godot.classes.core import PackedByteArray
 from py4godot.classes.Node import Node
 from py4godot.utils.smart_cast import (  # type: ignore[import-not-found]
     register_cast_function,
