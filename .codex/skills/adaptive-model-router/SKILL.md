@@ -1,13 +1,55 @@
 ---
 name: adaptive-model-router
-description: Select a sufficient live native, Z Code, or OpenCode agent backend, model, and reasoning effort for isolated Mornlea work while protecting code quality, token efficiency, and provider quotas.
+description: Select a sufficient live native, Z Code, or OpenCode agent backend, model, and reasoning effort for isolated Mornlea work while coordinating controller-worker handoffs, token efficiency, and provider quotas.
 ---
 
 # Adaptive Model Router
 
 Use this project-owned skill before every new Mornlea subagent delegation. It is a required project governance rule and complements `mornlea-implementation-orchestration`: orchestration applies the isolation-first execution policy; this skill selects the backend, model, and reasoning effort for that isolated work.
 
-The routing objectives are coequal: protect code quality and token efficiency. Do not downshift below credible sufficiency merely to save tokens, and do not use the highest model or effort by default when a lower tier can produce a verifiable result.
+The routing objectives are coequal: protect code quality and token efficiency. The main agent is the controller for the whole task; a delegated worker owns a bounded execution node. Do not downshift below credible sufficiency merely to save tokens, and do not use the highest model or effort by default when a lower tier can produce a verifiable result.
+
+## Controller/Worker Operating Contract
+
+The controller (main agent) owns the global picture and the final result:
+
+- Translate the user request into scope, dependencies, ownership, acceptance criteria, and the required validation tier.
+- Freeze the contract and file boundary for each delegated node before dispatching it.
+- Integrate worker output, resolve cross-node conflicts, run the final gates, update the change ledger, and make any commit or external handoff.
+
+The worker owns the concrete bounded node described in its brief. A worker brief MUST state the evidence, owned paths or isolated worktree, non-goals, integration point, and acceptance command. The controller must not silently expand the brief while the worker is running.
+
+Use this execution state machine for every delegated node:
+
+```text
+DECOMPOSE -> DISPATCH -> WAIT -> HANDOFF -> INTEGRATE
+                         |          |
+                         +-> NEEDS-INPUT / FAILED
+```
+
+After `DISPATCH`, the controller enters `WAIT` for that node. While a worker is active, the controller MUST use a cursor-aware bounded wait or status operation (`wait_threads`/worker `wait`, normally 30-60 seconds) and wake only for a phase change, checkpoint, test/tool failure, permission or user-input request, or terminal state. A timeout with unchanged state is not permission to redo the task; retain the cursor, back off, and wait again.
+
+The controller MUST NOT, while the worker is active:
+
+- repeat repository searches, file reads, planning, implementation, or tests over the worker's owned paths;
+- start a replacement worker for the same node merely because commentary is delayed;
+- inspect or rewrite an equivalent implementation in the main worktree;
+- poll token-level output or issue repeated status calls without a cursor.
+
+During `WAIT`, permitted work is limited to waiting/status/steering, answering an explicit worker request, handling a real failure, or progressing a separately scoped non-overlapping node. Any independent work MUST be recorded as such and MUST NOT consume the worker's files or acceptance evidence. If the controller notices a possible issue, send one targeted steer or wait for the worker's terminal report; take over only after `FAILED`, `NEEDS-INPUT`, an explicit scope change, or a verified worker exit.
+
+At `HANDOFF`, read the worker's terminal summary once, inspect only its owned diff, and run the focused acceptance command. Then return to `INTEGRATE` for cross-boundary checks and final validation. Record the worker id, exact route, state transitions, ownership boundary, wait outcome, and any correction in the change ledger. This handoff record prevents the controller from rediscovering the same context on the next turn.
+
+## Delegate-First Threshold
+
+To honor the controller/worker split without creating trivial coordination overhead, use a fresh Grok worker as the first eligible candidate for a bounded implementation, test, debugging, exploration, or review node when any of these is true:
+
+- the node spans two or more files or packages;
+- the expected tool horizon is at least three meaningful calls;
+- it needs independent repository discovery or review;
+- keeping the trace in the controller would materially enlarge context or invite repeated work.
+
+Keep tiny one-file deterministic edits, a change that is inseparable from the controller's current integration step, and final cross-node validation in the controller. Do not dispatch overlapping editing workers. The higher Grok dispatch frequency is a default for eligible bounded nodes, not a waiver of the high-level OpenAI design gate, file ownership, validation, or the two-worker concurrency ceiling.
 
 ## Discover the Live Capability Set
 
@@ -98,6 +140,8 @@ reasoning: xhigh
 ```
 
 Use it for complex bounded repository exploration, multi-step tool work, ordinary implementation, debugging, code review, test diagnosis, and synthesis across several packages when the validation oracle is clear. Its high reasoning setting makes it suitable for ambiguous bounded work that benefits from sustained investigation. Prefer a lower native effort or a smaller eligible model for extraction, formatting, trivial deterministic edits, and short checks where `xhigh` would add cost without improving the result. Require an independent review or stronger validation for security-sensitive, irreversible, weak-oracle, or cross-boundary changes. Architecture, feature design, package ownership, lifecycle, concurrency, protocol, ABI, storage, and other durable system decisions still go through the OpenAI design gate before Grok can be considered.
+
+For an ordinary bounded node that satisfies the delegate-first threshold, Grok is the default first dispatch. Keeping that node in the controller requires an explicit reason such as a one-file deterministic edit, inseparable integration ownership, or a missing isolated execution surface. This raises useful Grok delegation frequency while preserving the high-level design gate and final controller accountability.
 
 After eligibility filters and the OpenAI design gate, give Grok a higher but bounded selection prior:
 
@@ -207,6 +251,9 @@ At the end of every implementation round, evaluate routing alongside the archite
 - Was a model or effort tier higher than the task and its validation oracle required?
 - Did a lower choice cause retries, contradictions, missing context, weak review, or avoidable escalation?
 - Did context transfer, tool support, latency, or token use materially affect quality?
+- Were eligible bounded nodes dispatched to Grok instead of being redundantly re-executed by the controller?
+- After dispatch, did the controller actually remain in cursor-aware `WAIT` until a wake condition, without repeating the worker's searches, reads, implementation, or tests?
+- Did the handoff summary and ownership record prevent the controller from rediscovering the worker's context?
 - Would a reusable axis, constraint, or escalation rule improve future routing?
 
 Update both project-owned skill copies only when verified evidence supports a stable cross-task rule that changes future routing. Do not add task history, volatile availability lists, one-off model anecdotes, or unverified preferences. Validate and synchronize both copies after an update. If no reusable improvement qualifies, record `Model router: no change` with a short reason in the change ledger.
