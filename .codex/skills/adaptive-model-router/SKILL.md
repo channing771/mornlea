@@ -56,6 +56,35 @@ Pass the start brief and steering text through stdin unless a short non-sensitiv
 
 Use `plan` for read-only discovery and review. Use an editing mode only when the worker has an isolated worktree or an exclusive, non-overlapping file set and pass the bridge's explicit ownership assertion; the controller still owns integration and validation. Count the Z Code worker against the two-agent concurrency ceiling. Its startup context is substantial, so select it for bounded work that benefits from isolation and enough repository reasoning to repay that bootstrap cost, not for trivial extraction or one-line edits. The live supervisor can only wake a controller with a pending wait; it cannot inject an unsolicited turn into an idle Codex task.
 
+## OpenCode allocation policy
+
+OpenCode is a second external isolated-agent backend exposed only through the skill-local `scripts/opencode-agent.mjs` bridge. Keep its route exact and immutable:
+
+```text
+backend: opencode
+provider: opencode-go
+model: muse-spark-1.3-contributor
+reasoning: xhigh
+```
+
+The bridge must reject every other provider, model, or reasoning value before invoking OpenCode. `probe` is read-only and validates the installed OpenCode model metadata; `run` and `send` always pass `--model opencode-go/muse-spark-1.3-contributor`, `--variant xhigh`, `--format json`, `--agent plan|build`, and the selected absolute `--dir`. For long-running work, use `live-probe --cwd` before `start`; the live supervisor preserves the same fixed route and supports `wait`, `status`, `steer`, `stop`, and `close`. `guide` maps to an active-turn `steer`, `queue` preserves the active turn, and `startNow` interrupts before steering the replacement brief. Use stable command IDs and retain the returned cursor exactly as for the native and Z Code supervisors.
+
+OpenCode's Muse Spark 1.3 contributor model has a verified `1,048,576` token context limit, `131,072` maximum output, reasoning, tool-call, and attachment support. Historical local OpenCode operational data contains about 13.6k assistant messages for this model, about 13.1k with tool calls and about 99.8% with a normal stop or tool-call finish; the small failure tail is dominated by user cancellation, connection closure, regional availability, and rate limiting. These are reliability and workflow observations, not a benchmark claim or proof of quality superiority. Route it as a strong bounded explorer and implementer for long-context repository search, multi-step tool work, decomposition into child sessions, code review, ordinary implementation, and debugging with a clear validation oracle. Treat it as weaker for cross-boundary architecture, protocol/ABI/storage contracts, durable ownership or lifecycle design, high-level feature design, and work with a weak oracle or irreversible consequences. Those tasks remain behind the OpenAI design gate and OpenCode does not compete on quota or score.
+
+For ordinary eligible tasks, give OpenCode a bounded selection prior that reflects its lower contributor quota without treating it as exhausted:
+
+```text
+OpenCode prior = 0.92
+quota factor = 0.90 + 0.20 × quota ratio
+OpenCode score = base score × OpenCode prior × quota factor × time factor
+quota ratio = clamp(remaining / limit, 0, 1)
+time factor = 1.00 outside the Z Code disabled window
+```
+
+Use a fresh, read-only, non-secret OpenCode quota snapshot when the host exposes one. A valid snapshot has `used`, `limit`, or `remaining`, an `observed_at`, and an optional `reset_at`; derive missing `remaining` from `limit - used`. A malformed, missing, or more-than-15-minute-old snapshot is unknown quota and uses the neutral ratio `0.50`. Confirmed zero remaining or an actual OpenCode rate-limit response removes OpenCode until reset or a fresh positive snapshot. Missing quota telemetry alone does not mean zero quota. Apply the existing local `14:00–18:00` Z Code disabled-window filter before scoring; the window disables Z Code only, so OpenCode may still be considered outside the high-level OpenAI gate when its own probe is healthy and quota is not confirmed exhausted. Record the route, quota observation time, and eligibility reason without recording provider output or credentials.
+
+OpenCode live workers count against the same two-agent concurrency ceiling. Use `plan` for read-only exploration and review. Use `build`, `edit`, or `yolo` only with an isolated worktree or explicit exclusive-file ownership, and let the controller own integration and final validation. Preserve the worker session ID and use `send --session` for synchronous multi-turn continuation; use the live supervisor when the controller needs cursor-based progress, intervention, or queued follow-up work. The OpenCode session API exposes parent and child sessions and the bridge's `steer`/`queue` operations, which provide native-like multi-turn subagent communication without replaying prior context.
+
 ## High-level OpenAI design gate
 
 Before applying any quota or backend score, classify the task from its requested outcome and affected boundaries. Code architecture, package or module ownership, dependency direction, lifecycle or concurrency design, protocol/ABI/storage contracts, multi-component feature design, cross-component user behavior, OpenSpec proposal/design, and other durable system decisions are high-level tasks. If the brief is ambiguous and could change a durable boundary or multiple components, classify it as high-level.

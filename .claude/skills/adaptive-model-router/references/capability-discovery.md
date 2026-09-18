@@ -8,9 +8,10 @@ Treat the invocation boundary as the source of truth for what can run now:
 
 1. Inspect native `spawn`, `delegate`, `worker`, `agent`, or model-request tool metadata. Enumerated model and effort values are authoritative for that call surface.
 2. For the repository-owned Z Code worker, resolve the selected `adaptive-model-router` skill root and run its packaged `scripts/zcode-agent.mjs probe`. Before a live route, also run the same skill-local executable with `live-probe --cwd /absolute/worktree` so private app-server protocol drift fails before inference. These redacted results are authoritative only for the configured `GLM-5.3` external surface; they do not extend the native model enum.
-3. Call a read-only capability or model inventory operation if another host provides one.
-4. If a provider's list-models response contains only identifiers, consult current official documentation or machine-readable model metadata for reasoning effort, modalities, context, and tool support.
-5. Use local CLI help or a dry-run command only when it is provider-supported and does not modify configuration or incur inference cost.
+3. For the repository-owned OpenCode worker, resolve the selected skill root and run its packaged `scripts/opencode-agent.mjs probe`. Before a live route, also run `live-probe --cwd /absolute/worktree`. These results are authoritative only for the exact `opencode-go/muse-spark-1.3-contributor` route, whose bridge permits `xhigh` and rejects every other provider, model, or reasoning variant.
+4. Call a read-only capability or model inventory operation if another host provides one.
+5. If a provider's list-models response contains only identifiers, consult current official documentation or machine-readable model metadata for reasoning effort, modalities, context, and tool support.
+6. Use local CLI help or a dry-run command only when it is provider-supported and does not modify configuration or incur inference cost.
 
 Never scrape account secrets, print credentials, or use an unrelated account to fill gaps. Community tables and remembered model-family behavior are hints for where to look, not authoritative capability evidence.
 
@@ -23,6 +24,8 @@ Classify architecture, feature-design, contract, ownership, lifecycle, concurren
 Quota is a routing signal separate from model capability. Apply it only after the high-level gate and local-time filter. During the host's local `14:00–18:00` disabled window, omit Z Code before scoring. Outside that window, prefer a current, read-only usage snapshot exposed by the provider or the Z Code desktop host. If that surface is unavailable, accept a non-secret snapshot supplied by the host with `used`, `limit`, `remaining`, and `observed_at`; an optional `reset_at` helps decide when a depleted entitlement can be retried. Keep the raw response and credentials out of task output.
 
 Treat a snapshot as unknown when it is malformed, older than 15 minutes, or has no positive `limit`. Unknown quota uses the neutral routing value rather than zero. A confirmed zero remaining quota or a provider rate-limit response is different: it temporarily removes Z Code from the candidate set until reset or a fresh positive snapshot. Quota discovery must remain read-only and must not send a paid model request.
+
+OpenCode uses the same read-only quota shape when its host exposes one, but its lower contributor entitlement gets `OpenCode prior = 0.92` and `quota factor = 0.90 + 0.20 × quota ratio`. Its effective score is `base score × OpenCode prior × quota factor × time factor`; the local Z Code blackout does not disable OpenCode. Missing or stale OpenCode quota is neutral ratio `0.50`, while confirmed zero remaining or a rate-limit response removes it until reset or a fresh positive snapshot. Apply the exact-route and `xhigh` filters before this score.
 
 ## Normalize heterogeneous hosts
 

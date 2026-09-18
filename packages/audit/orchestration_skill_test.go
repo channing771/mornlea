@@ -31,6 +31,10 @@ func TestProjectAdaptiveModelRouterSkillsMatch(t *testing.T) {
 		"scripts/zcode-agent.test.mjs",
 		"scripts/zcode-live-agent.mjs",
 		"scripts/zcode-live-agent.test.mjs",
+		"scripts/opencode-agent.mjs",
+		"scripts/opencode-agent.test.mjs",
+		"scripts/opencode-live-agent.mjs",
+		"scripts/opencode-live-agent.test.mjs",
 	} {
 		codex := readOrchestrationPolicyFile(t, filepath.Join(root, ".codex", projectModelRouterSkillPath, filepath.FromSlash(relative)))
 		claude := readOrchestrationPolicyFile(t, filepath.Join(root, ".claude", projectModelRouterSkillPath, filepath.FromSlash(relative)))
@@ -40,13 +44,17 @@ func TestProjectAdaptiveModelRouterSkillsMatch(t *testing.T) {
 	}
 }
 
-func TestProjectRouterOwnsZCodeBridgeRuntime(t *testing.T) {
+func TestProjectRouterOwnsExternalBridgeRuntime(t *testing.T) {
 	root := repositoryRoot(t)
 	for _, relative := range []string{
 		"zcode-agent.mjs",
 		"zcode-agent.test.mjs",
 		"zcode-live-agent.mjs",
 		"zcode-live-agent.test.mjs",
+		"opencode-agent.mjs",
+		"opencode-agent.test.mjs",
+		"opencode-live-agent.mjs",
+		"opencode-live-agent.test.mjs",
 	} {
 		for _, skillRoot := range []string{".codex", ".claude"} {
 			path := filepath.Join(root, skillRoot, projectModelRouterSkillPath, "scripts", relative)
@@ -56,7 +64,7 @@ func TestProjectRouterOwnsZCodeBridgeRuntime(t *testing.T) {
 		}
 		legacy := filepath.Join(root, "scripts", "agents", relative)
 		if _, err := os.Stat(legacy); !os.IsNotExist(err) {
-			t.Errorf("Z Code bridge runtime must not remain outside the skill: %s", legacy)
+			t.Errorf("external bridge runtime must not remain outside the skill: %s", legacy)
 		}
 	}
 }
@@ -129,6 +137,13 @@ func TestProjectRouterDefinesZCodeBridge(t *testing.T) {
 		"`queue`",
 		"`startNow`",
 		"cannot inject an unsolicited turn",
+		"OpenCode",
+		"scripts/opencode-agent.mjs",
+		"muse-spark-1.3-contributor",
+		"--variant xhigh",
+		"multi-turn",
+		"steer",
+		"queue",
 	} {
 		if !strings.Contains(router, fragment) {
 			t.Errorf("project model router does not define ZCode bridge rule %q", fragment)
@@ -200,6 +215,15 @@ func modelRouterPolicyFragments() []string {
 		"Z Code and every other non-OpenAI backend MUST NOT compete",
 		"no compliant advanced OpenAI configuration",
 		"MUST NOT silently substitute Z Code",
+		"OpenCode allocation policy",
+		"opencode-go",
+		"muse-spark-1.3-contributor",
+		"reasoning: xhigh",
+		"OpenCode score",
+		"quota ratio",
+		"multi-turn",
+		"steer",
+		"queue",
 	}
 }
 
