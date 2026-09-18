@@ -79,7 +79,7 @@ const fn descriptor(
 
 /// The pilot feature-family set the Go sole registry reports, mirrored from
 /// the header constants. Every family is required by the pilot data plane;
-/// all seven must be present for a producer identity to be usable. Field
+/// all eight must be present for a producer identity to be usable. Field
 /// conventions match the Go registry: `record_limit` is each family's bounded
 /// batch capacity, which for byte-payload families (connection addresses) is
 /// the byte bound, and `record_bytes` is the fixed per-record wire size where
@@ -129,6 +129,12 @@ pub const PILOT_FAMILIES: [FamilyDescriptor; abi::FAMILY_COUNT as usize] = [
         abi::MAX_STATUS_RECORDS,
         0,
     ),
+    descriptor(
+        abi::FAMILY_ENVIRONMENT,
+        abi::ENVIRONMENT_VERSION,
+        1,
+        abi::ENVIRONMENT_BYTES as u32,
+    ),
 ];
 
 /// Every family identifier the pilot contract defines, in ascending order.
@@ -140,11 +146,12 @@ const PILOT_FAMILY_IDS: [u32; abi::FAMILY_COUNT as usize] = [
     abi::FAMILY_WORLD,
     abi::FAMILY_FRAME,
     abi::FAMILY_STATUS,
+    abi::FAMILY_ENVIRONMENT,
 ];
 
 /// Validate a producer-reported descriptor list as a registry table: every
 /// descriptor must name a known pilot family with a nonzero contract version,
-/// identifiers must be unique, and all seven families are required. Unknown
+/// identifiers must be unique, and all eight families are required. Unknown
 /// identifiers are rejected before presence checks so a table that both
 /// smuggles an unknown family and drops a required one reports the smuggled
 /// family first.
@@ -231,7 +238,7 @@ mod tests {
         // mirror fails here until the pin is consciously updated as part of a
         // reviewed contract-version bump.
         let pinned: [(u32, u32, u32, u32); 7] = [
-            (1, 1, 7, 24),
+            (1, 1, 8, 24),
             (2, 1, 256, 0),
             (3, 1, 128, 0),
             (4, 1, 1, 24),

@@ -19,8 +19,8 @@ import (
 // together without review) into a failing test, mirroring the engine ABI pin
 // pattern in packages/shared/nativeabi.
 func TestABIIdentityMatchesClientCoreContract(t *testing.T) {
-	if ABIMajor != 1 || ABIMinor != 0 {
-		t.Fatalf("client-core ABI = %d.%d, want 1.0", ABIMajor, ABIMinor)
+	if ABIMajor != 1 || ABIMinor != 1 {
+		t.Fatalf("client-core ABI = %d.%d, want 1.1", ABIMajor, ABIMinor)
 	}
 
 	statuses := []Status{
@@ -52,6 +52,7 @@ func TestABIIdentityMatchesClientCoreContract(t *testing.T) {
 		FamilyWorld,
 		FamilyFrame,
 		FamilyStatus,
+		FamilyEnvironment,
 	}
 	for index, family := range families {
 		if want := uint32(index + 1); uint32(family) != want {
@@ -346,6 +347,7 @@ func expectedHeaderDefines() map[string]uint32 {
 		"MORNLEA_CLIENT_MAGIC_WORLD":                  uint32(MagicWorld),
 		"MORNLEA_CLIENT_MAGIC_FRAME":                  uint32(MagicFrame),
 		"MORNLEA_CLIENT_MAGIC_STATUS":                 uint32(MagicStatus),
+		"MORNLEA_CLIENT_MAGIC_ENVIRONMENT":            uint32(MagicEnvironment),
 		"MORNLEA_CLIENT_ABI_ALIGNMENT":                ABIAlignment,
 		"MORNLEA_CLIENT_FAMILY_IDENTITY":              uint32(FamilyIdentity),
 		"MORNLEA_CLIENT_FAMILY_CONNECTION":            uint32(FamilyConnection),
@@ -354,6 +356,7 @@ func expectedHeaderDefines() map[string]uint32 {
 		"MORNLEA_CLIENT_FAMILY_WORLD":                 uint32(FamilyWorld),
 		"MORNLEA_CLIENT_FAMILY_FRAME":                 uint32(FamilyFrame),
 		"MORNLEA_CLIENT_FAMILY_STATUS":                uint32(FamilyStatus),
+		"MORNLEA_CLIENT_FAMILY_ENVIRONMENT":           uint32(FamilyEnvironment),
 		"MORNLEA_CLIENT_FAMILY_COUNT":                 uint32(FamilyCount),
 		"MORNLEA_CLIENT_IDENTITY_VERSION":             IdentityVersion,
 		"MORNLEA_CLIENT_CONNECTION_VERSION":           ConnectionVersion,
@@ -362,6 +365,8 @@ func expectedHeaderDefines() map[string]uint32 {
 		"MORNLEA_CLIENT_WORLD_VERSION":                WorldVersion,
 		"MORNLEA_CLIENT_FRAME_VERSION":                FrameVersion,
 		"MORNLEA_CLIENT_STATUS_VERSION":               StatusVersion,
+		"MORNLEA_CLIENT_ENVIRONMENT_VERSION":          EnvironmentVersion,
+		"MORNLEA_CLIENT_ENVIRONMENT_BYTES":            EnvironmentBytes,
 		"MORNLEA_CLIENT_MAX_INPUT_EVENTS":             MaxInputEvents,
 		"MORNLEA_CLIENT_MAX_CONNECTION_ADDRESS_BYTES": MaxConnectionAddressBytes,
 		"MORNLEA_CLIENT_MAX_STEP_MESSAGE_BUDGET":      MaxStepMessageBudget,

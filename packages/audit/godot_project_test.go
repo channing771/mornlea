@@ -151,11 +151,18 @@ func TestGodotDesktopOnlyFeatureSkeleton(t *testing.T) {
 		"platform/desktop/lifecycle/feature.tres",
 		"platform/desktop/audio/feature.tres",
 	}
-	// The session and world pilot features are implemented and selected by
-	// the production catalog; the remaining roots are still reserved
-	// skeletons and must stay explicitly disabled until their own
-	// implementation tasks enable them.
+	// The session/world roots are required providers; the input, player-view,
+	// actors, and UI roots are implemented optional consumers in the minimum
+	// loop. Remaining roots stay disabled until their own implementation tasks.
 	implemented := map[string]bool{
+		"features/session/feature.tres":       true,
+		"features/player_view/feature.tres":   true,
+		"features/world/feature.tres":         true,
+		"features/actors/feature.tres":        true,
+		"features/ui/feature.tres":            true,
+		"platform/desktop/input/feature.tres": true,
+	}
+	required := map[string]bool{
 		"features/session/feature.tres": true,
 		"features/world/feature.tres":   true,
 	}
@@ -167,7 +174,7 @@ func TestGodotDesktopOnlyFeatureSkeleton(t *testing.T) {
 			if !strings.Contains(manifest, "enabled = true") {
 				t.Errorf("implemented Godot feature %s must stay enabled", relative)
 			}
-			if !strings.Contains(manifest, "metadata/required = true") {
+			if required[relative] && !strings.Contains(manifest, "metadata/required = true") {
 				t.Errorf("implemented pilot feature %s must be required by the catalog plan", relative)
 			}
 		} else if !strings.Contains(manifest, "enabled = false") {
@@ -236,6 +243,16 @@ func TestGodotPythonFeatureSkeletonsAndScriptOwnership(t *testing.T) {
 		resourcePath := "res://" + filepath.ToSlash(filepath.Join(directory, scriptName))
 		if !strings.Contains(scene, resourcePath) || !strings.Contains(scene, "script = ExtResource") {
 			t.Errorf("feature scene %s does not attach %s", directory, resourcePath)
+		}
+	}
+	// Reserved coarse capabilities have no implementation scene, so their
+	// manifests live in the separate capability registry rather than the
+	// product activation catalog. Keep this audit aware of that ownership
+	// boundary while still rejecting every other unregistered manifest.
+	capabilityRegistry := readBaselineDoc(t, root, filepath.Join("apps", "mornlea-godot", "catalog", "capability_registry.tres"))
+	for _, token := range strings.Split(capabilityRegistry, `"`) {
+		if strings.HasPrefix(token, "res://") {
+			registeredManifests[strings.TrimPrefix(token, "res://")] = true
 		}
 	}
 

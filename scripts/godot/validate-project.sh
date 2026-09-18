@@ -332,7 +332,7 @@ validate_export_preset() {
 validate_export_closure() {
   local presets="${project_root}/export_presets.cfg"
   local line preset_name="" platform="" exclusions="" include_filter="" custom_template="" lower_template=""
-  local preset_count=0 findings relative_path catalog
+  local preset_count=0 findings relative_path catalog capability_registry
   [[ -f "${presets}" ]] || {
     reject "export_presets.cfg is missing"
     return
@@ -377,9 +377,18 @@ validate_export_closure() {
 
   catalog="${project_root}/config/feature_catalog.tres"
   [[ -f "${catalog}" ]] || return
+  capability_registry="${project_root}/catalog/capability_registry.tres"
   while IFS= read -r -d '' manifest; do
     relative_path="${manifest#${project_root}/}"
-    grep -Fq "res://${relative_path}" "${catalog}" || reject "feature is not selected by the export catalog: ${relative_path}"
+    if grep -Fq "res://${relative_path}" "${catalog}"; then
+      continue
+    fi
+    # Reserved coarse capabilities use their own registry and remain disabled;
+    # they are not product features and must not be forced into the activation catalog.
+    if [[ -f "${capability_registry}" ]] && grep -Fq "res://${relative_path}" "${capability_registry}"; then
+      continue
+    fi
+    reject "feature is not selected by the export catalog: ${relative_path}"
   done < <(find "${project_root}/features" "${project_root}/platform/desktop" -type f -name feature.tres -print0 2>/dev/null || true)
 }
 

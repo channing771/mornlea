@@ -81,6 +81,7 @@ const STATUS_PILOT_RECORDS: usize = 4;
 /// its own declared maximum is a contract violation, not a growth request.
 fn family_limit_bytes(family: PullFamily) -> usize {
     match family {
+        PullFamily::Environment => abi::ENVIRONMENT_BYTES,
         PullFamily::World => {
             abi::WORLD_HEADER_BYTES
                 + abi::MAX_WORLD_BATCH_OPERATIONS as usize * WORLD_OPERATION_BYTES
@@ -153,6 +154,15 @@ fn publication_identity(
                 revision: backing.le_u64_at(offset_of!(abi::FrameHeader, revision)),
             }))
         }
+        PullFamily::Environment => {
+            if written != abi::ENVIRONMENT_BYTES {
+                return Err(abi::STATUS_INTERNAL);
+            }
+            Ok(Some(PublicationIdentity {
+                epoch: backing.le_u64_at(24),
+                revision: backing.le_u64_at(16),
+            }))
+        }
         PullFamily::Status | PullFamily::Identity => Ok(None),
     }
 }
@@ -202,6 +212,7 @@ impl PullBuffer {
 /// sessions that never pull world data.
 #[derive(Default)]
 pub(crate) struct PullBufferSet {
+    environment: PullBuffer,
     world: PullBuffer,
     frame: PullBuffer,
     status: PullBuffer,
@@ -212,6 +223,7 @@ impl PullBufferSet {
     /// The reusable buffer of one pull family.
     pub(crate) fn for_family(&mut self, family: PullFamily) -> &mut PullBuffer {
         match family {
+            PullFamily::Environment => &mut self.environment,
             PullFamily::World => &mut self.world,
             PullFamily::Frame => &mut self.frame,
             PullFamily::Status => &mut self.status,
@@ -225,6 +237,7 @@ impl PullBufferSet {
     /// fresh session's epoch space legitimately restarts below the retired
     /// session's newest identity.
     pub(crate) fn reset_served_identities(&mut self) {
+        self.environment.served = None;
         self.world.served = None;
         self.frame.served = None;
         self.status.served = None;
@@ -501,6 +514,10 @@ mod tests {
             self.scripted_pull(buffer)
         }
 
+        fn environment_pull(&self, _handle: ClientHandle, buffer: &mut [u8]) -> PullOutcome {
+            self.scripted_pull(buffer)
+        }
+
         fn status_pull(&self, _handle: ClientHandle, buffer: &mut [u8]) -> PullOutcome {
             self.scripted_pull(buffer)
         }
@@ -594,11 +611,11 @@ mod tests {
         // 4096 operation records plus 524,288 packed quads), a maximal frame
         // (header plus every fixed record, seven entities, the 64-byte
         // name), the fixed pilot status record set, and the identity record
-        // with the full seven-descriptor table.
+        // with the full eight-descriptor table.
         assert_eq!(family_limit_bytes(PullFamily::World), 4_325_408);
         assert_eq!(family_limit_bytes(PullFamily::Frame), 576);
         assert_eq!(family_limit_bytes(PullFamily::Status), 80);
-        assert_eq!(family_limit_bytes(PullFamily::Identity), 192);
+        assert_eq!(family_limit_bytes(PullFamily::Identity), 216);
 
         // The body record sizes are producer-side wire vocabulary (the
         // frozen header owns only the headers and counts), so this pin
@@ -644,15 +661,15 @@ mod tests {
         let mut buffer = PullBuffer::default();
 
         // A first pull grows the empty backing to exactly the declared
-        // requirement (word granularity: 192 needs no padding).
-        let record = vec![5u8; 192];
+        // requirement (word granularity: 216 needs no padding).
+        let record = vec![5u8; 216];
         script_record(&core, &record);
         assert_eq!(
             drive(&core, PullFamily::Identity, &mut buffer),
             Ok(record.clone())
         );
         assert_eq!(buffer.grow_events(), 1);
-        assert_eq!(buffer.capacity_bytes(), 192);
+        assert_eq!(buffer.capacity_bytes(), 216);
 
         // A smaller record reuses the same backing without shrinking it and
         // without a second growth event.
@@ -660,7 +677,7 @@ mod tests {
         script_record(&core, &small);
         assert_eq!(drive(&core, PullFamily::Identity, &mut buffer), Ok(small));
         assert_eq!(buffer.grow_events(), 1);
-        assert_eq!(buffer.capacity_bytes(), 192);
+        assert_eq!(buffer.capacity_bytes(), 216);
 
         // A larger record grows to the new requirement exactly. The padded
         // size (380 bytes) is deliberately not word-aligned so the capacity
@@ -685,7 +702,7 @@ mod tests {
             (PullFamily::World, 4_325_408),
             (PullFamily::Frame, 576),
             (PullFamily::Status, 80),
-            (PullFamily::Identity, 192),
+            (PullFamily::Identity, 216),
         ] {
             let mut buffer = PullBuffer::default();
             core.script(
@@ -977,9 +994,10 @@ mod tests {
         // Repeated same-size records across three families allocate each
         // backing exactly once: the growth count stays at one per family and
         // every exact write lands at the same backing address.
-        let identity_record = vec![3u8; 192];
+        let identity_record = vec![3u8; 216];
         let status_record = vec![4u8; 80];
         let frame_record = test_frame_record(1, 1);
+        let environment_record = vec![5u8; 48];
         for _ in 0..4 {
             script_record(&core, &identity_record);
             assert_eq!(
@@ -1008,6 +1026,15 @@ mod tests {
                 ),
                 Ok(frame_record.clone())
             );
+            script_record(&core, &environment_record);
+            assert_eq!(
+                drive(
+                    &core,
+                    PullFamily::Environment,
+                    buffers.for_family(PullFamily::Environment)
+                ),
+                Ok(environment_record.clone())
+            );
         }
 
         let views = core.view_facts();
@@ -1016,10 +1043,10 @@ mod tests {
             .copied()
             .filter(|(_, length)| *length > 0)
             .collect();
-        assert_eq!(writes.len(), 12);
-        // The three families interleave, so group the write views by span:
+        assert_eq!(writes.len(), 16);
+        // The four pull families interleave, so group the write views by span:
         // every span of one family shares a single stable backing address.
-        for family_length in [192usize, 80, 176] {
+        for family_length in [216usize, 80, 176, 48] {
             let family_writes: Vec<(usize, usize)> = writes
                 .iter()
                 .copied()

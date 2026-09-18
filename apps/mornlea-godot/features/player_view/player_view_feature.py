@@ -88,3 +88,14 @@ class player_view_feature(Node):
             if isinstance(failure, str) and failure:
                 return failure
         return ""
+
+    def apply_typed_frame(self, typed: _DictionaryView) -> str:
+        """Fan one host-sampled frame to both view components."""
+        if self._camera is None or self._target is None:
+            return "player-view components are missing"
+        camera_failure = self._camera.call("apply_typed_frame", typed)
+        target_failure = self._target.call("apply_typed_frame", typed)
+        for failure in (camera_failure, target_failure):
+            if isinstance(failure, str) and failure:
+                return failure
+        return ""

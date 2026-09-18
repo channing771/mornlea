@@ -101,28 +101,16 @@ class world_feature(Node):
 
     _services: Node | None
     _terrain_near: Node | None
+    _environment: Node | None
     _epoch: int
     _active: bool
 
     def _ready(self) -> None:
         self._services = None
         self._terrain_near = None
+        self._environment = self.get_node_or_null("Environment")
         self._epoch = 0
         self._active = False
-
-    def _process(self, _delta: float) -> None:
-        # The bounded per-frame surface: exactly two typed bridge calls,
-        # world ingestion and one terrain frame drive. Without an attached
-        # renderer or a live producer session both answer the decodable
-        # invalid-state word inside the bridge, so the offline frame stays
-        # offline-honest (no terrain without a session) at zero Python cost.
-        if not self._active:
-            return
-        bridge = self._services
-        if bridge is None:
-            return
-        bridge.call("terrain_ingest_world")
-        bridge.call("terrain_frame")
 
     def validate_feature(self, feature_id: str) -> str:
         return "" if feature_id == "world" else "unexpected world feature ID"
@@ -140,10 +128,16 @@ class world_feature(Node):
         terrain_near = self.get_node_or_null("TerrainNear")
         if terrain_near is None:
             return "the near-field terrain compartment is missing"
+        if self._environment is None:
+            return "the environment presentation compartment is missing"
+        environment = self._environment
         failure = _configuration_failure(terrain_near)
         if failure:
             return failure
         self._services = services
+        environment_failure = environment.call("bind_host", services_path)
+        if isinstance(environment_failure, str) and environment_failure:
+            return environment_failure
         self._terrain_near = terrain_near
         return ""
 
@@ -167,6 +161,12 @@ class world_feature(Node):
             return f"the native terrain renderer could not attach (status {status}){suffix}"
         self._epoch = epoch
         self._active = True
+        environment = self._environment
+        if environment is not None:
+            failure = environment.call("activate_feature", epoch)
+            if isinstance(failure, str) and failure:
+                self._active = False
+                return failure
         return ""
 
     def reset_feature(self, epoch: int) -> None:
@@ -174,12 +174,31 @@ class world_feature(Node):
         # by the native renderer and rides the producer-session close, and
         # this feature holds no observation to refresh.
         self._epoch = epoch
+        if self._environment is not None:
+            self._environment.call("reset_feature", epoch)
 
     def deactivate_feature(self) -> None:
         self._active = False
         self._services = None
         self._terrain_near = None
+        if self._environment is not None:
+            self._environment.call("deactivate_feature")
+        self._environment = None
         self._epoch = 0
+
+    def drive_world(self) -> str:
+        """Run bounded terrain ingestion before the host samples one frame."""
+        if not self._active or self._services is None:
+            return ""
+        self._services.call("terrain_ingest_world")
+        self._services.call("terrain_frame")
+        return ""
+
+    def apply_typed_frame(self, frame: _DictionaryView) -> str:
+        if self._environment is None:
+            return "the environment presentation compartment is missing"
+        result = self._environment.call("apply_typed_frame", frame)
+        return result if isinstance(result, str) else "the environment apply result is invalid"
 
 
 def _node_path_text(node: Node) -> str:

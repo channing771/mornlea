@@ -35,6 +35,7 @@ register_cast_function("MornleaClientBridge", lambda bridge: bridge)
 # words the display distinguishes are named; every other status observed
 # while a session should be live fails closed to the internal error display.
 STATUS_OK = 0
+STATUS_INVALID_STATE = 6
 STATUS_DISCONNECTED = 7
 
 # Connection phase words: the identity cast of the presentation session
@@ -105,12 +106,6 @@ class session_feature(Control):
         # The initial display is honestly not-ready: without a requested
         # address there is no confirmed connection state to show.
         self._set_display(PHASE_DISPLAY[0], "")
-
-    def _process(self, _delta: float) -> None:
-        # One bounded observation per frame: a poll is O(1) and the typed
-        # status view runs at most once, at the terminal transition. With no
-        # open session the frame does no work at all.
-        self.refresh()
 
     def validate_feature(self, feature_id: str) -> str:
         return "" if feature_id == "session" else "unexpected session feature ID"
@@ -186,6 +181,20 @@ class session_feature(Control):
             self._set_display(PHASE_DISPLAY[PHASE_DISCONNECTED], "")
         else:
             self._set_display(PHASE_DISPLAY[PHASE_DISCONNECTED], INTERNAL_ERROR_TEXT)
+
+    def drive_session(self, elapsed_ns: int, message_budget: int, mesh_budget: int) -> int:
+        """Advance the owned session for the host's single bounded step."""
+        bridge = self._bridge
+        if bridge is None or not self._session_open or self._terminal_latched:
+            return STATUS_INVALID_STATE
+        return _word_of(bridge.call("session_step", elapsed_ns, message_budget, mesh_budget))
+
+    def pull_typed_frame(self) -> object:
+        """Return the one typed frame selected by the host fan-out pass."""
+        bridge = self._bridge
+        if bridge is None or not self._session_open or self._terminal_latched:
+            return None
+        return bridge.call("session_frame_typed")
 
     def refresh(self) -> None:
         """Observe the bridge once and map the confirmed state to the display."""

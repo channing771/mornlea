@@ -1,4 +1,6 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://features/player_view/target_feedback/target_feedback.py" id="1_script"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_outline"]
 size = Vector3(1.002, 1.002, 1.002)
@@ -17,6 +19,7 @@ no_depth_test = false
 depth_draw_mode = 2
 
 [node name="TargetFeedback" type="Node"]
+script = ExtResource("1_script")
 
 [node name="Outline" type="MeshInstance3D" parent="."]
 mesh = SubResource("BoxMesh_outline")

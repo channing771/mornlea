@@ -227,9 +227,9 @@ func TestMatrixCreateErrorPrecedence(t *testing.T) {
 		},
 		{
 			name:    "missing required family outranks the null out handle",
-			defects: "six of seven required families + null out handle",
+			defects: "seven of eight required families + null out handle",
 			invoke: func(t *testing.T) Status {
-				words := pilotRequestWords()[:6]
+				words := pilotRequestWords()[:7]
 				return coreCreate(ABIMajor, ABIMinor, requestWordsPointer(words), uint32(len(words)), nil)
 			},
 			recovery: liveProbe,

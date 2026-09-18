@@ -1,0 +1,16 @@
+[gd_resource type="Resource" format=3]
+
+[resource]
+resource_name = "menus"
+metadata/feature_id = "menus"
+metadata/host_protocol_major = 1
+metadata/host_protocol_minor = 0
+metadata/contract_version = "1.0"
+metadata/enabled = false
+metadata/implementation_status = "reserved"
+metadata/entry_scene_path = ""
+metadata/dependencies = PackedStringArray()
+metadata/required_bridge_families = PackedStringArray("3@1.0", "6@1.0", "7@1.0")
+metadata/required = false
+metadata/budget_class = "standard"
+metadata/reset_policy = "reset"

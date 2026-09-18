@@ -26,7 +26,7 @@ pub const ABI_MAJOR: u32 = 1;
 /// Client-core ABI minor version. Compatible additions (new families, new
 /// records, skippable fields) raise this value together with the affected
 /// family version.
-pub const ABI_MINOR: u32 = 0;
+pub const ABI_MINOR: u32 = 1;
 
 /// Success. No other status writes any output byte, except reporting the
 /// required size for the two-phase capacity signal.
@@ -92,6 +92,10 @@ pub const MAGIC_FRAME: u32 = 0x3146434D;
 /// Magic tag of the status/metrics family; wire bytes read "MCM1".
 pub const MAGIC_STATUS: u32 = 0x314D434D;
 
+/// Magic tag of the additive environment projection family; wire bytes read
+/// "MCE1" and its payload is tied to a retained frame revision/epoch.
+pub const MAGIC_ENVIRONMENT: u32 = 0x3145434D;
+
 /// Byte alignment of every record buffer and size granularity of every fixed
 /// header, so concatenated header-plus-payload sequences stay aligned.
 pub const ABI_ALIGNMENT: usize = 8;
@@ -118,7 +122,13 @@ pub const FAMILY_FRAME: u32 = 6;
 pub const FAMILY_STATUS: u32 = 7;
 
 /// Number of feature families defined by the pilot contract.
-pub const FAMILY_COUNT: u32 = 7;
+pub const FAMILY_COUNT: u32 = 8;
+/// Stable identifier of the additive environment projection family.
+pub const FAMILY_ENVIRONMENT: u32 = 8;
+/// Contract version of the environment projection family.
+pub const ENVIRONMENT_VERSION: u32 = 1;
+/// Fixed byte size of one environment projection record.
+pub const ENVIRONMENT_BYTES: usize = 48;
 
 /// Contract version of the identity/lifecycle family.
 pub const IDENTITY_VERSION: u32 = 1;
@@ -310,11 +320,12 @@ pub struct StatusHeader {
 mod tests {
     use super::{
         ABI_ALIGNMENT, ABI_MAJOR, ABI_MINOR, CONNECTION_HEADER_BYTES, CONNECTION_VERSION,
-        ConnectionHeader, FAMILY_CONNECTION, FAMILY_COUNT, FAMILY_DESCRIPTOR_BYTES, FAMILY_FRAME,
-        FAMILY_IDENTITY, FAMILY_INPUT, FAMILY_STATUS, FAMILY_STEP, FAMILY_WORLD,
-        FRAME_HEADER_BYTES, FRAME_SNAPSHOT_VERSION, FRAME_VERSION, FamilyDescriptor, FrameHeader,
-        IDENTITY_HEADER_BYTES, IDENTITY_VERSION, INPUT_HEADER_BYTES, INPUT_VERSION, IdentityHeader,
-        InputHeader, MAGIC_CONNECTION, MAGIC_FRAME, MAGIC_GENERATION, MAGIC_IDENTITY, MAGIC_INPUT,
+        ConnectionHeader, ENVIRONMENT_BYTES, ENVIRONMENT_VERSION, FAMILY_CONNECTION, FAMILY_COUNT,
+        FAMILY_DESCRIPTOR_BYTES, FAMILY_ENVIRONMENT, FAMILY_FRAME, FAMILY_IDENTITY, FAMILY_INPUT,
+        FAMILY_STATUS, FAMILY_STEP, FAMILY_WORLD, FRAME_HEADER_BYTES, FRAME_SNAPSHOT_VERSION,
+        FRAME_VERSION, FamilyDescriptor, FrameHeader, IDENTITY_HEADER_BYTES, IDENTITY_VERSION,
+        INPUT_HEADER_BYTES, INPUT_VERSION, IdentityHeader, InputHeader, MAGIC_CONNECTION,
+        MAGIC_ENVIRONMENT, MAGIC_FRAME, MAGIC_GENERATION, MAGIC_IDENTITY, MAGIC_INPUT,
         MAGIC_STATUS, MAGIC_STEP, MAGIC_TAG_PREFIX, MAGIC_WORLD, MAX_CONNECTION_ADDRESS_BYTES,
         MAX_ENTITY_RECORDS, MAX_INPUT_EVENTS, MAX_SECTION_MESH_QUADS, MAX_STATUS_RECORDS,
         MAX_STEP_MESH_BUDGET, MAX_STEP_MESSAGE_BUDGET, MAX_TARGET_NAME_BYTES,
@@ -411,6 +422,7 @@ mod tests {
             ("MORNLEA_CLIENT_MAGIC_WORLD", MAGIC_WORLD),
             ("MORNLEA_CLIENT_MAGIC_FRAME", MAGIC_FRAME),
             ("MORNLEA_CLIENT_MAGIC_STATUS", MAGIC_STATUS),
+            ("MORNLEA_CLIENT_MAGIC_ENVIRONMENT", MAGIC_ENVIRONMENT),
             ("MORNLEA_CLIENT_ABI_ALIGNMENT", ABI_ALIGNMENT as u32),
             ("MORNLEA_CLIENT_FAMILY_IDENTITY", FAMILY_IDENTITY),
             ("MORNLEA_CLIENT_FAMILY_CONNECTION", FAMILY_CONNECTION),
@@ -419,6 +431,7 @@ mod tests {
             ("MORNLEA_CLIENT_FAMILY_WORLD", FAMILY_WORLD),
             ("MORNLEA_CLIENT_FAMILY_FRAME", FAMILY_FRAME),
             ("MORNLEA_CLIENT_FAMILY_STATUS", FAMILY_STATUS),
+            ("MORNLEA_CLIENT_FAMILY_ENVIRONMENT", FAMILY_ENVIRONMENT),
             ("MORNLEA_CLIENT_FAMILY_COUNT", FAMILY_COUNT),
             ("MORNLEA_CLIENT_IDENTITY_VERSION", IDENTITY_VERSION),
             ("MORNLEA_CLIENT_CONNECTION_VERSION", CONNECTION_VERSION),
@@ -427,6 +440,8 @@ mod tests {
             ("MORNLEA_CLIENT_WORLD_VERSION", WORLD_VERSION),
             ("MORNLEA_CLIENT_FRAME_VERSION", FRAME_VERSION),
             ("MORNLEA_CLIENT_STATUS_VERSION", STATUS_VERSION),
+            ("MORNLEA_CLIENT_ENVIRONMENT_VERSION", ENVIRONMENT_VERSION),
+            ("MORNLEA_CLIENT_ENVIRONMENT_BYTES", ENVIRONMENT_BYTES as u32),
             ("MORNLEA_CLIENT_MAX_INPUT_EVENTS", MAX_INPUT_EVENTS),
             (
                 "MORNLEA_CLIENT_MAX_CONNECTION_ADDRESS_BYTES",
@@ -515,7 +530,7 @@ mod tests {
 
     #[test]
     fn abi_identity_pins_major_minor_status_order_and_families() {
-        assert_eq!((ABI_MAJOR, ABI_MINOR), (1, 0));
+        assert_eq!((ABI_MAJOR, ABI_MINOR), (1, 1));
         let statuses = [
             STATUS_OK,
             STATUS_INVALID_ARGUMENT,
@@ -541,6 +556,7 @@ mod tests {
             FAMILY_WORLD,
             FAMILY_FRAME,
             FAMILY_STATUS,
+            FAMILY_ENVIRONMENT,
         ];
         for (index, family) in families.iter().enumerate() {
             assert_eq!(*family, index as u32 + 1, "family {index}");
@@ -556,6 +572,7 @@ mod tests {
             WORLD_VERSION,
             FRAME_VERSION,
             STATUS_VERSION,
+            ENVIRONMENT_VERSION,
         ];
         assert!(versions.iter().all(|version| *version == 1));
     }

@@ -33,10 +33,6 @@ class actors_feature(Node):
         self._epoch = 0
         self._active = False
 
-    def _process(self, _delta: float) -> None:
-        if self._active:
-            self.apply_frame()
-
     def validate_feature(self, feature_id: str) -> str:
         return "" if feature_id == "actors" else "unexpected actors feature ID"
 
@@ -83,5 +79,12 @@ class actors_feature(Node):
         typed = self._services.call("session_frame_typed")
         if not isinstance(typed, _DictionaryView):
             return "the typed entity frame answer is not a dictionary"
+        failure = self._remote_players.call("apply_typed_frame", typed)
+        return failure if isinstance(failure, str) else "the remote-player apply result is invalid"
+
+    def apply_typed_frame(self, typed: _DictionaryView) -> str:
+        """Apply the immutable entity view sampled by the host driver."""
+        if self._remote_players is None:
+            return "the remote-player presentation pool is missing"
         failure = self._remote_players.call("apply_typed_frame", typed)
         return failure if isinstance(failure, str) else "the remote-player apply result is invalid"

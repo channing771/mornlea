@@ -32,6 +32,20 @@ pub(crate) struct TypedFrame {
     pub(crate) aspect: f32,
     pub(crate) near: f32,
     pub(crate) far: f32,
+    pub(crate) hud_ready: bool,
+    pub(crate) health: u32,
+    pub(crate) hunger: u32,
+    pub(crate) oxygen: u32,
+    pub(crate) environment_ready: bool,
+    pub(crate) environment_server_tick: u64,
+    pub(crate) world_time_ticks: u64,
+    pub(crate) day_phase_offset: u32,
+    pub(crate) weather: u32,
+    pub(crate) season: u32,
+    pub(crate) season_progress: u32,
+    pub(crate) temperature: i32,
+    pub(crate) daylight: f32,
+    pub(crate) sky_color: [f32; 3],
     pub(crate) entity_server_tick: u64,
     pub(crate) entities: Vec<TypedEntity>,
     pub(crate) target_visible: bool,
@@ -149,7 +163,45 @@ pub(crate) fn decode_frame_record(record: &[u8]) -> Result<TypedFrame, u32> {
         return Err(abi::STATUS_INTERNAL);
     }
 
-    let entity_tick = camera + CAMERA_BYTES + HUD_BYTES + ENVIRONMENT_BYTES;
+    let hud = camera + CAMERA_BYTES;
+    let hud_ready = ready_word(record, hud)?;
+    let health = le32(record, hud + 4);
+    let hunger = le32(record, hud + 8);
+    let oxygen = le32(record, hud + 12);
+    if health > 20
+        || hunger > 20
+        || oxygen > 300
+        || (!hud_ready && (health != 0 || hunger != 0 || oxygen != 0))
+    {
+        return Err(abi::STATUS_INTERNAL);
+    }
+    let environment = hud + HUD_BYTES;
+    let environment_ready = ready_word(record, environment)?;
+    let environment_server_tick = le64(record, environment + 8);
+    let world_time_ticks = le64(record, environment + 16);
+    let day_phase_offset = le32(record, environment + 24);
+    let weather = le32(record, environment + 28);
+    let season = le32(record, environment + 32);
+    let season_progress = le32(record, environment + 36);
+    let temperature = le32(record, environment + 40) as i32;
+    // Reject the complete observation before any resource mutation, including
+    // data hidden behind readiness and both reserved words.
+    if le32(record, environment + 4) != 0
+        || le32(record, environment + 44) != 0
+        || (!environment_ready
+            && record[environment + 4..environment + ENVIRONMENT_BYTES]
+                .iter()
+                .any(|byte| *byte != 0))
+        || day_phase_offset >= 24000
+        || weather > 2
+        || season > 3
+        || season_progress > 255
+        || !(-40..=45).contains(&temperature)
+    {
+        return Err(abi::STATUS_INTERNAL);
+    }
+
+    let entity_tick = environment + ENVIRONMENT_BYTES;
     let entity_server_tick = le64(record, entity_tick);
     let entity_start = entity_tick + ENTITY_TICK_BYTES;
     let mut entities = Vec::with_capacity(entity_count);
@@ -237,6 +289,20 @@ pub(crate) fn decode_frame_record(record: &[u8]) -> Result<TypedFrame, u32> {
         aspect,
         near,
         far,
+        hud_ready,
+        health,
+        hunger,
+        oxygen,
+        environment_ready,
+        environment_server_tick,
+        world_time_ticks,
+        day_phase_offset,
+        weather,
+        season,
+        season_progress,
+        temperature,
+        daylight: 0.0,
+        sky_color: [0.0; 3],
         entity_server_tick,
         entities,
         target_visible,
@@ -245,6 +311,40 @@ pub(crate) fn decode_frame_record(record: &[u8]) -> Result<TypedFrame, u32> {
         phase,
         error,
     })
+}
+
+/// Join only matching immutable observations; a concurrent step must never
+/// combine new lighting with an older camera or HUD publication.
+pub(crate) fn apply_environment_projection(
+    frame: &mut TypedFrame,
+    record: &[u8],
+) -> Result<(), u32> {
+    if record.len() != abi::ENVIRONMENT_BYTES
+        || le32(record, 0) != abi::MAGIC_ENVIRONMENT
+        || le32(record, 4) != abi::ENVIRONMENT_VERSION
+        || le32(record, 12) != 0
+        || le64(record, 16) != frame.revision
+        || le64(record, 24) != frame.epoch
+        || ready_word(record, 8)? != frame.environment_ready
+    {
+        return Err(abi::STATUS_INTERNAL);
+    }
+    let values = [
+        float(record, 32)?,
+        float(record, 36)?,
+        float(record, 40)?,
+        float(record, 44)?,
+    ];
+    if values
+        .iter()
+        .any(|value| !value.is_finite() || !(0.0..=1.0).contains(value))
+        || (!frame.environment_ready && values != [0.0; 4])
+    {
+        return Err(abi::STATUS_INTERNAL);
+    }
+    frame.daylight = values[0];
+    frame.sky_color.copy_from_slice(&values[1..]);
+    Ok(())
 }
 
 fn ready_word(record: &[u8], offset: usize) -> Result<bool, u32> {
@@ -280,6 +380,30 @@ mod tests {
     use super::decode_frame_record;
     use crate::abi;
     use crate::pull_buffers::test_frame_record;
+
+    #[test]
+    fn frame_decode_rejects_unconfirmed_hud_and_environment_payloads() {
+        let fixed = abi::FRAME_HEADER_BYTES + 40 + 16 + 48 + 8 + 16 + 8;
+        let mut valid = vec![0u8; fixed];
+        valid[0..4].copy_from_slice(&abi::MAGIC_FRAME.to_le_bytes());
+        valid[4..8].copy_from_slice(&abi::FRAME_VERSION.to_le_bytes());
+        valid[8..12].copy_from_slice(&abi::FRAME_SNAPSHOT_VERSION.to_le_bytes());
+        assert!(decode_frame_record(&valid).is_ok());
+        for offset in [
+            80, 84, 88, 92, 96, 100, 104, 112, 120, 124, 128, 132, 136, 140,
+        ] {
+            let mut bad = valid.clone();
+            bad[offset..offset + 4].copy_from_slice(&99999u32.to_le_bytes());
+            assert!(decode_frame_record(&bad).is_err(), "offset {offset}");
+        }
+        let hud = 80;
+        valid[hud..hud + 4].copy_from_slice(&1u32.to_le_bytes());
+        valid[hud + 4..hud + 8].copy_from_slice(&20u32.to_le_bytes());
+        valid[hud + 12..hud + 16].copy_from_slice(&300u32.to_le_bytes());
+        assert!(decode_frame_record(&valid).is_ok());
+        valid[hud + 12..hud + 16].copy_from_slice(&301u32.to_le_bytes());
+        assert!(decode_frame_record(&valid).is_err());
+    }
 
     #[test]
     fn frame_decode_rejects_the_existing_zero_fixture_until_ready_fields_are_valid() {

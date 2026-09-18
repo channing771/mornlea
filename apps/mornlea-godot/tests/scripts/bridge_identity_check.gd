@@ -15,7 +15,7 @@ func _run() -> void:
 		_finish()
 		return
 	_expect(_identity("client_core_abi_major") == 1, "unexpected client-core ABI major")
-	_expect(_identity("client_core_abi_minor") == 0, "unexpected client-core ABI minor")
+	_expect(_identity("client_core_abi_minor") == 1, "unexpected client-core ABI minor")
 	_expect(_identity("godot_api_major") == 4, "unexpected Godot API major")
 	_expect(_identity("godot_api_minor") == 7, "unexpected Godot API minor")
 	_expect(_identity("godot_rust_version") == "0.5.5", "unexpected godot-rust version")

@@ -13,6 +13,23 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 
+class String:
+    """Model the exact Py4Godot core string wrapper seen in typed dictionaries."""
+
+    __module__ = "py4godot.classes.core"
+
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+    def __str__(self) -> str:
+        return self.value
+
+
+class InvalidString:
+    def __str__(self) -> str:
+        return "not-a-player-id"
+
+
 class FakeSlot:
     def __init__(self) -> None:
         self.calls: list[tuple[str, object]] = []
@@ -69,11 +86,12 @@ class RemotePlayerFeatureTests(unittest.TestCase):
 
     def test_spawn_state_despawn_and_callback_budget(self):
         feature = self.make_feature()
-        self.assertEqual(feature.apply_typed_frame(frame([entity(1)])), "")
+        wrapped = entity(1)
+        wrapped["player_id"] = String(str(wrapped["player_id"]))
+        self.assertEqual(feature.apply_typed_frame(frame([wrapped])), "")
         slot = feature._slots[0]
         self.assertEqual(slot.meta["mornlea_player_id"], entity(1)["player_id"])
         self.assertIn(("set_visible", True), slot.calls)
-
         self.assertEqual(
             feature.apply_typed_frame(
                 frame([entity(1, 3.0)], revision=2, server_tick=2)
@@ -85,6 +103,11 @@ class RemotePlayerFeatureTests(unittest.TestCase):
         )
         self.assertIn(("set_visible", False), slot.calls)
         self.assertLessEqual(feature.last_callback_units(), module.MAX_REMOTE_PLAYERS)
+
+    def test_player_id_wrapper_is_normalized_only_after_uuid_validation(self):
+        wrapped = String("00000001-0000-4000-8000-000000000000")
+        self.assertEqual(module._canonical_player_id(wrapped), str(wrapped))
+        self.assertIsNone(module._canonical_player_id(InvalidString()))
 
     def test_duplicate_out_of_order_and_capacity_are_atomic(self):
         feature = self.make_feature()

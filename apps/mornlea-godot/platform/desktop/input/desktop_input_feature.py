@@ -48,6 +48,7 @@ class desktop_input_feature(Node):
     _focused: bool
     _yaw: float
     _pitch: float
+    _intent: tuple[int, int, bool, bool, bool, bool, bool, float, float]
     _mouse_baseline: tuple[float, float] | None
     _f5_down: bool
     _escape_down: bool
@@ -59,6 +60,7 @@ class desktop_input_feature(Node):
         self._focused = True
         self._yaw = 0.0
         self._pitch = 0.0
+        self._intent = (0, 0, False, False, False, False, False, 0.0, 0.0)
         self._mouse_baseline = None
         self._f5_down = False
         self._escape_down = False
@@ -68,9 +70,15 @@ class desktop_input_feature(Node):
             "" if feature_id == "platform.desktop.input" else "unexpected desktop-input feature ID"
         )
 
-    def bind_host(self, services: Node) -> str:
-        if not services.has_method("host_protocol_version"):
-            return "host protocol identity is missing"
+    def bind_host(self, services_path: str) -> str:
+        services = self.get_node_or_null(services_path)
+        if services is None:
+            return "typed bridge service node is missing"
+        # Production features bind the native bridge identity table. The
+        # retired Python facade's host-protocol method is not a valid runtime
+        # dependency for the input-to-session ownership path.
+        if not services.has_method("feature_families_json"):
+            return "typed bridge family identity is missing"
         self._services = services
         return ""
 
@@ -121,7 +129,8 @@ class desktop_input_feature(Node):
         self._mouse_baseline = None
 
     def neutral_input(self) -> int:
-        return self._submit(0, 0, False, False, False, False, False, 0.0, 0.0)
+        self._intent = (0, 0, False, False, False, False, False, 0.0, 0.0)
+        return self._submit(*self._intent)
 
     def collect_input(self, source: Any) -> int:
         if not self._focused:
@@ -143,7 +152,7 @@ class desktop_input_feature(Node):
             dx = dy = 0.0
         self._yaw = _finite(self._yaw + float(dx))
         self._pitch = max(-1.5707964, min(1.5707964, _finite(self._pitch + float(dy))))
-        return self._submit(
+        return self.submit_semantic_intent(
             move_x,
             move_z,
             bool(source.is_action_pressed("jump")),
@@ -154,6 +163,38 @@ class desktop_input_feature(Node):
             self._yaw,
             self._pitch,
         )
+
+    def drive_input(self) -> int:
+        """Submit the current bounded semantic intent before the host step."""
+        if not self._focused:
+            return self.neutral_input()
+        return self._submit(*self._intent)
+
+    def submit_semantic_intent(
+        self,
+        move_x: int,
+        move_z: int,
+        jump: bool,
+        mining: bool,
+        eating: bool,
+        sprinting: bool,
+        sneaking: bool,
+        yaw: float,
+        pitch: float,
+    ) -> int:
+        """Store and submit primitive intent so test drivers can drive input."""
+        self._intent = (
+            int(move_x),
+            int(move_z),
+            bool(jump),
+            bool(mining),
+            bool(eating),
+            bool(sprinting),
+            bool(sneaking),
+            _finite(float(yaw)),
+            max(-1.5707964, min(1.5707964, _finite(float(pitch)))),
+        )
+        return self._submit(*self._intent)
 
     def _submit(
         self,

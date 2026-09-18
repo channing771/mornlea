@@ -143,7 +143,7 @@ const _: () = assert!(size_of::<ClientHandle>() == 8 && align_of::<ClientHandle>
 /// directives of `exports.go` and the declarations of the extern block in
 /// this file, in both directions, so no side can gain or reorder an export
 /// silently.
-pub const EXPORT_SYMBOLS: [&str; 12] = [
+pub const EXPORT_SYMBOLS: [&str; 13] = [
     "mornlea_client_core_create",
     "mornlea_client_core_destroy",
     "mornlea_client_core_connect_begin",
@@ -153,6 +153,7 @@ pub const EXPORT_SYMBOLS: [&str; 12] = [
     "mornlea_client_core_step",
     "mornlea_client_core_world_pull",
     "mornlea_client_core_frame_pull",
+    "mornlea_client_core_environment_pull",
     "mornlea_client_core_status_pull",
     "mornlea_client_core_status_identity",
     "mornlea_client_core_abi_version",
@@ -238,6 +239,15 @@ unsafe extern "C" {
     /// the same pointer discipline as the world pull; the pull is
     /// non-consuming and serves the retained per-step frame snapshot.
     fn mornlea_client_core_frame_pull(
+        handle: ClientHandle,
+        out: *mut u8,
+        capacity: u32,
+        required_out: *mut u32,
+    ) -> Status;
+
+    /// Same aligned, non-overlapping, two-phase discipline as frame pulls.
+    /// This additive family never mutates or consumes the retained frame.
+    fn mornlea_client_core_environment_pull(
         handle: ClientHandle,
         out: *mut u8,
         capacity: u32,
@@ -331,6 +341,8 @@ pub(crate) enum PullOutcome {
 /// The four pull families of the producer surface.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PullFamily {
+    /// Confirmed Go-derived lighting tied to the retained frame identity.
+    Environment,
     /// Consuming drain of the retained world batch.
     World,
     /// Non-consuming per-step frame snapshot.
@@ -349,6 +361,7 @@ impl PullFamily {
         buffer: &mut [u8],
     ) -> PullOutcome {
         match self {
+            Self::Environment => calls.environment_pull(handle, buffer),
             Self::World => calls.world_pull(handle, buffer),
             Self::Frame => calls.frame_pull(handle, buffer),
             Self::Status => calls.status_pull(handle, buffer),
@@ -365,6 +378,10 @@ impl PullFamily {
 /// data and returns raw status words (`u32`) so undefined producer words
 /// surface unchanged instead of panicking a classification.
 pub(crate) trait CoreCalls {
+    /// Added environment projection; old scripted cores fail closed by default.
+    fn environment_pull(&self, _handle: ClientHandle, _buffer: &mut [u8]) -> PullOutcome {
+        PullOutcome::Status(abi::STATUS_INVALID_STATE)
+    }
     /// The producer's packed ABI version (`major << 32 | minor`), or `None`
     /// when this table cannot reach a producer at all.
     fn abi_version(&self) -> Option<u64>;
@@ -543,6 +560,7 @@ struct ProducerVTable {
     step: unsafe extern "C" fn(ClientHandle, *const u8, u32) -> Status,
     world_pull: unsafe extern "C" fn(ClientHandle, *mut u8, u32, *mut u32) -> Status,
     frame_pull: unsafe extern "C" fn(ClientHandle, *mut u8, u32, *mut u32) -> Status,
+    environment_pull: unsafe extern "C" fn(ClientHandle, *mut u8, u32, *mut u32) -> Status,
     status_pull: unsafe extern "C" fn(ClientHandle, *mut u8, u32, *mut u32) -> Status,
     status_identity: unsafe extern "C" fn(ClientHandle, *mut u8, u32, *mut u32) -> Status,
     abi_version: unsafe extern "C" fn() -> u64,
@@ -667,6 +685,7 @@ fn load_producer_table() -> ProducerTable {
         step: symbol!("mornlea_client_core_step"),
         world_pull: symbol!("mornlea_client_core_world_pull"),
         frame_pull: symbol!("mornlea_client_core_frame_pull"),
+        environment_pull: symbol!("mornlea_client_core_environment_pull"),
         status_pull: symbol!("mornlea_client_core_status_pull"),
         status_identity: symbol!("mornlea_client_core_status_identity"),
         abi_version: symbol!("mornlea_client_core_abi_version"),
@@ -841,6 +860,17 @@ impl CoreCalls for ProducerCore {
             // Safety: see `world_pull`.
             |core, out, capacity, required| unsafe {
                 (core.vtable.frame_pull)(handle, out, capacity, required)
+            },
+            buffer,
+        )
+    }
+
+    fn environment_pull(&self, handle: ClientHandle, buffer: &mut [u8]) -> PullOutcome {
+        self.pull_via(
+            // Safety: `pull_via` owns valid aligned buffers and the size word
+            // for this synchronous call, including null for capacity queries.
+            |core, out, capacity, required| unsafe {
+                (core.vtable.environment_pull)(handle, out, capacity, required)
             },
             buffer,
         )
@@ -1328,7 +1358,7 @@ mod tests {
     /// producer file holds the signature truth; its line numbers appear in
     /// the module's per-export documentation). Any argument type, argument
     /// order, or return-type drift fails this pin.
-    const PINNED_DECLARATIONS: [&str; 12] = [
+    const PINNED_DECLARATIONS: [&str; 13] = [
         "fn mornlea_client_core_create(abi_major: u32, abi_minor: u32, requested_families: \
          *const u64, family_count: u32, out_handle: *mut ClientHandle) -> Status",
         "fn mornlea_client_core_destroy(handle: ClientHandle) -> Status",
@@ -1344,6 +1374,8 @@ mod tests {
          required_out: *mut u32) -> Status",
         "fn mornlea_client_core_frame_pull(handle: ClientHandle, out: *mut u8, capacity: u32, \
          required_out: *mut u32) -> Status",
+        "fn mornlea_client_core_environment_pull(handle: ClientHandle, out: *mut u8, capacity: \
+         u32, required_out: *mut u32) -> Status",
         "fn mornlea_client_core_status_pull(handle: ClientHandle, out: *mut u8, capacity: u32, \
          required_out: *mut u32) -> Status",
         "fn mornlea_client_core_status_identity(handle: ClientHandle, out: *mut u8, capacity: \
@@ -1363,7 +1395,7 @@ mod tests {
     /// The producer vtable field for each export symbol, in
     /// [`EXPORT_SYMBOLS`] order; the signature pin derives each field's
     /// expected type from the matching pinned declaration.
-    const VTABLE_FIELD_SYMBOLS: [(&str, &str); 12] = [
+    const VTABLE_FIELD_SYMBOLS: [(&str, &str); 13] = [
         ("create", "mornlea_client_core_create"),
         ("destroy", "mornlea_client_core_destroy"),
         ("connect_begin", "mornlea_client_core_connect_begin"),
@@ -1373,6 +1405,7 @@ mod tests {
         ("step", "mornlea_client_core_step"),
         ("world_pull", "mornlea_client_core_world_pull"),
         ("frame_pull", "mornlea_client_core_frame_pull"),
+        ("environment_pull", "mornlea_client_core_environment_pull"),
         ("status_pull", "mornlea_client_core_status_pull"),
         ("status_identity", "mornlea_client_core_status_identity"),
         ("abi_version", "mornlea_client_core_abi_version"),
@@ -1384,7 +1417,7 @@ mod tests {
         // Both directions and in order: a renamed, added, dropped, or
         // reordered producer export fails until this mirror is consciously
         // re-pinned with the same review as the header change.
-        assert_eq!(EXPORT_SYMBOLS.len(), 12);
+        assert_eq!(EXPORT_SYMBOLS.len(), 13);
         assert_eq!(exported, EXPORT_SYMBOLS.to_vec());
     }
 
@@ -1737,6 +1770,7 @@ mod tests {
     /// pull and submit.
     fn probe_vtable() -> ProducerVTable {
         ProducerVTable {
+            environment_pull: probe_pull,
             create: probe_create,
             destroy: probe_unused_handle,
             connect_begin: probe_input,

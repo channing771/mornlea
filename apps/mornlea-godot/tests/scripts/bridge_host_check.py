@@ -15,7 +15,7 @@ class bridge_host_check(Node):
         _expect(result == "", f"bridge initialization failed: {result}", failures)
         _expect(bridge.call("host_protocol_version") == "1.0", "host protocol mismatch", failures)
         _expect(
-            bridge.call("client_core_abi_version") == "1.0", "client-core ABI mismatch", failures
+            bridge.call("client_core_abi_version") == "1.1", "client-core ABI mismatch", failures
         )
         _expect(bridge.call("godot_api_version") == "4.7", "Godot API mismatch", failures)
         _expect(bridge.call("godot_rust_version") == "0.5.5", "godot-rust mismatch", failures)
@@ -25,7 +25,7 @@ class bridge_host_check(Node):
         )
         _expect(bridge.call("lifecycle_stage") == "main-loop", "lifecycle stage mismatch", failures)
         _expect(
-            bridge.call("bridge_identity") == "client-core=1.0;godot=4.7;godot-rust=0.5.5",
+            bridge.call("bridge_identity") == "client-core=1.1;godot=4.7;godot-rust=0.5.5",
             "composed bridge identity mismatch",
             failures,
         )

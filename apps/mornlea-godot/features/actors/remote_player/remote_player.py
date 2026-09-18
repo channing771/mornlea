@@ -78,19 +78,30 @@ def _array_items(value: object) -> list[object] | None:
     return None
 
 
+def _text_value(value: object) -> str | None:
+    """Normalize typed-view text before applying the strict UUID validator."""
+    if isinstance(value, str):
+        return value
+    try:
+        return str(value)
+    except Exception:
+        return None
+
+
 def _canonical_player_id(value: object) -> str | None:
-    if not isinstance(value, str) or len(value) != 36:
+    value_text = _text_value(value)
+    if value_text is None or len(value_text) != 36:
         return None
-    if any(value[index] != "-" for index in (8, 13, 18, 23)):
+    if any(value_text[index] != "-" for index in (8, 13, 18, 23)):
         return None
-    compact = value.replace("-", "")
+    compact = value_text.replace("-", "")
     if len(compact) != 32 or compact.lower() != compact:
         return None
     if any(character not in "0123456789abcdef" for character in compact):
         return None
-    if value[14] != "4" or value[19] not in "89ab":
+    if value_text[14] != "4" or value_text[19] not in "89ab":
         return None
-    return value
+    return value_text
 
 
 def _entity_value(value: object) -> _EntityValue | None:

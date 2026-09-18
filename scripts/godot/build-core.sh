@@ -194,6 +194,7 @@ mornlea_client_core_submit_input
 mornlea_client_core_step
 mornlea_client_core_world_pull
 mornlea_client_core_frame_pull
+mornlea_client_core_environment_pull
 mornlea_client_core_status_pull
 "
 

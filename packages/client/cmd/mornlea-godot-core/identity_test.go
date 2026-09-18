@@ -38,8 +38,8 @@ func TestIdentityStatusQueryReturnsRequiredBytes(t *testing.T) {
 		t.Fatalf("required bytes = %d, want %d (header %d plus %d descriptors of %d bytes)",
 			required, want, IdentityHeaderBytes, FamilyCount, FamilyDescriptorBytes)
 	}
-	if want != 192 {
-		t.Fatalf("identity record size = %d, want the pinned literal 192", want)
+	if want != 216 {
+		t.Fatalf("identity record size = %d, want the pinned literal 216", want)
 	}
 }
 
@@ -213,7 +213,7 @@ func TestIdentityAbiVersionAccessorMatchesHeader(t *testing.T) {
 	if got, want := coreAbiVersion(), uint64(ABIMajor)<<32|uint64(ABIMinor); got != want {
 		t.Fatalf("abi version accessor = %#x, want %#x", got, want)
 	}
-	if got, want := coreAbiVersion(), uint64(0x0000000100000000); got != want {
+	if got, want := coreAbiVersion(), uint64(0x0000000100000001); got != want {
 		t.Fatalf("abi version accessor = %#x, want the pinned literal %#x", got, want)
 	}
 }

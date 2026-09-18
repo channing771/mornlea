@@ -101,6 +101,11 @@ func mornlea_client_core_frame_pull(handle C.uint64_t, out *C.uint8_t, capacity 
 	))
 }
 
+//export mornlea_client_core_environment_pull
+func mornlea_client_core_environment_pull(handle C.uint64_t, out *C.uint8_t, capacity C.uint32_t, outRequiredBytes *C.uint32_t) C.uint32_t {
+	return C.uint32_t(coreFrameProjectionPull(uint64(handle), (*byte)(unsafe.Pointer(out)), uint32(capacity), (*uint32)(unsafe.Pointer(outRequiredBytes)), encodeEnvironmentProjection))
+}
+
 //export mornlea_client_core_status_pull
 func mornlea_client_core_status_pull(handle C.uint64_t, out *C.uint8_t, capacity C.uint32_t, outRequiredBytes *C.uint32_t) C.uint32_t {
 	return C.uint32_t(coreStatusPull(

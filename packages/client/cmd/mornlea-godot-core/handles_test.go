@@ -262,10 +262,10 @@ func TestLifecycleCreateRejectsFamilyNegotiationBeforeOutHandlePointer(t *testin
 		details string
 	}{
 		{name: "unknown family", words: unknownFamily, details: "family 99 is not registered"},
-		{name: "missing required", words: full()[:6], details: "dropping one family leaves six of seven"},
+		{name: "missing required", words: full()[:7], details: "dropping one family leaves seven of eight"},
 		{name: "version too new", words: tooNewVersion, details: "requested version above the registered contract"},
 		{name: "duplicate family", words: duplicateIdentity, details: "identity listed twice, connection missing"},
-		{name: "empty request", words: nil, details: "zero families cannot cover the required seven"},
+		{name: "empty request", words: nil, details: "zero families cannot cover the required eight"},
 	}
 	for _, testCase := range cases {
 		count := uint32(len(testCase.words))

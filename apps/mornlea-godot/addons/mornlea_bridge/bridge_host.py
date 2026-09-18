@@ -14,7 +14,7 @@ from py4godot.classes.Node import Node
 
 _NATIVE_CLASS = "MornleaClientBridge"
 _HOST_PROTOCOL_VERSION = "1.0"
-_EXPECTED_CLIENT_CORE_ABI = "1.0"
+_EXPECTED_CLIENT_CORE_ABI = "1.1"
 _EXPECTED_GODOT_API = "4.7"
 _EXPECTED_GODOT_RUST_VERSION = "0.5.5"
 
@@ -95,7 +95,7 @@ class bridge_host(Node):
         if not self.supports_godot_api(4, 7):
             return "MornleaClientBridge rejected Godot API 4.7"
         if self.client_core_abi_version() != _EXPECTED_CLIENT_CORE_ABI:
-            return "MornleaClientBridge client-core ABI is not 1.0"
+            return "MornleaClientBridge client-core ABI is not 1.1"
         if self.godot_api_version() != _EXPECTED_GODOT_API:
             return "MornleaClientBridge Godot API is not 4.7"
         if self.godot_rust_version() != _EXPECTED_GODOT_RUST_VERSION:

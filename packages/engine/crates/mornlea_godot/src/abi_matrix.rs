@@ -111,7 +111,7 @@ pub fn bucket_obligation(bucket: StatusBucket) -> &'static str {
 mod tests {
     use super::{StatusBucket, bucket_obligation, classify_status};
     use crate::abi::{
-        ABI_MAJOR, FAMILY_COUNT, FAMILY_STATUS, STATUS_ABI_MISMATCH, STATUS_COUNT,
+        ABI_MAJOR, FAMILY_COUNT, FAMILY_ENVIRONMENT, STATUS_ABI_MISMATCH, STATUS_COUNT,
         STATUS_DISCONNECTED, STATUS_INPUT_REJECTED, STATUS_INSUFFICIENT_CAPACITY, STATUS_INTERNAL,
         STATUS_INVALID_ARGUMENT, STATUS_INVALID_HANDLE, STATUS_INVALID_STATE, STATUS_OK,
         STATUS_PANIC,
@@ -236,7 +236,7 @@ mod tests {
     #[test]
     fn abi_matrix_negotiation_covers_every_family_major_minor_cell() {
         let known = PILOT_FAMILIES;
-        let unknown = [0, FAMILY_COUNT + 1, FAMILY_STATUS + 1, u32::MAX];
+        let unknown = [0, FAMILY_COUNT + 1, FAMILY_ENVIRONMENT + 1, u32::MAX];
         // `ABI_MAJOR` is 1 today; saturating keeps the "low" cell
         // representable without underflow if the major ever moves.
         let majors = [ABI_MAJOR, ABI_MAJOR + 1, ABI_MAJOR.saturating_sub(1)];

@@ -72,26 +72,30 @@ const ABIAlignment = uint32(C.MORNLEA_CLIENT_ABI_ALIGNMENT)
 // Feature-family identifiers for descriptor records and family negotiation.
 // New families append; existing identifiers are never reused or reordered.
 const (
-	FamilyIdentity   Family = Family(C.MORNLEA_CLIENT_FAMILY_IDENTITY)
-	FamilyConnection Family = Family(C.MORNLEA_CLIENT_FAMILY_CONNECTION)
-	FamilyInput      Family = Family(C.MORNLEA_CLIENT_FAMILY_INPUT)
-	FamilyStep       Family = Family(C.MORNLEA_CLIENT_FAMILY_STEP)
-	FamilyWorld      Family = Family(C.MORNLEA_CLIENT_FAMILY_WORLD)
-	FamilyFrame      Family = Family(C.MORNLEA_CLIENT_FAMILY_FRAME)
-	FamilyStatus     Family = Family(C.MORNLEA_CLIENT_FAMILY_STATUS)
-	FamilyCount      Family = Family(C.MORNLEA_CLIENT_FAMILY_COUNT)
+	FamilyIdentity    Family = Family(C.MORNLEA_CLIENT_FAMILY_IDENTITY)
+	FamilyConnection  Family = Family(C.MORNLEA_CLIENT_FAMILY_CONNECTION)
+	FamilyInput       Family = Family(C.MORNLEA_CLIENT_FAMILY_INPUT)
+	FamilyStep        Family = Family(C.MORNLEA_CLIENT_FAMILY_STEP)
+	FamilyWorld       Family = Family(C.MORNLEA_CLIENT_FAMILY_WORLD)
+	FamilyFrame       Family = Family(C.MORNLEA_CLIENT_FAMILY_FRAME)
+	FamilyStatus      Family = Family(C.MORNLEA_CLIENT_FAMILY_STATUS)
+	FamilyEnvironment Family = Family(C.MORNLEA_CLIENT_FAMILY_ENVIRONMENT)
+	FamilyCount       Family = Family(C.MORNLEA_CLIENT_FAMILY_COUNT)
 )
 
 // Per-family contract versions. A version rises with any compatible change to
 // that family's records; value 1 is the pilot generation.
 const (
-	IdentityVersion   = uint32(C.MORNLEA_CLIENT_IDENTITY_VERSION)
-	ConnectionVersion = uint32(C.MORNLEA_CLIENT_CONNECTION_VERSION)
-	InputVersion      = uint32(C.MORNLEA_CLIENT_INPUT_VERSION)
-	StepVersion       = uint32(C.MORNLEA_CLIENT_STEP_VERSION)
-	WorldVersion      = uint32(C.MORNLEA_CLIENT_WORLD_VERSION)
-	FrameVersion      = uint32(C.MORNLEA_CLIENT_FRAME_VERSION)
-	StatusVersion     = uint32(C.MORNLEA_CLIENT_STATUS_VERSION)
+	IdentityVersion    = uint32(C.MORNLEA_CLIENT_IDENTITY_VERSION)
+	ConnectionVersion  = uint32(C.MORNLEA_CLIENT_CONNECTION_VERSION)
+	InputVersion       = uint32(C.MORNLEA_CLIENT_INPUT_VERSION)
+	StepVersion        = uint32(C.MORNLEA_CLIENT_STEP_VERSION)
+	WorldVersion       = uint32(C.MORNLEA_CLIENT_WORLD_VERSION)
+	FrameVersion       = uint32(C.MORNLEA_CLIENT_FRAME_VERSION)
+	StatusVersion      = uint32(C.MORNLEA_CLIENT_STATUS_VERSION)
+	EnvironmentVersion = uint32(C.MORNLEA_CLIENT_ENVIRONMENT_VERSION)
+	EnvironmentBytes   = uint32(C.MORNLEA_CLIENT_ENVIRONMENT_BYTES)
+	MagicEnvironment   = uint32(C.MORNLEA_CLIENT_MAGIC_ENVIRONMENT)
 )
 
 // Bounded-family limits. The world, step, entity, and frame-snapshot limits

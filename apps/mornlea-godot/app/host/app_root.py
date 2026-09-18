@@ -14,7 +14,7 @@ from py4godot.utils.smart_cast import (  # type: ignore[import-not-found]
 # only the scene path crosses into the feature host.
 register_cast_function("MornleaClientBridge", lambda bridge: bridge)
 
-_EXPECTED_CLIENT_CORE_ABI = "1.0"
+_EXPECTED_CLIENT_CORE_ABI = "1.1"
 _EXPECTED_GODOT_API = "4.7"
 _EXPECTED_GODOT_RUST_VERSION = "0.5.5"
 
@@ -64,7 +64,7 @@ def _bridge_identity_error(bridge: Node) -> str:
         return "MornleaClientBridge rejected Godot API 4.7"
     abi = _pair_version(bridge, "client_core_abi_major", "client_core_abi_minor")
     if abi != _EXPECTED_CLIENT_CORE_ABI:
-        return "MornleaClientBridge client-core ABI is not 1.0"
+        return "MornleaClientBridge client-core ABI is not 1.1"
     if _pair_version(bridge, "godot_api_major", "godot_api_minor") != _EXPECTED_GODOT_API:
         return "MornleaClientBridge Godot API is not 4.7"
     if _call_text(bridge, "godot_rust_version") != _EXPECTED_GODOT_RUST_VERSION:

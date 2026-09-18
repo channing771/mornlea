@@ -85,12 +85,13 @@ func pilotFamilyIDs() []Family {
 		FamilyWorld,
 		FamilyFrame,
 		FamilyStatus,
+		FamilyEnvironment,
 	}
 }
 
 // NewRegistry validates a descriptor list and returns the registry it
 // describes. Every descriptor must name a known pilot family with a nonzero
-// contract version, identifiers must be unique, and all seven families are
+// contract version, identifiers must be unique, and all eight families are
 // required by the pilot data plane, so a missing required family fails here
 // before any consumer creates world state. Unknown identifiers are rejected
 // before the presence check so a table that both smuggles an unknown family
@@ -168,6 +169,7 @@ func clientCoreFamilyTable() []RegistryDescriptor {
 		// and the descriptor keeps zero `RecordBytes` this generation because
 		// both language pin suites pin this table (see status.go).
 		{Family: FamilyStatus, Version: StatusVersion, RecordLimit: MaxStatusRecords},
+		{Family: FamilyEnvironment, Version: EnvironmentVersion, RecordLimit: 1, RecordBytes: EnvironmentBytes},
 	}
 }
 

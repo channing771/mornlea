@@ -171,7 +171,7 @@ func FuzzClientCoreABI(f *testing.F) {
 	f.Add(uint8(0xA8), uint64(0), []byte(nil), uint32(0), uint32(576), uint64(0))
 	f.Add(uint8(0x09), uint64(0), []byte(nil), uint32(0), uint32(80), uint64(0))
 	f.Add(uint8(0x89), uint64(0), []byte(nil), uint32(0), uint32(0), uint64(0))
-	f.Add(uint8(0x0A), uint64(0), []byte(nil), uint32(0), uint32(192), uint64(0))
+	f.Add(uint8(0x0A), uint64(0), []byte(nil), uint32(0), uint32(216), uint64(0))
 	f.Add(uint8(0x8A), uint64(0), []byte(nil), uint32(0), uint32(0), uint64(0))
 	f.Fuzz(func(t *testing.T, selector uint8, handle uint64, payload []byte, length uint32, capacity uint32, abiWord uint64) {
 		// Reset every piece of shared producer state through the same seams

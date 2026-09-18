@@ -11,7 +11,7 @@ use crate::client_core::{
     production_core_calls,
 };
 use crate::feature_negotiation::PILOT_FAMILIES;
-use crate::frame_decode::{TypedFrame, decode_frame_record};
+use crate::frame_decode::{TypedFrame, apply_environment_projection, decode_frame_record};
 use crate::lifecycle;
 use crate::pull_buffers::{PullBufferSet, pull_via_buffer};
 use crate::status_decode::{TypedStatus, decode_status_record};
@@ -229,8 +229,10 @@ impl BridgeSession {
     /// values. Record parsing stays Rust-owned so Python never depends on the
     /// client-core wire layout or invents a value after a producer failure.
     pub(crate) fn frame_typed(&mut self) -> Result<TypedFrame, u32> {
-        self.pull(PullFamily::Frame)
-            .and_then(|record| decode_frame_record(&record))
+        let mut frame = decode_frame_record(&self.pull(PullFamily::Frame)?)?;
+        let environment = self.pull(PullFamily::Environment)?;
+        apply_environment_projection(&mut frame, &environment)?;
+        Ok(frame)
     }
 
     /// Release the session idempotently: the first close destroys the handle
@@ -815,6 +817,22 @@ impl MornleaClientBridge {
     }
 
     fn put_typed_frame_defaults(result: &mut VarDictionary) {
+        result.set("hud_ready", false);
+        result.set("health", 0i64);
+        result.set("hunger", 0i64);
+        result.set("oxygen", 0i64);
+        result.set("environment_ready", false);
+        result.set("environment_server_tick", 0i64);
+        result.set("world_time_ticks", 0i64);
+        result.set("day_phase_offset", 0i64);
+        result.set("weather", 0i64);
+        result.set("season", 0i64);
+        result.set("season_progress", 0i64);
+        result.set("temperature", 0i64);
+        result.set("daylight", 0.0f64);
+        result.set("sky_r", 0.0f64);
+        result.set("sky_g", 0.0f64);
+        result.set("sky_b", 0.0f64);
         result.set("revision", 0i64);
         result.set("epoch", 0i64);
         result.set("camera_ready", false);
@@ -839,6 +857,28 @@ impl MornleaClientBridge {
     }
 
     fn put_typed_frame(result: &mut VarDictionary, frame: &TypedFrame, status: u32) {
+        result.set("hud_ready", frame.hud_ready);
+        result.set("health", i64::from(frame.health));
+        result.set("hunger", i64::from(frame.hunger));
+        result.set("oxygen", i64::from(frame.oxygen));
+        result.set("environment_ready", frame.environment_ready);
+        result.set(
+            "environment_server_tick",
+            i64::try_from(frame.environment_server_tick).unwrap_or(i64::MAX),
+        );
+        result.set(
+            "world_time_ticks",
+            i64::try_from(frame.world_time_ticks).unwrap_or(i64::MAX),
+        );
+        result.set("day_phase_offset", i64::from(frame.day_phase_offset));
+        result.set("weather", i64::from(frame.weather));
+        result.set("season", i64::from(frame.season));
+        result.set("season_progress", i64::from(frame.season_progress));
+        result.set("temperature", i64::from(frame.temperature));
+        result.set("daylight", f64::from(frame.daylight));
+        result.set("sky_r", f64::from(frame.sky_color[0]));
+        result.set("sky_g", f64::from(frame.sky_color[1]));
+        result.set("sky_b", f64::from(frame.sky_color[2]));
         result.set("status", i64::from(status));
         result.set(
             "revision",
@@ -1098,7 +1138,7 @@ mod tests {
 
     #[test]
     fn bridge_identity_matches_pinned_dependencies() {
-        assert_eq!((i64::from(ABI_MAJOR), i64::from(ABI_MINOR)), (1, 0));
+        assert_eq!((i64::from(ABI_MAJOR), i64::from(ABI_MINOR)), (1, 1));
         assert_eq!((GODOT_API_MAJOR, GODOT_API_MINOR), (4, 7));
         assert_eq!(GODOT_RUST_VERSION, "0.5.5");
     }

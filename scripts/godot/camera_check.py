@@ -8,6 +8,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "apps/mornlea-godot/features/player_view/camera/camera_feature.py"
+SCENE = ROOT / "apps/mornlea-godot/features/player_view/camera/camera.tscn"
 spec = importlib.util.spec_from_file_location("mornlea_camera_feature", SOURCE)
 assert spec and spec.loader
 module = importlib.util.module_from_spec(spec)
@@ -93,6 +94,11 @@ class CameraMappingTests(unittest.TestCase):
         self.assertFalse(feature.camera_ready())
         feature.set_ui_blocked(True)
         self.assertFalse(feature.camera_ready())
+
+    def test_scene_attaches_the_camera_feature_script(self):
+        text = SCENE.read_text(encoding="utf-8")
+        self.assertIn('path="res://features/player_view/camera/camera_feature.py"', text)
+        self.assertIn('script = ExtResource("1_script")', text)
 
 
 if __name__ == "__main__":

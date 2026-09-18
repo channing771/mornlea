@@ -64,7 +64,7 @@ extern "C" {
 /* Client-core ABI identity. The major rises only for incompatible layout or
  * semantic breaks; the minor rises for compatible additions. */
 #define MORNLEA_CLIENT_ABI_MAJOR 1u
-#define MORNLEA_CLIENT_ABI_MINOR 0u
+#define MORNLEA_CLIENT_ABI_MINOR 1u
 
 /*
  * Stable status codes returned by every client-core export. Values are
@@ -128,7 +128,7 @@ extern "C" {
 
 /*
  * Stable feature-family identifiers used by descriptor records and family
- * negotiation. The seven pilot families map one-to-one to the bridge
+ * negotiation. The eight pilot families map one-to-one to the bridge
  * responsibility split (identity/lifecycle, connection, input, step, world,
  * frame, status/metrics). New families append new identifiers; existing
  * identifiers are never reused or reordered.
@@ -140,8 +140,9 @@ extern "C" {
 #define MORNLEA_CLIENT_FAMILY_WORLD 5u
 #define MORNLEA_CLIENT_FAMILY_FRAME 6u
 #define MORNLEA_CLIENT_FAMILY_STATUS 7u
+#define MORNLEA_CLIENT_FAMILY_ENVIRONMENT 8u
 /* Number of families defined by the pilot contract. */
-#define MORNLEA_CLIENT_FAMILY_COUNT 7u
+#define MORNLEA_CLIENT_FAMILY_COUNT 8u
 
 /*
  * Per-family contract versions. A family version rises with any compatible
@@ -156,6 +157,12 @@ extern "C" {
 #define MORNLEA_CLIENT_WORLD_VERSION 1u
 #define MORNLEA_CLIENT_FRAME_VERSION 1u
 #define MORNLEA_CLIENT_STATUS_VERSION 1u
+/* Additive projection of the retained frame; existing frame bytes stay frozen.
+ * The 48-byte record contains magic/layout/ready/reserved u32 words,
+ * revision/epoch u64 words, then daylight and sky RGB f32 words. */
+#define MORNLEA_CLIENT_ENVIRONMENT_VERSION 1u
+#define MORNLEA_CLIENT_ENVIRONMENT_BYTES 48u
+#define MORNLEA_CLIENT_MAGIC_ENVIRONMENT 0x3145434du
 
 /*
  * Bounded-family limits. Each limit names its provenance: values mirrored

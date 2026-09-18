@@ -61,20 +61,27 @@ class session_feature_check(Node):
             self._failures.append(f"production catalog activation failed: {result}")
             self._finish(1)
             return
-        # The production catalog activates the session and world features
-        # together since the terrain gate enabled world; the session half of
-        # this probe still drives only the session feature.
-        if result["order"] != ["session", "world"]:
+        # The production catalog activates the complete minimum remote loop;
+        # this probe still drives only the session feature's offline dial.
+        expected_order = [
+            "session",
+            "actors",
+            "platform.desktop.input",
+            "player_view",
+            "ui",
+            "world",
+        ]
+        if result["order"] != expected_order:
             self._failures.append(f"activation order differs: {result['order']}")
-        if "session" in result["disabled"] or "world" in result["disabled"]:
-            self._failures.append(f"a production feature was disabled by the plan: {result}")
+        if result["disabled"]:
+            self._failures.append(f"a minimum-loop feature was disabled by the plan: {result}")
         host = self._host
         if host is None:
             self._failures.append("the feature host node is missing")
             self._finish(1)
             return
-        if cast(int, host.call("active_count")) != 2:
-            self._failures.append("the session and world features did not stay active")
+        if cast(int, host.call("active_count")) != len(expected_order):
+            self._failures.append("the minimum-loop features did not stay active")
         feature = host.get_node_or_null("SessionFeature")
         if feature is None or not feature.has_method("request_connect"):
             self._failures.append("the active session feature lacks request_connect")

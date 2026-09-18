@@ -41,6 +41,13 @@ class StringArrayView(Protocol):
     def get(self, index: int) -> str: ...
 
 
+@runtime_checkable
+class _DictionaryView(Protocol):
+    """Minimal typed view used by the host's one-frame fan-out seam."""
+
+    def __getitem__(self, key: str) -> object: ...
+
+
 class FeatureManifest:
     """Immutable-in-practice projection of one serialized feature resource."""
 
@@ -124,6 +131,46 @@ class feature_host(Node):
 
     def _exit_tree(self) -> None:
         _deactivate(self)
+
+    def _process(self, delta: float) -> None:
+        """Run one ordered bounded step and fan out one immutable typed frame."""
+        if self._bridge is None:
+            return
+        for feature_id in self._active_order:
+            instance = self._instances.get(feature_id)
+            if instance is not None and instance.has_method("drive_input"):
+                instance.call("drive_input")
+        elapsed_ns = max(0, min(int(delta * 1_000_000_000), 100_000_000))
+        stepped = False
+        for feature_id in self._active_order:
+            instance = self._instances.get(feature_id)
+            if instance is None or not instance.has_method("drive_session"):
+                continue
+            status = instance.call("drive_session", elapsed_ns, 64, 32)
+            if not isinstance(status, int) or isinstance(status, bool) or status != 0:
+                return
+            stepped = True
+        if not stepped:
+            return
+        for feature_id in self._active_order:
+            instance = self._instances.get(feature_id)
+            if instance is not None and instance.has_method("drive_world"):
+                instance.call("drive_world")
+        typed: _DictionaryView | None = None
+        for feature_id in self._active_order:
+            instance = self._instances.get(feature_id)
+            if instance is None or not instance.has_method("pull_typed_frame"):
+                continue
+            candidate = instance.call("pull_typed_frame")
+            if isinstance(candidate, _DictionaryView):
+                typed = candidate
+                break
+        if typed is None:
+            return
+        for feature_id in self._active_order:
+            instance = self._instances.get(feature_id)
+            if instance is not None and instance.has_method("apply_typed_frame"):
+                instance.call("apply_typed_frame", typed)
 
     def plan_catalog(self, catalog_path: str, bridge_path: str) -> str:
         bridge = self.get_node(bridge_path)

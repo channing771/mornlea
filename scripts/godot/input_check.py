@@ -31,7 +31,7 @@ class FakeServices:
         self.submissions: list[tuple[object, ...]] = []
 
     def has_method(self, name: str) -> bool:
-        return name in {"host_protocol_version", "session_submit_semantic"}
+        return name in {"feature_families_json", "session_submit_semantic"}
 
     def call(self, name: str, *arguments: object) -> int:
         assert name == "session_submit_semantic"
@@ -45,6 +45,11 @@ class InputContractTests(unittest.TestCase):
         feature._ready()
         return feature
 
+    @staticmethod
+    def bind(feature, services):
+        feature.get_node_or_null = lambda _path: services
+        return feature.bind_host("Bridge")
+
     def test_semantic_actions_and_unsupported_actions(self):
         self.assertEqual(
             module.SUPPORTED_ACTIONS - module.UNSUPPORTED_ACTIONS,
@@ -54,10 +59,14 @@ class InputContractTests(unittest.TestCase):
         self.assertIn("hotbar", module.UNSUPPORTED_ACTIONS)
         self.assertNotIn("touch", " ".join(module.SUPPORTED_ACTIONS))
 
+    def test_bind_accepts_the_native_bridge_identity(self):
+        feature = self.make_feature()
+        self.assertEqual(self.bind(feature, FakeServices()), "")
+
     def test_desktop_actions_encode_movement_buttons_and_mouse(self):
         feature = self.make_feature()
         services = FakeServices()
-        self.assertEqual(feature.bind_host(services), "")
+        self.assertEqual(self.bind(feature, services), "")
         self.assertEqual(
             feature.collect_input(
                 FakeSource(
@@ -73,7 +82,7 @@ class InputContractTests(unittest.TestCase):
     def test_focus_loss_is_neutral_and_recapture_discards_baseline(self):
         feature = self.make_feature()
         services = FakeServices()
-        feature.bind_host(services)
+        self.assertEqual(self.bind(feature, services), "")
         feature.capture_cursor()
         feature.collect_input(FakeSource(delta=(100, 100)))
         feature.on_focus_changed(False)
@@ -88,10 +97,23 @@ class InputContractTests(unittest.TestCase):
         self.assertEqual(first, 0)
         self.assertEqual(services.submissions[-1][-2:], (0.0, 0.0))
 
+    def test_drive_input_repeats_the_latest_primitive_intent(self):
+        feature = self.make_feature()
+        services = FakeServices()
+        self.assertEqual(self.bind(feature, services), "")
+        feature.submit_semantic_intent(1, -1, True, True, False, True, False, 3.5, -0.25)
+        services.submissions.clear()
+
+        self.assertEqual(feature.drive_input(), 0)
+        self.assertEqual(
+            services.submissions,
+            [(1, -1, True, True, False, True, False, 3.5, -0.25)],
+        )
+
     def test_f5_and_escape_are_local_actions(self):
         feature = self.make_feature()
         services = FakeServices()
-        feature.bind_host(services)
+        self.assertEqual(self.bind(feature, services), "")
         feature.capture_cursor()
         feature.collect_input(FakeSource({"f5"}))
         self.assertTrue(feature.f5_down())

@@ -78,6 +78,10 @@ class TargetFeedbackTests(unittest.TestCase):
 
     def test_scene_requires_depth_test_and_disables_depth_writes(self):
         text = SCENE.read_text(encoding="utf-8")
+        self.assertIn(
+            'path="res://features/player_view/target_feedback/target_feedback.py"', text
+        )
+        self.assertIn('script = ExtResource("1_script")', text)
         self.assertIn("no_depth_test = false", text)
         self.assertIn("depth_draw_mode = 2", text)
         self.assertIn('metadata/depth_testing = "enabled"', text)

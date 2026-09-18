@@ -23,13 +23,14 @@ register_cast_function("MornleaClientBridge", lambda bridge: bridge)
 # The pinned pilot family table mirrored from the frozen client-core contract:
 # (family, version, record_limit, record_bytes) in ascending family order.
 PINNED_FAMILIES = [
-    (1, 1, 7, 24),
+    (1, 1, 8, 24),
     (2, 1, 256, 0),
     (3, 1, 128, 0),
     (4, 1, 1, 24),
     (5, 1, 4096, 0),
     (6, 1, 7, 0),
     (7, 1, 64, 0),
+    (8, 1, 1, 48),
 ]
 PINNED_FAMILIES_JSON = json.dumps(
     [
@@ -73,7 +74,7 @@ class bridge_contract_check(Node):
 
 def _check_identity(bridge: Node, failures: list[str]) -> None:
     _expect(_call_int(bridge, "client_core_abi_major") == 1, "client-core ABI major", failures)
-    _expect(_call_int(bridge, "client_core_abi_minor") == 0, "client-core ABI minor", failures)
+    _expect(_call_int(bridge, "client_core_abi_minor") == 1, "client-core ABI minor", failures)
     _expect(_call_int(bridge, "godot_api_major") == 4, "Godot API major", failures)
     _expect(_call_int(bridge, "godot_api_minor") == 7, "Godot API minor", failures)
     _expect(_call_text(bridge, "godot_rust_version") == "0.5.5", "godot-rust version", failures)
@@ -83,7 +84,7 @@ def _check_identity(bridge: Node, failures: list[str]) -> None:
 def _check_producer_identity(bridge: Node, failures: list[str]) -> None:
     identity = json.loads(_call_text(bridge, "producer_identity_json"))
     _expect(
-        identity == {"available": True, "major": 1, "minor": 0},
+        identity == {"available": True, "major": 1, "minor": 1},
         f"producer identity mismatch: {identity}",
         failures,
     )
@@ -104,11 +105,11 @@ def _check_offline_session(bridge: Node, failures: list[str]) -> None:
     identity = cast(Any, bridge.call("pull_identity"))
     _expect(identity["status"] == STATUS_OK, "identity pull failed", failures)
     record = identity["record"]
-    _expect(record.size() == 192, f"identity record size: {record.size()}", failures)
-    if record.size() == 192:
+    _expect(record.size() == 216, f"identity record size: {record.size()}", failures)
+    if record.size() == 216:
         header = _decode_header(record, 0)
         _expect(
-            header == [0x3149434D, 1, 1, 0, 7],
+            header == [0x3149434D, 1, 1, 1, 8],
             f"identity header mismatch: {[hex(word) for word in header]}",
             failures,
         )
@@ -119,7 +120,7 @@ def _check_offline_session(bridge: Node, failures: list[str]) -> None:
                 _decode32(record, 24 + index * 24 + 8),
                 _decode32(record, 24 + index * 24 + 12),
             )
-            for index in range(7)
+            for index in range(8)
         ]
         _expect(
             descriptors == PINNED_FAMILIES,

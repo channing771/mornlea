@@ -25,9 +25,13 @@ var godotEntrypointTargets = []string{
 	"godot-camera-check",
 	"godot-target-check",
 	"godot-entity-check",
+	"godot-environment-check",
+	"godot-hud-check",
 	"godot-disconnect-check",
 	"godot-smoke",
 	"godot-terrain-check",
+	"godot-capability-check",
+	"godot-playable-smoke",
 }
 
 // godotEntrypointRecipes pins the exact script invocation each gate must run;
@@ -44,9 +48,13 @@ var godotEntrypointRecipes = map[string][]string{
 		"$(CARGO) test -p mornlea_godot entity_snapshot --locked",
 		"scripts/godot/entity-check.sh",
 	},
-	"godot-disconnect-check": {"go test ./packages/client/runtime", "Disconnect|Overflow|Shutdown"},
-	"godot-smoke":            {"scripts/godot/smoke.sh --iterations 100", "--isolated-python"},
-	"godot-terrain-check":    {"scripts/godot/godot-terrain-check.sh"},
+	"godot-environment-check": {"scripts/godot/environment-check.sh"},
+	"godot-hud-check":         {"scripts/godot/hud-check.sh"},
+	"godot-disconnect-check":  {"go test ./packages/client/runtime", "Disconnect|Overflow|Shutdown"},
+	"godot-smoke":             {"scripts/godot/smoke.sh --iterations 100", "--isolated-python"},
+	"godot-terrain-check":     {"scripts/godot/godot-terrain-check.sh"},
+	"godot-capability-check":  {"scripts/godot/capability-check.sh"},
+	"godot-playable-smoke":    {"scripts/godot/playable-smoke.sh --duration 300s"},
 }
 
 const godotEntrypointTestRootEnv = "MORNLEA_GODOT_ENTRYPOINT_TEST_ROOT"

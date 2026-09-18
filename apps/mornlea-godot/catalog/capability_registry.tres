@@ -1,0 +1,6 @@
+[gd_resource type="Resource" format=3]
+
+[resource]
+resource_name = "capability_registry"
+metadata/registry_version = 1
+metadata/manifest_paths = PackedStringArray("res://features/menus/feature.tres", "res://features/containers/feature.tres", "res://features/chat/feature.tres", "res://features/audio/feature.tres", "res://features/lod/feature.tres", "res://features/viewmodel/feature.tres", "res://features/companions/feature.tres", "res://features/hostile_mobs/feature.tres", "res://features/passive_cows/feature.tres", "res://features/projectiles/feature.tres", "res://features/drops/feature.tres", "res://features/name_tags/feature.tres", "res://features/particles/feature.tres", "res://features/full_weather/feature.tres")

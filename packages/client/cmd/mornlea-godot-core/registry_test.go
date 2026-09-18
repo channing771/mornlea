@@ -8,7 +8,7 @@ import (
 )
 
 // The registry tests pin the sole client-core feature-family registry: the
-// seven pilot families with header-derived IDs, contract versions, and
+// eight pilot families with header-derived IDs, contract versions, and
 // limits, plus the negotiation rules every consumer (the Rust bridge and
 // later identity/feature exports) must agree on. The registry reports
 // data-plane availability only; product assembly stays with the Godot-side
@@ -21,13 +21,14 @@ import (
 // bump, mirroring the identity pins in abi_test.go.
 func pinnedPilotDescriptors() []RegistryDescriptor {
 	return []RegistryDescriptor{
-		{Family: 1, Version: 1, RecordLimit: 7, RecordBytes: 24},
+		{Family: 1, Version: 1, RecordLimit: 8, RecordBytes: 24},
 		{Family: 2, Version: 1, RecordLimit: 256, RecordBytes: 0},
 		{Family: 3, Version: 1, RecordLimit: 128, RecordBytes: 0},
 		{Family: 4, Version: 1, RecordLimit: 1, RecordBytes: 24},
 		{Family: 5, Version: 1, RecordLimit: 4096, RecordBytes: 0},
 		{Family: 6, Version: 1, RecordLimit: 7, RecordBytes: 0},
 		{Family: 7, Version: 1, RecordLimit: 64, RecordBytes: 0},
+		{Family: 8, Version: 1, RecordLimit: 1, RecordBytes: 48},
 	}
 }
 
@@ -45,6 +46,7 @@ func registryTestDescriptors() []RegistryDescriptor {
 		{Family: FamilyWorld, Version: WorldVersion, RecordLimit: MaxWorldBatchOperations, RecordBytes: 0},
 		{Family: FamilyFrame, Version: FrameVersion, RecordLimit: MaxEntityRecords, RecordBytes: 0},
 		{Family: FamilyStatus, Version: StatusVersion, RecordLimit: MaxStatusRecords, RecordBytes: 0},
+		{Family: FamilyEnvironment, Version: EnvironmentVersion, RecordLimit: 1, RecordBytes: EnvironmentBytes},
 	}
 }
 

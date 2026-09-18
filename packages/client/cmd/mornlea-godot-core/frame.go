@@ -317,12 +317,18 @@ func (session *clientSession) framePullSnapshot() framePullSnapshot {
 // terminal frame with `StatusOK` (retention survives teardown, see step.go);
 // only a destroyed handle is rejected with `StatusInvalidState`.
 func (session *clientSession) pullFrame(out *byte, capacity uint32, requiredOut *uint32) Status {
+	return session.pullFrameProjection(out, capacity, requiredOut, frameEncode)
+}
+
+// `pullFrameProjection` keeps all frame-derived views on the same retained value
+// and the same failure-atomic two-phase output path.
+func (session *clientSession) pullFrameProjection(out *byte, capacity uint32, requiredOut *uint32, encode func(presentation.FrameSnapshot) []byte) Status {
 	snapshot := session.framePullSnapshot()
 	if !snapshot.available {
 		*requiredOut = 0
 		return StatusOK
 	}
-	record := frameEncode(snapshot.frame)
+	record := encode(snapshot.frame)
 	if record == nil {
 		return StatusInternal
 	}
@@ -369,6 +375,10 @@ func (session *clientSession) pullFrame(out *byte, capacity uint32, requiredOut 
 // only fire before any write. The caller's pointers are never retained after
 // the call returns.
 func coreFramePull(handle uint64, out *byte, capacity uint32, requiredOut *uint32) Status {
+	return coreFrameProjectionPull(handle, out, capacity, requiredOut, frameEncode)
+}
+
+func coreFrameProjectionPull(handle uint64, out *byte, capacity uint32, requiredOut *uint32, encode func(presentation.FrameSnapshot) []byte) Status {
 	return withPanicGuard(func() Status {
 		session, status := clientSessions.sessionFor(handle)
 		if status != StatusOK {
@@ -390,6 +400,6 @@ func coreFramePull(handle uint64, out *byte, capacity uint32, requiredOut *uint3
 				return StatusInvalidArgument
 			}
 		}
-		return session.pullFrame(out, capacity, requiredOut)
+		return session.pullFrameProjection(out, capacity, requiredOut, encode)
 	})
 }
