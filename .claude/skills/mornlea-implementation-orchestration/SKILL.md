@@ -17,7 +17,7 @@ An explicit user instruction requiring or prohibiting subagents controls the exe
 
 ## OpenAI-Native Mode
 
-Use an isolation-first execution shape. At most two subagents may run concurrently.
+Use an isolation-first execution shape. At most three subagents may run concurrently.
 
 - Prefer a fresh isolated agent when a bounded task requires independent repository discovery, multi-file reasoning, specialized review, or a long tool/work trace whose main-context retention cost is greater than the handoff and integration cost.
 - Work directly only when the task is tiny, tightly coupled to the controller's current edit, or cheaper to finish than to specify and integrate.
@@ -25,7 +25,7 @@ Use an isolation-first execution shape. At most two subagents may run concurrent
 - Before each new delegation, use the project-owned `adaptive-model-router` with the live host capability set. Evaluate difficulty, consequence, context breadth, tool horizon, validation strength, and user priorities; choose the lowest-cost model and reasoning effort credibly sufficient for the isolated task. Both code quality and token efficiency are coequal routing objectives.
 - Escalate one eligible step only after observable insufficiency. Do not restart an already-running agent solely to change its model.
 - Give every delegated task a concise task brief containing only the required evidence, paths, constraints, ownership, integration point, and expected validation. Use a fresh or minimal context instead of copying the full conversation by default.
-- Treat native subagents and router-approved external isolated agents as the same concurrency budget. Never let two editing agents own the same worktree or overlapping files concurrently.
+- Treat native subagents and router-approved external isolated agents as the same three-worker concurrency budget. Never let editing agents own the same worktree or overlapping files concurrently.
 - Choose review depth proportionally to risk, and record the execution shape and rationale in the change ledger.
 
 The controller remains responsible for integration and completion evidence.

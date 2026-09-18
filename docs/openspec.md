@@ -27,7 +27,7 @@ Use `explore` when context or requirements are unclear. Proposals must state con
 
 1. Explore relevant code, tests, and history with `$openspec-explore` when requirements are unclear.
 2. Propose a focused change with `$openspec-propose <change-name>` containing proposal, delta specs, design, and tasks. Requirements use normative English and decidable Given/When/Then scenarios.
-3. Apply with `$openspec-apply-change`, following `tasks.md`, test-first. Main-agent execution is the default; verified OpenAI ChatGPT/Codex has standing delegation authorization. Delegate only for material context isolation, never for parallel speed or unused capacity, at most two concurrent subagents, and route each new delegation through live `adaptive-model-router` discovery using the lowest sufficient model/effort. Non-OpenAI or unknown providers use strict `subagent-driven-development` with independent implementation and review.
+3. Apply with `$openspec-apply-change`, following `tasks.md`, test-first. Main-agent execution is the default; verified OpenAI ChatGPT/Codex has standing delegation authorization. Delegate only for material context isolation, never for parallel speed or unused capacity, at most three concurrent subagents, and route each new delegation through live `adaptive-model-router` discovery using the lowest sufficient model/effort. Non-OpenAI or unknown providers use strict `subagent-driven-development` with independent implementation and review.
 4. Validate and archive with `$openspec-archive-change` after implementation matches the specifications:
 
 ```bash

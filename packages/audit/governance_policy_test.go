@@ -19,10 +19,40 @@ func TestProviderAwareOrchestration(t *testing.T) {
 			"strict `subagent-driven-development`",
 			"explicit user prohibition",
 			"higher-priority runtime restriction",
+			"three subagents",
 		} {
 			if !strings.Contains(text, required) {
 				t.Errorf("%s does not state required provider-aware policy %q", path, required)
 			}
+		}
+	}
+}
+
+func TestControllerWorkerRoutingPolicy(t *testing.T) {
+	root := repositoryRoot(t)
+	paths := []string{
+		filepath.Join(".codex", "skills", "adaptive-model-router", "SKILL.md"),
+		filepath.Join(".claude", "skills", "adaptive-model-router", "SKILL.md"),
+	}
+	var baseline string
+	for index, path := range paths {
+		text := readBaselineDoc(t, root, path)
+		for _, required := range []string{
+			"Controller/Worker Operating Contract",
+			"DECOMPOSE -> DISPATCH -> WAIT -> HANDOFF -> INTEGRATE",
+			"cursor-aware bounded wait",
+			"MUST NOT",
+			"Grok is the default first dispatch",
+			"three-worker concurrency ceiling",
+		} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s does not state controller/worker routing rule %q", path, required)
+			}
+		}
+		if index == 0 {
+			baseline = text
+		} else if text != baseline {
+			t.Errorf("project router skill copies are not byte-identical: %s", path)
 		}
 	}
 }
@@ -77,7 +107,7 @@ func TestDelegationBudgetAndAdaptiveModelRouting(t *testing.T) {
 func TestDelegationBudgetGuardDetectsDrift(t *testing.T) {
 	valid := strings.Join([]string{
 		"isolation-first",
-		"At most two subagents may run concurrently",
+		"At most three subagents may run concurrently",
 		"main-context retention",
 		"Do not delegate merely for parallel speed",
 		"concise task brief",
@@ -111,7 +141,7 @@ func delegationPolicyViolations(text string) []string {
 func delegationPolicyFragments() []string {
 	return []string{
 		"isolation-first",
-		"At most two subagents may run concurrently",
+		"At most three subagents may run concurrently",
 		"main-context retention",
 		"Do not delegate merely for parallel speed",
 		"concise task brief",
