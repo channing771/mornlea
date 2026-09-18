@@ -1,6 +1,6 @@
 ---
 name: adaptive-model-router
-description: Select the lowest-cost live native or Z Code agent backend, model, and reasoning effort sufficient for isolated Mornlea work while protecting code quality and token efficiency.
+description: Select a sufficient live native or Z Code agent backend, model, and reasoning effort for isolated Mornlea work while protecting code quality, token efficiency, and current Z Code quota.
 ---
 
 # Adaptive Model Router
@@ -17,7 +17,7 @@ When availability or effort support is unclear, read [capability discovery](refe
 
 ## Route Native and Z Code Workers
 
-Prefer the native delegation surface when its eligible model is sufficient and native lifecycle, tool, or review integration materially reduces coordination cost. A model absent from the native tool enum cannot be injected by this skill.
+Prefer the native delegation surface when its eligible model is sufficient and native lifecycle, tool, or review integration materially reduces coordination cost. When the Z Code probe passes, the task is bounded, validation is strong, and quota is not confirmed exhausted, let the adjusted Z Code score compete in the normal candidate set. A model absent from the native tool enum cannot be injected by this skill.
 
 Z Code `GLM-5.3` is available through the `scripts/zcode-agent.mjs` runtime packaged with this skill as an external isolated agent, not as a model on the native delegation surface. The bridge reads the enabled desktop provider locally, passes its credential to the child process only, returns machine-readable JSON, and never copies the credential into project configuration or task output. Resolve `router_skill_dir` to the absolute directory containing the selected `adaptive-model-router/SKILL.md`; do not depend on a project-root bridge. Verify the route immediately before routing:
 
@@ -55,6 +55,25 @@ node "$router_skill_dir/scripts/zcode-agent.mjs" close --worker <worker-id>
 Pass the start brief and steering text through stdin unless a short non-sensitive `--prompt` is more practical. Pass the exact selected `low`, `high`, or `max` reasoning level to live `start` and record the resolved value returned by the bridge; synchronous `run` and `send` inherit the configured desktop default. `guide` targets the active turn at a safe boundary, `queue` preserves the active turn and schedules later work, and `startNow` preempts active work before starting the replacement instruction. Give every steering intent a stable command ID and reuse it after an ambiguous retry so the upstream protocol can deduplicate it. Treat acceptance as an acknowledgement rather than proof the instruction has already been consumed. Keep a returned cursor and wait from it; wake the controller only for phase changes, checkpoints, tool or test failures, permission or input requests, and terminal states. Do not forward token-level text, reasoning, or tool-input deltas into the controller context.
 
 Use `plan` for read-only discovery and review. Use an editing mode only when the worker has an isolated worktree or an exclusive, non-overlapping file set and pass the bridge's explicit ownership assertion; the controller still owns integration and validation. Count the Z Code worker against the two-agent concurrency ceiling. Its startup context is substantial, so select it for bounded work that benefits from isolation and enough repository reasoning to repay that bootstrap cost, not for trivial extraction or one-line edits. The live supervisor can only wake a controller with a pending wait; it cannot inject an unsolicited turn into an idle Codex task.
+
+## ZCode allocation policy
+
+Keep Z Code in normal rotation with a modestly higher overall share, while retaining native fallback for high-consequence or weak-oracle work. This is a bounded routing preference, not a guarantee that Z Code wins every task.
+
+Immediately before scoring a Z Code candidate, obtain a fresh, non-secret quota snapshot from a read-only account-scoped usage source exposed by the host or provider. Accept `used`, `limit`, and `remaining` values plus `observed_at` and optional `reset_at`; when only `used` and `limit` are available, derive `remaining = limit - used`. Do not send an inference request just to discover quota, print credentials, or treat a missing snapshot as zero quota. A snapshot older than 15 minutes, malformed, or missing a positive `limit` is `stale quota` and becomes `unknown quota` for routing.
+
+Normalize the live value as `quota ratio = clamp(remaining / limit, 0, 1)`. Apply the following deterministic `score modifier` after the six-axis base score:
+
+```text
+ZCode score = base score × Z Code prior × quota factor × time factor
+Z Code prior = 1.06
+quota factor = 0.90 + 0.20 × quota ratio
+time factor = 1.00
+```
+
+The neutral `unknown quota` case uses a ratio of `0.50`, so it keeps the modest Z Code prior without pretending that capacity is either full or exhausted. A confirmed zero `remaining` value or an actual provider rate-limit response removes Z Code from that decision until the next reset or a fresh positive snapshot; an unavailable quota source does not. This keeps the total Z Code preference slightly higher while still conserving a genuinely depleted entitlement.
+
+Use the host's local timezone for the time check. During `14:00–18:00`, Z Code must remain eligible whenever its probe is healthy and quota is not confirmed exhausted; do not create a time-based blackout or set its score to zero. Keep the same `time factor` in that window, and fall back only for an actual capability, quota, or provider failure. Record the local timezone and quota observation time in the routing decision, never the credential or raw account response.
 
 ## Apply Constraints and Project Ceilings
 

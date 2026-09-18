@@ -14,6 +14,12 @@ Treat the invocation boundary as the source of truth for what can run now:
 
 Never scrape account secrets, print credentials, or use an unrelated account to fill gaps. Community tables and remembered model-family behavior are hints for where to look, not authoritative capability evidence.
 
+## Quota discovery
+
+Quota is a routing signal separate from model capability. Prefer a current, read-only usage snapshot exposed by the provider or the Z Code desktop host. If that surface is unavailable, accept a non-secret snapshot supplied by the host with `used`, `limit`, `remaining`, and `observed_at`; an optional `reset_at` helps decide when a depleted entitlement can be retried. Keep the raw response and credentials out of task output.
+
+Treat a snapshot as unknown when it is malformed, older than 15 minutes, or has no positive `limit`. Unknown quota uses the neutral routing value rather than zero. A confirmed zero remaining quota or a provider rate-limit response is different: it temporarily removes Z Code from the candidate set until reset or a fresh positive snapshot. Quota discovery must remain read-only and must not send a paid model request.
+
 ## Normalize heterogeneous hosts
 
 Build a temporary record for each available option:

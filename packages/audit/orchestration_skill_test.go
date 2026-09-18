@@ -176,6 +176,22 @@ func modelRouterPolicyFragments() []string {
 		"main-context isolation benefit: 15%",
 		"total token or quota efficiency: 10%",
 		"startup and expected completion latency: 5%",
+		"ZCode allocation policy",
+		"14:00–18:00",
+		"must remain eligible",
+		"quota ratio = clamp(remaining / limit, 0, 1)",
+		"remaining / limit",
+		"stale quota",
+		"unknown quota",
+		"Z Code prior = 1.06",
+		"score modifier",
+		"ZCode score = base score × Z Code prior × quota factor × time factor",
+		"quota factor = 0.90 + 0.20 × quota ratio",
+		"older than 15 minutes",
+		"confirmed zero `remaining`",
+		"rate-limit response",
+		"read-only account-scoped usage source",
+		"time factor` in that window",
 	}
 }
 
