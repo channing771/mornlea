@@ -21,6 +21,11 @@ var godotEntrypointTargets = []string{
 	"godot-asset-check",
 	"godot-project-check",
 	"godot-python-check",
+	"godot-input-check",
+	"godot-camera-check",
+	"godot-target-check",
+	"godot-entity-check",
+	"godot-disconnect-check",
 	"godot-smoke",
 	"godot-terrain-check",
 }
@@ -32,8 +37,16 @@ var godotEntrypointRecipes = map[string][]string{
 	"godot-asset-check":   {"scripts/godot/sync-assets.sh --check"},
 	"godot-project-check": {"scripts/godot/validate-project.sh"},
 	"godot-python-check":  {"scripts/godot/python-check.sh --locked"},
-	"godot-smoke":         {"scripts/godot/smoke.sh --iterations 100", "--isolated-python"},
-	"godot-terrain-check": {"scripts/godot/godot-terrain-check.sh"},
+	"godot-input-check":   {"scripts/godot/input-check.sh"},
+	"godot-camera-check":  {"scripts/godot/camera-check.sh"},
+	"godot-target-check":  {"scripts/godot/target-check.sh"},
+	"godot-entity-check": {
+		"$(CARGO) test -p mornlea_godot entity_snapshot --locked",
+		"scripts/godot/entity-check.sh",
+	},
+	"godot-disconnect-check": {"go test ./packages/client/runtime", "Disconnect|Overflow|Shutdown"},
+	"godot-smoke":            {"scripts/godot/smoke.sh --iterations 100", "--isolated-python"},
+	"godot-terrain-check":    {"scripts/godot/godot-terrain-check.sh"},
 }
 
 const godotEntrypointTestRootEnv = "MORNLEA_GODOT_ENTRYPOINT_TEST_ROOT"
@@ -128,7 +141,7 @@ func godotMakefileEntrypointViolations(t *testing.T, makefile string) []string {
 
 // godotMakefileScriptReferenceViolations is a whole-file invariant over every
 // non-comment Makefile line: the substring scripts/godot may appear only in a
-// rule line of exactly one of the three godot gate targets or in the
+// rule line of exactly one registered godot gate target or in the
 // tab-indented recipe lines directly following such a rule. It deliberately
 // stays grammar-light instead of teaching the rule parser more make syntax —
 // double-colon rules, inline semicolon recipes, and especially parse-time
@@ -160,7 +173,7 @@ func godotMakefileScriptReferenceViolations(makefile string) []string {
 		targets, _, ok := splitMakeRuleLine(line)
 		inGodotRecipe = ok && len(targets) == 1 && godotGate[targets[0]]
 		if !inGodotRecipe && strings.Contains(line, "scripts/godot") {
-			violations = append(violations, fmt.Sprintf("Makefile line references scripts/godot outside the three godot gate rules: %s", strings.TrimSpace(line)))
+			violations = append(violations, fmt.Sprintf("Makefile line references scripts/godot outside the registered godot gate rules: %s", strings.TrimSpace(line)))
 		}
 	}
 	return violations

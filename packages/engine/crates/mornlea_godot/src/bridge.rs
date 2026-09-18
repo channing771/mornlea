@@ -145,6 +145,7 @@ impl BridgeSession {
     /// Encode one complete semantic desktop intent into the producer-owned
     /// MCN1 record. Python supplies only typed device state; wire identity,
     /// event ordering, and numeric validation stay on this Rust boundary.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn submit_semantic(
         &mut self,
         move_x: i64,
@@ -497,6 +498,7 @@ impl MornleaClientBridge {
     }
 
     /// Submit typed desktop intent without exposing MCN1 to Python.
+    #[allow(clippy::too_many_arguments)]
     #[func]
     fn session_submit_semantic(
         &mut self,
@@ -825,6 +827,8 @@ impl MornleaClientBridge {
         result.set("aspect", 0.0f64);
         result.set("near", 0.0f64);
         result.set("far", 0.0f64);
+        result.set("entity_server_tick", 0i64);
+        result.set("entities", &VarArray::new());
         result.set("target_visible", false);
         result.set("target_x", 0i64);
         result.set("target_y", 0i64);
@@ -851,6 +855,24 @@ impl MornleaClientBridge {
         result.set("aspect", f64::from(frame.aspect));
         result.set("near", f64::from(frame.near));
         result.set("far", f64::from(frame.far));
+        result.set(
+            "entity_server_tick",
+            i64::try_from(frame.entity_server_tick).unwrap_or(i64::MAX),
+        );
+        let mut entities = VarArray::new();
+        for entity in &frame.entities {
+            let mut typed = VarDictionary::new();
+            typed.set("kind", i64::from(entity.kind));
+            typed.set("player_id", entity.player_id_text());
+            typed.set("dimension", i64::from(entity.dimension));
+            typed.set("position_x", f64::from(entity.position[0]));
+            typed.set("position_y", f64::from(entity.position[1]));
+            typed.set("position_z", f64::from(entity.position[2]));
+            typed.set("yaw", f64::from(entity.yaw));
+            typed.set("pitch", f64::from(entity.pitch));
+            entities.push(&typed.to_variant());
+        }
+        result.set("entities", &entities);
         result.set("target_visible", frame.target_visible);
         result.set("target_x", i64::from(frame.target_position[0]));
         result.set("target_y", i64::from(frame.target_position[1]));

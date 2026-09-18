@@ -444,20 +444,21 @@ func (step *stepState) resetRemoteLocked(id core.PlayerID, sample remoteFrameSam
 // The pose always stays inside the two most recent authoritative samples: the interpolation
 // weight is the explicit step elapsed over elapsed-plus-window, so any finite elapsed yields
 // a strictly interior pose and zero elapsed presents the previous authoritative sample.
-// Records keep deterministic player-ID order and are truncated to the batch capacity.
+// Records keep deterministic player-ID order. Exceeding the protocol-aligned capacity
+// fails the frame instead of silently omitting confirmed remote players.
 func (step *stepState) entityBatchLocked(serverTick uint64, elapsed time.Duration) (presentation.EntityBatch, error) {
 	ids := make([]core.PlayerID, 0, len(step.remotes))
 	for id := range step.remotes {
 		ids = append(ids, id)
 	}
-	if len(ids) == 0 {
-		return presentation.EntityBatch{}, nil
-	}
 	slices.SortFunc(ids, func(left, right core.PlayerID) int {
 		return bytes.Compare(left[:], right[:])
 	})
 	if len(ids) > presentation.MaxEntityBatchRecords {
-		ids = ids[:presentation.MaxEntityBatchRecords]
+		return presentation.EntityBatch{}, fmt.Errorf(
+			"runtime: remote-player count %d exceeds presentation capacity %d",
+			len(ids), presentation.MaxEntityBatchRecords,
+		)
 	}
 	records := make([]presentation.EntityRecord, 0, len(ids))
 	for _, id := range ids {

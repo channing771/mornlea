@@ -4,6 +4,7 @@ mod bridge;
 mod client_core;
 mod feature_negotiation;
 mod frame_decode;
+#[cfg(test)]
 mod input_map;
 mod lifecycle;
 mod mesh_worker;

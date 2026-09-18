@@ -32,11 +32,52 @@ pub(crate) struct TypedFrame {
     pub(crate) aspect: f32,
     pub(crate) near: f32,
     pub(crate) far: f32,
+    pub(crate) entity_server_tick: u64,
+    pub(crate) entities: Vec<TypedEntity>,
     pub(crate) target_visible: bool,
     pub(crate) target_position: [i32; 3],
     pub(crate) target_name: String,
     pub(crate) phase: u32,
     pub(crate) error: u32,
+}
+
+/// One renderer-independent entity value decoded from the frame family.
+/// The bridge publishes these fields to Godot only after the whole frame has
+/// passed identity, capacity, duplicate, and numeric-domain validation.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct TypedEntity {
+    pub(crate) kind: u32,
+    pub(crate) player_id: [u8; 16],
+    pub(crate) dimension: u32,
+    pub(crate) position: [f32; 3],
+    pub(crate) yaw: f32,
+    pub(crate) pitch: f32,
+}
+
+impl TypedEntity {
+    /// Return the canonical lowercase UUID text consumed as the Godot pool key.
+    pub(crate) fn player_id_text(&self) -> String {
+        let id = self.player_id;
+        format!(
+            "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+            id[0],
+            id[1],
+            id[2],
+            id[3],
+            id[4],
+            id[5],
+            id[6],
+            id[7],
+            id[8],
+            id[9],
+            id[10],
+            id[11],
+            id[12],
+            id[13],
+            id[14],
+            id[15],
+        )
+    }
 }
 
 pub(crate) fn decode_frame_record(record: &[u8]) -> Result<TypedFrame, u32> {
@@ -108,12 +149,53 @@ pub(crate) fn decode_frame_record(record: &[u8]) -> Result<TypedFrame, u32> {
         return Err(abi::STATUS_INTERNAL);
     }
 
-    let target = camera
-        + CAMERA_BYTES
-        + HUD_BYTES
-        + ENVIRONMENT_BYTES
-        + ENTITY_TICK_BYTES
-        + entity_count * ENTITY_BYTES;
+    let entity_tick = camera + CAMERA_BYTES + HUD_BYTES + ENVIRONMENT_BYTES;
+    let entity_server_tick = le64(record, entity_tick);
+    let entity_start = entity_tick + ENTITY_TICK_BYTES;
+    let mut entities = Vec::with_capacity(entity_count);
+    for index in 0..entity_count {
+        let offset = entity_start + index * ENTITY_BYTES;
+        let kind = le32(record, offset);
+        if kind != 1 || le32(record, offset + 4) != 0 {
+            return Err(abi::STATUS_INTERNAL);
+        }
+        let mut player_id = [0u8; 16];
+        player_id.copy_from_slice(&record[offset + 8..offset + 24]);
+        if player_id == [0; 16] || player_id[6] >> 4 != 4 || player_id[8] & 0xc0 != 0x80 {
+            return Err(abi::STATUS_INTERNAL);
+        }
+        if entities
+            .iter()
+            .any(|entity: &TypedEntity| entity.player_id == player_id)
+        {
+            return Err(abi::STATUS_INTERNAL);
+        }
+        let dimension = le32(record, offset + 24);
+        if dimension > 1 {
+            return Err(abi::STATUS_INTERNAL);
+        }
+        let position = [
+            float(record, offset + 28)?,
+            float(record, offset + 32)?,
+            float(record, offset + 36)?,
+        ];
+        let yaw = float(record, offset + 40)?;
+        let pitch = float(record, offset + 44)?;
+        if !position.iter().all(|value| value.is_finite()) || !yaw.is_finite() || !pitch.is_finite()
+        {
+            return Err(abi::STATUS_INTERNAL);
+        }
+        entities.push(TypedEntity {
+            kind,
+            player_id,
+            dimension,
+            position,
+            yaw,
+            pitch,
+        });
+    }
+
+    let target = entity_start + entity_count * ENTITY_BYTES;
     let target_visible = ready_word(record, target)?;
     let target_position = [
         le32(record, target + 4) as i32,
@@ -155,6 +237,8 @@ pub(crate) fn decode_frame_record(record: &[u8]) -> Result<TypedFrame, u32> {
         aspect,
         near,
         far,
+        entity_server_tick,
+        entities,
         target_visible,
         target_position,
         target_name,
@@ -280,5 +364,57 @@ mod tests {
         record[camera + 20..camera + 24]
             .copy_from_slice(&core::f32::consts::FRAC_PI_2.to_bits().to_le_bytes());
         assert!(decode_frame_record(&record).is_err());
+    }
+
+    #[test]
+    fn entity_snapshot_decode_exposes_typed_remote_players() {
+        let record = frame_record_with_entities(2);
+        let decoded = decode_frame_record(&record).expect("typed entity frame");
+        assert_eq!(decoded.entity_server_tick, 42);
+        assert_eq!(decoded.entities.len(), 2);
+        assert_eq!(decoded.entities[0].kind, 1);
+        assert_eq!(decoded.entities[0].player_id[0], 1);
+        assert_eq!(decoded.entities[0].dimension, 0);
+        assert_eq!(decoded.entities[0].position, [1.0, 65.0, -2.0]);
+        assert_eq!(decoded.entities[0].yaw, 0.25);
+        assert_eq!(decoded.entities[0].pitch, -0.125);
+    }
+
+    #[test]
+    fn entity_snapshot_decode_rejects_duplicate_identity_and_capacity_overflow() {
+        let mut duplicate = frame_record_with_entities(2);
+        let entities = abi::FRAME_HEADER_BYTES + 40 + 16 + 48 + 8;
+        let first_id = duplicate[entities + 8..entities + 24].to_vec();
+        duplicate[entities + 48 + 8..entities + 48 + 24].copy_from_slice(&first_id);
+        assert!(decode_frame_record(&duplicate).is_err());
+        assert!(decode_frame_record(&frame_record_with_entities(8)).is_err());
+    }
+
+    fn frame_record_with_entities(count: usize) -> Vec<u8> {
+        let fixed = abi::FRAME_HEADER_BYTES + 40 + 16 + 48 + 8 + 16 + 8;
+        let mut record = vec![0u8; fixed + count * 48];
+        record[0..4].copy_from_slice(&abi::MAGIC_FRAME.to_le_bytes());
+        record[4..8].copy_from_slice(&abi::FRAME_VERSION.to_le_bytes());
+        record[8..12].copy_from_slice(&abi::FRAME_SNAPSHOT_VERSION.to_le_bytes());
+        record[12..16].copy_from_slice(&(count as u32).to_le_bytes());
+        record[24..32].copy_from_slice(&3u64.to_le_bytes());
+        record[32..40].copy_from_slice(&2u64.to_le_bytes());
+        let tick = abi::FRAME_HEADER_BYTES + 40 + 16 + 48;
+        record[tick..tick + 8].copy_from_slice(&42u64.to_le_bytes());
+        let entities = tick + 8;
+        for index in 0..count {
+            let offset = entities + index * 48;
+            record[offset..offset + 4].copy_from_slice(&1u32.to_le_bytes());
+            record[offset + 8] = (index + 1) as u8;
+            record[offset + 14] = 0x40;
+            record[offset + 16] = 0x80;
+            record[offset + 28..offset + 32]
+                .copy_from_slice(&(index as f32 + 1.0).to_bits().to_le_bytes());
+            record[offset + 32..offset + 36].copy_from_slice(&65.0f32.to_bits().to_le_bytes());
+            record[offset + 36..offset + 40].copy_from_slice(&(-2.0f32).to_bits().to_le_bytes());
+            record[offset + 40..offset + 44].copy_from_slice(&0.25f32.to_bits().to_le_bytes());
+            record[offset + 44..offset + 48].copy_from_slice(&(-0.125f32).to_bits().to_le_bytes());
+        }
+        record
     }
 }

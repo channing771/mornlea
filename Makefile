@@ -21,7 +21,7 @@ ARGS ?=
 # dev-check、vet）显式循环该列表，防止新模块成为 ./... 盲区。
 GO_TEST_MODULES := ./packages/contracts ./packages/shared ./packages/server ./packages/client ./packages/tools ./packages/audit
 
-.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck comment-language-check fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev godot-asset-check godot-project-check godot-python-check godot-input-check godot-camera-check godot-target-check godot-disconnect-check godot-smoke godot-terrain-check
+.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck comment-language-check fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev godot-asset-check godot-project-check godot-python-check godot-input-check godot-camera-check godot-target-check godot-entity-check godot-disconnect-check godot-smoke godot-terrain-check
 
 run test test-multiplayer bench-multiplayer visual-check visual-update: rust
 build: rust
@@ -50,6 +50,11 @@ help:
 		'  make godot-asset-check   Optional pilot gate: verify generated Godot assets match their inputs' \
 		'  make godot-project-check Optional pilot gate: validate the Godot project structure' \
 		'  make godot-python-check  Optional pilot gate: locked Godot Python static and unit checks' \
+		'  make godot-input-check   Optional pilot gate: validate desktop semantic input' \
+		'  make godot-camera-check  Optional pilot gate: validate typed camera mapping' \
+		'  make godot-target-check  Optional pilot gate: validate typed target feedback' \
+		'  make godot-entity-check  Optional pilot gate: validate remote-player presentation' \
+		'  make godot-disconnect-check Optional pilot gate: validate terminal session behavior' \
 		'  make godot-smoke         Optional pilot gate: 100-iteration isolated Godot headless smoke' \
 		'  make godot-terrain-check  Optional pilot gate: headless transcript terrain scenario end to end' \
 		'  make fmt              格式化全部 Rust 与 Go 源码' \
@@ -240,6 +245,10 @@ godot-camera-check:
 
 godot-target-check:
 	scripts/godot/target-check.sh
+
+godot-entity-check:
+	cd $(RUST_DIR) && $(CARGO) test -p mornlea_godot entity_snapshot --locked
+	scripts/godot/entity-check.sh
 
 godot-disconnect-check:
 	go test ./packages/client/runtime -run 'Disconnect|Overflow|Shutdown' -race -count=1
