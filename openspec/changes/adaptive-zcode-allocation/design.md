@@ -8,7 +8,7 @@ See `proposal.md` and `specs/zcode-quota-aware-routing/spec.md` for the motivati
 
 - Make the Z Code preference modest, deterministic, and bounded.
 - Let a current non-secret quota snapshot increase or reduce the Z Code score without confusing capability with entitlement.
-- Remove the local-time blackout while preserving ordinary capability, provider, user, and validation constraints.
+- Enforce the local 14:00–18:00 Z Code blackout while preserving ordinary capability, provider, user, and validation constraints.
 - Keep both skill copies independently usable and byte-identical.
 - Make stale, unavailable, and exhausted quota decisions explicit and auditable.
 
@@ -30,7 +30,7 @@ An unavailable or stale source maps to ratio `0.50`, which preserves a small pre
 
 ### Apply a bounded modifier after existing score axes
 
-The existing six-axis score remains the primary fit and risk signal. The new modifier uses a `1.06` prior and a quota factor from `0.90` to `1.10`; it cannot override explicit user constraints or the native fallback rules. The factor is applied after filtering incompatible candidates and after calculating the existing base score. A constant `time factor = 1.00` makes the 14:00–18:00 change explicit and prevents time-of-day from silently becoming a second quota heuristic.
+The existing six-axis score remains the primary fit and risk signal. The new modifier uses a `1.06` prior and a quota factor from `0.90` to `1.10`; it cannot override explicit user constraints or the native fallback rules. The factor is applied after filtering incompatible candidates and after calculating the existing base score. The local 14:00–18:00 check happens before scoring and removes Z Code entirely; outside the disabled window, a constant `time factor = 1.00` prevents time-of-day from silently becoming a second quota heuristic.
 
 The prior and bounds are policy judgments rather than model-accuracy claims. They give healthy Z Code a greater overall opportunity while allowing low remaining capacity to reduce allocation pressure. Future measured evaluations may revise them through another OpenSpec change.
 
@@ -47,7 +47,7 @@ When a controller records a routing decision, it may include the normalized rati
 - **Use a fixed Z Code percentage or random sampling:** rejected because it ignores current entitlement and makes routing hard to reproduce.
 - **Treat missing quota as zero:** rejected because a telemetry outage would incorrectly disable a healthy worker.
 - **Probe quota with a model request:** rejected because it spends capacity and cannot reliably distinguish quota from provider failure.
-- **Disable Z Code from 14:00–18:00:** rejected because it creates the user-reported blackout and does not represent capability or quota.
+- **Leave Z Code enabled from 14:00–18:00:** rejected because the requested policy explicitly reserves that local window and needs a deterministic pre-score exclusion.
 - **Add an undocumented provider API client:** rejected because the repository has no verified contract and would create credential and compatibility risk.
 
 ## Risks / Trade-offs

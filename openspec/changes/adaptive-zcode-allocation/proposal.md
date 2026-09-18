@@ -1,13 +1,13 @@
 ## Why
 
-The synchronized Mornlea router can invoke the configured Z Code `GLM-5.3` worker, but its allocation guidance does not yet turn the current entitlement into a deterministic routing signal. A modest Z Code preference and a temporary afternoon blackout also need explicit, reviewable policy so healthy Z Code capacity remains usable from 14:00 through 18:00 local time.
+The synchronized Mornlea router can invoke the configured Z Code `GLM-5.3` worker, but its allocation guidance does not yet turn the current entitlement into a deterministic routing signal. A modest Z Code preference and an enforced local afternoon blackout need explicit, reviewable policy so Z Code is reserved outside 14:00 through 18:00 local time.
 
 ## What Changes
 
 - Add a quota-aware Z Code allocation policy to both synchronized `adaptive-model-router` skills.
 - Define a non-secret, read-only quota snapshot contract with freshness, derivation, clamping, unknown-quota, and confirmed-exhaustion behavior.
 - Apply a modest Z Code prior and a bounded quota factor to the existing six-axis routing score.
-- Keep Z Code eligible during the local 14:00–18:00 window when its capability probe is healthy and quota is not confirmed exhausted.
+- Disable Z Code during the local 14:00–18:00 window before quota scoring, regardless of probe health or remaining quota.
 - Preserve native fallback for high-consequence work, weak validation oracles, capability failures, provider rate limits, and confirmed zero quota.
 - Extend the project audit so the two skill copies cannot silently lose the quota and time-window rules.
 

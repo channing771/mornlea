@@ -5,7 +5,7 @@
 - The change is limited to synchronized project-owned routing guidance, capability-discovery guidance, and the corresponding governance audit. No game runtime, save, network, protocol, ABI, or benchmark behavior changes.
 - The implemented policy uses `Z Code prior = 1.06`, `quota factor = 0.90 + 0.20 × quota ratio`, and `time factor = 1.00`.
 - The quota input is read-only and non-secret. Freshness is limited to 15 minutes; unknown quota uses ratio `0.50`; confirmed zero remaining or a provider rate limit removes Z Code for the current decision.
-- The local 14:00–18:00 window has no blackout. A healthy, non-exhausted Z Code candidate remains eligible and is still subject to ordinary fit, validation, user, and provider constraints.
+- The local 14:00–18:00 window is a hard Z Code blackout. Z Code is omitted before quota scoring, regardless of probe health or remaining quota; outside the window it remains subject to ordinary fit, validation, user, and provider constraints.
 
 ## Routing decision
 
@@ -24,7 +24,7 @@
 - `git diff --check`: passed.
 - `make test-race`: passed for the Rust release build and all six Go module loops; package results were a mix of fresh and cached runs.
 - `make dev-check`: the vet phase completed, but the short-test phase reproduced the pre-existing unchanged `packages/server/server` failure `TestWarpParityMemoryVsTCP` (`unsupported passive dimension 1`) and cleanup reported the same passive-storage error. No exemption or gate bypass was used.
-- `openspec validate --all --strict --no-interactive`: passed, 116 items.
+- `openspec validate --all --strict --no-interactive`: passed, 116 items before this correction; rerun after the corrected blackout wording is validated.
 
 ## Review and rulings
 
@@ -33,3 +33,12 @@
 - Credentials and raw account responses remain outside skill text, ledger output, and routing records.
 - Architecture skill: no change. This is a developer-tool policy and does not establish a new game ownership, dependency, lifecycle, or ABI boundary.
 - Model router: updated in both synchronized copies because the quota-aware prior, freshness treatment, and afternoon eligibility are reusable routing rules backed by the requested behavior and focused policy tests.
+
+## Blackout correction closeout
+
+- The corrected policy is a hard local-time blackout: from 14:00 through 18:00, Z Code is removed before quota scoring and cannot consume quota; outside that window it may compete under the quota-aware policy.
+- The synchronized `.codex` and `.claude` copies, capability-discovery references, OpenSpec artifacts, and audit fragments all use the corrected disabled-window semantics.
+- Final verification: 35 bridge tests passed; focused audit passed; synchronized copies passed `cmp`; the stale inverted-window wording scan found no matches; `git diff --check` passed; `openspec validate --all --strict --no-interactive` passed with 117 items; `make test-race` passed.
+- `make dev-check` still reproduces the pre-existing `packages/server/server` `TestWarpParityMemoryVsTCP` failure (`unsupported passive dimension 1`) and matching passive-storage cleanup error; no gate bypass was used.
+- Architecture skill: no change. The rule governs agent routing and does not alter Mornlea runtime ownership or boundaries.
+- Model router: no further change. The corrected blackout ordering and quota weighting are already captured as reusable policy.

@@ -1,6 +1,6 @@
 ## 1. Quota-aware policy contract
 
-- [x] 1.1 Add `openspec/changes/adaptive-zcode-allocation/specs/zcode-quota-aware-routing/spec.md` with quota normalization, bounded score modifiers, unknown/exhausted behavior, local-time eligibility, and credential-safe scenarios; validate with `openspec validate --all --strict --no-interactive`.
+- [x] 1.1 Add `openspec/changes/adaptive-zcode-allocation/specs/zcode-quota-aware-routing/spec.md` with quota normalization, bounded score modifiers, unknown/exhausted behavior, local-time blackout, and credential-safe scenarios; validate with `openspec validate --all --strict --no-interactive`.
 - [x] 1.2 Add `proposal.md` and `design.md` describing the affected synchronized skills, rejected alternatives, compatibility boundaries, and rollback; validate the change with `openspec status --change adaptive-zcode-allocation --json`.
 
 ## 2. Synchronized router guidance and audit

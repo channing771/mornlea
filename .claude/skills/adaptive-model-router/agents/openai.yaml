@@ -1,7 +1,7 @@
 interface:
   display_name: "Adaptive Model Router"
   short_description: "Route isolated work across native and Z Code agents"
-  default_prompt: "Use $adaptive-model-router to select a sufficient, token-efficient native or Z Code worker for this isolated Mornlea task."
+  default_prompt: "Use $adaptive-model-router; route architecture, feature-design, and high-level system tasks only to an advanced native OpenAI model before applying Z Code quota preferences."
 
 policy:
   allow_implicit_invocation: true

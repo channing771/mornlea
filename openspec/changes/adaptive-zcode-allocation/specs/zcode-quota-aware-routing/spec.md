@@ -1,6 +1,6 @@
 ## Purpose
 
-This capability makes external Z Code allocation deterministic, quota-aware, and available throughout the afternoon without exposing credentials or sacrificing native fallback for risky work.
+This capability makes external Z Code allocation deterministic and quota-aware, while enforcing a local afternoon blackout without exposing credentials or sacrificing native fallback for risky work.
 
 ## ADDED Requirements
 
@@ -40,19 +40,25 @@ The quota factor MUST therefore remain between `0.90` and `1.10`. A missing, mal
 - **WHEN** the router builds the candidate set
 - **THEN** it MUST omit Z Code for that decision and retain the next eligible native or external fallback
 
-### Requirement: Afternoon Z Code eligibility
+### Requirement: Afternoon Z Code blackout
 
-The router MUST use the host's local timezone for its time check. During the stated `14:00–18:00` local window, a healthy Z Code probe with quota that is not confirmed exhausted MUST remain eligible. The time factor MUST remain `1.00`; the router MUST NOT create a time-based blackout or set the Z Code score to zero. Actual capability, quota, provider, user, or validation constraints MAY still select a fallback.
+The router MUST use the host's local timezone for its time check. During the stated `14:00–18:00` local window, the router MUST remove Z Code from the candidate set before quota scoring, regardless of probe health or quota. Outside that window, Z Code MAY participate when its probe is healthy and quota is not confirmed exhausted. The time factor MUST remain `1.00` outside the disabled window. Actual capability, quota, provider, user, or validation constraints MAY still select a fallback.
 
-#### Scenario: Healthy Z Code remains available in the afternoon
+#### Scenario: Healthy Z Code is disabled in the afternoon
 
-- **GIVEN** local host time is within `14:00–18:00`, the Z Code probe is healthy, and quota is fresh or unknown but not confirmed exhausted
+- **GIVEN** local host time is within `14:00–18:00`, the Z Code probe is healthy, and quota is full
 - **WHEN** the router evaluates candidates
-- **THEN** Z Code MUST remain in the candidate set with time factor `1.00`
+- **THEN** Z Code MUST be omitted before scoring and no Z Code quota MUST be spent
 
-#### Scenario: Afternoon provider failure still falls back
+#### Scenario: Outside the blackout Z Code can compete
 
-- **GIVEN** local host time is within `14:00–18:00` but the Z Code probe or provider request fails
+- **GIVEN** local host time is outside `14:00–18:00`, the Z Code probe is healthy, and quota is fresh or unknown but not confirmed exhausted
+- **WHEN** the router evaluates candidates
+- **THEN** Z Code MAY enter the candidate set and its score MUST use time factor `1.00`
+
+#### Scenario: Provider failure still falls back outside the blackout
+
+- **GIVEN** local host time is outside `14:00–18:00` but the Z Code probe or provider request fails
 - **WHEN** the router evaluates candidates
 - **THEN** it MUST use the normal fallback path for that failure and MUST NOT fabricate Z Code availability
 

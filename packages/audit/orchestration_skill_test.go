@@ -178,7 +178,8 @@ func modelRouterPolicyFragments() []string {
 		"startup and expected completion latency: 5%",
 		"ZCode allocation policy",
 		"14:00–18:00",
-		"must remain eligible",
+		"MUST be disabled",
+		"time factor = 1.00 outside the disabled window",
 		"quota ratio = clamp(remaining / limit, 0, 1)",
 		"remaining / limit",
 		"stale quota",
@@ -191,7 +192,14 @@ func modelRouterPolicyFragments() []string {
 		"confirmed zero `remaining`",
 		"rate-limit response",
 		"read-only account-scoped usage source",
-		"time factor` in that window",
+		"High-level OpenAI design gate",
+		"Before applying any quota or backend score",
+		"highest eligible OpenAI model",
+		"gpt-5.6-sol",
+		"with `high` or `max` reasoning",
+		"Z Code and every other non-OpenAI backend MUST NOT compete",
+		"no compliant advanced OpenAI configuration",
+		"MUST NOT silently substitute Z Code",
 	}
 }
 

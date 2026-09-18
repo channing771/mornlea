@@ -14,9 +14,13 @@ Treat the invocation boundary as the source of truth for what can run now:
 
 Never scrape account secrets, print credentials, or use an unrelated account to fill gaps. Community tables and remembered model-family behavior are hints for where to look, not authoritative capability evidence.
 
+## High-level design gate
+
+Classify architecture, feature-design, contract, ownership, lifecycle, concurrency, and other durable multi-component tasks before quota scoring. These tasks MUST use the highest eligible native OpenAI model under the project ceiling with `high` or `max` reasoning. If no compliant advanced OpenAI configuration is exposed, report an unavailable route; do not substitute Z Code or another non-OpenAI backend. Ambiguous tasks that could change durable boundaries are classified as high-level.
+
 ## Quota discovery
 
-Quota is a routing signal separate from model capability. Prefer a current, read-only usage snapshot exposed by the provider or the Z Code desktop host. If that surface is unavailable, accept a non-secret snapshot supplied by the host with `used`, `limit`, `remaining`, and `observed_at`; an optional `reset_at` helps decide when a depleted entitlement can be retried. Keep the raw response and credentials out of task output.
+Quota is a routing signal separate from model capability. Apply it only after the high-level gate and local-time filter. During the host's local `14:00–18:00` disabled window, omit Z Code before scoring. Outside that window, prefer a current, read-only usage snapshot exposed by the provider or the Z Code desktop host. If that surface is unavailable, accept a non-secret snapshot supplied by the host with `used`, `limit`, `remaining`, and `observed_at`; an optional `reset_at` helps decide when a depleted entitlement can be retried. Keep the raw response and credentials out of task output.
 
 Treat a snapshot as unknown when it is malformed, older than 15 minutes, or has no positive `limit`. Unknown quota uses the neutral routing value rather than zero. A confirmed zero remaining quota or a provider rate-limit response is different: it temporarily removes Z Code from the candidate set until reset or a fresh positive snapshot. Quota discovery must remain read-only and must not send a paid model request.
 

@@ -17,7 +17,7 @@ When availability or effort support is unclear, read [capability discovery](refe
 
 ## Route Native and Z Code Workers
 
-Prefer the native delegation surface when its eligible model is sufficient and native lifecycle, tool, or review integration materially reduces coordination cost. When the Z Code probe passes, the task is bounded, validation is strong, and quota is not confirmed exhausted, let the adjusted Z Code score compete in the normal candidate set. A model absent from the native tool enum cannot be injected by this skill.
+Prefer the native delegation surface when its eligible model is sufficient and native lifecycle, tool, or review integration materially reduces coordination cost. For architecture, feature-design, and other high-level system tasks, apply the mandatory OpenAI design gate before considering any Z Code score. For ordinary bounded work, Z Code may compete only when its probe passes, validation is strong, quota is not confirmed exhausted, and the local time is outside the disabled window. A model absent from the native tool enum cannot be injected by this skill.
 
 Z Code `GLM-5.3` is available through the `scripts/zcode-agent.mjs` runtime packaged with this skill as an external isolated agent, not as a model on the native delegation surface. The bridge reads the enabled desktop provider locally, passes its credential to the child process only, returns machine-readable JSON, and never copies the credential into project configuration or task output. Resolve `router_skill_dir` to the absolute directory containing the selected `adaptive-model-router/SKILL.md`; do not depend on a project-root bridge. Verify the route immediately before routing:
 
@@ -56,24 +56,30 @@ Pass the start brief and steering text through stdin unless a short non-sensitiv
 
 Use `plan` for read-only discovery and review. Use an editing mode only when the worker has an isolated worktree or an exclusive, non-overlapping file set and pass the bridge's explicit ownership assertion; the controller still owns integration and validation. Count the Z Code worker against the two-agent concurrency ceiling. Its startup context is substantial, so select it for bounded work that benefits from isolation and enough repository reasoning to repay that bootstrap cost, not for trivial extraction or one-line edits. The live supervisor can only wake a controller with a pending wait; it cannot inject an unsolicited turn into an idle Codex task.
 
+## High-level OpenAI design gate
+
+Before applying any quota or backend score, classify the task from its requested outcome and affected boundaries. Code architecture, package or module ownership, dependency direction, lifecycle or concurrency design, protocol/ABI/storage contracts, multi-component feature design, cross-component user behavior, OpenSpec proposal/design, and other durable system decisions are high-level tasks. If the brief is ambiguous and could change a durable boundary or multiple components, classify it as high-level.
+
+For a high-level task, filter the candidate set to native OpenAI-backed models and select the highest eligible OpenAI model under the project ceiling, currently `gpt-5.6-sol`, with `high` or `max` reasoning. Z Code and every other non-OpenAI backend MUST NOT compete through quota or routing scores. If no compliant advanced OpenAI configuration is exposed by the live native surface, report an unavailable route and MUST NOT silently substitute Z Code.
+
 ## ZCode allocation policy
 
-Keep Z Code in normal rotation with a modestly higher overall share, while retaining native fallback for high-consequence or weak-oracle work. This is a bounded routing preference, not a guarantee that Z Code wins every task.
+Keep Z Code in normal rotation outside the local 14:00–18:00 disabled window, with a modestly higher overall share, while retaining native fallback for high-consequence or weak-oracle work. This is a bounded routing preference, not a guarantee that Z Code wins every task.
 
-Immediately before scoring a Z Code candidate, obtain a fresh, non-secret quota snapshot from a read-only account-scoped usage source exposed by the host or provider. Accept `used`, `limit`, and `remaining` values plus `observed_at` and optional `reset_at`; when only `used` and `limit` are available, derive `remaining = limit - used`. Do not send an inference request just to discover quota, print credentials, or treat a missing snapshot as zero quota. A snapshot older than 15 minutes, malformed, or missing a positive `limit` is `stale quota` and becomes `unknown quota` for routing.
+Immediately before scoring an ordinary Z Code candidate, first apply the high-level gate and the local-time filter. During `14:00–18:00` in the host's local timezone, remove Z Code from the candidate set and do not spend quota on it. Outside that disabled window, obtain a fresh, non-secret quota snapshot from a read-only account-scoped usage source exposed by the host or provider. Accept `used`, `limit`, and `remaining` values plus `observed_at` and optional `reset_at`; when only `used` and `limit` are available, derive `remaining = limit - used`. Do not send an inference request just to discover quota, print credentials, or treat a missing snapshot as zero quota. A snapshot older than 15 minutes, malformed, or missing a positive `limit` is `stale quota` and becomes `unknown quota` for routing.
 
 Normalize the live value as `quota ratio = clamp(remaining / limit, 0, 1)`. Apply the following deterministic `score modifier` after the six-axis base score:
 
 ```text
-ZCode score = base score × Z Code prior × quota factor × time factor
+ZCode score = base score × Z Code prior × quota factor × time factor (outside the disabled window)
 Z Code prior = 1.06
 quota factor = 0.90 + 0.20 × quota ratio
-time factor = 1.00
+time factor = 1.00 outside the disabled window
 ```
 
 The neutral `unknown quota` case uses a ratio of `0.50`, so it keeps the modest Z Code prior without pretending that capacity is either full or exhausted. A confirmed zero `remaining` value or an actual provider rate-limit response removes Z Code from that decision until the next reset or a fresh positive snapshot; an unavailable quota source does not. This keeps the total Z Code preference slightly higher while still conserving a genuinely depleted entitlement.
 
-Use the host's local timezone for the time check. During `14:00–18:00`, Z Code must remain eligible whenever its probe is healthy and quota is not confirmed exhausted; do not create a time-based blackout or set its score to zero. Keep the same `time factor` in that window, and fall back only for an actual capability, quota, or provider failure. Record the local timezone and quota observation time in the routing decision, never the credential or raw account response.
+Use the host's local timezone for the time check. During `14:00–18:00`, Z Code MUST be disabled and omitted before scoring, regardless of probe health or quota. Outside the disabled window, Z Code remains eligible only when its probe is healthy and quota is not confirmed exhausted; fall back for an actual capability, quota, provider, user, or validation constraint. Record the local timezone, disabled-window classification, and quota observation time in the routing decision, never the credential or raw account response.
 
 ## Apply Constraints and Project Ceilings
 
