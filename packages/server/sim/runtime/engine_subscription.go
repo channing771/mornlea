@@ -87,6 +87,15 @@ func (engine *Engine) reconcileSubscriptions(result *TickResult) {
 		next := engine.sessionWantedSnapshot(sessionID, session)
 		for key := range next {
 			union[key] = struct{}{}
+			if _, alreadyWanted := session.wanted[key]; alreadyWanted {
+				continue
+			}
+			// `Ready` also wakes publication for a late subscriber when the shared
+			// chunk did not transition globally during this tick.
+			dimension := engine.dimension(key.Dimension)
+			if info, exists := dimension.Info(key.Pos); exists && info.State == realm.ChunkReady {
+				result.Ready = append(result.Ready, key)
+			}
 		}
 		for key := range session.wanted {
 			if _, retained := next[key]; !retained {
