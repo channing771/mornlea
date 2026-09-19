@@ -49,6 +49,10 @@ func (engine *engineContext) advancePassiveSpawn() {
 	if anchorSession == nil || anchorSession.player == nil {
 		return
 	}
+	if anchorSession.dimension != core.Overworld {
+		// Protocol, storage, and PassiveSpawn all require overworld-only cattle.
+		return
+	}
 	dimension := engine.dimension(anchorSession.dimension)
 	if dimension == nil {
 		return

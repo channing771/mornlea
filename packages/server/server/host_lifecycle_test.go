@@ -90,7 +90,10 @@ func TestHostHeartbeatTimeoutCleanupIsIsolated(t *testing.T) {
 func TestHostSlowClientCleanupIsIsolated(t *testing.T) {
 	config := hostTestConfig()
 	config.MaxPlayers = 8
-	config.OutboxCapacity = 4
+	// Keep the host outbox small enough that a non-draining client still
+	// disconnects, but large enough that an already-ready chunk burst for a
+	// newly joining session cannot abort login before Ready.
+	config.OutboxCapacity = 32
 	host, stop := startHostWithConfig(t, config, newHostTestStore())
 	defer stop()
 	healthy := loginHealthyMemoryPlayers(t, host, 7, 400)

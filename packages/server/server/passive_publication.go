@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"github.com/channing771/mornlea/packages/server/sim/contract"
+	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
 )
 
@@ -142,6 +143,11 @@ func (server *Server) publishPassives(
 // 话订阅集合内，且该会话已收到过这份快照（客户端先有世界再有实体，与夜行
 // 者的判定逐语义一致）。
 func (server *Server) passiveCandidateVisible(current *session, mob contract.PassiveMob) bool {
+	if mob.Dimension != core.Overworld {
+		// Wire PassiveSpawn rejects every non-overworld dimension; depths or
+		// other dimensions must stay off the session stream rather than close it.
+		return false
+	}
 	foot := publicationFootChunk(mob.Dimension, [3]float32(mob.State.Position))
 	if !server.engine.SessionWantsChunk(current.id, foot) {
 		return false

@@ -659,3 +659,12 @@ The uncommitted `modernize-project-governance` implementation is an explicit pre
 - Task 12.7: complete. `openspec validate --all --strict --no-interactive` passes 121/121. Proposal/spec/design/tasks, the P7 `Decision: GO`, target architecture documents, and all seven P8–P14 candidates reconcile: candidate artifacts are complete, their implementation tasks remain entirely unchecked, the existing Rust client remains the default, and no candidate was implemented in this change.
 - Architecture skill: no change. The observed failures are baseline-specific validation debt and renderer/server test fixtures, not durable cross-task ownership or dependency rules; existing architecture guidance already requires preserving them as explicit failures rather than weakening gates.
 - Package state: partial, with 88/90 leaf tasks checked. The remaining unchecked tasks are 12.5 and 12.6; they require separate baseline/test-fixture or visual-golden remediation before this change can be marked fully complete.
+
+### Closeout (2026-09-20)
+
+- User ruling: finish `pilot-godot-client-migration`, sync OpenSpec, submit a PR, and merge to `main`.
+- Removed the in-repo `spec-delegated-orchestration` skill and the change-local `delegation/` result store so that skill is no longer a project document.
+- Task 12.5: `openspec/specs/visual-verification/spec.md` English producer-handoff requirements were moved after the grandfathered Chinese prose so language-debt line numbers stay stable; `go test ./packages/audit -count=1` passed. Passive cattle spawn and publication now stay overworld-only, matching wire and storage; `TestHostSlowClientCleanupIsIsolated` keeps a 32-message host outbox so an already-ready snapshot burst cannot abort login before Ready. `go test ./packages/server/server -run 'TestHostSlowClientCleanupIsIsolated|TestWarpParityMemoryVsTCP' -count=1` passed.
+- Task 12.6: inspected `grass-closeup`, `mining-crack-early`, and `mining-crack-heavy` against the thinner target outline and dimmer block-name change, then updated those three world goldens. `make visual-check` passed all scenes. `make frontend-check` passed typecheck, 232 Vitest tests, production build, and `dist` consistency.
+- Specs: synced the `godot-client-pilot` delta into `openspec/specs/godot-client-pilot/spec.md`. `openspec validate --all --strict --no-interactive` passed 122/122.
+- Architecture skill: no change. Overworld-only cattle and visual-class routing are already stated by protocol/storage and `visual-verification`.
