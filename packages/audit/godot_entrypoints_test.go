@@ -18,6 +18,8 @@ import (
 // legacy make/CI entry (build, test, run, companion-agent-check) must stay
 // free of any scripts/godot probe or godot-* dependency edge.
 var godotEntrypointTargets = []string{
+	"godot-build",
+	"godot-check",
 	"godot-asset-check",
 	"godot-project-check",
 	"godot-python-check",
@@ -41,6 +43,12 @@ var godotEntrypointTargets = []string{
 // godot-smoke additionally requires the isolated Python flag so the smoke
 // cycle can never silently fall back to a host interpreter.
 var godotEntrypointRecipes = map[string][]string{
+	"godot-build": {
+		"scripts/godot/build-python-runtime.sh --verify --offline",
+		"scripts/godot/build-extension.sh --profile release --verify",
+		"scripts/godot/build-core.sh --profile release --verify",
+	},
+	"godot-check":         {"scripts/godot/godot.sh --headless --path apps/mornlea-godot --editor --quit"},
 	"godot-asset-check":   {"scripts/godot/sync-assets.sh --check"},
 	"godot-project-check": {"scripts/godot/validate-project.sh"},
 	"godot-python-check":  {"scripts/godot/python-check.sh --locked"},

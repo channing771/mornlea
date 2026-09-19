@@ -118,6 +118,7 @@ func TestGodotPythonRuntimePin(t *testing.T) {
 	check := readBaselineDoc(t, root, filepath.Join("scripts", "godot", "python-runtime-check.sh"))
 	for _, required := range []string{
 		"--qualify",
+		"--exported",
 		"--offline",
 		"MORNLEA_PY4GODOT_CACHE_DIR",
 		"PYTHONNOUSERSITE",

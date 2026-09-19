@@ -38,13 +38,17 @@ trap cleanup EXIT
 
 usage() {
   printf '%s\n' \
-    'usage: scripts/godot/python-runtime-check.sh (--qualify|--coexistence|--bridge-contract|--host-open-session|--session-feature) [--offline] [--target darwin-arm64] [--cache-dir ABSOLUTE_PATH]'
+    'usage: scripts/godot/python-runtime-check.sh (--qualify|--exported|--coexistence|--bridge-contract|--host-open-session|--session-feature) [--offline] [--target darwin-arm64] [--cache-dir ABSOLUTE_PATH]'
 }
 
 while (($# > 0)); do
   case "$1" in
     --qualify)
       mode="qualify"
+      shift
+      ;;
+    --exported)
+      mode="exported"
       shift
       ;;
     --coexistence)
@@ -87,8 +91,8 @@ while (($# > 0)); do
   esac
 done
 
-[[ "${mode}" == "qualify" || "${mode}" == "coexistence" || "${mode}" == "bridge-contract" || "${mode}" == "host-open-session" || "${mode}" == "session-feature" ]] || \
-  fail "--qualify, --coexistence, --bridge-contract, --host-open-session, or --session-feature is required"
+[[ "${mode}" == "qualify" || "${mode}" == "exported" || "${mode}" == "coexistence" || "${mode}" == "bridge-contract" || "${mode}" == "host-open-session" || "${mode}" == "session-feature" ]] || \
+  fail "--qualify, --exported, --coexistence, --bridge-contract, --host-open-session, or --session-feature is required"
 [[ "${target}" == "darwin-arm64" ]] || fail "unsupported Py4Godot desktop target: ${target}"
 [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]] || \
   fail "unsupported Py4Godot desktop target: $(uname -s)-$(uname -m)"
@@ -266,43 +270,46 @@ if [[ "${mode}" == "coexistence" ]]; then
   exit 0
 fi
 
-editor_output="$(run_isolated --headless --path "${project_root}" --editor --quit 2>&1)" || {
-  printf '%s\n' "${editor_output}" >&2
-  fail "editor failed to load the Python extension"
-}
-[[ "${editor_output}" != *"ERROR:"* && "${editor_output}" != *"SCRIPT ERROR:"* ]] || {
-  printf '%s\n' "${editor_output}" >&2
-  fail "editor reported an extension error"
-}
-
-iterations="${MORNLEA_PY4GODOT_QUALIFY_ITERATIONS:-100}"
-[[ "${iterations}" =~ ^[1-9][0-9]*$ ]] || fail "qualification iteration count must be a positive integer"
-for ((iteration = 1; iteration <= iterations; iteration++)); do
-  headless_output="$(run_isolated --headless --path "${project_root}" --quit-after 120 \
-    res://tests/scenes/python_runtime_probe.tscn 2>&1)" || {
-    printf '%s\n' "${headless_output}" >&2
-    fail "headless Python probe failed on iteration ${iteration}"
+iterations="0"
+if [[ "${mode}" != "exported" ]]; then
+  editor_output="$(run_isolated --headless --path "${project_root}" --editor --quit 2>&1)" || {
+    printf '%s\n' "${editor_output}" >&2
+    fail "editor failed to load the Python extension"
   }
-  [[ "${headless_output}" == *"Py4Godot runtime check passed."* ]] || \
-    fail "headless Python success marker is missing on iteration ${iteration}"
-  [[ "${headless_output}" != *"ERROR:"* && "${headless_output}" != *"SCRIPT ERROR:"* ]] || {
-    printf '%s\n' "${headless_output}" >&2
-    fail "headless Python probe reported an error on iteration ${iteration}"
+  [[ "${editor_output}" != *"ERROR:"* && "${editor_output}" != *"SCRIPT ERROR:"* ]] || {
+    printf '%s\n' "${editor_output}" >&2
+    fail "editor reported an extension error"
   }
-done
 
-"${script_dir}/build-extension.sh" --verify >/dev/null
-coexistence_output="$(run_isolated --headless --path "${project_root}" \
-  --quit-after 120 res://tests/scenes/bridge_host_check.tscn 2>&1)" || {
-  printf '%s\n' "${coexistence_output}" >&2
-  fail "Py4Godot and mornlea_godot coexistence probe failed"
-}
-[[ "${coexistence_output}" == *"Python bridge host check passed."* ]] || \
-  fail "mornlea_godot coexistence marker is missing"
-[[ "${coexistence_output}" != *"ERROR:"* && "${coexistence_output}" != *"SCRIPT ERROR:"* ]] || {
-  printf '%s\n' "${coexistence_output}" >&2
-  fail "coexistence probe reported an extension error"
-}
+  iterations="${MORNLEA_PY4GODOT_QUALIFY_ITERATIONS:-100}"
+  [[ "${iterations}" =~ ^[1-9][0-9]*$ ]] || fail "qualification iteration count must be a positive integer"
+  for ((iteration = 1; iteration <= iterations; iteration++)); do
+    headless_output="$(run_isolated --headless --path "${project_root}" --quit-after 120 \
+      res://tests/scenes/python_runtime_probe.tscn 2>&1)" || {
+      printf '%s\n' "${headless_output}" >&2
+      fail "headless Python probe failed on iteration ${iteration}"
+    }
+    [[ "${headless_output}" == *"Py4Godot runtime check passed."* ]] || \
+      fail "headless Python success marker is missing on iteration ${iteration}"
+    [[ "${headless_output}" != *"ERROR:"* && "${headless_output}" != *"SCRIPT ERROR:"* ]] || {
+      printf '%s\n' "${headless_output}" >&2
+      fail "headless Python probe reported an error on iteration ${iteration}"
+    }
+  done
+
+  "${script_dir}/build-extension.sh" --verify >/dev/null
+  coexistence_output="$(run_isolated --headless --path "${project_root}" \
+    --quit-after 120 res://tests/scenes/bridge_host_check.tscn 2>&1)" || {
+    printf '%s\n' "${coexistence_output}" >&2
+    fail "Py4Godot and mornlea_godot coexistence probe failed"
+  }
+  [[ "${coexistence_output}" == *"Python bridge host check passed."* ]] || \
+    fail "mornlea_godot coexistence marker is missing"
+  [[ "${coexistence_output}" != *"ERROR:"* && "${coexistence_output}" != *"SCRIPT ERROR:"* ]] || {
+    printf '%s\n' "${coexistence_output}" >&2
+    fail "coexistence probe reported an extension error"
+  }
+fi
 
 template_archive="${godot_cache_root}/${GODOT_VERSION}/darwin-universal/Godot_v${GODOT_VERSION}_export_templates.tpz"
 if [[ ! -f "${template_archive}" ]]; then
@@ -364,6 +371,6 @@ exported_output="$(run_isolated_executable "${exported_executable}" --headless -
 }
 [[ ! -e "${invocation_marker}" ]] || fail "an external Python or package installer was invoked"
 
-printf 'Py4Godot %s qualified offline: upstream=%s source=%s cpython=%s target=%s cycles=%s exported=macos-app artifact_sha256=%s\n' \
-  "${PY4GODOT_HARDENED_VERSION}" "${PY4GODOT_VERSION}" "${PY4GODOT_SOURCE_REVISION}" \
+printf 'Py4Godot %s %s offline: upstream=%s source=%s cpython=%s target=%s cycles=%s exported=macos-app artifact_sha256=%s\n' \
+  "${PY4GODOT_HARDENED_VERSION}" "${mode}" "${PY4GODOT_VERSION}" "${PY4GODOT_SOURCE_REVISION}" \
   "${PY4GODOT_CPYTHON_VERSION}" "${target}" "${iterations}" "${PY4GODOT_HARDENED_ARTIFACT_SHA256}"
