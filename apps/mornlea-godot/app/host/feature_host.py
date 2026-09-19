@@ -8,6 +8,8 @@ independent of ambient ``sys.path`` entries and sibling-module imports.
 from __future__ import annotations
 
 import json
+import sys
+import time
 from typing import Protocol, cast, runtime_checkable
 
 from py4godot.classes import gdclass
@@ -104,6 +106,15 @@ class PlanResult:
         )
 
 
+def _allocated_blocks() -> int:
+    getter = getattr(sys, "getallocatedblocks", None)
+    if callable(getter):
+        count = getter()
+        if isinstance(count, int) and not isinstance(count, bool) and count >= 0:
+            return count
+    return 0
+
+
 @gdclass
 class feature_host(Node):
     """Own the bounded feature lifecycle while remaining feature agnostic.
@@ -121,6 +132,9 @@ class feature_host(Node):
     _bridge: Node | None
     _bridge_path: str
     _trace: list[str]
+    _last_process_ns: int
+    _last_apply_ns: int
+    _last_allocation_delta: int
 
     def _ready(self) -> None:
         self._instances = {}
@@ -128,49 +142,74 @@ class feature_host(Node):
         self._bridge = None
         self._bridge_path = ""
         self._trace = []
+        self._last_process_ns = 0
+        self._last_apply_ns = 0
+        self._last_allocation_delta = 0
 
     def _exit_tree(self) -> None:
         _deactivate(self)
 
     def _process(self, delta: float) -> None:
         """Run one ordered bounded step and fan out one immutable typed frame."""
-        if self._bridge is None:
-            return
-        for feature_id in self._active_order:
-            instance = self._instances.get(feature_id)
-            if instance is not None and instance.has_method("drive_input"):
-                instance.call("drive_input")
-        elapsed_ns = max(0, min(int(delta * 1_000_000_000), 100_000_000))
-        stepped = False
-        for feature_id in self._active_order:
-            instance = self._instances.get(feature_id)
-            if instance is None or not instance.has_method("drive_session"):
-                continue
-            status = instance.call("drive_session", elapsed_ns, 64, 32)
-            if not isinstance(status, int) or isinstance(status, bool) or status != 0:
+        started = time.perf_counter_ns()
+        allocated_before = _allocated_blocks()
+        apply_ns = 0
+        try:
+            if self._bridge is None:
                 return
-            stepped = True
-        if not stepped:
-            return
-        for feature_id in self._active_order:
-            instance = self._instances.get(feature_id)
-            if instance is not None and instance.has_method("drive_world"):
-                instance.call("drive_world")
-        typed: _DictionaryView | None = None
-        for feature_id in self._active_order:
-            instance = self._instances.get(feature_id)
-            if instance is None or not instance.has_method("pull_typed_frame"):
-                continue
-            candidate = instance.call("pull_typed_frame")
-            if isinstance(candidate, _DictionaryView):
-                typed = candidate
-                break
-        if typed is None:
-            return
-        for feature_id in self._active_order:
-            instance = self._instances.get(feature_id)
-            if instance is not None and instance.has_method("apply_typed_frame"):
-                instance.call("apply_typed_frame", typed)
+            for feature_id in self._active_order:
+                instance = self._instances.get(feature_id)
+                if instance is not None and instance.has_method("drive_input"):
+                    instance.call("drive_input")
+            elapsed_ns = max(0, min(int(delta * 1_000_000_000), 100_000_000))
+            stepped = False
+            for feature_id in self._active_order:
+                instance = self._instances.get(feature_id)
+                if instance is None or not instance.has_method("drive_session"):
+                    continue
+                status = instance.call("drive_session", elapsed_ns, 64, 32)
+                if not isinstance(status, int) or isinstance(status, bool) or status != 0:
+                    return
+                stepped = True
+            if not stepped:
+                return
+            for feature_id in self._active_order:
+                instance = self._instances.get(feature_id)
+                if instance is not None and instance.has_method("drive_world"):
+                    instance.call("drive_world")
+            typed: _DictionaryView | None = None
+            for feature_id in self._active_order:
+                instance = self._instances.get(feature_id)
+                if instance is None or not instance.has_method("pull_typed_frame"):
+                    continue
+                candidate = instance.call("pull_typed_frame")
+                if isinstance(candidate, _DictionaryView):
+                    typed = candidate
+                    break
+            if typed is None:
+                return
+            apply_started = time.perf_counter_ns()
+            for feature_id in self._active_order:
+                instance = self._instances.get(feature_id)
+                if instance is not None and instance.has_method("apply_typed_frame"):
+                    instance.call("apply_typed_frame", typed)
+            apply_ns = time.perf_counter_ns() - apply_started
+        finally:
+            # Recording-only host cost for the P7 report: interpreter apply
+            # duration and allocation pressure stay visible instead of hiding
+            # inside aggregate frame time. These counters never gate work.
+            self._last_process_ns = time.perf_counter_ns() - started
+            self._last_apply_ns = apply_ns
+            self._last_allocation_delta = max(0, _allocated_blocks() - allocated_before)
+
+    def last_process_ns(self) -> int:
+        return self._last_process_ns
+
+    def last_apply_ns(self) -> int:
+        return self._last_apply_ns
+
+    def last_allocation_delta(self) -> int:
+        return self._last_allocation_delta
 
     def plan_catalog(self, catalog_path: str, bridge_path: str) -> str:
         bridge = self.get_node(bridge_path)

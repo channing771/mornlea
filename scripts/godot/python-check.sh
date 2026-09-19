@@ -53,6 +53,7 @@ uv_run=(
 )
 
 uv "${uv_run[@]}" python -m unittest "${script_dir}/python_boundary_check_test.py"
+uv "${uv_run[@]}" python -m unittest "${script_dir}/visual_evidence_contract_test.py"
 uv "${uv_run[@]}" python "${script_dir}/python_boundary_check.py" --project-root "${project_root}"
 uv "${uv_run[@]}" ruff format --check "${python_sources[@]}"
 uv "${uv_run[@]}" ruff check "${python_sources[@]}"

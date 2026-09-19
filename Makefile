@@ -21,7 +21,7 @@ ARGS ?=
 # dev-check、vet）显式循环该列表，防止新模块成为 ./... 盲区。
 GO_TEST_MODULES := ./packages/contracts ./packages/shared ./packages/server ./packages/client ./packages/tools ./packages/audit
 
-.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck comment-language-check fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev godot-asset-check godot-project-check godot-python-check godot-input-check godot-camera-check godot-target-check godot-entity-check godot-environment-check godot-hud-check godot-disconnect-check godot-smoke godot-terrain-check godot-capability-check godot-playable-smoke
+.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck comment-language-check fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev godot-asset-check godot-project-check godot-python-check godot-input-check godot-camera-check godot-target-check godot-entity-check godot-environment-check godot-hud-check godot-disconnect-check godot-smoke godot-terrain-check godot-capability-check godot-playable-smoke godot-visual-evidence godot-visual-compare godot-benchmark
 
 run test test-multiplayer bench-multiplayer visual-check visual-update: rust
 build: rust
@@ -61,6 +61,9 @@ help:
 		'  make godot-terrain-check  Optional pilot gate: headless transcript terrain scenario end to end' \
 		'  make godot-capability-check Optional pilot gate: validate disabled coarse capability reservations' \
 		'  make godot-playable-smoke Optional pilot gate: real-server minimum playable scenario' \
+		'  make godot-visual-evidence Optional pilot gate: headless Godot visual evidence' \
+		'  make godot-visual-compare Optional pilot gate: classify Godot evidence against tracked baselines' \
+		'  make godot-benchmark      Optional pilot gate: Godot pilot v23 performance report' \
 		'  make fmt              格式化全部 Rust 与 Go 源码' \
 		'  make visual-check     跑视觉场景并与 golden 基线比对（SCENES= 只跑场景子集、GIFS=1 生成 GIF 供人工审查）' \
 		'  make visual-update    重新生成 golden 基线（VISUAL_OUT 覆盖输出目录，SCENES= 只更新所列场景）' \
@@ -274,3 +277,12 @@ godot-capability-check:
 
 godot-playable-smoke:
 	scripts/godot/playable-smoke.sh --duration 300s
+
+godot-visual-evidence:
+	scripts/godot/capture.sh
+
+godot-visual-compare:
+	scripts/godot/visual-compare.sh
+
+godot-benchmark:
+	scripts/godot/benchmark.sh

@@ -46,7 +46,7 @@ Use this skill as a compact decision aid, not as a replacement for repository tr
 ## Visual and documentation direction
 
 - Route visual evidence by observable semantics, not renderer identity: UI fixtures use `ui/`, stable headless world frames use `world/`, and cross-tick human-review GIFs use `motion/` without automated pixel comparison.
-- Godot pilot captures are untracked evidence under `build/visual/godot-pilot/`. A tracked producer changes only through an approved handoff; never add a renderer-specific golden class or relax thresholds to make a pilot pass.
+- Godot pilot captures are untracked evidence under `build/visual/godot-pilot/`. A tracked producer changes only through an approved handoff; never add a renderer-specific golden class or relax thresholds to make a pilot pass. Godot 4.7 `--display-driver headless` / `--headless` only exposes the dummy renderer, so pixel capture and GPU timestamps require a no-focus desktop display driver rather than dummy textures.
 - English is canonical for active/new OpenSpec prose, plans, machine governance, and all new or substantively rewritten source comments. Existing non-English comments and unchanged canonical-spec prose are grandfathered behind non-growth inventories. New or substantively revised explanatory and architectural documents use English `*.md` plus synchronized Chinese `*.zh.md`; unchanged pre-policy documents may remain manifest-classified `legacy` until revision.
 - New architecture and boundary code must include concise English comments or doc comments at ownership, lifecycle, compatibility, and non-obvious failure decisions. Explain intent and trade-offs rather than restating syntax; a new architectural unit with no explanatory comments is incomplete.
 

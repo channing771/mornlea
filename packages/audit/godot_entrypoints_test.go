@@ -32,6 +32,9 @@ var godotEntrypointTargets = []string{
 	"godot-terrain-check",
 	"godot-capability-check",
 	"godot-playable-smoke",
+	"godot-visual-evidence",
+	"godot-visual-compare",
+	"godot-benchmark",
 }
 
 // godotEntrypointRecipes pins the exact script invocation each gate must run;
@@ -55,6 +58,9 @@ var godotEntrypointRecipes = map[string][]string{
 	"godot-terrain-check":     {"scripts/godot/godot-terrain-check.sh"},
 	"godot-capability-check":  {"scripts/godot/capability-check.sh"},
 	"godot-playable-smoke":    {"scripts/godot/playable-smoke.sh --duration 300s"},
+	"godot-visual-evidence":   {"scripts/godot/capture.sh"},
+	"godot-visual-compare":    {"scripts/godot/visual-compare.sh"},
+	"godot-benchmark":         {"scripts/godot/benchmark.sh"},
 }
 
 const godotEntrypointTestRootEnv = "MORNLEA_GODOT_ENTRYPOINT_TEST_ROOT"
