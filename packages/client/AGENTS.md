@@ -6,8 +6,10 @@
 go.work 成员）。更具体的边界见各子目录 `AGENTS.md`：
 
 - `packages/client/client/AGENTS.md`（镜像、预测与 client C ABI bridge）
+- `packages/client/runtime/` 与 `packages/client/presentation/`（平台无关会话步进与呈现值；方向由 `packages/audit` 的 allowed 表与 `TestClientRuntimeBoundaryProhibitions` 强制）
 - `packages/client/cmd/mornlea/AGENTS.md`（客户端命令子树总纲；app/capture/
   benchmark/devcapture 各有局部指南）
+- `packages/client/cmd/mornlea-godot-core/`（Godot pilot 的过渡 Go client-core；终局由 Rust client-core 替换，不得扩成新的实时权威）
 
 ## 包所有权
 

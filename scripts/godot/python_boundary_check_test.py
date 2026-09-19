@@ -58,6 +58,10 @@ class PythonBoundaryCheckTests(unittest.TestCase):
             "import importlib\nimportlib.import_module(name)\n": "unrestricted-dynamic-import",
             "__import__(name)\n": "unrestricted-dynamic-import",
             "# 中文注释\n": "non-english-comment",
+            "import sqlite3\n": "forbidden-persistence",
+            "import numpy\n": "forbidden-numerical-fallback",
+            "from packages.shared.network import codec\n": "forbidden-protocol-ownership",
+            "value = Predictor()\n": "forbidden-prediction",
         }
         for source, expected in cases.items():
             with self.subTest(expected=expected):
@@ -111,6 +115,29 @@ class PythonBoundaryCheckTests(unittest.TestCase):
         self.assertNotIn(
             "host-gameplay-bridge-call",
             self.scan(source, "features/session/session_feature.py"),
+        )
+
+    def test_rejects_cross_feature_private_paths_and_unbounded_callbacks(self) -> None:
+        self.assertIn(
+            "cross-feature-private-path",
+            self.scan(
+                'SCENE = "res://features/session/feature_root.tscn"\n',
+                "features/world/world_feature.py",
+            ),
+        )
+        self.assertNotIn(
+            "cross-feature-private-path",
+            self.scan(
+                'SCENE = "res://features/world/terrain_near/terrain_near_opaque.tres"\n',
+                "features/world/world_feature.py",
+            ),
+        )
+        self.assertIn(
+            "unbounded-callback",
+            self.scan(
+                "class Feature:\n    def _process(self, delta: float) -> None:\n        while True:\n            pass\n",
+                "features/ui/hud.py",
+            ),
         )
 
     def test_rejects_invalid_python(self) -> None:

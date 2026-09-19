@@ -19,6 +19,12 @@ NETWORK_GODOT_CLASSES = frozenset(
 NATIVE_ABI_MODULES = frozenset({"_ctypes", "cffi", "ctypes"})
 INSTALLER_MODULES = frozenset({"ensurepip", "pip", "uv"})
 PROCESS_MODULES = frozenset({"subprocess"})
+PERSISTENCE_MODULES = frozenset({"pickle", "shelve", "sqlite3"})
+NUMERICAL_FALLBACK_MODULES = frozenset({"numba", "numpy", "scipy"})
+PREDICTION_NAMES = frozenset(
+    {"AdvancePrediction", "Predictor", "ReplayUnconfirmed", "ReplayUnconfirmedInputs"}
+)
+UNBOUNDED_CALLBACKS = frozenset({"_physics_process", "_process"})
 
 # Client-core wire magics from the frozen ABI header: the wire-text tags and
 # their little-endian 32-bit words. Production Godot scripts must never carry
@@ -86,6 +92,17 @@ def _matches_prefix(module: str, prefix: str) -> bool:
     return module == prefix or module.startswith(prefix + ".")
 
 
+def _feature_owner(relative: str) -> str | None:
+    parts = [part for part in relative.split("/") if part]
+    if len(parts) < 2:
+        return None
+    if parts[0] == "features":
+        return "/".join(parts[:2])
+    if parts[0] == "platform" and len(parts) >= 3:
+        return "/".join(parts[:3])
+    return None
+
+
 def _module_rule(module: str) -> tuple[str, str] | None:
     if _matches_prefix(module, "packages.agent"):
         return ("forbidden-agent-import", module)
@@ -98,9 +115,22 @@ def _module_rule(module: str) -> tuple[str, str] | None:
         )
     ):
         return ("forbidden-native-abi", module)
+    if any(
+        _matches_prefix(module, prefix)
+        for prefix in (
+            "packages.client",
+            "packages.server",
+            "packages.shared.network",
+        )
+    ):
+        return ("forbidden-protocol-ownership", module)
     root = module.split(".", 1)[0]
     if root in NATIVE_ABI_MODULES:
         return ("forbidden-native-abi", module)
+    if root in PERSISTENCE_MODULES:
+        return ("forbidden-persistence", module)
+    if root in NUMERICAL_FALLBACK_MODULES:
+        return ("forbidden-numerical-fallback", module)
     if root in NETWORK_MODULES or any(
         part in NETWORK_GODOT_CLASSES for part in module.split(".")
     ):
@@ -118,6 +148,7 @@ class BoundaryVisitor(ast.NodeVisitor):
         self.production = production
         self.host = host
         self.findings: list[Finding] = []
+        self._callback_stack: list[str] = []
 
     def _add(self, node: ast.AST, rule: str, detail: str) -> None:
         self.findings.append(
@@ -171,6 +202,42 @@ class BoundaryVisitor(ast.NodeVisitor):
                 HOST_FEATURE_IDS
             ):
                 self._add(node, "host-feature-reference", node.value)
+        if (
+            self.production
+            and not self.host
+            and isinstance(node.value, str)
+            and node.value.startswith("res://")
+        ):
+            owner = _feature_owner(self.path)
+            target = _feature_owner(node.value.removeprefix("res://"))
+            if owner and target and owner != target:
+                self._add(node, "cross-feature-private-path", node.value)
+        self.generic_visit(node)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        if self.production and node.id in PREDICTION_NAMES:
+            self._add(node, "forbidden-prediction", node.id)
+        self.generic_visit(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._callback_stack.append(node.name)
+        self.generic_visit(node)
+        self._callback_stack.pop()
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._callback_stack.append(node.name)
+        self.generic_visit(node)
+        self._callback_stack.pop()
+
+    def visit_While(self, node: ast.While) -> None:
+        if (
+            self.production
+            and self._callback_stack
+            and self._callback_stack[-1] in UNBOUNDED_CALLBACKS
+            and isinstance(node.test, ast.Constant)
+            and node.test.value is True
+        ):
+            self._add(node, "unbounded-callback", "while True")
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:

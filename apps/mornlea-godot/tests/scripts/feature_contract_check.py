@@ -81,6 +81,20 @@ def _check_planning(host: Node, bridge_path: str, failures: list[str]) -> None:
         "missing required bridge family did not fail",
         failures,
     )
+    unknown_budget = _plan(host, bridge_path, "unknown_budget")
+    _expect(
+        not unknown_budget["ok"] and _contains(unknown_budget["errors"], "unknown budget"),
+        "unknown budget class was accepted",
+        failures,
+    )
+    required_dependent = _plan(host, bridge_path, "required_dependent")
+    _expect(
+        not required_dependent["ok"]
+        and _contains(required_dependent["errors"], "required_dependent")
+        and required_dependent["order"] == [],
+        "required dependent was partially enabled after a missing family",
+        failures,
+    )
     optional_bridge = _plan(host, bridge_path, "optional_bridge")
     _expect(
         optional_bridge["ok"] and optional_bridge["disabled"] == ["optional_bridge"],

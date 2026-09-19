@@ -1,6 +1,6 @@
 ---
 doc_id: architecture-target
-doc_revision: 2026-09-19.1
+doc_revision: 2026-09-19.2
 language: zh-CN
 counterpart: architecture-target.md
 status: target-not-current
@@ -154,3 +154,22 @@ mornlea-server -> mornlea-storage
 - 不能把 Godot pilot 成功误解为可以跳过 Rust server/client-core 收敛阶段。
 
 当新任务与本文档冲突时，必须重设计任务以符合目标，或者在其 OpenSpec change 中明确记录经过批准且有时限的迁移期例外。
+
+## 10. Rust foundation stages、后续 feature 与 No-Go rollback
+
+P7 只批准远程 TCP pilot 为 Go。该决定不授权切换默认客户端，也不授权新的 Go 实时所有权。后续工作必须等待独立提出的 Rust foundation stages：
+
+| Stage | Owner | Prerequisite | Exit condition | Rollback |
+|---|---|---|---|---|
+| F1 | Rust domain、protocol、storage contract 与 numerical kernel | P7 Go | 与 Go 的 replay/oracle 一致；没有第二个在线写者 | 保留 Go 生产路径 |
+| F2 | Rust authoritative server | F1 | 确定性 replay、存档迁移、故障路径 parity、共享 Memory/TCP 语义 | 保留 Go 权威；禁止 dual-write |
+| F3 | Rust client-core 与 typed Godot bridge | F1；F2 protocol | Transcript parity、correction/replay、有界 bridge、重复生命周期 | 保留 pilot Go core 且不再扩展 feature |
+| P8 | 生产地形呈现 | F3 | 独立 world feature 消费 Rust semantic family | 禁用 catalog 项；旧客户端保持默认 |
+| P9 | 完整实体与效果 | F3 | 可独立禁用的 actor feature | 按 catalog 禁用 |
+| P10 | UI 迁移 | F3 | Godot Control 加 embedded Python；无生产 GDScript 或新 WebView 所有权 | 保留旧 UI 客户端 |
+| P11 | 音频与桌面设备 | F3 | Semantic cue；无头路径不触设备 | 禁用 adapter |
+| P12 | 工具链 | 按需 F1–F3 | 离线 replay 与呈现测试；无双在线权威 | 继续使用旧工具链 |
+| P13 | 本地游玩与桌面发行 | F2–F3 | 本地/远程共用一条 Rust 路径；仅桌面 closure | 回到仅远程或旧客户端 |
+| P14 | 默认切换与退役 | F1–P13 完成 | 两个发行周期和可用 rollback package | 恢复上一发行；禁止部分删除 |
+
+当前 pilot 的 No-Go rollback 仍是加法：删除 `apps/mornlea-godot/`、两个 GDExtension、捆绑 Python runtime、Go client-core ABI 以及可选的 `scripts/godot` 入口后，应恢复 pilot 之前的生产行为。pilot 失败不得改写存档或默认配置。P7 为 Go 之后，后续 feature 必须可独立回退，且不得删除稳定项目根。Rust 迁移使用 offline replay，而不是 dual online writer，也绝不运行两个在线权威。

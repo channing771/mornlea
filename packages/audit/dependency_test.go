@@ -98,6 +98,19 @@ var allowed = map[string][]string{
 	"packages/client/mesh":               {"packages/shared/core", "packages/shared/world", "packages/shared/nativeabi"},
 	"packages/client/lod":                {"packages/shared/core", "packages/shared/nativeabi"},
 	"packages/client/assets":             {"packages/shared/core", "packages/shared/world", "packages/client/mesh", "packages/shared/worldgen"},
+	"packages/client/presentation":       {"packages/client/mesh", "packages/shared/core"},
+	"packages/client/runtime": {
+		"packages/client/assets", "packages/client/client", "packages/client/mesh",
+		"packages/client/presentation", "packages/shared/core", "packages/shared/network",
+		"packages/shared/network/protocol", "packages/shared/network/tcp", "packages/shared/physics",
+	},
+	// The Go client-core is a pilot transition exception: it may compose the
+	// portable runtime/presentation packages until Rust client-core replaces it.
+	"packages/client/cmd/mornlea-godot-core": {
+		"packages/client/assets", "packages/client/presentation", "packages/client/render",
+		"packages/client/runtime", "packages/shared/core", "packages/shared/network",
+		"packages/shared/network/protocol",
+	},
 	"packages/client/render":             {"packages/shared/core", "packages/shared/world", "packages/client/mesh", "packages/client/assets"},
 	"packages/client/render/hud":         {"packages/shared/core", "packages/client/mesh", "packages/client/assets", "packages/client/render"},
 	"packages/server/server":             {"packages/contracts/companion-agent/mcp-v1", "packages/shared/companion", "packages/shared/core", "packages/shared/network", "packages/shared/pathfind", "packages/shared/physics", "packages/shared/world", "packages/shared/worldgen", "packages/server/sim/contract", "packages/server/sim/runtime", "packages/server/storage", "packages/server/server/persistence"},
@@ -123,8 +136,11 @@ func TestInternalDependenciesAreOneWay(t *testing.T) {
 	// 命中，macOS 与 Linux CI 收敛到同一包集。保留 `./...` 让未来新增的
 	// tools 包继续自动进入本检查。新模块 use 进 go.work 后同样自动进入。
 	out := listWorkspacePackages(t, "{{.ImportPath}}|{{join .Imports \" \"}}", map[string][]string{
-		"packages/client": {"./client/...", "./render/...", "./mesh/...", "./lod/...", "./audio/...", "./assets/..."},
-		"packages/tools":  {"./...", "./gfxspike"},
+		"packages/client": {
+			"./client/...", "./render/...", "./mesh/...", "./lod/...", "./audio/...", "./assets/...",
+			"./runtime/...", "./presentation/...", "./cmd/mornlea-godot-core",
+		},
+		"packages/tools": {"./...", "./gfxspike"},
 	})
 
 	actual := make(map[string]bool)

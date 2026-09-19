@@ -1,6 +1,6 @@
 ---
 doc_id: architecture-target
-doc_revision: 2026-09-19.1
+doc_revision: 2026-09-19.2
 language: en
 counterpart: architecture-target.zh.md
 status: target-not-current
@@ -154,3 +154,22 @@ Each phase has a reversible boundary. Rollback selects the previous release or r
 - Do not interpret a successful Godot pilot as permission to skip the Rust server/client-core convergence stages.
 
 When a new task conflicts with this document, the task must either be redesigned to fit the target or explicitly record an approved, time-bounded transition exception in its OpenSpec change.
+
+## 10. Rust foundation stages, later features, and No-Go rollback
+
+P7 decided Go for the remote-TCP pilot only. That decision does not authorize a default-client switch or new Go real-time ownership. Later work is blocked on independently proposed Rust foundation stages:
+
+| Stage | Owner | Prerequisite | Exit condition | Rollback |
+|---|---|---|---|---|
+| F1 | Rust domain, protocol, storage contracts, and numerical kernels | P7 Go | Replay/oracle agreement with Go; no second online writer | Keep the Go production path |
+| F2 | Rust authoritative server | F1 | Deterministic replay, save migration, failure-path parity, shared Memory/TCP semantics | Keep Go authority; never dual-write |
+| F3 | Rust client-core and typed Godot bridge | F1; F2 protocol | Transcript parity, correction/replay, bounded bridge, repeated lifecycle | Keep the pilot Go core without adding features |
+| P8 | Production terrain presentation | F3 | Independent world feature against Rust semantic families | Disable the catalog entry; keep the old client default |
+| P9 | Complete entities and effects | F3 | Independently disableable actor features | Disable by catalog |
+| P10 | UI migration | F3 | Godot Control plus embedded Python; no production GDScript or new WebView ownership | Keep the old UI client |
+| P11 | Audio and desktop devices | F3 | Semantic cues; headless touches no device | Disable the adapter |
+| P12 | Tooling | F1–F3 as applicable | Offline replay and presentation tests; no dual online authority | Continue the old toolchain |
+| P13 | Local play and desktop release | F2–F3 | Local/remote share one Rust path; desktop-only closure | Return to remote-only or the old client |
+| P14 | Default switch and retirement | F1–P13 complete | Two release cycles and a usable rollback package | Restore the previous release; prohibit partial deletion |
+
+No-Go rollback for the current pilot remains additive: removing `apps/mornlea-godot/`, both GDExtensions, the bundled Python runtime, the Go client-core ABI, and optional `scripts/godot` entry points restores pre-pilot production behavior. Pilot failure must not rewrite saves or default configuration. After a P7 Go, later features stay independently reversible without deleting the stable project root. Rust migration uses offline replay rather than a dual online writer; it never runs two online authorities.

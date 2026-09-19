@@ -6,6 +6,7 @@ import (
 	"go/build"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"maps"
 	"os"
 	"os/exec"
@@ -324,29 +325,43 @@ func clientRuntimeABISurface(t *testing.T, root string) map[string]bool {
 }
 
 // clientRuntimeGuardedSources collects the production Go sources of the
-// guarded packages as repository-relative paths. A guarded package without
-// production files fails the test instead of degrading to an empty scan.
+// guarded packages as repository-relative paths, including future
+// subpackages. A guarded package without production files fails the test
+// instead of degrading to an empty scan.
 func clientRuntimeGuardedSources(t *testing.T, root string) map[string]string {
 	t.Helper()
 	sources := make(map[string]string)
 	for _, pkg := range clientRuntimeGuardedPackages {
 		directory := filepath.Join(root, filepath.FromSlash(pkg))
-		entries, err := os.ReadDir(directory)
-		if err != nil {
-			t.Fatalf("read %s: %v", directory, err)
-		}
 		produced := 0
-		for _, entry := range entries {
+		err := filepath.WalkDir(directory, func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() {
+				if entry.Name() == "testdata" {
+					return filepath.SkipDir
+				}
+				return nil
+			}
 			name := entry.Name()
-			if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-				continue
+			if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+				return nil
 			}
-			data, err := os.ReadFile(filepath.Join(directory, name))
+			data, err := os.ReadFile(path)
 			if err != nil {
-				t.Fatalf("read %s: %v", filepath.Join(directory, name), err)
+				return err
 			}
-			sources[pkg+"/"+name] = string(data)
+			relative, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
+			}
+			sources[filepath.ToSlash(relative)] = string(data)
 			produced++
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", pkg, err)
 		}
 		if produced == 0 {
 			t.Fatalf("%s contains no production Go files; the boundary guard must not silently degrade to an empty scan", pkg)
@@ -382,36 +397,50 @@ func clientRuntimeGuardedDeps(t *testing.T, root string) map[string][]string {
 // platform-independent file set passes on every host.
 func clientRuntimePlatformGatingViolations(t *testing.T, directory string) []string {
 	t.Helper()
-	entries, err := os.ReadDir(directory)
-	if err != nil {
-		t.Fatalf("read %s: %v", directory, err)
-	}
 	var violations []string
 	checked := 0
-	for _, entry := range entries {
+	err := filepath.WalkDir(directory, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			if entry.Name() == "testdata" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		name := entry.Name()
-		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			return nil
 		}
 		checked++
+		parent := filepath.Dir(path)
+		relative, relErr := filepath.Rel(directory, path)
+		if relErr != nil {
+			relative = name
+		}
 		for _, goos := range clientRuntimeGuardedGOOS {
 			for _, goarch := range clientRuntimeGuardedGOARCH {
 				context := build.Default
 				context.GOOS = goos
 				context.GOARCH = goarch
 				context.CgoEnabled = true
-				matched, err := context.MatchFile(directory, name)
+				matched, err := context.MatchFile(parent, name)
 				if err != nil {
-					violations = append(violations, fmt.Sprintf("%s cannot be evaluated for GOOS=%s GOARCH=%s: %v", name, goos, goarch, err))
+					violations = append(violations, fmt.Sprintf("%s cannot be evaluated for GOOS=%s GOARCH=%s: %v", relative, goos, goarch, err))
 					continue
 				}
 				if !matched {
 					violations = append(violations, fmt.Sprintf(
 						"%s is excluded from the GOOS=%s GOARCH=%s build; guarded client semantics packages must keep one platform-independent file set with no per-platform build tags or filename suffixes",
-						name, goos, goarch))
+						relative, goos, goarch))
 				}
 			}
 		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk %s: %v", directory, err)
 	}
 	if checked == 0 {
 		t.Fatalf("%s contains no production Go files; the platform guard must not silently degrade to an empty scan", directory)
@@ -526,6 +555,12 @@ func value(position core.BlockPos) int { return 1 }
 			path:   "packages/client/runtime/mesh.go",
 			source: "package runtime\n\nconst assetRoot = \"apps/mornlea-godot/assets\"\n",
 			marker: "mornlea-godot application tree",
+		},
+		{
+			name:   "nested subpackage still joins the scan",
+			path:   "packages/client/runtime/internal/device.go",
+			source: "package internal\n\nimport _ \"github.com/godot-go/godot-go/gd\"\n",
+			marker: "forbidden Godot family",
 		},
 		{
 			name:   "unparsable file fails closed",
