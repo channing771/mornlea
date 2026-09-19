@@ -1,6 +1,6 @@
 ---
 doc_id: development-process
-doc_revision: 2026-09-16.3
+doc_revision: 2026-09-19.1
 language: en
 counterpart: development-process.zh.md
 ---
@@ -10,11 +10,9 @@ This is the single current process document. `docs/feature-backlog.md`, role car
 
 ## Workflow policy
 
-OpenAI-native orchestration is isolation-first. A verified OpenAI ChatGPT/Codex controller has standing authorization to choose direct, delegated, or mixed execution. Prefer a fresh agent for bounded repository discovery, multi-file reasoning, specialized review, or a long trace whose main-context retention cost exceeds its handoff cost; keep only tiny, tightly coupled, or cheaper-to-finish work in the controller. Parallel speed and unused capacity are not sufficient by themselves, and no more than three subagents may run concurrently. Give each worker a concise task brief and a fresh or minimal context. Before every new delegation, use the project-owned `adaptive-model-router` with live host capabilities. Evaluate difficulty, consequence, context breadth, tool horizon, validation strength, worker bootstrap cost, and user priorities, then select the lowest-cost model and effort credibly sufficient for the work. Code quality and token efficiency are coequal goals: neither routine work on an excessive tier nor risky work on an inadequate tier is acceptable. A non-OpenAI or unknown-provider controller must use strict `subagent-driven-development`, including independent implementation and review. Every mode preserves scope, ownership, test-first work, validation, and authorization boundaries.
+OpenAI-native orchestration is isolation-first. A verified OpenAI ChatGPT/Codex controller has standing authorization to choose direct, delegated, or mixed execution. Prefer a fresh agent for bounded repository discovery, multi-file reasoning, specialized review, or a long trace whose main-context retention cost exceeds its handoff cost; keep only tiny, tightly coupled, or cheaper-to-finish work in the controller. Parallel speed and unused capacity are not sufficient by themselves, and no more than three subagents may run concurrently. Give each worker a concise task brief and a fresh or minimal context. A non-OpenAI or unknown-provider controller must use strict `subagent-driven-development`, including independent implementation and review. Every mode preserves scope, ownership, test-first work, validation, and authorization boundaries.
 
-The router may use a native subagent or the external Z Code `GLM-5.3` bridge packaged in `adaptive-model-router/scripts/`. Resolve the selected skill root and run its `scripts/zcode-agent.mjs probe` before selecting Z Code, start a fresh isolated session with `run`, and use the returned session ID with `send` for follow-up turns. The bridge is not a native Codex model registration. Editing sessions require an isolated worktree or exclusive files and remain subject to controller integration and validation.
-
-At the end of each implementation round, promote only stable cross-task architectural conventions into `mornlea-architecture`; otherwise record `Architecture skill: no change`. Also review routing for over-routing, under-routing, retries, escalation, context-transfer cost, validation quality, and token use. Update both project `adaptive-model-router` copies only for verified reusable improvements; otherwise record `Model router: no change`.
+At the end of each implementation round, promote only stable cross-task architectural conventions into `mornlea-architecture`; otherwise record `Architecture skill: no change`.
 
 ## Stages
 

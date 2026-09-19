@@ -1,4 +1,0 @@
-schema: spec-driven
-created: 2026-09-18
-goal: Ensure code architecture, feature design, and high-level design tasks
-  never route to Z Code or other non-OpenAI backends.

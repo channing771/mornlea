@@ -2,6 +2,10 @@
 
 See `docs/notes/godot-client-pilot-report.md` and `openspec/changes/pilot-godot-client-migration/design.md` matrix row P10. This candidate is planning-only.
 
+## Target-boundary decision
+
+Godot Control with embedded Python is the selected final UI route. Rust client-core publishes versioned semantic view-models; Python maps them to controls and emits typed intent. The existing React/WebView path may remain as a rollback producer until handoff, but this change must not expand it or introduce production GDScript. UI state cannot become a second mirror or authority.
+
 ## Goals / Non-Goals
 
 **Goals:**

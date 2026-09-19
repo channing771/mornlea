@@ -2,6 +2,10 @@
 
 See `docs/notes/godot-client-pilot-report.md` and `openspec/changes/pilot-godot-client-migration/design.md` matrix row P13. This candidate is planning-only.
 
+## Target-boundary decision
+
+Local and remote play use one Rust server-core and one login/packet/validation path. The implementation may select an in-process loopback transport or a supervised server process, but must not create a privileged Go local simulation. The packaged presentation is Godot with embedded Python; the standalone Agent remains a separate optional service. F2–F3 are prerequisites.
+
 ## Goals / Non-Goals
 
 **Goals:**

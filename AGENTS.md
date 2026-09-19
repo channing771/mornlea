@@ -6,13 +6,13 @@ Agent guidance accumulates along the ancestor chain. The nearest `AGENTS.md` add
 
 ## Project and contracts
 
-Mornlea is an independent voxel game written in Go 1.26. The root `go.work` coordinates six modules: `packages/contracts`, `packages/shared`, `packages/server`, `packages/client`, `packages/tools`, and `packages/audit`; each module path begins with `github.com/channing771/mornlea/packages/<unit>`, and the repository root is not a Go module. The repository contains the custom client, authoritative server, world storage, physics, the Rust `mornlea_engine` numerical engine, and the Rust `mornlea_client` wgpu renderer. It is not compatible with the official Minecraft protocol, saves, or copyrighted assets.
+Mornlea's current production implementation is an independent voxel game written primarily in Go 1.26. The root `go.work` coordinates six modules: `packages/contracts`, `packages/shared`, `packages/server`, `packages/client`, `packages/tools`, and `packages/audit`; each module path begins with `github.com/channing771/mornlea/packages/<unit>`, and the repository root is not a Go module. The repository contains the custom client, authoritative server, world storage, physics, the Rust `mornlea_engine` numerical engine, and the Rust `mornlea_client` wgpu renderer. The intended final runtime is documented in [`docs/architecture-target.md`](docs/architecture-target.md): Rust owns the real-time server and client core, while Godot uses embedded Python for presentation. It is not compatible with the official Minecraft protocol, saves, or copyrighted assets.
 
 The current baseline is protocol v44, player schema v9, chunk schema v9, world metadata v6, standalone `companions.ai` schema v5, standalone `hostile_mobs` schema v2, standalone `passive_mobs` schema v1, engine ABI v11, client ABI v19, and benchmark scenario v23.
 
 ## Source-of-truth order
 
-When sources conflict, verify the current state in this order: code and tests -> `openspec/specs/` -> `docs/architecture.md` -> `docs/notes/progress.md` -> `docs/superpowers/`. Historical documents provide context but do not override verified current behavior.
+When sources conflict, verify the current state in this order: code and tests -> `openspec/specs/` -> `docs/architecture.md` -> `docs/notes/progress.md` -> `docs/superpowers/`. For a new architecture decision, read [`docs/architecture-target.md`](docs/architecture-target.md) as the target and use `docs/architecture.md` only to identify migration seams. Historical documents provide context but do not override verified current behavior or the approved target direction.
 
 ## Repository areas and scoped guidance
 
@@ -28,6 +28,14 @@ When sources conflict, verify the current state in this order: code and tests ->
 - Python companion Agent service: `packages/agent/AGENTS.md`.
 - OpenSpec project context and artifact rules: `openspec/config.yaml`.
 
+## Directory-scoped guidance
+
+- Important directories are the repository root, top-level modules or packages, and subtree roots that own an independent ownership, dependency, lifecycle, or validation boundary, or coordinate multiple packages, entry points, or asset classes.
+- Each important directory MUST have a concise `AGENTS.md` beside the work it governs. It records the directory purpose, directory map, ownership and dependency boundaries, entry points, lifecycle constraints, and focused validation. Use the exact uppercase filename; do not introduce a parallel lowercase `agent.md` convention.
+- Create or update the important directory's `AGENTS.md` in the same change when the directory is created, reorganized, or materially reassigned. If it has no independent invariant, inherit the parent guide and do not add a file merely for symmetry.
+- `CLAUDE.md` remains a thin import at established repository or subtree roots; it is not a second source of directory rules.
+- Use `docs/agents-md-style.md` for the detailed directory-guide structure and self-review checklist.
+
 ## Before starting work
 
 1. Read `openspec/config.yaml`.
@@ -41,7 +49,8 @@ When sources conflict, verify the current state in this order: code and tests ->
 - Local Memory and remote TCP modes must reuse the same login, simulation, and validation path.
 - No Go package may import WebGPU bindings; the Rust client exclusively owns GPU rendering.
 - Go may call Rust only through the repository's established ABI bridges; do not add production fallbacks or side channels.
-- The Go server communicates with the independent Python service only through loopback Agent HTTP and MCP contracts. It must not shell out to, embed, or use FFI with Python. Python coordinates Planner, Dialogue, and compact memory only and must not submit world actions.
+- The current Go server communicates with the independent Python Agent service only through loopback Agent HTTP and MCP contracts. It must not shell out to, embed, or use FFI with that service. The final Godot product has a separate qualified embedded Python runtime for presentation features; it must not share the Agent's imports, process state, or dependencies. Neither Python runtime may submit unvalidated world actions.
+- New real-time architecture work follows [`docs/architecture-target.md`](docs/architecture-target.md): Rust is the final owner of authoritative server logic, protocol/storage contracts, client session/mirror/prediction, and numerical kernels; Godot's embedded Python is the final presentation language. Existing Go runtime and Python pilot code are transition exceptions and must not be expanded without an explicit removal condition in OpenSpec.
 - A message and its slices are immutable after a successful cross-goroutine send.
 - Authoritative tick, render, and network hot paths must not perform unbounded work or blocking CPU, disk, or network operations.
 - Do not add Mojang copyrighted textures or other unauthorized binary art assets.
@@ -67,9 +76,9 @@ After an independently verifiable OpenSpec task or small coherent feature node p
 
 A verified ChatGPT or Codex controller using an OpenAI model has standing project authorization to choose direct, delegated, or mixed execution without a separate per-task user request. This standing authorization means that the absence of an explicit subagent request is not a main-agent-only restriction.
 
-OpenAI-native orchestration is isolation-first. At most three subagents may run concurrently. Prefer a fresh isolated agent for a bounded task that needs independent repository discovery, multi-file reasoning, specialized review, or a long work trace that would otherwise increase main-context retention. Work directly only when the task is tiny, tightly coupled to the controller's current edit, or cheaper to finish than to specify and integrate. Do not delegate merely for parallel speed, independent file ownership, or unused capacity. Give every delegate a concise task brief with only the evidence, paths, constraints, ownership, integration point, and acceptance criteria it needs; do not fork the full conversation by default. Before each new delegation, use the project-owned `adaptive-model-router` with the live host capability set. Assess task difficulty, consequence, context breadth, tool horizon, validation strength, and user priorities, then choose the lowest-cost model and reasoning effort credibly sufficient for the isolated task. Both code quality and token efficiency are coequal objectives: account for worker bootstrap and handoff cost as well as saved main-agent context, do not under-route work merely to save tokens, and do not over-route mechanically verifiable work. Escalate one eligible step only after observable insufficiency, and do not restart an already-running agent solely to change its model.
+OpenAI-native orchestration is isolation-first. At most three subagents may run concurrently. Prefer a fresh isolated agent for a bounded task that needs independent repository discovery, multi-file reasoning, specialized review, or a long work trace that would otherwise increase main-context retention. Work directly only when the task is tiny, tightly coupled to the controller's current edit, or cheaper to finish than to specify and integrate. Do not delegate merely for parallel speed, independent file ownership, or unused capacity. Give every delegate a concise task brief with only the evidence, paths, constraints, ownership, integration point, and acceptance criteria it needs; do not fork the full conversation by default. Do not restart an already-running agent solely to change its model.
 
-The controller records material orchestration decisions, isolation reasons, and rulings in the change ledger. At the end of each implementation round, review verified architectural discoveries for promotion into the synchronized project-owned `mornlea-architecture` skill. Promote only stable cross-task decision rules backed by current code, tests, or canonical specifications; otherwise record `Architecture skill: no change` rather than adding task history or volatile facts. In the same closeout, evaluate the project router for over-routing, under-routing, retries, escalation, context-transfer cost, validation quality, and token use. Update both project-owned `adaptive-model-router` copies only for verified, reusable routing improvements; otherwise record `Model router: no change`.
+The controller records material orchestration decisions, isolation reasons, and rulings in the change ledger. At the end of each implementation round, review verified architectural discoveries for promotion into the synchronized project-owned `mornlea-architecture` skill. Promote only stable cross-task decision rules backed by current code, tests, or canonical specifications; otherwise record `Architecture skill: no change` rather than adding task history or volatile facts.
 
 An explicit user prohibition or higher-priority runtime restriction always controls. A non-OpenAI or unknown-provider controller must use strict `subagent-driven-development`, including independent implementation and review responsibilities as defined by that skill. In every mode, preserve approved OpenSpec scope, test-first development, ownership boundaries, required validation, completion evidence, destructive-action safety, and authorization for externally consequential actions. Orchestration discretion is not authority to skip a gate or expand the task.
 

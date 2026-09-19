@@ -1,6 +1,6 @@
 ---
 doc_id: development-process
-doc_revision: 2026-09-16.3
+doc_revision: 2026-09-19.1
 language: zh-CN
 counterpart: development-process.md
 ---
@@ -10,11 +10,9 @@ counterpart: development-process.md
 
 ## 流程政策
 
-OpenAI 原生编排采用隔离优先策略。经验证的 OpenAI ChatGPT/Codex 控制器拥有选择直接、委派或混合执行的授权。对于有边界的仓库探索、多文件推理、专项评审，或会让主上下文长期保留大量过程信息的任务，若主上下文保留成本高于交接成本，应优先使用全新代理；只有微小、与控制器当前编辑紧密耦合，或完成成本低于描述和集成成本的工作才留在控制器中。不得仅为并行速度或填满空闲槽位而委派，最多同时运行三个子代理。每个代理只接收简洁任务 brief 和全新或最小上下文。每次新委派前使用项目自有的 `adaptive-model-router` 发现实时主机能力；从任务难度、错误后果、上下文范围、工具调用跨度、验证强度、代理启动成本和用户偏好等多个角度评估，再选择可信够用的最低成本模型和 effort。代码质量与 token 效率同等重要：既不能让常规任务使用过高等级，也不能为了省 token 让高风险任务使用能力不足的等级。非 OpenAI 或未知提供方必须严格使用 `subagent-driven-development`，包括独立实现和评审。所有模式都必须保留范围、所有权、测试优先、验证和授权边界。
+OpenAI 原生编排采用隔离优先策略。经验证的 OpenAI ChatGPT/Codex 控制器拥有选择直接、委派或混合执行的授权。对于有边界的仓库探索、多文件推理、专项评审，或会让主上下文长期保留大量过程信息的任务，若主上下文保留成本高于交接成本，应优先使用全新代理；只有微小、与控制器当前编辑紧密耦合，或完成成本低于描述和集成成本的工作才留在控制器中。不得仅为并行速度或填满空闲槽位而委派，最多同时运行三个子代理。每个代理只接收简洁任务 brief 和全新或最小上下文。非 OpenAI 或未知提供方必须严格使用 `subagent-driven-development`，包括独立实现和评审。所有模式都必须保留范围、所有权、测试优先、验证和授权边界。
 
-路由器可以使用原生子代理，也可以使用内置于 `adaptive-model-router/scripts/` 的外部 Z Code `GLM-5.3` 桥接。选择 Z Code 前先解析当前技能根目录并运行其中的 `scripts/zcode-agent.mjs probe`，通过 `run` 启动全新隔离会话，再用返回的 session ID 和 `send` 继续对话。该桥接不是 Codex 原生模型注册。编辑会话必须使用隔离 worktree 或独占文件，最终集成和验证仍由控制器负责。
-
-每轮实现结束时，仅将稳定、可跨任务复用的架构约定提升到 `mornlea-architecture`；否则记录 `Architecture skill: no change`。同时复盘是否存在过度路由、能力不足、重试或升级、上下文传递成本、验证质量和 token 使用问题。只有经过验证、可复用的改进才同步更新两份项目 `adaptive-model-router`；否则记录 `Model router: no change`。
+每轮实现结束时，仅将稳定、可跨任务复用的架构约定提升到 `mornlea-architecture`；否则记录 `Architecture skill: no change`。
 
 ## 阶段
 

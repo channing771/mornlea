@@ -1,7 +1,0 @@
-interface:
-  display_name: "Adaptive Model Router"
-  short_description: "Route isolated work across native, Z Code, OpenCode, and Grok agents"
-  default_prompt: "Use $adaptive-model-router; route architecture, feature-design, and high-level system tasks only to an advanced native OpenAI model before applying Grok, Z Code, or OpenCode routing preferences."
-
-policy:
-  allow_implicit_invocation: true

@@ -2,6 +2,10 @@
 
 See `docs/notes/godot-client-pilot-report.md` and `openspec/changes/pilot-godot-client-migration/design.md` matrix row P14. This candidate is planning-only.
 
+## Target-boundary decision
+
+The default switch occurs only after the Rust server/client-core and Godot/Python presentation stack are the production path and the old release remains rollback-capable. The switch retires Go from real-time runtime ownership and removes the pilot Go client-core ABI only after release evidence; it does not remove the final embedded Python presentation runtime and does not allow a dual-authority period.
+
 ## Goals / Non-Goals
 
 **Goals:**

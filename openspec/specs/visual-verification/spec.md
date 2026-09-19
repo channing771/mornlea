@@ -3,6 +3,50 @@
 ## Purpose
 为渲染结果提供像素级验证：把 GPU 上渲染出的帧读回主存、以确定性的固定场景抓帧存档，并与冻结的基线图做有容差的比对，使"屏幕上画错了"这类问题在自动门禁中可见，而不是只能靠人眼偶然发现。
 ## Requirements
+
+### Requirement: Visual baseline classes are independent of renderer host
+
+The repository SHALL classify tracked visual evidence by observable semantics rather than by the renderer that produced it: window or UI fixtures belong to `ui/`, stable headless world frames belong to `world/`, and cross-tick behavior belongs to the existing `motion/` GIF class for bounded human review without automated pixel comparison. Adding a Godot renderer MUST NOT create a fourth tracked class or silently duplicate the same behavior under a renderer-specific golden tree.
+
+#### Scenario: Godot pilot produces comparison evidence
+
+- **GIVEN** the Godot client is still a pilot and the existing Rust client remains the canonical producer
+- **WHEN** the Godot client captures a comparable UI, world, or cross-tick scene
+- **THEN** the output SHALL be written as untracked, identity-complete comparison evidence outside `testdata/visual-golden/`
+- **AND** it MUST NOT create, replace, or update a tracked golden
+
+#### Scenario: Godot feature becomes the canonical producer
+
+- **GIVEN** a separately approved migration change has established behavioral parity for a Godot feature
+- **WHEN** visual ownership is transferred from the current producer to Godot
+- **THEN** the change MUST identify the existing semantic class, scene or fixture identity, old producer, new producer, affected goldens, and rollback path
+- **AND** the new producer MUST use the existing explicit-update and human-review discipline before any tracked golden changes
+
+#### Scenario: Proposed renderer-specific baseline directory
+
+- **GIVEN** a change proposes a tracked directory such as `testdata/visual-golden/godot/`
+- **WHEN** validation runs
+- **THEN** validation MUST reject the renderer-specific class
+- **AND** require the evidence to be routed to `ui/`, `world/`, the human-review `motion/` GIF class, or an untracked pilot-evidence directory
+
+### Requirement: Visual producer handoff preserves comparison discipline
+
+A visual producer handoff SHALL preserve the existing scene semantics, capture boundaries, explicit update authorization, human inspection requirement, difference artifacts, and bounded frame budgets. Renderer-specific antialiasing, rasterization, or color-pipeline differences MUST be recorded and reviewed; they MUST NOT be accepted by weakening existing thresholds or by overwriting unrelated baselines.
+
+#### Scenario: Handoff changes expected pixels
+
+- **GIVEN** an approved producer handoff is expected to change pixels while preserving scene semantics
+- **WHEN** candidate captures are generated
+- **THEN** every affected image or GIF MUST be reviewed before the explicit update command writes tracked goldens
+- **AND** unaffected baselines MUST remain byte-identical
+
+#### Scenario: Pilot comparison exceeds current tolerance
+
+- **GIVEN** a Godot pilot image differs from the canonical baseline beyond the current comparison tolerance
+- **WHEN** the pilot report is generated
+- **THEN** the report MUST classify and retain the difference as evidence
+- **AND** it MUST NOT change the canonical threshold or baseline merely to make the pilot pass
+
 ### Requirement: 渲染目标的像素可被读回且行距紧凑
 
 系统 SHALL 支持把渲染目标纹理的像素读回主存。读回结果 MUST 按"宽 × 每像素字节"紧凑排列，不得包含底层图形 API 为满足行距对齐而插入的填充字节。读回能力 MUST 由纹理在创建时显式声明的用途位启用，未声明该用途的纹理不得被读回。
@@ -647,4 +691,3 @@ lure 剧本 MUST 呈现牛跟随：牛逐帧向持麦玩家移动并止步、朝
 - **WHEN** 运行视觉比对
 - **THEN** 既有 golden MUST 逐字节不变或保持在既有双阈值内
 - **AND** 阈值 MUST NOT 被放宽
-

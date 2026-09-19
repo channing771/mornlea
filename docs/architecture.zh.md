@@ -6,9 +6,11 @@ counterpart: architecture.md
 ---
 # Mornlea 当前架构
 
-## 已批准的未来架构：Godot 试点
+> 本文档记录当前实现。所有新架构决策必须先阅读 [`architecture-target.md`](architecture-target.md)。下面的 Godot/Python pilot 是迁移期实现，不是最终语言或运行时拓扑。
 
-批准的未来项目根目录为 `apps/mornlea-godot/`，按粗粒度 feature 组织，并使用仅支持 macOS、Windows、Linux 的 `platform/desktop` 目标。Android、iOS、Web 和主机平台不在范围内。这是架构目标，不表示运行时实现已经存在。
+## 迁移期 Godot pilot（不是终局架构）
+
+迁移项目根目录为 `apps/mornlea-godot/`，按粗粒度 feature 组织，并使用仅支持 macOS、Windows、Linux 的 `platform/desktop` 目标。当前 pilot 使用内嵌 Python host、Go client-core 和 Rust Godot adapter。这些是迁移 seam：Python 保持为终局 Godot feature 语言，而 Go client-core 及其 c-shared 边界将由 Rust client-core 替代。Android、iOS、Web 和主机平台不在范围内。
 
 ## 1. 系统总览
 

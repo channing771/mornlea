@@ -62,7 +62,7 @@
       ],
       "english_path": "docs/agents-md-style.md",
       "chinese_path": "docs/agents-md-style.zh.md",
-      "revision": "2026-09-16.1"
+      "revision": "2026-09-19.1"
     },
     {
       "id": "agent-orchestration-guide",
@@ -111,6 +111,17 @@
       "revision": "2026-09-16.1"
     },
     {
+      "id": "architecture-target",
+      "classification": "bilingual",
+      "paths": [
+        "docs/architecture-target.md",
+        "docs/architecture-target.zh.md"
+      ],
+      "english_path": "docs/architecture-target.md",
+      "chinese_path": "docs/architecture-target.zh.md",
+      "revision": "2026-09-19.1"
+    },
+    {
       "id": "development-process",
       "classification": "bilingual",
       "paths": [
@@ -119,7 +130,7 @@
       ],
       "english_path": "docs/development-process.md",
       "chinese_path": "docs/development-process.zh.md",
-      "revision": "2026-09-16.3"
+      "revision": "2026-09-19.1"
     },
     {
       "id": "feature-backlog",
@@ -134,6 +145,17 @@
       "paths": [
         "docs/notes/godot-client-pilot-baseline.md"
       ]
+    },
+    {
+      "id": "godot-client-pilot-report",
+      "classification": "bilingual",
+      "paths": [
+        "docs/notes/godot-client-pilot-report.md",
+        "docs/notes/godot-client-pilot-report.zh.md"
+      ],
+      "english_path": "docs/notes/godot-client-pilot-report.md",
+      "chinese_path": "docs/notes/godot-client-pilot-report.zh.md",
+      "revision": "2026-09-19.1"
     },
     {
       "id": "agent-dashboard-guide",
@@ -189,10 +211,14 @@
     },
     {
       "id": "go-rust-ownership",
-      "classification": "legacy",
+      "classification": "bilingual",
       "paths": [
-        "docs/notes/go-rust-division.md"
-      ]
+        "docs/notes/go-rust-division.md",
+        "docs/notes/go-rust-division.zh.md"
+      ],
+      "english_path": "docs/notes/go-rust-division.md",
+      "chinese_path": "docs/notes/go-rust-division.zh.md",
+      "revision": "2026-09-19.1"
     },
     {
       "id": "lan-server-guide",
@@ -284,7 +310,7 @@
       ],
       "english_path": "docs/openspec.md",
       "chinese_path": "docs/openspec.zh.md",
-      "revision": "2026-09-15.1"
+      "revision": "2026-09-19.1"
     },
     {
       "id": "test-organization",

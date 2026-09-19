@@ -1,6 +1,6 @@
 ---
 doc_id: agent-guidance-style
-doc_revision: 2026-09-16.1
+doc_revision: 2026-09-19.1
 language: en
 counterpart: agents-md-style.zh.md
 ---
@@ -11,7 +11,9 @@ This document defines the writing and presentation details for directory-scoped 
 ## Scope and layering
 
 - Put a rule at its nearest scope. A constraint for one package belongs in that package's `AGENTS.md`; cross-package maps, directions, and entry-point differences belong in the subtree overview. Ancestor guidance accumulates, so a child file adds rules and does not restate its parent.
-- Create a guide only when a scope has an independent invariant to state. Otherwise inherit the parent; do not create files for symmetry.
+- Treat a directory as important when it is the repository root, a top-level module or package, a subtree root with an independent ownership, dependency, lifecycle, or validation boundary, or a directory that coordinates multiple packages, entry points, or asset classes. Each such directory should have a concise `AGENTS.md` that states its purpose, directory map, boundaries, entry points, and focused validation.
+- Create or update the local `AGENTS.md` in the same change when an important directory is created, reorganized, or materially reassigned. If no independent invariant exists, inherit the parent and do not add a guide merely for symmetry.
+- Keep each guide tied to decidable, scope-specific invariants rather than turning it into a general tutorial.
 - Thin-import `CLAUDE.md` files exist only at the repository root and subtree roots such as `cmd/mornlea/CLAUDE.md`. Their bytes are identical and their paths are registered in `packages/audit` as `claudeImportDocs`, guarded by `TestClaudeImportsAgentGuidance`. Edit only `AGENTS.md`; do not copy its body into `CLAUDE.md`. Package directories do not contain `CLAUDE.md`: agents already read subtree and parent guidance along the ancestor chain, and nested copies only create synchronization work.
 
 ## Overview-document skeleton for a subtree root

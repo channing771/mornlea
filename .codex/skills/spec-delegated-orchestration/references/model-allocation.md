@@ -28,6 +28,8 @@ Host values are examples. The main model must not invent an unsupported effort e
 
 These defaults are cost-oriented: select the least expensive listed model and band that can plausibly produce a useful result. Do not lower the assignment for architecture, protocol, save, ABI, security, or other durable contract work merely to save tokens; assign supporting analysis to a worker and reserve the final decision for the main model.
 
+The allocation unit is a coherent work package, not necessarily one checkbox. Group adjacent tasks when they share ownership, context, dependencies, and validation; split them when independent failure recovery, review, or lifecycle boundaries make a separate handoff materially useful. Record every covered leaf task in the assignment's `covers` list so coarse allocation never loses traceability.
+
 ## Allocation Procedure
 
 For each decomposed task, the main model records:
@@ -43,20 +45,23 @@ Choose the lowest band that covers the first three factors. Raise the band when 
 ## Assignment Example
 
     tasks:
-      - id: task-001
-        title: extract the current packet-field mapping
+      - id: block-contract
+        title: extract and reconcile the current packet-field contract
+        covers: ["4.1", "4.2", "4.3"]
         model: GLM 5.3 Flash
         reasoning: low
-        result_dir: delegation/results/task-001/
-      - id: task-002
+        result_dir: delegation/results/block-contract/
+      - id: block-design
         title: compare two bounded implementation approaches
+        covers: ["5.1", "5.2"]
         model: Muse spark
         reasoning: medium
-        result_dir: delegation/results/task-002/
-      - id: task-003
+        result_dir: delegation/results/block-design/
+      - id: block-review
         title: identify contract conflicts for controller review
+        covers: ["6.1", "6.2", "6.3"]
         model: ChatGPT worker
         reasoning: high
-        result_dir: delegation/results/task-003/
+        result_dir: delegation/results/block-review/
 
 ChatGPT worker is a human-readable placeholder for the concrete separately launched ChatGPT model selected by the host; replace it with the actual user-approved label in a real assignment. The main model should preserve the distinction between the requested label and any host-resolved identifier.

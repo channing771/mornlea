@@ -1,6 +1,6 @@
 ---
 doc_id: openspec-workflow
-doc_revision: 2026-09-15.1
+doc_revision: 2026-09-19.1
 language: zh-CN
 counterpart: openspec.md
 ---
@@ -27,7 +27,7 @@ openspec --version
 
 1. 需求不清时用 `$openspec-explore` 探索代码、测试和历史。
 2. 用 `$openspec-propose <change-name>` 生成聚焦的 proposal、delta specs、design 和 tasks。
-3. 用 `$openspec-apply-change` 按 `tasks.md` 测试优先实施。默认主会话直接执行；经验证的 OpenAI ChatGPT/Codex 有委派授权。仅为上下文隔离委派，最多三个子代理；每次新委派先用实时 `adaptive-model-router` 选择最低够用模型/effort。非 OpenAI 或未知提供方严格使用 `subagent-driven-development` 并独立实现和评审。
+3. 用 `$openspec-apply-change` 按 `tasks.md` 测试优先实施。默认主会话直接执行；经验证的 OpenAI ChatGPT/Codex 有委派授权。仅为上下文隔离委派，最多三个子代理。非 OpenAI 或未知提供方严格使用 `subagent-driven-development` 并独立实现和评审。
 4. 实现符合规格后运行：
 
 ```bash

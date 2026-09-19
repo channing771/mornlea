@@ -28,35 +28,6 @@ func TestProviderAwareOrchestration(t *testing.T) {
 	}
 }
 
-func TestControllerWorkerRoutingPolicy(t *testing.T) {
-	root := repositoryRoot(t)
-	paths := []string{
-		filepath.Join(".codex", "skills", "adaptive-model-router", "SKILL.md"),
-		filepath.Join(".claude", "skills", "adaptive-model-router", "SKILL.md"),
-	}
-	var baseline string
-	for index, path := range paths {
-		text := readBaselineDoc(t, root, path)
-		for _, required := range []string{
-			"Controller/Worker Operating Contract",
-			"DECOMPOSE -> DISPATCH -> WAIT -> HANDOFF -> INTEGRATE",
-			"cursor-aware bounded wait",
-			"MUST NOT",
-			"Grok is the default first dispatch",
-			"three-worker concurrency ceiling",
-		} {
-			if !strings.Contains(text, required) {
-				t.Errorf("%s does not state controller/worker routing rule %q", path, required)
-			}
-		}
-		if index == 0 {
-			baseline = text
-		} else if text != baseline {
-			t.Errorf("project router skill copies are not byte-identical: %s", path)
-		}
-	}
-}
-
 func TestAgentGuidance(t *testing.T) {
 	root := repositoryRoot(t)
 	for _, path := range []string{
@@ -90,7 +61,7 @@ func TestCodeCommentLanguagePolicy(t *testing.T) {
 	}
 }
 
-func TestDelegationBudgetAndAdaptiveModelRouting(t *testing.T) {
+func TestDelegationBudgetAndContextIsolation(t *testing.T) {
 	root := repositoryRoot(t)
 	for _, path := range []string{
 		"AGENTS.md",
@@ -111,10 +82,6 @@ func TestDelegationBudgetGuardDetectsDrift(t *testing.T) {
 		"main-context retention",
 		"Do not delegate merely for parallel speed",
 		"concise task brief",
-		"`adaptive-model-router`",
-		"live host capability set",
-		"lowest-cost model and reasoning effort credibly sufficient",
-		"Escalate one eligible step only after observable insufficiency",
 	}, "\n")
 	if violations := delegationPolicyViolations(valid); len(violations) != 0 {
 		t.Fatalf("valid delegation fixture produced violations: %v", violations)
@@ -145,9 +112,5 @@ func delegationPolicyFragments() []string {
 		"main-context retention",
 		"Do not delegate merely for parallel speed",
 		"concise task brief",
-		"`adaptive-model-router`",
-		"live host capability set",
-		"lowest-cost model and reasoning effort credibly sufficient",
-		"Escalate one eligible step only after observable insufficiency",
 	}
 }

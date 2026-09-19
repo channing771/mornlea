@@ -342,3 +342,39 @@ The pilot SHALL use only project-owned or procedurally generated code and assets
 - **WHEN** that dependency enters the repository or build artifact
 - **THEN** its source, version, license, and distribution obligations MUST be recorded and pass audit
 - **AND** any asset whose authorization cannot be confirmed MUST be rejected
+
+### Requirement: Forward migration preserves the final Python presentation boundary
+
+The pilot SHALL identify the embedded Godot Python host and features as the intended final presentation-language boundary, while identifying the current Go client-core, Go server, and pure-GDScript Bootstrap as migration seams. New migration work MUST NOT replace Python features with production GDScript or add new authoritative, protocol, prediction, persistence, or numerical behavior to Python. A qualified embedded Python runtime remains a prerequisite for the final Godot cutover; a failed qualification MUST block cutover rather than authorize an unqualified language fallback.
+
+#### Scenario: A later feature is added after the pilot
+
+- **GIVEN** a later terrain, actor, UI, audio, or tooling change needs Godot behavior
+- **WHEN** the change declares its language and ownership boundary
+- **THEN** presentation orchestration SHALL be implemented through the qualified embedded Python boundary and typed semantic views
+- **AND** authoritative or bulk computation SHALL be assigned to the Rust target runtime rather than new Go, Python, or GDScript logic
+
+#### Scenario: The embedded Python runtime does not qualify
+
+- **GIVEN** the selected embedded Python runtime fails isolation, export, lifecycle, or reproducibility qualification
+- **WHEN** a change attempts to proceed toward the final Godot product cutover
+- **THEN** the change MUST be marked blocked or No-Go
+- **AND** it MUST NOT add production GDScript features, system-Python dependencies, or a second client data path as a workaround
+
+### Requirement: Transition work keeps one online authority
+
+The pilot and its follow-on changes SHALL allow only one online authoritative world writer at a time. Go may serve as a current implementation or offline replay/differential oracle while Rust ownership is built, but Go and Rust MUST NOT both mutate authoritative state online, and a shadow writer MUST NOT be used as an implicit migration mechanism.
+
+#### Scenario: Rust server behavior is compared with the Go server
+
+- **GIVEN** a migration change needs to compare Rust behavior with the current Go implementation
+- **WHEN** the comparison is executed
+- **THEN** it SHALL use recorded inputs, packets, saves, or replay transcripts outside the live authoritative session
+- **AND** only the selected runtime SHALL write world state during an online run
+
+#### Scenario: A follow-on task would add a new Go gameplay path
+
+- **GIVEN** a feature can be implemented quickly by extending the current Go runtime
+- **WHEN** the feature has not been assigned a documented transition exception with a removal condition
+- **THEN** the task MUST fail architecture review before implementation
+- **AND** the plan SHALL identify the corresponding Rust target owner or defer the feature until that owner exists

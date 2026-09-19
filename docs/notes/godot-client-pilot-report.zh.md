@@ -1,7 +1,7 @@
 ---
 doc_id: godot-client-pilot-report
 doc_revision: 2026-09-19.1
-language: zh
+language: zh-CN
 counterpart: godot-client-pilot-report.md
 ---
 

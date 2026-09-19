@@ -4,6 +4,8 @@
 
 This document freezes the implementation baseline for the `pilot-godot-client-migration` change. It is a planning record, not a declaration that the Godot client is already production-ready.
 
+Forward architecture is defined by [`docs/architecture-target.md`](../architecture-target.md): embedded Python remains the final Godot feature language, while Rust replaces the Go real-time server/client-core path. P0–P7 evidence below describes the migration pilot and must not be read as approval to expand the pilot's Go data path or to introduce production GDScript features.
+
 | Field | Baseline |
 |---|---|
 | Source commit | `84f3e0e75dff6987e47cf2aa50f50d888e85eafb` |
@@ -88,13 +90,16 @@ Unimplemented pilot capabilities must be absent, disabled, or explicitly identif
 | P5 | Desktop input, prediction, first-person camera, target feedback, and disconnect paths | Protocol/input/prediction terminal state matches the old client | Old client remains the default |
 | P6 | Remote player, basic environment, confirmed HUD values, and disabled future capability identities | Minimum remote presentation loop uses confirmed state only | Disable optional manifests |
 | P7 | Headless capture, scenario v23 benchmark report, visual classification, and Go/No-Go review | Every hard condition has complete identity and an explicit decision | No-Go removes pilot runtime entry points but preserves evidence |
-| P8 | Production terrain, LOD, water, atmosphere, and resource pools | Separate post-Go OpenSpec change | Catalog can select the earlier world feature |
-| P9 | Complete actors, effects, and viewmodel | Separate feature changes with parity evidence | Disable features independently |
-| P10 | Full Godot Control UI or cross-platform React/WebView route | Separate route decision and implementation change | Keep old UI client |
-| P11 | Desktop audio, device input, and optional controller | Separate desktop-only change | Disable device adapters |
-| P12 | Production capture, benchmark, devcapture, import, and CI tooling | Separate tooling change | Continue the old toolchain |
-| P13 | Local play and macOS/Windows/Linux desktop packaging | Separate lifecycle/release decision | Return to remote-only pilot or old client |
-| P14 | Default-client switch followed later by client ABI retirement | At least one stable release stage plus rollback package | Restore the previous release; no partial retirement |
+| F1 | Rust domain, protocol, storage contracts, deterministic kernels, and replay reference | Separate Rust foundation change after P7 | Keep Go as offline oracle; no dual writer |
+| F2 | Rust authoritative server, validation, persistence, and shared local/remote session path | F1 replay and migration evidence | Keep Go authority until cutover; never dual-write |
+| F3 | Rust client-core and typed Godot bridge for session, mirror, prediction, reconciliation, and semantic frames | F1/F2 protocol contract | Keep pilot Go core without adding features |
+| P8 | Production terrain, LOD, water, atmosphere, and resource pools | F3 plus separate post-Go OpenSpec change | Catalog can select the earlier world feature |
+| P9 | Complete actors, effects, and viewmodel | F3 plus parity evidence | Disable features independently |
+| P10 | Godot Control UI driven by embedded Python and Rust view-models | F3 plus separate route change | Keep old UI client as rollback producer |
+| P11 | Desktop audio, device input, and optional controller | F3 plus separate desktop-only change | Disable device adapters |
+| P12 | Rust replay/perf contracts and Godot/Python capture, benchmark, devcapture, import, and CI tooling | F1–P9 as applicable | Continue the old toolchain |
+| P13 | Rust server-core local play and macOS/Windows/Linux desktop packaging | F2–P12 | Return to remote-only pilot or old client |
+| P14 | Default-client switch and retirement of Go real-time runtime/client ABI | F1–P13 plus rollback release | Restore the previous release; no partial retirement |
 
 Only P0–P7 are implementation scope for the current change. A P7 Go decision authorizes proposals for P8–P14, not their implementation and not a default switch.
 

@@ -2,6 +2,10 @@
 
 See `docs/notes/godot-client-pilot-report.md` and `openspec/changes/pilot-godot-client-migration/design.md` matrix row P9. This candidate is planning-only.
 
+## Target-boundary decision
+
+This change consumes typed entity families from Rust server/client-core and implements only actor presentation in embedded Godot Python. Authority, entity rules, interpolation inputs, identity, and overflow decisions remain Rust-owned. The current Go path may provide offline parity evidence until F3 is complete, but no new Go or Python gameplay state machine and no production GDScript fallback may be introduced.
+
 ## Goals / Non-Goals
 
 **Goals:**

@@ -1,6 +1,6 @@
 ---
 doc_id: agent-guidance-style
-doc_revision: 2026-09-16.1
+doc_revision: 2026-09-19.1
 language: zh-CN
 counterpart: agents-md-style.md
 ---
@@ -18,8 +18,13 @@ counterpart: agents-md-style.md
 - 规则住**最近作用域**：约束单个包的内容放该包目录的 `AGENTS.md`；跨包的
   地图、方向与入口差异放子树根的总纲。祖先链叠加生效，子文件只补充、不
   复述父文件已有的条文。
-- 只在有独立不变量要陈述时才新建指南文件；没有就继承父级，不为对称性
-  建文件。
+- 重要目录包括仓库根、顶层模块或包，以及拥有独立所有权、依赖、生命周期或
+  验证边界，或协调多个包、入口、资产类别的子树根。每个重要目录都应在所辖
+  内容旁有一份精简 `AGENTS.md`，说明目录用途、目录地图、边界、入口和定点
+  验证。
+- 新建、重组或实质性改变重要目录职责时，必须在同一变更中新建或更新该目录
+  的 `AGENTS.md`。如果没有独立不变量，就继承父级，不要为了对称性新增指南。
+- 每份指南都应绑定到可判定、作用域特定的不变量，不要把它写成通用教程。
 - 薄导入 `CLAUDE.md` 只出现在仓库根与子树根（如 `cmd/mornlea/CLAUDE.md`），
   内容逐字节一致并登记进 `packages/audit` 的 `claudeImportDocs`
   （`TestClaudeImportsAgentGuidance` 把关）；修改只落在 `AGENTS.md`，不把

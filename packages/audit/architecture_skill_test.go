@@ -38,3 +38,54 @@ func TestArchitectureSkillRetrospective(t *testing.T) {
 		}
 	}
 }
+
+func TestDirectoryScopedGuidancePolicy(t *testing.T) {
+	root := repositoryRoot(t)
+	paths := []string{
+		"AGENTS.md",
+		filepath.Join("docs", "agents-md-style.md"),
+		filepath.Join(".codex", projectArchitectureSkillPath),
+		filepath.Join(".claude", projectArchitectureSkillPath),
+	}
+	required := []string{
+		"important directory",
+		"`AGENTS.md`",
+		"independent ownership, dependency, lifecycle, or validation boundary",
+		"purpose",
+		"directory map",
+		"entry points",
+		"focused validation",
+		"create or update",
+		"inherit the parent",
+	}
+	for _, relative := range paths {
+		text := string(readOrchestrationPolicyFile(t, filepath.Join(root, relative)))
+		for _, fragment := range required {
+			if !strings.Contains(strings.ToLower(text), strings.ToLower(fragment)) {
+				t.Errorf("%s does not state directory-scoped guidance rule %q", relative, fragment)
+			}
+		}
+	}
+}
+
+func TestOrchestrationCarriesDirectoryGuidancePolicy(t *testing.T) {
+	root := repositoryRoot(t)
+	paths := []string{
+		filepath.Join("openspec", "config.yaml"),
+		filepath.Join(".codex", "skills", "mornlea-implementation-orchestration", "SKILL.md"),
+		filepath.Join(".claude", "skills", "mornlea-implementation-orchestration", "SKILL.md"),
+	}
+	for _, relative := range paths {
+		text := string(readOrchestrationPolicyFile(t, filepath.Join(root, relative)))
+		for _, fragment := range []string{
+			"ancestor `AGENTS.md` chain",
+			"important directory",
+			"same change",
+			"inheritance rationale",
+		} {
+			if !strings.Contains(text, fragment) {
+				t.Errorf("%s does not carry directory-guidance orchestration rule %q", relative, fragment)
+			}
+		}
+	}
+}

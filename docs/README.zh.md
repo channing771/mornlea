@@ -12,7 +12,8 @@ counterpart: README.md
 | --- | --- | --- |
 | 用户入口 | [`README.md`](../README.md)、[`README.zh.md`](../README.zh.md) | 项目介绍、运行方式和用户可见能力 |
 | 玩家与运维 | [`docs/notes/gameplay.md`](notes/gameplay.md)、[`docs/notes/configuration.md`](notes/configuration.md)、[`docs/notes/lan-server.md`](notes/lan-server.md)、[`docs/texture-packs.md`](texture-packs.md)、[`docs/notes/limitations.md`](notes/limitations.md)、[`docs/notes/compatibility.md`](notes/compatibility.md)、[`docs/notes/visual-verification.md`](notes/visual-verification.md) | 玩法手册、配置与调试面板、局域网联机、材质包、项目边界与升级纪律 |
-| 当前架构 | [`docs/architecture.md`](architecture.md) | 当前组件所有权、依赖方向和运行边界 |
+| 终局架构 | [`docs/architecture-target.md`](architecture-target.md) | 新任务使用的最终语言职责、运行时拓扑、迁移顺序和禁止方向 |
+| 当前架构 | [`docs/architecture.md`](architecture.md) | 当前组件所有权、依赖方向和运行边界；这不是最终目标 |
 | 行为主规格 | [`openspec/specs/`](../openspec/specs/) | 当前可观察行为的主契约 |
 | 活跃变更 | [`openspec/changes/`](../openspec/changes/) | 正在提议或实施的变更产物 |
 | OpenSpec 流程 | [`docs/openspec.md`](openspec.md) | 提案、实现、校验与归档规则 |

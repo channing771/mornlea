@@ -2,6 +2,10 @@
 
 See `docs/notes/godot-client-pilot-report.md` and `openspec/changes/pilot-godot-client-migration/design.md` matrix row P12. This candidate is planning-only.
 
+## Target-boundary decision
+
+Tooling consumes the language-neutral Rust replay and report contracts. Godot/Python may produce bounded presentation evidence; Rust owns authoritative replay, protocol fixtures, and performance-critical producers. Go remains an offline differential oracle only, and no tooling workflow may create a second online authority or require the standalone Agent inside the client.
+
 ## Goals / Non-Goals
 
 **Goals:**

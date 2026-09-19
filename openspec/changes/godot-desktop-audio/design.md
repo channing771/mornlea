@@ -2,6 +2,10 @@
 
 See `docs/notes/godot-client-pilot-report.md` and `openspec/changes/pilot-godot-client-migration/design.md` matrix row P11. This candidate is planning-only.
 
+## Target-boundary decision
+
+Rust client-core produces validated semantic cue and device-intent events. Embedded Godot Python and Godot desktop APIs own playback, controller mapping, focus behavior, and resource lifecycle. The independent Agent Python runtime is not a dependency. The change must wait for F3 and must not add Go real-time logic, Python authority, numerical loops, or GDScript features.
+
 ## Goals / Non-Goals
 
 **Goals:**

@@ -30,6 +30,19 @@ Current scale is relevant to risk, not code-quality judgment: `mornlea_client/sr
 
 The Godot baseline is the verifiable `4.7.2-stable` Standard release as of 2026-09-15, sourced from Godot's official maintained-release announcement and download archive. Godot 4.8 development snapshots are prohibited as the pilot baseline. The Rust side uses Godot 4 GDExtension bindings. The exact `godot` crate version is pinned after the first compatibility probe and MUST work with the repository's pinned Rust 1.97.1. If no compatible combination exists, the pilot stops before introducing gameplay code.
 
+### Forward architecture ruling
+
+The pilot deliberately preserves the current Go server and Go client-core so P0–P7 can be completed without a big-bang rewrite. That is a compatibility decision, not a target ownership decision. The final runtime is Rust authoritative server + Rust client-core + Godot with qualified embedded Python presentation, as recorded in [`docs/architecture-target.md`](../../../docs/architecture-target.md).
+
+The embedded Godot Python language is retained in the final design. The migration replaces the Go-backed real-time core and the pilot's Python-to-Go data seam; it does not replace Python with GDScript. Pure GDScript remains a temporary openability/diagnostics Bootstrap only. The standalone Agent Python service remains a separate process and dependency closure.
+
+All work after the completed pilot must use one of two explicit labels:
+
+- **Target work**: adds or moves ownership toward Rust domain/server/client-core or Godot/Python presentation.
+- **Transition work**: keeps an existing Go/Python seam alive for compatibility, names its removal condition, and adds no new authoritative or protocol behavior to that seam.
+
+No online dual-authority or shadow-writer phase is permitted. Go is a replay/differential oracle during Rust migration, not a second server. A feature that cannot be expressed through the target typed semantic contract is blocked until the relevant Rust foundation change exists.
+
 Python is not an official first-party Godot scripting language. The first candidate was the community Py4Godot `4.7-alpha21` line, which exposes Python through a second GDExtension and remains explicitly pre-stable. Exact qualification rejected its release artifact because legacy interpreter initialization accepted external `PYTHONPATH`, its headless editor integration emitted errors, and shutdown leaked objects/resources. The user subsequently approved a narrowly scoped project-maintained hardening route. P1 now reproduces a derivative from that exact upstream source revision plus an ordered repository patch stack; the fork may change only interpreter isolation, editor integration, packaging, and lifecycle correctness and may not add Mornlea gameplay/data APIs. The complete Godot 4.7.2, current macOS Apple Silicon, headless/editor, export, repeated teardown, and `mornlea_godot` coexistence matrix remains mandatory. If the hardened derivative still requires system Python, runtime `pip`, an unpinned build input, a broader fork, or a reduced gate, Python-primary gameplay work remains No-Go rather than silently falling back to GDScript.
 
 ## Goals / Non-Goals
@@ -66,9 +79,9 @@ Rejected alternatives:
 - Build only an isolated Godot rendering demo: it would not validate protocol, Go mirror/predictor, mesh updates, or real frame boundaries.
 - Delete `mornlea_client` before migration: that would break capture, benchmark, and the existing playable baseline.
 
-### 2. Establish a Python-primary Godot product shell with replaceable scripting and data adapters
+### 2. Establish a Python Godot product shell with a replaceable transition data adapter
 
-The Godot project does not live at the repository root or inside a Go/Rust module. It uses the stable application root `apps/mornlea-godot/`. This path is both the pilot project root and the future production-client project root. P8–P14 add or replace coarse features in place; they do not rename the directory, replace `project.godot`, or turn the repository root into a Godot project.
+The Godot project does not live at the repository root or inside a Go/Rust module. It uses the stable application root `apps/mornlea-godot/`. This path is both the pilot project root and the future production-client project root. P8–P14 add or replace coarse features in place; they do not rename the directory, replace `project.godot`, or turn the repository root into a Godot project. Python remains the final feature language; only the pilot's Go-backed data adapter is replaceable.
 
 Target layout:
 
@@ -349,38 +362,38 @@ Performance reports use the same scenario version, seed, resolution, view distan
 Go/No-Go is determined by these hard conditions:
 
 - Go: the exact hardened Py4Godot/CPython artifact is reproducible from the pinned upstream revision and patch series, works offline on the current macOS target, and exports with complete provenance; no authority/protocol/prediction fork exists; no silent loss or partial batch occurs; terrain and the minimum entity run stably; both GDExtensions and the Go core close repeatedly; Python main-thread cost is bounded; performance regressions have concrete optimization points; and Godot demonstrably removes in-house window/GPU/cross-platform shell burden.
-- No-Go: Python-primary execution requires system Python, runtime package installation, an unpinned build input, a broader or unreviewed binding fork, or a GDScript feature fallback; protocol or physics must be rewritten in Godot; Python enters bulk terrain/numerical hot paths; packed-mesh adaptation cannot meet bounded budgets for the target scene and low-level custom rendering is the only route; either GDExtension/Go c-shared lifecycle is unstable; the default client must change prematurely; or report identity is incomplete.
+- No-Go: embedded Python execution requires system Python, runtime package installation, an unpinned build input, a broader or unreviewed binding fork, or a GDScript gameplay fallback; protocol or physics must be rewritten in Godot/Python; Python enters bulk terrain/numerical hot paths; packed-mesh adaptation cannot meet bounded budgets for the target scene and low-level custom rendering is the only route; either GDExtension/Go c-shared lifecycle is unstable; the default client must change prematurely; or report identity is incomplete. A failed Python qualification blocks the Godot cutover; it does not authorize moving presentation features to unqualified GDScript.
 
 ### 10. Principal current-`main` feature migration matrix
 
-"Retain" means remain the sole production truth. "Extract" means move from the Darwin app into the platform-independent Go core. "Adapt" means preserve semantics while changing the Godot presentation outlet. "Rewrite" is allowed only for pure presentation/device implementation. "Retire" happens only after complete parity and a default switch.
+"Retain" means remain the current source of truth during this pilot, not necessarily the final language owner. "Extract" means first make semantics host-independent; the final extraction target is Rust client-core/server unless a row explicitly says otherwise. "Adapt" means preserve semantics while changing the Godot/Python presentation outlet. "Rewrite" is allowed only for pure presentation/device implementation. "Retire" happens only after complete parity and a default switch.
 
 | Current area / representative files | Principal current function | Pilot treatment | Complete migration target | Key validation |
 |---|---|---|---|---|
 | `packages/contracts` | Shared Go/Python JSON contracts | Untouched | Retain | Contract goldens unchanged |
 | `packages/agent/companion` | Planner/Dialogue/memory service | Untouched and forbidden as a client import | Retain independent service | Agent integration gates unchanged; source guard rejects client reuse |
-| `packages/shared/core` | Coordinates, blocks/items, raycast domain entry | Reuse directly | Retain | Coordinate-conversion property tests |
-| `packages/shared/world` | Chunk/section/palette/snapshot data model | Reuse directly | Retain | Three section-storage forms round-trip |
-| `packages/shared/network/protocol` | Protocol v44 packets and domains | Reuse directly | Retain sole wire definition | Handshake, codec, fuzz |
-| `packages/shared/network/codec,tcp` | Framing, strict codecs, TCP stream | Reuse directly | Retain | Truncation/trailing/limit failures |
-| `packages/shared/physics` | Player collision source and physics-semantic adapter | Reuse directly | Retain | Predictor/authority oracle |
-| `packages/shared/nativeabi` | Sole Go bridge to engine ABI v11 | Reuse directly | Retain sole entry | ABI/capacity/panic tests |
-| `packages/server/sim/*` | Authoritative tick, realm, entities, rule resolution | Untouched | Retain sole authority | Server race and simulation tests |
+| `packages/shared/core` | Coordinates, blocks/items, raycast domain entry | Reuse directly | Transition domain identities and kernel-facing contracts to Rust | Coordinate-conversion property tests |
+| `packages/shared/world` | Chunk/section/palette/snapshot data model | Reuse directly | Transition world data model and semantic snapshots to Rust domain | Three section-storage forms round-trip |
+| `packages/shared/network/protocol` | Protocol v44 packets and domains | Reuse directly | Transition the canonical wire contract to Rust protocol with compatibility fixtures | Handshake, codec, fuzz |
+| `packages/shared/network/codec,tcp` | Framing, strict codecs, TCP stream | Reuse directly | Transition session/codec ownership to Rust server/client-core | Truncation/trailing/limit failures |
+| `packages/shared/physics` | Player collision source and physics-semantic adapter | Reuse directly | Transition deterministic physics semantics to Rust kernel | Predictor/authority oracle |
+| `packages/shared/nativeabi` | Sole Go bridge to engine ABI v11 | Reuse directly | Retire after Rust server/client-core consume the Rust kernel directly | ABI/capacity/panic tests |
+| `packages/server/sim/*` | Authoritative tick, realm, entities, rule resolution | Untouched | Transition authority to Rust server/domain through replay parity | Server race and simulation tests |
 | `packages/server/fluid` | Bounded fluid orchestration | Untouched | Retain | Existing fluid tests |
-| `packages/server/storage` | World/player/entity saves and migration | Pilot does not access | Retain | Schemas/goldens unchanged |
-| `packages/server/server` | Host, login, session, publication, shutdown | Existing TCP service only | Retain | Existing remote-login/shutdown tests |
-| `packages/client/client/mirror.go`, `snapshot.go` | Chunk mirror and reset | Compose/reuse in runtime | Retain Go ownership | Transcript-state equivalence |
-| `receiver.go` | Bounded server-message receive | Move/wrap in runtime | Retain Go worker | Overflow, close, immutability |
+| `packages/server/storage` | World/player/entity saves and migration | Pilot does not access | Transition save ownership and migrations to Rust storage/server | Schemas/goldens unchanged |
+| `packages/server/server` | Host, login, session, publication, shutdown | Existing TCP service only | Transition network/session authority to Rust server | Existing remote-login/shutdown tests |
+| `packages/client/client/mirror.go`, `snapshot.go` | Chunk mirror and reset | Compose/reuse in runtime | Transition to Rust client-core after F3 | Transcript-state equivalence |
+| `receiver.go` | Bounded server-message receive | Move/wrap in runtime | Transition to Rust protocol/client-core after F2/F3 | Overflow, close, immutability |
 | `predictor*.go`, `collision.go` | Input prediction, replay, authoritative correction | Compose/reuse in runtime | Retain | Same-input bitwise/tolerance equivalence |
 | `input.go`, `camera*.go` | Semantic input and camera modes/occlusion | Extract device-independent input | Retain semantics; Godot only collects devices | Cursor, F5, three-view tests |
 | `remote_players.go`, `companions.go`, `hostiles.go`, `passives.go`, `projectiles.go` | Authoritative entity mirrors and interpolation | Pilot starts with remote players | Adapt all entities in batches | Tick and spawn/state/despawn order |
-| `inventory.go`, `chest.go`, `furnace.go`, `chat.go` | Authoritative UI mirrors | Basic HUD subset only | Retain Go; adapt UI later | Unconfirmed operations do not alter mirrors |
-| `mesher*.go`, `mesher_*queue.go` | Mesh workers, scheduling, backpressure | Include in runtime | Retain Go orchestration and Rust kernel | Zero extra steady-state allocation, overflow |
+| `inventory.go`, `chest.go`, `furnace.go`, `chat.go` | Authoritative UI mirrors | Basic HUD subset only | Transition semantic mirror ownership to Rust client-core; Python only presents it | Unconfirmed operations do not alter mirrors |
+| `mesher*.go`, `mesher_*queue.go` | Mesh workers, scheduling, backpressure | Include in runtime | Transition scheduling and bulk preparation to Rust client-core/kernel | Zero extra steady-state allocation, overflow |
 | `render_world_update.go` | MRW1 atomic world-cache update encoding | Design reference; no direct reuse promise | May evolve into host-neutral world delta | Epoch/revision/tombstone |
 | `packages/client/mesh` | Section-input encoding and engine mesh calls | Reuse | Retain | Mesh oracle and capacity tests |
 | `packages/client/lod` | Far-ring tile scheduling and encoding | Not in pilot | Adapt to Godot later | Far radius/fog/budgets |
 | `packages/client/assets` | Registry, atlas, procedural materials, item icons/geometry | Reuse registry/atlas | Retain data generation; add Godot import adapter | Layers, alpha, mipmaps, authorization |
-| `packages/client/render/section_scheduler.go` etc. | Connectivity, visibility, upload/drop budgets | Extract host-neutral decisions | Retain Go decisions; Godot owns resources | Visible set and upload-sequence parity |
+| `packages/client/render/section_scheduler.go` etc. | Connectivity, visibility, upload/drop budgets | Extract host-neutral decisions | Transition decisions to Rust client-core; Godot owns resources | Visible set and upload-sequence parity |
 | `render/avatar*.go`, `drop*.go`, `projectile*.go` | Entity presentation poses and current GPU-instance encoding | Reuse semantic poses only | Retain poses; eventually retire 96-byte encoding | Pose/death/interpolation goldens |
 | `render/daylight.go`, `weather.go`, `celestial.go` | Day/night, weather, sky, precipitation parameters | Basic environment in pilot | Retain parameters; rewrite shaders | Tick phase and clear/rain branches |
 | `render/block_outline.go`, `block_crack.go` | Target outline and cracks | Implement target feedback | Adapt Godot material/pass | Depth test, reset, stages |
@@ -389,23 +402,23 @@ Go/No-Go is determined by these hard conditions:
 | `render/hud` | HUD/container data and historical GPU layout | Basic values only | Rewrite presentation with selected UI route | Values, hit testing, visual baseline |
 | `packages/client/audio` | Darwin AudioQueue procedural cues | Silent pilot | Rewrite device layer with Godot AudioServer | Rising edge, volume, headless silence |
 | `app/app_startup.go`, `app_dependencies.go` | Local/remote assembly and reverse-order cleanup | New remote-only runtime constructor | Split platform core and host assembly | Failure order, no premature window |
-| `app/app_messages.go` | Message drain and mirror/entity/UI/audio routing | Extract to runtime and event output | Retain Go | Same state/event result per message |
+| `app/app_messages.go` | Message drain and mirror/entity/UI/audio routing | Extract to runtime and event output | Transition to Rust client-core event output | Same state/event result per message |
 | `app/app_input.go`, `app_game_ui.go` | Phase gates, command assembly, view token | Pilot only movement/look/target | Migrate all semantic actions later | Stale-token/unconfirmed rejection |
 | `app/app_frame.go`, `app_render.go` | Per-frame drain, prediction, mesh, presentation assembly | Split into runtime step plus Godot apply | Eventually retire concrete old-renderer path | Same budgets and frame snapshot |
 | `app/interactive.go` | Menu/loading/game event loop | Godot SceneTree owns outer loop | Retain state-machine semantics | Pause/resize/focus/close |
 | `app/app_menu*.go`, `app_settings.go`, `debug_panel.go` | Menus, settings, pause, F3 state | Connection/error UI only | Later Godot UI or React decision | State documentation and input participation |
 | `app/app_load.go` | Loaded criterion and loading progress | Reuse criterion | Retain | Same view-distance target; no fabricated completion |
-| `app/app_audio.go` | Derive cues from confirmed state | May record without playback | Retain Go trigger; Godot playback | Cue exactly once |
+| `app/app_audio.go` | Derive cues from confirmed state | May record without playback | Rust emits semantic cue; Python/Godot owns playback | Cue exactly once |
 | `cmd/mornlea/capture` | Windowless fixed-scene PNG | Keep old path | Add Godot headless capture later | No focused window, same scene identity |
 | `cmd/mornlea/benchmark` | Benchmark v23 scenario and report | Comparison truth | Share scenario description later | Identity, warmup, sample completeness |
 | `cmd/mornlea/devcapture` | Interactive-window capture coordination | Not in pilot | Adapt to Godot viewport capture later | Non-blocking delivery |
-| `mornlea_engine` | Mesh/light/collision/raycast/physics/worldgen/LOD/fluid | Keep ABI and sole implementation | Retain long term | Rust/Go ABI and oracles |
+| `mornlea_engine` | Mesh/light/collision/raycast/physics/worldgen/LOD/fluid | Keep ABI and sole implementation | Fold into Rust domain/kernel contracts as adapters are retired | Rust determinism, replay, and numerical oracles |
 | `mornlea_client/window.rs,input.rs,camera.rs` | Darwin window/input/native camera calculations | Keep old client | Retire corresponding exports after Godot parity | Old-client baseline continues to pass |
 | `mornlea_client/render/*,shaders.rs` | wgpu GPU resources, passes, shaders | Keep old client | Retire in stages after Godot parity | Visual/benchmark/capacity |
-| `mornlea_client/overlay.rs,webview.rs` and `frontend` | WKWebView plus complete React UI | Keep old client | Choose one later migration route | Bridge schema and visual fixtures |
-| `apps/mornlea-godot/app` | Pure-GDScript Bootstrap plus Python host lifecycle and phase routing | Establish stable microkernel and language allowlist | Retain long term; never absorb concrete features | Opens without libraries, Python handoff, idempotent close, stable main scene |
+| `mornlea_client/overlay.rs,webview.rs` and `frontend` | WKWebView plus complete React UI | Keep old client | Migrate UI to Godot Control/Python in P10; retire after producer handoff | Bridge schema and visual fixtures |
+| `apps/mornlea-godot/app` | Migration-only pure-GDScript Bootstrap plus Python host lifecycle and phase routing | Establish stable microkernel and language allowlist | Retain Python host; remove or minimize the Bootstrap after the final launcher can diagnose missing runtime | Opens without libraries, Python handoff, idempotent close, stable main scene |
 | `apps/mornlea-godot/config` | Feature catalog and launch/render profiles | Establish pilot catalog | Evolve through profiles and coarse manifests | Dependency, version, budget, required/optional validation |
-| `apps/mornlea-godot/features` | Python-led vertical scene-based presentation capabilities | Minimum-loop features only | Extend by capability through P8–P13 | Python typing, isolation, missing/failure semantics, no hidden dependency |
+| `apps/mornlea-godot/features` | Python-led vertical scene-based presentation capabilities | Minimum-loop features only | Extend by capability through P8–P13 against Rust semantic views; Python remains the final feature language | Python typing, isolation, missing/failure semantics, no hidden dependency |
 | `apps/mornlea-godot/platform/desktop` | Python desktop input/audio/window-lifecycle adaptation | Keyboard/mouse and window lifecycle only | Add desktop audio/controller later; no mobile/Web reservation | Headless avoids device, semantic input, target rejection |
 | `scripts/godot/py4godot`, `apps/mornlea-godot/addons/py4godot` | Ordered project hardening stack plus generated Python scripting runtime and embedded CPython | Exact upstream base and approved minimal derivative only after compatibility gate | Replaceable only through an independent binding change | Upstream/patch/build/output identity, license, offline startup/export, teardown, platform matrix |
 | `apps/mornlea-godot/addons/mornlea_bridge` | Project-owned Godot native adapter and platform-library descriptors | New sole gameplay/data entry | Evolve through additive feature families | GDExtension/ABI/distribution identity; Python never loads C symbols |
@@ -415,7 +428,7 @@ Go/No-Go is determined by these hard conditions:
 
 ### 11. Complete migration stage table
 
-Size is relative engineering complexity: S is one boundary; M spans multiple packages with stable behavior; L crosses runtimes or visual systems; XL is a product-level transition. P0–P7 belong to this change. P8–P14 define routes for later changes only.
+Size is relative engineering complexity: S is one boundary; M spans multiple packages with stable behavior; L crosses runtimes or visual systems; XL is a product-level transition. P0–P7 belong to this change. P8–P14 define feature routes for later changes, but they cannot skip the Rust foundation stages below.
 
 | Stage | Size | Scope and principal code | Prerequisite | Deliverable | Exit condition | Rollback |
 |---|---:|---|---|---|---|---|
@@ -427,17 +440,20 @@ Size is relative engineering complexity: S is one boundary; M spans multiple pac
 | P5 remote game loop | L | TCP login, input, predictor, camera, target, disconnect | P4 | Movable/correctable first-person loop | v44 behavior equivalent; disconnect/errors understandable | Old client unchanged |
 | P6 minimum presentation | M | Remote player, day/night/weather, health/hunger/oxygen HUD | P5 | Required minimum entity and HUD | State comes only from confirmed mirror; count limits valid | Remove optional presentation nodes |
 | P7 dual-client decision | M | Capture, benchmark, RSS, report, review | P6 | Go/No-Go report and later recommendations | Every hard condition has evidence; OpenSpec strict validation passes | On No-Go archive evidence and delete runtime entry |
-| P8 productionize terrain | XL | `features/world/*`, mesh layout, LOD, water, cutout, fog, lighting, resource pools | P7 Go | Independent change plus world manifest/families | Target view distance and stable frame meet approved budgets; pilot world feature replaceable | Catalog points back to pilot feature; old client remains default |
-| P9 complete entities/effects | L | `features/actors/*`, `effects/*`, `viewmodel/*`, corresponding actor families | P8 | Independent change set | Each behavior/visual specification reaches parity; features independently disableable | Disable by feature in catalog |
-| P10 UI migration | XL | `features/ui/*` and versioned UI view-model family | P7 route decision | Independent UI change set | Token/hit/confirmation/visual fixture parity without Bootstrap changes | Keep old UI client and disable new UI manifests |
-| P11 audio/devices | M | `platform/desktop/*`, cue family, AudioServer, keyboard/mouse/controller | P7 | Independent change | Cue exactly once, headless touches no device, desktop adapter replaceable | Disable audio/controller adapter or use old client |
-| P12 tooling | L | Godot tests, capture, benchmark, devcapture, resource import, CI | P8/P9 | Independent change | Replaces existing acceptance without focusing windows or polluting product features | Continue old toolchain |
-| P13 local play and desktop release | XL | `config/launch_profiles`, decision between embedded Memory and server child process, packaging, signing, macOS/Windows/Linux desktop | P8–P12 | Independent change | Local/remote semantics share one source; desktop unit not mixed; project root unchanged; mobile/Web remains rejected | Return catalog/profile to remote-only or old client |
-| P14 default switch and retirement | XL | Default entry, release catalog, documentation, removal of old ABI/client crate | Complete parity | Final cutover change | Two release cycles without blocking regression and a usable rollback package; Godot layout and feature contract stable | Restore previous release; prohibit partial deletion |
+| F1 Rust domain/protocol/kernel foundation | XL | Rust domain, protocol, storage contracts, deterministic kernels, replay corpus | P7 Go | Language-neutral contracts and Rust reference behavior | Go replay oracle and Rust implementation agree; no second online writer | Keep Go production path and discard Rust adapter |
+| F2 Rust authoritative server | XL | Rust tick, world/entity rules, persistence, validation, network session | F1 | Rust server-core and migration adapters | Deterministic replay, save migration, failure-path parity, same Memory/TCP semantics | Keep Go authority; no dual-write mode |
+| F3 Rust client-core and typed Godot bridge | XL | Rust session, mirror, prediction, reconciliation, semantic snapshots, direct Godot bridge | F1; F2 protocol | Go-free client-core path consumed by Python features | Transcript parity, correction/replay, bounded bridge, repeated lifecycle | Keep pilot Go core without adding features |
+| P8 productionize terrain | XL | Rust terrain/mesh pipeline plus Python `features/world/*`, LOD, water, cutout, fog, lighting, resource pools | F3 | Independent world feature and semantic families | Target view distance and stable frame meet approved budgets; no Go terrain logic added | Catalog points to prior feature; old client remains default |
+| P9 complete entities/effects | L | Rust typed entity families plus Python `features/actors/*`, effects, viewmodel | F3; P8 where terrain resources are required | Independent presentation change | Each behavior/visual specification reaches parity; features independently disableable | Disable by feature in catalog |
+| P10 UI migration | XL | Python Godot Control features and versioned Rust view-model family | F3 | Independent UI change set | Token/hit/confirmation/visual fixture parity without new GDScript or WebView dependency | Keep old UI client and disable new manifests |
+| P11 audio/devices | M | Python `platform/desktop/*`, Godot AudioServer, semantic cue family, keyboard/mouse/controller | F3 | Independent change | Cue exactly once, headless touches no device, desktop adapter replaceable | Disable adapter or use old client |
+| P12 tooling | L | Rust replay/perf contracts, Python/Godot tests, capture, benchmark, import, CI | F1–P9 as applicable | Independent change | Replaces acceptance without focusing windows or product-runtime Python tooling | Continue old toolchain |
+| P13 local play and desktop release | XL | Rust server-core local mode, shared protocol path, Python presentation packaging, macOS/Windows/Linux | F2–P12 | Independent change | Local/remote semantics share one source; desktop unit is closed; mobile/Web rejected | Return to remote-only or old client |
+| P14 default switch and retirement | XL | Default entry, release catalog, retirement of Go runtime/client ABI and pilot-only bootstrap seams | F1–P13 complete | Final cutover change | Two release cycles without blocking regression and a usable rollback package; Python Godot layout stable | Restore previous release; prohibit partial deletion |
 
 ## Concurrency and frame boundary
 
-Each Godot frame follows this order. Numeric limits become named constants and report identity during implementation design review:
+Each pilot Godot frame follows this order. This is the migration-era Go-backed path; the final frame boundary replaces the Go calls with direct Rust client-core calls while keeping Python as the presentation language. Numeric limits become named constants and report identity during implementation design review:
 
 ```text
 Godot main thread
@@ -455,6 +471,20 @@ Godot main thread
 
 Connection establishment and DNS/TCP/login MUST NOT block on the Godot main thread. Python callbacks have explicit work budgets and do not hold or expose native buffers after a bridge call. Shutdown first stops Python input/feature dispatch, cancels receiver/mesh work, waits for bounded native workers, drains or discards presentation results with an old epoch, releases the Go session and project bridge resources, deactivates Python features, and finally releases Godot RIDs, the Python runtime, and dynamic-library handles. Repeated shutdown is safe.
 
+The final frame boundary is:
+
+```text
+Godot main thread
+  1. Python desktop adapter samples bounded semantic input
+  2. Rust Godot bridge submits input to Rust client-core
+  3. Rust client-core performs bounded receive, mirror, prediction, reconciliation, and mesh scheduling
+  4. Rust client-core publishes one immutable semantic FrameSnapshot
+  5. Python features apply typed views to Godot scenes/resources
+  6. Godot renders without synchronous protocol, storage, or server queries
+```
+
+The migration must prove semantic parity between these two frame boundaries before removing the Go-backed path.
+
 ## Compatibility and versioning
 
 | Contract | This change | Notes |
@@ -464,25 +494,25 @@ Connection establishment and DNS/TCP/login MUST NOT block on the Godot main thre
 | companion/hostile/passive schemas | Unchanged | Still owned by server/storage |
 | engine ABI | Remains v11 | Godot never calls it directly; still reached through Go nativeabi |
 | client ABI | Remains v19 | Old production client path unchanged |
-| client-core ABI | New v1 | Godot distribution only; independently negotiated major/minor and feature families, separate from v19 |
+| client-core ABI | New v1 transition contract | Pilot-only Go c-shared ABI; final Rust client-core uses a separately versioned typed Godot bridge and must not preserve Go as a runtime dependency |
 | Godot project root | Fixed at `apps/mornlea-godot/` | If pilot passes, production client grows in place through P8–P14 |
 | Godot feature contract | New v1 | Coarse manifest/catalog/lifecycle; compatible additive growth, explicit version bump for breaking change |
 | benchmark scenario | Remains v23 | New reports reuse identity; a changed scenario shape requires a separate bump |
 | Godot | Pinned `4.7.2-stable` | Binary/export templates and checksums recorded in manifest |
 | Python scripting runtime | New pinned hardened Py4Godot derivative | P1 records exact upstream, patch-series, build inputs, generated plugin, embedded CPython, artifact checksums, licenses, supported target, and export identity; alpha status and project maintenance cost are not waived |
-| Python host contract | New v1 | Python owns host/features/platform scripts; pure GDScript owns only bootstrap diagnostics; breaking host changes require explicit versioning |
+| Python host contract | New v1 and retained in the target | Python owns Godot host/features/platform scripts; pure GDScript owns only migration Bootstrap diagnostics; breaking host changes require explicit versioning |
 | platform scope | Desktop only | Pilot macOS Apple Silicon; later Windows/Linux desktop only; Android/iOS/Web/console rejected |
 
 ## Risks / Trade-offs
 
 - [Godot, CPython, Rust, and Go runtime layers increase lifecycle complexity] → Use a pull-only C ABI behind one Rust bridge, no cross-thread Godot/Python callbacks, repeated create/destroy tests for both GDExtensions, and strict reverse-order release; P1/P3 failure is immediate No-Go.
 - [A pre-stable community Python binding and project patch stack become a production dependency] → Pin the upstream source, ordered patch series, build inputs, generated artifact, and embedded CPython with checksums/licenses; prohibit gameplay/data APIs in the fork; prove editor/headless/export behavior on the current macOS target; run mutation and 100-cycle lifecycle tests; and stop at P1 on any unresolved crash, platform gap, system-runtime dependency, or irreproducible build. A matching Godot minor label is not sufficient evidence.
-- [Python obscures performance or moves work behind the GIL] → Restrict Python to bounded orchestration and thin presentation mapping, keep bulk terrain/resource preparation in Rust and state/protocol work in Go, measure Python callback/apply duration and allocation pressure, and fail review if a hot path requires unbounded Python work.
+- [Python obscures performance or moves work behind the GIL] → Retain Python as the final bounded presentation language, keep bulk terrain/resource preparation and state/protocol work in Rust in the target (Go only during transition), measure Python callback/apply duration and allocation pressure, and fail review if a hot path requires unbounded Python work.
 - [Developers obtain different Python environments] → Runtime uses only the project-local pinned Py4Godot/CPython unit; development tools use the checked `uv.lock`; system Python, user site-packages, and runtime `pip` are rejected by validation.
 - [The standalone companion Agent and client Python are conflated] → Keep separate project roots, locks, imports, and processes; audit that `apps/mornlea-godot` never imports `packages/agent`.
 - [Packed-quad expansion substantially increases CPU, memory, or upload volume] → P4 records input/expanded/VRAM proxies; the pilot exposes amplification, and production chooses standard Mesh or low-level buffers from data.
 - [Runtime extraction changes existing client behavior] → Add characterization/transcript tests first and keep the old client consuming the shared logic; move only one ownership loop at a time.
-- [Two clients drift] → Share Go runtime/presentation semantics. Before cutover, every new feature explicitly decides whether it belongs in the pilot; gameplay is never duplicated in two hosts.
+- [Two clients drift] → Use language-neutral transcripts and Rust as the target reference. During the transition, every new feature explicitly names whether it is a compatibility seam or target work; gameplay is never duplicated in two online authorities.
 - [The stable host becomes a service locator or giant controller] → `app/` exposes only lifecycle, budgets, bridge views, and diagnostics. Concrete presentation lives in explicit coarse features; new host services require design and dependency audit.
 - [Feature growth creates hidden dependencies or assembly-order drift] → Only independently enableable/replaceable boundaries own manifests; the catalog fixes directed dependencies, versions, and required/optional status. Directory scans, cross-feature private paths, and shared mutable autoloads are prohibited.
 - [Feature catalog and ABI registry become duplicate or cyclic truths] → Direction is profile→catalog→manifest→required ABI families→client-core registry. The catalog chooses product assembly; the registry only reports data-plane availability.
@@ -493,8 +523,8 @@ Connection establishment and DNS/TCP/login MUST NOT block on the Godot main thre
 - [Godot main-thread upload stutters] → Prepare CPU expansion on Rust workers; the main thread consumes only fixed-budget completions. Per-block Nodes and synchronous server queries are prohibited.
 - [One scene Node per section/entity is too expensive] → Terrain prefers a RenderingServer RID table. Entity counts decide among Nodes, MultiMesh, or low-level instances; one-object-one-Node is not assumed.
 - [Visual differences are misclassified as functional errors or accepted without review] → Classify each as must-match, bounded difference, or uncovered, with an owner and evidence.
-- [UI rewrite cost is underestimated] → P10 is independent and begins with component/event/visual inventories and a route decision; UI is not mixed into the terrain pilot.
-- [Local mode changes single-process semantics] → P13 decides embedded Memory versus server child process. The pilot is remote-only and does not silently change default single-player.
+- [UI rewrite cost is underestimated] → P10 is independent and uses Godot Control with Python as the target feature language; UI is not mixed into the terrain pilot and does not introduce a GDScript feature fallback.
+- [Local mode changes single-process semantics] → P13 uses the same Rust server-core, login, validation, and protocol path for local and remote play. The pilot is remote-only and does not silently change default single-player.
 - [New assets violate authorization or plugins cannot be redistributed] → Audit provenance, licenses, sources, and checksums; default to existing procedural/project-owned assets.
 - [Copied derivative resources drift from source assets] → `packages/client/assets` stays authoritative; `sync-assets` deterministically generates and verifies input revisions/checksums; manual edits in `assets/generated/` are prohibited.
 - [Stale architecture-document versions mislead review] → P0 verifies code-owned identities through audit and treats no historical document as behavioral truth.
@@ -507,7 +537,10 @@ Connection establishment and DNS/TCP/login MUST NOT block on the Godot main thre
 2. Through P2, the old client remains the only playable client. Existing tests must prove that runtime extraction does not change behavior.
 3. After P3–P6, add an explicit `godot-pilot` build/launch entry. It connects only to an explicit address, does not automatically start a local world, and never writes saves. Every pilot capability enters through a catalog manifest; it cannot be added directly to Bootstrap or as an unnegotiated ABI field.
 4. P7 produces a complete-identity dual-client report and a reviewed Go/No-Go decision. P8 MUST NOT begin without that decision.
-5. A Go decision authorizes only proposals for P8 and later changes; it does not authorize a default switch or old-code deletion.
+5. A Go decision authorizes only proposals for P8 and later changes; it does not authorize a default switch or old-code deletion. Before any P8–P14 feature is implemented, the Rust foundation stages F1–F3 in the migration table must be proposed and independently validated.
+6. F1–F3 use replay and differential evidence to move server, protocol, persistence, client-core, prediction, and mesh scheduling ownership to Rust. The Go runtime remains an offline oracle or explicit compatibility adapter and never becomes a second online authority.
+7. P8–P13 then migrate feature presentation into Godot/Python against Rust semantic families. Python remains the final Godot feature language; pure GDScript is not a feature fallback.
+8. P14 switches the default only after Rust server/client-core, Godot/Python presentation, local/remote parity, packaging, and rollback have passed the release criteria in `docs/architecture-target.md`.
 
 ### Rollback
 
@@ -525,11 +558,10 @@ Connection establishment and DNS/TCP/login MUST NOT block on the Godot main thre
 - `add-godot-capture-and-benchmark`: P12.
 - `package-godot-local-and-remote-client`: P13.
 - `cut-over-default-client-to-godot`: first part of P14.
-- `retire-rust-client-abi`: second part of P14, only after at least one stable release stage.
+- `retire-go-client-core-and-pilot-abi`: second part of P14, only after at least one stable release stage. The qualified embedded Godot Python runtime remains part of the final presentation architecture.
 
 ## Open Questions
 
-- For complete migration, should local play use a Host/Memory transport embedded in Go client core, or a supervised dedicated-server child process over TCP? This does not affect the remote pilot.
-- Should P10 rewrite UI with Godot Control or retain React/WebView? Decide from post-pilot cross-platform goals, UI iteration needs, and plugin risk.
-- Should P8 use standard Mesh or RenderingDevice/custom packed buffers? Decide from P4 expansion, upload, and memory measurements.
-- Should the first formal cross-platform desktop target be Windows, Linux, or both? The pilot first validates the architecture on the current Darwin/macOS machine. This question cannot expand scope to Android, iOS, Web, or console.
+- P13 may choose whether the Rust server-core runs in-process behind the same loopback protocol or as a supervised child process. Either choice must use the same login, validation, and packet path; it cannot restore a privileged Go Memory implementation.
+- P8 may choose standard Godot Mesh or RenderingDevice/custom packed buffers from expansion, upload, and memory measurements. This does not change Rust ownership of bulk preparation or Python ownership of presentation orchestration.
+- The first formal cross-platform desktop target may be Windows, Linux, or both. The pilot first validates the architecture on the current Darwin/macOS machine. This question cannot expand scope to Android, iOS, Web, or console.

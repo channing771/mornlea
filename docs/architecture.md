@@ -6,9 +6,11 @@ counterpart: architecture.zh.md
 ---
 # Mornlea current architecture
 
-## Approved future architecture: Godot pilot
+> This document records the current implementation. For all new architecture decisions, read [`architecture-target.md`](architecture-target.md) first. The Godot/Python pilot described below is a migration-era implementation and is not the final language or runtime topology.
 
-The approved future project root is `apps/mornlea-godot/`, organized around coarse features and a `platform/desktop` target for macOS, Windows, and Linux only. Android, iOS, Web, and consoles are out of scope. This is an architecture target, not a claim that a runtime implementation exists.
+## Migration-era Godot pilot (not the target architecture)
+
+The migration project root is `apps/mornlea-godot/`, organized around coarse features and a `platform/desktop` target for macOS, Windows, and Linux only. The current pilot uses an embedded Python host, a Go client-core, and a Rust Godot adapter. Those are transition seams: Python remains the intended final Godot feature language, while the Go client-core and its c-shared boundary are replaced by Rust client-core. Android, iOS, Web, and consoles are out of scope.
 
 ## 1. System overview
 

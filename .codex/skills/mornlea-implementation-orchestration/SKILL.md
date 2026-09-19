@@ -22,10 +22,9 @@ Use an isolation-first execution shape. At most three subagents may run concurre
 - Prefer a fresh isolated agent when a bounded task requires independent repository discovery, multi-file reasoning, specialized review, or a long tool/work trace whose main-context retention cost is greater than the handoff and integration cost.
 - Work directly only when the task is tiny, tightly coupled to the controller's current edit, or cheaper to finish than to specify and integrate.
 - Do not delegate merely for parallel speed, independent file ownership, or unused capacity. Do not send trivial work to a worker whose bootstrap cost would exceed the context saved.
-- Before each new delegation, use the project-owned `adaptive-model-router` with the live host capability set. Evaluate difficulty, consequence, context breadth, tool horizon, validation strength, and user priorities; choose the lowest-cost model and reasoning effort credibly sufficient for the isolated task. Both code quality and token efficiency are coequal routing objectives.
-- Escalate one eligible step only after observable insufficiency. Do not restart an already-running agent solely to change its model.
+- Do not restart an already-running agent solely to change its model.
 - Give every delegated task a concise task brief containing only the required evidence, paths, constraints, ownership, integration point, and expected validation. Use a fresh or minimal context instead of copying the full conversation by default.
-- Treat native subagents and router-approved external isolated agents as the same three-worker concurrency budget. Never let editing agents own the same worktree or overlapping files concurrently.
+- Count every native subagent against the three-worker concurrency budget. Never let editing agents own the same worktree or overlapping files concurrently.
 - Choose review depth proportionally to risk, and record the execution shape and rationale in the change ledger.
 
 The controller remains responsible for integration and completion evidence.
@@ -42,8 +41,6 @@ Multiple controllers (Codex, Claude Code, ZCode) alternately advance the same ch
 
 At the end of each implementation round, review verified ownership, dependency, lifecycle, concurrency, platform, visual, validation, and documentation findings. Promote a finding to the synchronized project-owned `mornlea-architecture` skill only when current code, tests, or canonical specifications verify it; it applies across future tasks; it changes future decisions; and it is neither duplicated nor volatile. Otherwise record `Architecture skill: no change` in the ledger.
 
-Also review the project-owned `adaptive-model-router` for over-routing, under-routing, avoidable retries or escalation, context-transfer cost, validation quality, and token use. Update both project copies only when evidence supports a stable cross-task routing improvement; otherwise record `Model router: no change` in the ledger.
-
 ## Strict SDD Mode
 
 Read and follow the available `subagent-driven-development` skill. Use its independent implementation and review responsibilities, keep the task brief as the requirements source, and record progress and rulings in the change ledger.
@@ -51,6 +48,7 @@ Read and follow the available `subagent-driven-development` skill. Use its indep
 ## Invariants in Both Modes
 
 - Preserve the approved OpenSpec scope and reconcile artifacts before implementing a design change.
+- During discovery, read the ancestor `AGENTS.md` chain for every affected directory. When a task creates, reorganizes, or materially reassigns an important directory, include creation or revision of that directory's `AGENTS.md` in the same change and validation scope; if no guide is warranted, record the inheritance rationale.
 - Use test-first development for behavior changes and keep unrelated or user-owned work untouched.
 - Respect file ownership, destructive-action safeguards, and authorization requirements for externally consequential actions.
 - Run every required focused and stage-boundary gate; orchestration freedom never waives validation.
