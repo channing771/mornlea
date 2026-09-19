@@ -1,0 +1,4 @@
+interface:
+  display_name: "Spec Task Model Allocation"
+  short_description: "Assign models and index task results"
+  default_prompt: "Use $spec-delegated-orchestration to assign each spec task a model and reasoning band, then define where its staged and final results are stored."
