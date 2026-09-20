@@ -181,10 +181,7 @@ fn items_locations_item_stack_rejects_unregistered_item_numbers() {
 fn items_locations_item_stack_count_boundaries_follow_the_stack_limit() {
     for item in registered_items() {
         let limit = item_stack_limit(item).expect("registered item has a stack limit");
-        let durability = match durability_max(item) {
-            Some(max) => max,
-            None => 0,
-        };
+        let durability = durability_max(item).unwrap_or_default();
 
         assert_eq!(
             ItemStack::try_new(item, 0, durability),
