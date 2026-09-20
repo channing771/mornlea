@@ -1,31 +1,32 @@
 ## Why
 
-The Godot pilot P7 review recorded Decision: GO in `docs/notes/godot-client-pilot-report.md`. P10 is a later, independently reviewable production step: choose and implement a production UI route (Godot Control or retained WebView) with versioned view-models. This candidate change exists so later work does not restart inside the pilot change. It MUST NOT be implemented as part of `pilot-godot-client-migration`.
-
-## Target architecture gate
-
-The final UI route is Godot Control driven by embedded Python and typed Rust semantic view-models. A retained WebView may remain as a rollback or compatibility producer during migration, but it is not the target route and must not receive new product UI ownership. This candidate MUST wait for Rust client-core stage F3 and MUST NOT introduce production GDScript, protocol access, Go mirror ownership, or a second UI state authority. See [`docs/architecture-target.md`](../../../../docs/architecture-target.md).
+The selected final UI route is Godot Control with embedded Python. The pilot HUD does not cover menus, inventory/container interactions, tokens, focus, and complete UI fixtures.
 
 ## What Changes
 
-- Authorize a later OpenSpec apply for P10 after the pilot remains additive.
-- Keep `apps/mornlea-godot/` as the stable project root.
-- Keep the existing Rust `mornlea` client as the default entry until an explicit later switch.
-- Choose and implement a production UI route (Godot Control or retained WebView) with versioned view-models.
+- Inventory and preserve existing UI intent/view semantics using Rust contracts and offline legacy characterization.
+- Implement Godot Control UI in embedded Python; keep WebView solely as the previous producer or release rollback.
+- Produce per-fixture semantic and visual acceptance before handoff.
+
+## Scope and prerequisites
+
+This is a planned, independently reversible production slice. Non-goals are new gameplay rules, expansion of Go real-time ownership, production GDScript, mobile/Web/console support, and unreviewed baseline updates. [F1](../rust-runtime-foundation/proposal.md), [F2](../rust-authoritative-server/proposal.md), and [F3](../rust-client-core/proposal.md) provide the Rust contracts, sole authoritative server, and typed client-core bridge it consumes; their accepted ledger evidence is required before dependent implementation. Python remains Godot's feature language. This planning revision authorizes no runtime cutover, tracked baseline update, or version bump.
+
+
 
 ## Capabilities
 
 ### New Capabilities
 
-- `godot-ui-migration`: Choose and implement a production UI route (Godot Control or retained WebView) with versioned view-models.
+- `godot-ui-migration`: Provide production Godot Control UI over Rust semantic views, preserving tokens and confirmed interaction behavior.
 
 ### Modified Capabilities
 
-None in this candidate. The live `godot-client-pilot` contract remains the pilot boundary until this change is independently applied.
+None. The current pilot contract remains scoped to the pilot; this new capability does not rewrite it.
 
 ## Impact
 
-- Compatibility: no protocol, save, or ABI change is authorized by creating this candidate.
-- Default startup remains the existing Rust client.
-- Rollback is to leave this change unimplemented; the pilot and old client stay as they are.
-- Performance and concurrency contracts are unchanged until implementation is separately applied.
+- Affected: Rust client-core/bridge UI families, `apps/mornlea-godot/features/ui/`, UI fixture harnesses, and reviewed producer records.
+- Compatibility: no protocol/save or legacy client ABI change is planned; versioned semantic views consume F3 contracts.
+- Concurrency/performance: bounded view/event batches and UI callbacks; focus/resize state stays presentation-owned.
+- Rollback: disable the new UI feature and select the prior release/producer; current canonical UI images stay unchanged until approved handoff.

@@ -1,31 +1,32 @@
 ## Why
 
-The Godot pilot P7 review recorded Decision: GO in `docs/notes/godot-client-pilot-report.md`. P9 is a later, independently reviewable production step: migrate remaining actor presentation (companions, hostiles, passives, projectiles, viewmodel, effects) behind typed entity families. This candidate change exists so later work does not restart inside the pilot change. It MUST NOT be implemented as part of `pilot-godot-client-migration`.
-
-## Target architecture gate
-
-This candidate is an actor presentation slice, not a new gameplay authority. It MUST wait for Rust domain/server/client-core foundation stages F1–F3 in [`docs/architecture-target.md`](../../../../docs/architecture-target.md). Rust owns authoritative entity state, typed entity families, interpolation inputs, and semantic snapshots; Godot's embedded Python owns scenes, animation, pooling, and presentation resources. It MUST NOT add entity rules, protocol decoding, prediction, persistence, or numerical fallback to Go, Python, or GDScript.
+The pilot presents only one remote-entity class. Complete actors need explicit identity, lifecycle, and evidence contracts over Rust semantic entity families.
 
 ## What Changes
 
-- Authorize a later OpenSpec apply for P9 after the pilot remains additive.
-- Keep `apps/mornlea-godot/` as the stable project root.
-- Keep the existing Rust `mornlea` client as the default entry until an explicit later switch.
-- Migrate remaining actor presentation (companions, hostiles, passives, projectiles, viewmodel, effects) behind typed entity families.
+- Present companions, hostiles, passives, projectiles, viewmodel, and effects through independently disableable features.
+- Preserve atomic entity batches, pooling, interpolation inputs, reset, and confirmed outcome semantics.
+- Review static and motion evidence per actor family before canonical handoff.
+
+## Scope and prerequisites
+
+This is a planned, independently reversible production slice. Non-goals are new gameplay rules, expansion of Go real-time ownership, production GDScript, mobile/Web/console support, and unreviewed baseline updates. [F1](../rust-runtime-foundation/proposal.md), [F2](../rust-authoritative-server/proposal.md), and [F3](../rust-client-core/proposal.md) provide the Rust contracts, sole authoritative server, and typed client-core bridge it consumes; their accepted ledger evidence is required before dependent implementation. Python remains Godot's feature language. This planning revision authorizes no runtime cutover, tracked baseline update, or version bump.
+
+
 
 ## Capabilities
 
 ### New Capabilities
 
-- `godot-complete-actors`: Migrate remaining actor presentation (companions, hostiles, passives, projectiles, viewmodel, effects) behind typed entity families.
+- `godot-complete-actors`: Present complete actors and effects from Rust semantic families without creating gameplay authority.
 
 ### Modified Capabilities
 
-None in this candidate. The live `godot-client-pilot` contract remains the pilot boundary until this change is independently applied.
+None. The current pilot contract remains scoped to the pilot; this new capability does not rewrite it.
 
 ## Impact
 
-- Compatibility: no protocol, save, or ABI change is authorized by creating this candidate.
-- Default startup remains the existing Rust client.
-- Rollback is to leave this change unimplemented; the pilot and old client stay as they are.
-- Performance and concurrency contracts are unchanged until implementation is separately applied.
+- Affected: Rust client-core/bridge entity publications; `apps/mornlea-godot/features/actors/`, `features/effects/`, `features/viewmodel/`; actor harness and evidence fixtures.
+- Protocol/save compatibility: consume F1/F2 contracts; no new actor rules, packet formats, save schemas, or legacy ABI changes are planned.
+- Concurrency/performance: immutable bounded entity batches, bounded pools/callbacks, cancellation by epoch.
+- Rollback: disable affected catalog families and restore previous case producers without changing authoritative state.

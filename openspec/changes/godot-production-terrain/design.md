@@ -1,31 +1,29 @@
-## Context
+## Planning status and prerequisites
 
-See `docs/notes/godot-client-pilot-report.md` and `openspec/changes/pilot-godot-client-migration/design.md` matrix row P8. This candidate is planning-only.
+This revision changes planning artifacts only. Runtime behavior, version identities, current producers, tracked images, and default startup do not change. The current Go server and Go pilot client-core remain transition implementations; final ownership follows the [target architecture](../../../docs/architecture-target.md). The [archived pilot design](../archive/2026-09-20-pilot-godot-client-migration/design.md) is historical evidence, not authority for new runtime ownership.
 
-## Target-boundary decision
+Implementation requires the relevant accepted F1, F2, and F3 exit evidence in their ledgers, including exact source SHA, fixture identities, command output, test discovery, and rollback decision. An existing proposal, checked planning status, text search, or optional-entry audit is not completion evidence. After a prerequisite is archived, resolve its ledger through its archive location and retain the accepted SHA. No task is complete merely because a test filter selected zero tests.
 
-This change may only implement the terrain presentation capability after Rust foundation stages F1–F3 have supplied authoritative world/protocol contracts and a Rust client-core semantic terrain family. Rust owns chunk interpretation, bulk mesh preparation, scheduling, budgets, and revisions; embedded Godot Python owns feature assembly and Godot resource application. The current Go runtime may be used as a replay oracle or compatibility adapter, but no new Go terrain ownership is permitted. Pure GDScript is not a feature implementation language.
+## Ownership and design decisions
 
-## Goals / Non-Goals
+`mornlea_engine` remains the single numerical implementation. `mornlea_client_core` owns chunk interpretation, revisions, visibility, mesh scheduling, and bounded semantic publication; `mornlea_godot` validates the bridge and owns any necessary native bulk resource conversion. Embedded Python in `features/world/` applies typed resources within declared budgets. GPU resource release remains on the Godot owner thread. No per-cell FFI or raw buffers reach Python.
 
-**Goals:**
+Reuse the stable project root and catalog. The pure-GDScript Bootstrap stays a migration diagnostic until the later native-launcher cutover; this feature does not promise it as the permanent main scene. Reject a second Go/Python mesher because it duplicates numerical ownership. Reject a monolithic host terrain implementation because it prevents independent disable and teardown tests.
 
-- Record the P8 production route so later work can apply it independently.
-- Preserve catalog replaceability and the stable Godot project root.
+Define budget values and supported view-distance cases in the test fixture manifest before enabling the feature. Preserve full LOD transitions, visibility, material classes, fog/light inputs, and reset semantics. Pools have explicit capacities; a stale completion is discarded by identity, while real overflow fails visibly. Python never invents a new revision.
 
-**Non-Goals:**
+## Risks and migration
 
-- Implementing P8 inside the pilot change.
-- Switching the default `mornlea` entry point.
-- Relaxing visual thresholds or writing renderer-specific goldens.
+Resource leaks and delayed completions can survive a reset: repeated activate/reset/deactivate tests must account for all owned resources. Different rasterization can change pixels: record differences without loosening tolerances. Roll out behind a disabled catalog entry, validate semantic parity, then enable only the approved feature profile. Disable or restore the prior producer on failure; saves are untouched.
 
-## Decisions
+### Visual evidence dependency
 
-### Candidate only
+The visual task consumes the capture/report contract delivered by phase 2 of [production tooling](../godot-production-tooling/tasks.md), after F3. It does not wait for all tooling producer handoffs: tooling establishes the contract first, features provide parity evidence next, and each case is handed off afterward. This avoids a P8/P9/P10/P12 dependency cycle.
 
-Creating this change authorizes later apply work. It does not modify runtime code, the default client, or tracked visual producers.
+Evidence has three ordered layers: semantic replay, untracked candidate capture, and explicitly approved canonical handoff. Each case names its semantic class, current and candidate producer, source SHA, scenario/input identity, asset/runtime/platform identity, capture boundary, and limits. Same-producer pixel regression retains its existing thresholds; cross-producer parity requires semantic evidence and human review of declared differences. Missing, stale, empty, failed, or non-comparable required cases block handoff. A dummy headless renderer cannot provide GPU pixel evidence; GPU capture uses a qualified non-foreground, no-focus path or requires explicit manual acceptance. No renderer-specific tracked class is created.
 
-### Rejected alternatives
+## Validation and rollback discipline
 
-- Implementing P8 immediately in the pilot change: rejected because P7 only authorizes the split.
-- Recreating a second Godot project root: rejected; `apps/mornlea-godot/` stays stable.
+Named new test targets and scripts in `tasks.md` are prospective interfaces, not claims that they exist today. Their first implementation task creates them, records nonzero discovery, and runs a failing behavioral case before implementation. Reuse passing evidence only for the same tested SHA. Performance values are informational; invalid identity, incomplete coverage, real overflow, data loss, and I/O failures are hard errors. Automated validation must not launch or focus a foreground game window.
+
+Commit each independently verified implementation node with its scoped evidence before starting the next node. Update affected directory `AGENTS.md` when ownership changes; otherwise record inherited guidance. Closeout includes formatting, Rust checks, six-module vet, all six Go modules under `make test-race`, and strict OpenSpec validation. Review durable architecture findings at the end of each round; record `Architecture skill: no change` when no new verified rule qualifies.

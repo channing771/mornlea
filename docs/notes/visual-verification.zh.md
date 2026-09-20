@@ -1,6 +1,6 @@
 ---
 doc_id: visual-verification-guide
-doc_revision: 2026-09-15.1
+doc_revision: 2026-09-20.1
 language: zh-CN
 counterpart: visual-verification.md
 ---
@@ -44,7 +44,7 @@ make visual-update SCENES=mining-crack-early,mining-crack-heavy
 
 ## Godot 试点证据
 
-Godot 试点把身份完整的抓帧写入 `build/visual/godot-pilot/<run-id>/`。`godot-visual-evidence` 生成抓帧，`godot-visual-compare` 生成比对与差异报告。两者都不得写 `testdata/visual-golden/`、创建 renderer-specific tracked 类别或放宽阈值。
+Godot 试点把身份完整的抓帧写入 `build/visual/godot-pilot/<run-id>/`。`godot-visual-evidence` 生成抓帧，`godot-visual-compare` 生成分类报告。当前 pilot 比较器不会生成差异图或自行调用身份校验，需要单独校验所选运行，并在有意义时补充差异图。两者都不得写 `testdata/visual-golden/`、创建 renderer-specific tracked 类别或放宽阈值。
 
 未来 producer handoff 必须点名既有 UI/world/motion identity、旧/new producer、预期差异、受影响文件、审查证据与回退。只有显式批准并完成人工检查后，才可通过既有更新纪律修改 tracked evidence。
 
@@ -56,4 +56,19 @@ Godot 试点把身份完整的抓帧写入 `build/visual/godot-pilot/<run-id>/`�
 
 只有视觉行为有意变化且逐项打开候选图确认后才运行更新。不得仅为清除红灯覆盖基线；必须先检查 actual/diff，再判断实现还是证据错误。未受影响证据保持逐字节一致；阈值只能通过独立的实测和批准契约变更调整。
 
-视觉抓帧是本地 GPU/人工审查流程，不进入普通 Go 测试或 CI。
+当前 world/UI 像素基线是本地 GPU/人工审查流程，不进入普通 Go 测试或必需 CI；计划中的生产采集门禁须先验证各支持环境。
+
+
+## Rust/Godot 迁移证据与当前限制
+
+[目标架构](../architecture-target.zh.md) 将语义正确性与呈现分开：F1/F2 验证协议、存档、回放和权威结果，F3 验证客户端镜像、预测和 typed frame，Godot/Python 验证有界呈现及场景生命周期。PNG/GIF 不能证明服务端权威、存档正确性或音频播放。
+
+当前映射表是 `testdata/godot-pilot/visual-semantics.json`。缺少映射会报告为未覆盖，命令成功不表示完整 parity。使用 `scripts/godot/visual-compare.sh --run-dir <run-directory>` 固定证据目录，避免隐式选择最新运行或触发采集。当前比较器只生成分类报告，不生成差异图，也不会自行调用身份校验；单独执行 `python3 scripts/godot/visual_evidence_contract.py --identity <run-directory>/identity.json --run-dir <run-directory>`，并在有意义时补充差异图。确认环境、输入夹具、相机、视口、资产、就绪条件和输出身份后，才能认定可比较。
+
+当前采集脚本使用 macOS display driver 与 Metal。Godot 的 dummy `--headless` renderer 不能提供真实 GPU 像素；没有合格的非前台采集环境时，应明确记录像素证据不可用，并继续语义及生命周期检查。自动测试不得启动或聚焦前台游戏窗口。
+
+[生产工具规划](../../openspec/changes/godot-production-tooling/proposal.md) 将引入必需场景的严格覆盖检查和经审查的生产者归属，这些门禁尚未由 pilot 命令实现。工具基础设施可先于 feature 交接完成；随后每个 feature 仅交接已审查的 `ui/`、`world/` 或 `motion/` 场景。交接前仍由旧生产者负责。相同生产者的像素回归和跨生产者的语义审查是两类证据，渲染差异需要审查，不能靠放宽阈值通过。
+
+[visual-baseline 技能](../../.codex/skills/visual-baseline/SKILL.md) 及其交接参考文档规定操作流程、元数据和回滚记录。规划更新不改变当前 golden 或生产者归属。当前 world/UI 像素工作流是本地 GPU 与人工审查，不属于普通 Go 测试或必需 CI；未来生产采集门禁必须先验证各支持环境。
+
+`make visual-update SCENES=...` 仍会生成已登记的 passive GIF，`VISUAL_OUT` 不会重定向受版本控制的基线写入。若授权只覆盖更小范围，应在隔离的准确源码快照中运行更新并保留全部采集保护，只发布已审查且被授权的文件，其他基线与任务开始前的哈希逐项核对。
