@@ -156,12 +156,6 @@ func RunTrace(request TraceRequest) (Trace, error) {
 	if err != nil {
 		return Trace{}, err
 	}
-	// A corpus asset that is not a plain regular file would let the run report
-	// evidence about bytes it never actually read, so this gate runs before
-	// reconciliation publishes any verdict about the corpus.
-	if err := verifyCorpusAssets(request.Root, selectedCases); err != nil {
-		return Trace{}, err
-	}
 	if err := Reconcile(request.Root, inventory, families, live); err != nil {
 		return Trace{}, err
 	}
@@ -455,59 +449,6 @@ func selectTraceCases(request TraceRequest, inventory Inventory) ([]CaseSpec, er
 		selected = append(selected, c)
 	}
 	return selected, nil
-}
-
-// verifyCorpusAssets rejects a corpus asset that is not a plain regular file
-// reachable without a symlink component. A symlinked, missing, or non-regular
-// asset would let a run describe bytes it never read.
-func verifyCorpusAssets(root string, cases []CaseSpec) error {
-	for _, c := range cases {
-		if err := verifyCorpusAsset(root, c.Input.Path, corpusAssetBudget(c.InputFormat)); err != nil {
-			return fmt.Errorf("runtime-oracle: case %s input asset %s: %w", c.ID, c.Input.Path, err)
-		}
-		if err := verifyCorpusAsset(root, c.Expected.Path, MaxCaseJSONBytes); err != nil {
-			return fmt.Errorf("runtime-oracle: case %s expected asset %s: %w", c.ID, c.Expected.Path, err)
-		}
-	}
-	return nil
-}
-
-// corpusAssetBudget maps a declared input format onto its byte budget.
-func corpusAssetBudget(format string) int64 {
-	if format == "json" {
-		return MaxCaseJSONBytes
-	}
-	return MaxBinaryBytes
-}
-
-// verifyCorpusAsset walks every component of one repository-relative asset and
-// requires a plain regular file inside the byte budget. Each component is
-// checked before the asset is opened, so a symlink component is rejected
-// instead of being followed.
-func verifyCorpusAsset(root, rel string, maxBytes int64) error {
-	if err := validateCorpusPath(rel); err != nil {
-		return err
-	}
-	current := root
-	var info os.FileInfo
-	for _, part := range strings.Split(rel, "/") {
-		current = filepath.Join(current, part)
-		stat, err := os.Lstat(current)
-		if err != nil {
-			return err
-		}
-		if stat.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("symlink component %s", current)
-		}
-		info = stat
-	}
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("%s is not a regular file", current)
-	}
-	if info.Size() > maxBytes {
-		return fmt.Errorf("file size %d exceeds budget %d", info.Size(), maxBytes)
-	}
-	return nil
 }
 
 // LoadTrace reads a trace artifact and validates it against the manifest.

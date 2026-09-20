@@ -397,7 +397,10 @@ func TestTraceIORejectsSymlinkedSourceFixture(t *testing.T) {
 		Seed:           "1",
 		TickSchedule:   []uint64{0},
 	})
-	if err == nil || !strings.Contains(err.Error(), "symlink component") {
+	// The fixture gate is the canonical corpus validator, so a symlinked source
+	// fixture is rejected with its own "path component ... is a symlink" text
+	// rather than a trace-specific message.
+	if err == nil || !strings.Contains(err.Error(), "path component") || !strings.Contains(err.Error(), "is a symlink") {
 		t.Fatalf("expected symlinked fixture rejection, got: %v", err)
 	}
 
