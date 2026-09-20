@@ -16,6 +16,7 @@ mod bytes;
 mod chat_command;
 mod chat_event;
 mod chest_state;
+mod chunk_snapshot;
 mod client_hello;
 mod close_container;
 mod collect_water;
@@ -92,6 +93,10 @@ pub use chat_event::{
     TASK_FAIL_PATH_UNREACHABLE, TASK_FAIL_PLANNER_UNAVAILABLE, TASK_FAIL_WORLD_CHANGED,
 };
 pub use chest_state::{CHEST_SLOTS, ChestState};
+pub use chunk_snapshot::{
+    ChunkSnapshot, MAX_COMPRESSED_SNAPSHOT, MAX_DECODED_SNAPSHOT, SNAPSHOT_ENVELOPE_LENGTH,
+    SectionData, SectionStorage, SnapshotEnvelope, compress_logical,
+};
 pub use client_hello::ClientHello;
 pub use close_container::CloseContainer;
 pub use collect_water::CollectWater;

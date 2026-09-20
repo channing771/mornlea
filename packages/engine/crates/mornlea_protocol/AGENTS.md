@@ -2,10 +2,12 @@
 
 `packages/engine/crates/mornlea_protocol` owns versioned framing, negotiation,
 and packet-family codecs. It is a windowless rlib. Production code may depend
-only on `mornlea_domain` and must not depend on `mornlea_storage`,
-`mornlea_engine`, `mornlea_client`, or `mornlea_godot`. Direction is enforced
-by `tests/runtime_contract.rs` (`production_manifest_depends_only_on_domain`
-and `domain_does_not_depend_on_protocol`).
+on `mornlea_domain` and exactly one compression dependency, `zstd`, and must
+not depend on `mornlea_storage`, `mornlea_engine`, `mornlea_client`, or
+`mornlea_godot`. Direction is enforced by `tests/runtime_contract.rs`
+(`production_manifest_depends_only_on_domain` and
+`domain_does_not_depend_on_protocol`), which pins the permitted set exactly
+rather than checking that it omits a few names.
 
 ## Inventory freeze (`src/lib.rs`, `tests/runtime_contract.rs`)
 
@@ -723,6 +725,55 @@ and `domain_does_not_depend_on_protocol`).
   absent companion identity for those cases is `CompanionId::NONE`
   (`chat_event_round_trip_preserves_golden_bytes`,
   `chat_event_rejects_invalid_kind_combinations_and_malformed_payload`).
+
+## Chunk snapshot (`src/chunk_snapshot.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 0 payload is an eight-byte envelope — the declared decoded
+  length, then the declared compressed length — followed by a zstd frame
+  carrying the logical snapshot: dimension, chunk, revision, a section count,
+  and one paletted container per section. This is the only family whose wire
+  payload is compressed, and it is the only reason this crate is allowed the
+  `zstd` dependency.
+- `MAX_COMPRESSED_SNAPSHOT` and `MAX_DECODED_SNAPSHOT` are the two ceilings,
+  and both are checked before the frame is touched. Every declared palette and
+  word count is checked against the bytes that remain before the matching
+  buffer is allocated, so a corrupt count cannot become a large allocation.
+- Section containers are a closed set of three kinds. A `Single` section
+  carries one block ID, an `Indexed` section a palette plus 4- or 8-bit slots,
+  and a `Direct` section 15-bit slots with no palette. A section must not carry
+  a field belonging to another kind, every slot must resolve inside the palette
+  or the registered block range, and a direct word must not carry bits above
+  its 15-bit slot. Rejecting the combination instead of ignoring it keeps a
+  partially described section from being silently reinterpreted.
+- The section list is the whole ordered column: the count must be exactly
+  `SECTIONS_PER_CHUNK` and each section's Y must equal its index. The decoder
+  does not repair a missing or reordered section.
+- Encoder output is intentionally not byte-identical to the Go encoder and
+  must not be "fixed". The Go payload is built by
+  `github.com/klauspost/compress/zstd`, a pure-Go zstd implementation whose
+  compressed block payload differs from the reference libzstd bound here at
+  every compression level, even though the frame header and the trailing
+  xxhash-64 content checksum are byte-identical and the total frame length can
+  match. A standalone Go program re-encodes the committed fixture exactly, so
+  the divergence is exclusively a Rust-versus-Go encoder difference.
+- Cross-implementation compatibility is defined at the logical/decode level:
+  zstd frames are self-describing, so the Go decoder reads what this encoder
+  writes and this decoder reads what the Go encoder wrote. Acceptance is
+  semantic round-trip — exact decode of the committed fixture, lossless
+  encode/decode, round-trip through the fixture, and rejection without
+  implicit repair — never byte-identical re-encode. Do not add an assertion
+  that a frame produced here equals a committed fixture's compressed bytes.
+  The frame magic, the frame header descriptor, the four-byte content size, and
+  the trailing content checksum are pinned separately because those parts are
+  identical across the two implementations.
+- Intermediate layers (`encode_logical`, `decode_logical`, `decode_envelope`,
+  `SnapshotEnvelope::decompress`, `compress_logical`) are public so contract
+  tests can prove decode exactness byte for byte and rejection before
+  allocation without reaching into private state
+  (`chunk_snapshot_round_trip_preserves_golden_bytes`,
+  `chunk_snapshot_round_trips_through_committed_fixture`,
+  `chunk_snapshot_rejects_malformed_envelope_and_bounds`,
+  `chunk_snapshot_rejects_malformed_logical_payload`).
 
 ## Shared value rules
 

@@ -17,6 +17,15 @@ impl ByteEncoder {
         }
     }
 
+    /// Builds an encoder that reserves `capacity` bytes up front, so a payload
+    /// whose exact size is known does not reallocate while it is written.
+    pub(crate) fn with_capacity(capacity: usize) -> Self {
+        Self {
+            data: Vec::with_capacity(capacity),
+            err: None,
+        }
+    }
+
     fn fail(&mut self, err: ProtocolError) {
         if self.err.is_none() {
             self.err = Some(err);
@@ -127,7 +136,7 @@ impl<'a> ByteDecoder<'a> {
         self.data.len().saturating_sub(self.offset)
     }
 
-    fn take(&mut self, n: usize) -> Result<&'a [u8], ProtocolError> {
+    pub(crate) fn take(&mut self, n: usize) -> Result<&'a [u8], ProtocolError> {
         let end = self.offset.checked_add(n).ok_or(ProtocolError::Truncated)?;
         if end > self.data.len() {
             return Err(ProtocolError::Truncated);

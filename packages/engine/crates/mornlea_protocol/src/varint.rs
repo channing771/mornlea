@@ -1,6 +1,6 @@
 use crate::error::ProtocolError;
 
-fn canonical_uvarint_length(value: u32) -> usize {
+pub(crate) fn canonical_uvarint_length(value: u32) -> usize {
     match value {
         0..=0x7f => 1,
         0x80..=0x3fff => 2,

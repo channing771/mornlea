@@ -4515,3 +4515,366 @@ fn chat_event_rejects_invalid_kind_combinations_and_malformed_payload() {
     bad_kind[49] = 10;
     assert!(mornlea_protocol::ChatEvent::decode(&bad_kind).is_err());
 }
+
+/// Section field offsets inside one logical snapshot payload, walked with the
+/// same layout the encoder writes so mutation tests target real bytes.
+struct SnapshotSectionOffsets {
+    y: usize,
+    storage: usize,
+    bits: usize,
+    palette_count: usize,
+    first_palette: usize,
+    word_count: usize,
+    first_word: usize,
+}
+
+fn snapshot_section_offsets(logical: &[u8]) -> Vec<SnapshotSectionOffsets> {
+    let mut offset = 20;
+    let (count, used) =
+        mornlea_protocol::decode_uvarint(&logical[offset..]).expect("section count");
+    offset += used;
+    let mut offsets = Vec::with_capacity(count as usize);
+    for _ in 0..count {
+        let y = offset;
+        let storage = offset + 1;
+        offset += 2;
+        let mut entry = SnapshotSectionOffsets {
+            y,
+            storage,
+            bits: 0,
+            palette_count: 0,
+            first_palette: 0,
+            word_count: 0,
+            first_word: 0,
+        };
+        match logical[storage] {
+            0 => offset += 2,
+            1 => {
+                entry.bits = offset;
+                offset += 1;
+                entry.palette_count = offset;
+                let (palette_count, used) =
+                    mornlea_protocol::decode_uvarint(&logical[offset..]).expect("palette count");
+                offset += used;
+                entry.first_palette = offset;
+                offset += palette_count as usize * 2;
+                entry.word_count = offset;
+                let (word_count, used) =
+                    mornlea_protocol::decode_uvarint(&logical[offset..]).expect("word count");
+                offset += used;
+                entry.first_word = offset;
+                offset += word_count as usize * 8;
+            }
+            _ => {
+                entry.bits = offset;
+                offset += 1;
+                entry.word_count = offset;
+                let (word_count, used) =
+                    mornlea_protocol::decode_uvarint(&logical[offset..]).expect("word count");
+                offset += used;
+                entry.first_word = offset;
+                offset += word_count as usize * 8;
+            }
+        }
+        offsets.push(entry);
+    }
+    offsets
+}
+
+/// Packs a section's block slots the way the Go fixture builder does, so the
+/// golden snapshot is the same logical value the committed fixture carries.
+fn snapshot_packed_words(bits: u8, modulus: usize, seed: usize) -> Vec<u64> {
+    let per_word = 64 / bits as usize;
+    let words = (mornlea_protocol::BLOCKS_PER_SECTION + per_word - 1) / per_word;
+    let mut packed = vec![0u64; words];
+    for index in 0..mornlea_protocol::BLOCKS_PER_SECTION {
+        let value = ((index + seed) % modulus) as u64;
+        packed[index / per_word] |= value << ((index % per_word) * bits as usize);
+    }
+    packed
+}
+
+/// The committed fixture's logical snapshot: overworld chunk (-3, 7) at
+/// revision 19, cycling through all three section storages.
+fn golden_chunk_snapshot() -> mornlea_protocol::ChunkSnapshot {
+    let mut sections = Vec::with_capacity(mornlea_protocol::SECTIONS_PER_CHUNK);
+    for y in 0..mornlea_protocol::SECTIONS_PER_CHUNK {
+        let section = match y % 4 {
+            0 => mornlea_protocol::SectionData::single(y as i32, (y % 6) as u16),
+            1 => mornlea_protocol::SectionData::indexed(
+                y as i32,
+                4,
+                vec![0, 2, 3],
+                snapshot_packed_words(4, 3, y),
+            ),
+            2 => mornlea_protocol::SectionData::indexed(
+                y as i32,
+                8,
+                vec![0, 1, 2, 3, 4, 5, 27, 34],
+                snapshot_packed_words(8, 8, y),
+            ),
+            _ => mornlea_protocol::SectionData::direct(y as i32, snapshot_packed_words(15, 35, y)),
+        };
+        sections.push(section);
+    }
+    mornlea_protocol::ChunkSnapshot::new(mornlea_domain::Dimension::OVERWORLD, -3, 7, 19, sections)
+        .expect("golden snapshot")
+}
+
+fn read_go_snapshot_fixture() -> Vec<u8> {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../../packages/shared/network/codec/testdata/chunk-snapshot-v1.bin");
+    fs::read(&path).unwrap_or_else(|err| panic!("read {}: {err}", path.display()))
+}
+
+fn snapshot_envelope(decoded_length: u32, compressed: &[u8]) -> Vec<u8> {
+    let mut payload = Vec::with_capacity(8 + compressed.len());
+    payload.extend_from_slice(&decoded_length.to_le_bytes());
+    payload.extend_from_slice(&(compressed.len() as u32).to_le_bytes());
+    payload.extend_from_slice(compressed);
+    payload
+}
+
+#[test]
+fn chunk_snapshot_round_trip_preserves_golden_bytes() {
+    let snapshot = golden_chunk_snapshot();
+    let logical = snapshot.encode_logical();
+    // The Go fixture's logical payload length, derived from its envelope.
+    assert_eq!(logical.len(), 86_295);
+    assert_eq!(snapshot.logical_size(), 86_295);
+    // Identity fields lead the logical payload: dimension, chunk, revision,
+    // then the 24-section count.
+    assert_eq!(&logical[0..4], &0i32.to_le_bytes());
+    assert_eq!(&logical[4..8], &(-3i32).to_le_bytes());
+    assert_eq!(&logical[8..12], &7i32.to_le_bytes());
+    assert_eq!(&logical[12..20], &19u64.to_le_bytes());
+    assert_eq!(logical[20], 24);
+    assert_eq!(mornlea_protocol::ChunkSnapshot::PACKET_ID, 0);
+
+    // Decode exactness: the committed fixture's logical payload must be
+    // reproduced byte for byte by decoding it, which the logical layer can
+    // prove because it is uncompressed and deterministic.
+    let fixture = read_go_snapshot_fixture();
+    let envelope =
+        mornlea_protocol::ChunkSnapshot::decode_envelope(&fixture).expect("fixture envelope");
+    assert_eq!(envelope.decoded_length, 86_295);
+    assert_eq!(envelope.compressed.len(), 439);
+    assert_eq!(envelope.decompress().expect("fixture logical"), logical);
+    assert_eq!(
+        mornlea_protocol::ChunkSnapshot::decode(&fixture).expect("fixture decode"),
+        snapshot
+    );
+    assert_eq!(
+        mornlea_protocol::ChunkSnapshot::decode_logical(&logical).expect("logical decode"),
+        snapshot
+    );
+}
+
+#[test]
+fn chunk_snapshot_round_trips_through_committed_fixture() {
+    let fixture = read_go_snapshot_fixture();
+    let decoded = mornlea_protocol::ChunkSnapshot::decode(&fixture).expect("fixture decode");
+    let reencoded = decoded.encode();
+    let again = mornlea_protocol::ChunkSnapshot::decode(&reencoded).expect("re-encoded decode");
+    assert_eq!(again, decoded);
+
+    // The compressed block payload legitimately differs from the Go encoder's,
+    // so only the self-describing frame envelope and the logical snapshot are
+    // compared. The zstd magic, the frame header descriptor, the four-byte
+    // content size, and the trailing xxhash-64 content checksum are the parts
+    // that are byte-identical across the two implementations.
+    let fixture_frame = &fixture[8..];
+    let rust_frame = &reencoded[8..];
+    assert_eq!(&fixture_frame[0..4], &rust_frame[0..4]);
+    assert_eq!(&fixture_frame[0..4], &[0x28, 0xb5, 0x2f, 0xfd]);
+    assert_eq!(fixture_frame[4], rust_frame[4]);
+    assert_eq!(fixture_frame[4], 0xa4);
+    assert_eq!(&fixture_frame[5..9], &rust_frame[5..9]);
+    assert_eq!(
+        &fixture_frame[5..9],
+        &(86_295u32).to_le_bytes(),
+        "frame content size must equal the logical length"
+    );
+    assert_eq!(
+        &fixture_frame[fixture_frame.len() - 4..],
+        &rust_frame[rust_frame.len() - 4..],
+        "xxhash-64 content checksum must match across implementations"
+    );
+    assert_eq!(&reencoded[0..4], &(86_295u32).to_le_bytes());
+}
+
+#[test]
+fn chunk_snapshot_rejects_malformed_envelope_and_bounds() {
+    let snapshot = golden_chunk_snapshot();
+    let logical = snapshot.encode_logical();
+    let valid = snapshot.encode();
+
+    for length in 0..8 {
+        assert!(
+            mornlea_protocol::ChunkSnapshot::decode(&valid[..length]).is_err(),
+            "accepted truncated snapshot envelope at {length}"
+        );
+    }
+
+    let mut mismatched = valid.clone();
+    let declared = u32::from_le_bytes(mismatched[4..8].try_into().unwrap());
+    mismatched[4..8].copy_from_slice(&(declared + 1).to_le_bytes());
+    assert!(mornlea_protocol::ChunkSnapshot::decode(&mismatched).is_err());
+
+    let mut trailing = valid.clone();
+    trailing.push(0);
+    assert!(mornlea_protocol::ChunkSnapshot::decode(&trailing).is_err());
+
+    let mut short_declared = valid.clone();
+    short_declared[0..4].copy_from_slice(&(logical.len() as u32 + 1).to_le_bytes());
+    assert!(mornlea_protocol::ChunkSnapshot::decode(&short_declared).is_err());
+
+    let mut long_declared = valid.clone();
+    long_declared[0..4].copy_from_slice(&(logical.len() as u32 - 1).to_le_bytes());
+    assert!(mornlea_protocol::ChunkSnapshot::decode(&long_declared).is_err());
+
+    // The frame's own content checksum is enforced, so a corrupted tail is a
+    // corrupt payload rather than a silently accepted one.
+    let mut bad_checksum = valid.clone();
+    let last = bad_checksum.len() - 1;
+    bad_checksum[last] ^= 0xff;
+    assert!(mornlea_protocol::ChunkSnapshot::decode(&bad_checksum).is_err());
+
+    // Bounds are rejected before decompression: a non-zstd payload of the
+    // declared size still yields the bound failure rather than a frame failure.
+    for size in [
+        mornlea_protocol::MAX_COMPRESSED_SNAPSHOT - 1,
+        mornlea_protocol::MAX_COMPRESSED_SNAPSHOT,
+    ] {
+        let payload = snapshot_envelope(1, &vec![0u8; size]);
+        assert_eq!(
+            mornlea_protocol::ChunkSnapshot::decode(&payload),
+            Err(mornlea_protocol::ProtocolError::Truncated),
+            "compressed length {size} must reach the zstd decoder"
+        );
+    }
+    let oversized = snapshot_envelope(1, &vec![0u8; mornlea_protocol::MAX_COMPRESSED_SNAPSHOT + 1]);
+    assert_eq!(
+        mornlea_protocol::ChunkSnapshot::decode(&oversized),
+        Err(mornlea_protocol::ProtocolError::FrameTooLarge)
+    );
+    let oversized_decoded =
+        snapshot_envelope(mornlea_protocol::MAX_DECODED_SNAPSHOT as u32 + 1, &[0u8]);
+    assert_eq!(
+        mornlea_protocol::ChunkSnapshot::decode(&oversized_decoded),
+        Err(mornlea_protocol::ProtocolError::FrameTooLarge)
+    );
+
+    // A frame that decodes past the declared ceiling is an expansion bomb and
+    // must be rejected rather than decompressed into a larger buffer.
+    let bomb = vec![0u8; mornlea_protocol::MAX_DECODED_SNAPSHOT + 1];
+    let frame = mornlea_protocol::compress_logical(&bomb).expect("compress bomb");
+    let payload = snapshot_envelope(mornlea_protocol::MAX_DECODED_SNAPSHOT as u32, &frame);
+    assert!(mornlea_protocol::ChunkSnapshot::decode(&payload).is_err());
+}
+
+#[test]
+fn chunk_snapshot_rejects_malformed_logical_payload() {
+    let snapshot = golden_chunk_snapshot();
+    let logical = snapshot.encode_logical();
+    let offsets = snapshot_section_offsets(&logical);
+
+    let mut cases: Vec<(&str, Box<dyn Fn(&mut Vec<u8>)>)> = Vec::new();
+    cases.push((
+        "section count",
+        Box::new(|data: &mut Vec<u8>| data[20] = mornlea_protocol::SECTIONS_PER_CHUNK as u8 - 1),
+    ));
+    cases.push((
+        "section order",
+        Box::new(|data: &mut Vec<u8>| data[offsets[4].y] = 5),
+    ));
+    // An unknown storage byte is the future-version rejection for this family:
+    // the wire defines exactly three storage kinds and this version has no
+    // repair for a fourth.
+    cases.push((
+        "unknown storage",
+        Box::new(|data: &mut Vec<u8>| data[offsets[0].storage] = 3),
+    ));
+    cases.push((
+        "indexed bits",
+        Box::new(|data: &mut Vec<u8>| data[offsets[1].bits] = 5),
+    ));
+    cases.push((
+        "palette count before allocation",
+        Box::new(|data: &mut Vec<u8>| data[offsets[1].palette_count] = 17),
+    ));
+    cases.push((
+        "duplicate palette block ID",
+        Box::new(|data: &mut Vec<u8>| {
+            let at = offsets[1].first_palette;
+            let first = u16::from_le_bytes(data[at..at + 2].try_into().unwrap());
+            data[at + 2..at + 4].copy_from_slice(&first.to_le_bytes());
+        }),
+    ));
+    cases.push((
+        "invalid palette block ID",
+        Box::new(|data: &mut Vec<u8>| {
+            let at = offsets[1].first_palette;
+            data[at..at + 2].copy_from_slice(&(1u16 << 15).to_le_bytes());
+        }),
+    ));
+    cases.push((
+        "invalid palette slot",
+        Box::new(|data: &mut Vec<u8>| {
+            let at = offsets[1].first_word;
+            let word = u64::from_le_bytes(data[at..at + 8].try_into().unwrap());
+            data[at..at + 8].copy_from_slice(&(word | 0xf).to_le_bytes());
+        }),
+    ));
+    cases.push((
+        "indexed word count before allocation",
+        Box::new(|data: &mut Vec<u8>| data[offsets[1].word_count] = 0),
+    ));
+    cases.push((
+        "direct bits",
+        Box::new(|data: &mut Vec<u8>| data[offsets[3].bits] = 14),
+    ));
+    cases.push((
+        "direct word count before allocation",
+        Box::new(|data: &mut Vec<u8>| data[offsets[3].word_count] = 0),
+    ));
+    cases.push((
+        "direct unused high bits",
+        Box::new(|data: &mut Vec<u8>| {
+            let at = offsets[3].first_word;
+            let word = u64::from_le_bytes(data[at..at + 8].try_into().unwrap());
+            data[at..at + 8].copy_from_slice(&(word | 1 << 60).to_le_bytes());
+        }),
+    ));
+    cases.push((
+        "logical trailing byte",
+        Box::new(|data: &mut Vec<u8>| data.push(0)),
+    ));
+
+    for (name, mutate) in cases {
+        let mut malformed = logical.clone();
+        mutate(&mut malformed);
+        let frame = mornlea_protocol::compress_logical(&malformed).expect("compress malformed");
+        let payload = snapshot_envelope(malformed.len() as u32, &frame);
+        assert!(
+            mornlea_protocol::ChunkSnapshot::decode(&payload).is_err(),
+            "malformed logical payload accepted: {name}"
+        );
+    }
+
+    // No prefix of a valid logical payload decodes as a shorter snapshot. The
+    // stride keeps the case count bounded while still walking every section
+    // boundary, and the leading window is exhaustive because the header and
+    // the first section descriptors are where a partial read is most likely to
+    // be mistaken for a whole field.
+    let lengths: Vec<usize> = (0..48).chain((48..logical.len()).step_by(256)).collect();
+    for length in lengths {
+        let frame =
+            mornlea_protocol::compress_logical(&logical[..length]).expect("compress prefix");
+        let payload = snapshot_envelope(length as u32, &frame);
+        assert!(
+            mornlea_protocol::ChunkSnapshot::decode(&payload).is_err(),
+            "accepted truncated logical snapshot at {length}"
+        );
+    }
+}
