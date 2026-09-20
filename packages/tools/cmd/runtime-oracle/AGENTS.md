@@ -66,7 +66,11 @@ or Agent process packages. These boundaries are enforced by `packages/audit`
   regressions in `trace_isolation_test.go` (`TestTraceIsolation*`,
   `TestTracePath*`, `TestTraceOutput*`, `TestTraceIO*`).
 
-## Independent operation runners (`runner_test.go`, `protocol_frame_test.go`)
+## Independent operation runners (`runner_helpers_test.go`, `protocol_frame_test.go`)
+
+`runner_helpers_test.go` is a pure helper file: it declares `GoOperation`, the
+registries, `RunCases`, and the fixture/export helpers, and carries no test
+function, so it follows the `*_helpers_test.go` naming rule.
 
 - `GoOperation` and the `map[string]GoOperation` registry live in test code
   only. A producer receives the case specification and the case input bytes and
@@ -80,8 +84,13 @@ or Agent process packages. These boundaries are enforced by `packages/audit`
   operation, an operation that disagrees with its family's binding, a missing
   checkpoint, or a tampered input digest is a hard error.
 - Protocol producers use the real production codec. The framing producer calls
-  `codec.ReadFrame` and classifies a rejection into a language-neutral category;
-  an unclassified failure is an error rather than an unlabelled rejection.
+  `codec.ReadFrame` and classifies a rejection into one of the frozen execution
+  contract categories (`invalid-varint` for a non-canonical length prefix); an
+  unclassified failure is an error rather than an unlabelled rejection.
+- Every committed `*.expected.json` under `testdata/runtime-migration/cases/`
+  publishes the frozen outcome vocabulary: `kind` is `ok` or `error`, and an
+  `error` category is one of the structural, login admission, or storage values
+  the execution contract names.
 - Explicit fixture export is gated by `RUNTIME_ORACLE_EXPORT_DIR`. There is no
   repository default: an unset variable exports nothing. A named directory must
   be fresh and directly addressed, and the report is published through
@@ -89,6 +98,7 @@ or Agent process packages. These boundaries are enforced by `packages/audit`
   no-replace gates. Production `main.go` reconciles and validates existing
   artifacts and has no trace-generation mode.
 - Enforcement: `TestProtocolOracleFrameIndependentOutcomes`,
+  `TestCorpusOutcomeVocabularyMatchesExecutionContract`,
   `TestProtocolOracleFrameOutcomesDistinguishCases`,
   `TestProtocolOracleFrameRunnerRejects*`,
   `TestProtocolOracleFrameRunnerHandsProducerOnlyCaseAndInput`,
