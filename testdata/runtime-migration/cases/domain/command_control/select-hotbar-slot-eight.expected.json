@@ -1,0 +1,9 @@
+{
+  "kind": "ok",
+  "category": "select-hotbar",
+  "fields": {
+    "sequence": "5",
+    "slot": 8,
+    "wire": "050000000000000008"
+  }
+}

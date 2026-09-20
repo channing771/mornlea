@@ -1,0 +1,10 @@
+{
+  "kind": "ok",
+  "category": "collect-water",
+  "fields": {
+    "pitch": "80000000",
+    "sequence": "10",
+    "wire": "0a000000000000000000008000000080",
+    "yaw": "80000000"
+  }
+}

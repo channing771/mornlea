@@ -1,0 +1,12 @@
+{
+  "kind": "error",
+  "category": "invalid-enum",
+  "fields": {
+    "chunk_x": -3,
+    "chunk_z": 7,
+    "dimension": 2,
+    "have_revision": "0",
+    "rule": "chunk_resync.dimension",
+    "sequence": "6"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "select-hotbar",
+  "sequence": 5,
+  "slot": 9
+}

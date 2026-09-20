@@ -1,0 +1,17 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "eating": false,
+    "jump": false,
+    "mining": false,
+    "move_x": 0,
+    "move_z": 0,
+    "pitch": "7f800000",
+    "rule": "player_input.finite_rotation",
+    "sequence": "2",
+    "sneaking": false,
+    "sprinting": false,
+    "yaw": "00000000"
+  }
+}

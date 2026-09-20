@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "rule": "select_hotbar.slot_range",
+    "sequence": "5",
+    "slot": 9
+  }
+}

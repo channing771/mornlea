@@ -1,0 +1,12 @@
+{
+  "kind": "ok",
+  "category": "chunk-resync",
+  "fields": {
+    "chunk_x": -3,
+    "chunk_z": 7,
+    "dimension": 1,
+    "have_revision": "0",
+    "sequence": "6",
+    "wire": "060000000000000001000000fdffffff070000000000000000000000"
+  }
+}
