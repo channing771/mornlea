@@ -19,8 +19,14 @@ fn crate_identity_matches_workspace_name() {
 
 #[test]
 fn production_manifest_depends_only_on_domain() {
+    // Exactly one compression dependency is permitted: the ChunkSnapshot
+    // envelope is a zstd frame with an xxhash-64 content checksum, so the
+    // codec needs a real encoder rather than a decode-only crate. Every other
+    // production dependency stays forbidden, including the other workspace
+    // crates listed below, so this is an exact-set assertion and not a
+    // "does not contain" check.
     let keys = production_dependency_keys(&read_manifest(env!("CARGO_MANIFEST_DIR")));
-    assert_eq!(keys, ["mornlea_domain"]);
+    assert_eq!(keys, ["mornlea_domain", "zstd"]);
     for forbidden in FORBIDDEN_PRODUCTION_DEPS {
         assert!(
             !keys.iter().any(|key| key == forbidden),

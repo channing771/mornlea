@@ -9,3 +9,7 @@ crate-type = ["rlib"]
 
 [dependencies]
 mornlea_domain = { path = "../mornlea_domain" }
+# The ChunkSnapshot envelope is a zstd frame carrying an xxhash-64 content
+# checksum, so the codec needs a real encoder and decoder rather than a
+# decode-only crate. This is the crate's only compression dependency.
+zstd = "=0.13.3"
