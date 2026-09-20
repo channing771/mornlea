@@ -4183,3 +4183,84 @@ fn projectile_spawn_rejects_invalid_records_and_malformed_payload() {
     over[8] = mornlea_protocol::MAX_PROJECTILE_RECORDS + 1;
     assert!(mornlea_protocol::ProjectileSpawn::decode(&over).is_err());
 }
+
+#[test]
+fn projectile_state_round_trip_preserves_batch_bytes() {
+    let state = mornlea_protocol::ProjectileState::new(
+        0x0102_0304_0506_0708,
+        vec![
+            mornlea_protocol::ProjectileStateRecord {
+                id: 7,
+                position: [2.5, 1.0, -3.25],
+            },
+            mornlea_protocol::ProjectileStateRecord {
+                id: 9,
+                position: [-8.5, 65.5, 12.75],
+            },
+        ],
+    )
+    .expect("state");
+    let payload = state.encode();
+    assert_eq!(mornlea_protocol::ProjectileState::PACKET_ID, 30);
+    assert_eq!(payload.len(), 8 + 1 + 2 * 20);
+    assert_eq!(&payload[..8], &0x0102_0304_0506_0708u64.to_le_bytes());
+    assert_eq!(payload[8], 2);
+    assert_eq!(&payload[9..17], &[0x07, 0, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(&payload[17..21], &[0x00, 0x00, 0x20, 0x40]);
+    assert_eq!(&payload[21..25], &[0x00, 0x00, 0x80, 0x3f]);
+    assert_eq!(&payload[25..29], &[0x00, 0x00, 0x50, 0xc0]);
+    // The second record starts one fixed 20-byte stride later.
+    assert_eq!(&payload[29..37], &[0x09, 0, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(
+        mornlea_protocol::ProjectileState::decode(&payload).expect("decode"),
+        state
+    );
+}
+
+#[test]
+fn projectile_state_rejects_invalid_records_and_malformed_payload() {
+    let record = mornlea_protocol::ProjectileStateRecord {
+        id: 7,
+        position: [1.0, 2.0, 3.0],
+    };
+
+    let mut zero_id = record;
+    zero_id.id = 0;
+    let mut bad_position = record;
+    bad_position.position = [f32::INFINITY, 0.0, 0.0];
+    for bad in [zero_id, bad_position] {
+        assert!(
+            mornlea_protocol::ProjectileState::new(1, vec![bad]).is_err(),
+            "accepted invalid projectile state record"
+        );
+    }
+    assert!(mornlea_protocol::ProjectileState::new(1, vec![record, record]).is_err());
+    assert!(mornlea_protocol::ProjectileState::new(1, Vec::new()).is_err());
+
+    let valid = mornlea_protocol::ProjectileState::new(1, vec![record]).expect("state");
+    let payload = valid.encode();
+    for length in 0..payload.len() {
+        assert!(
+            mornlea_protocol::ProjectileState::decode(&payload[..length]).is_err(),
+            "accepted truncated projectile state at {length}"
+        );
+    }
+    let mut padded = payload.clone();
+    padded.push(0x00);
+    assert_eq!(
+        mornlea_protocol::ProjectileState::decode(&padded),
+        Err(mornlea_protocol::ProtocolError::Truncated)
+    );
+    let mut mismatched = payload.clone();
+    mismatched[8] = 2;
+    assert_eq!(
+        mornlea_protocol::ProjectileState::decode(&mismatched),
+        Err(mornlea_protocol::ProtocolError::Truncated)
+    );
+    let mut empty = payload.clone();
+    empty[8] = 0;
+    assert!(mornlea_protocol::ProjectileState::decode(&empty).is_err());
+    let mut over = payload.clone();
+    over[8] = mornlea_protocol::MAX_PROJECTILE_RECORDS + 1;
+    assert!(mornlea_protocol::ProjectileState::decode(&over).is_err());
+}

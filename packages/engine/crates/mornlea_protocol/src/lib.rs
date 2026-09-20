@@ -63,6 +63,7 @@ mod player_input;
 mod player_state;
 mod projectile_despawn;
 mod projectile_spawn;
+mod projectile_state;
 mod remote_player_despawn;
 mod remote_player_spawn;
 mod remote_player_states;
@@ -183,6 +184,10 @@ pub use projectile_despawn::{
 pub use projectile_spawn::{
     PROJECTILE_KIND_ARROW, PROJECTILE_KIND_SHARD, PROJECTILE_SPAWN_MAX_WIRE_BYTES,
     PROJECTILE_SPAWN_WIRE_BYTES, ProjectileSpawn, ProjectileSpawnRecord,
+};
+pub use projectile_state::{
+    PROJECTILE_STATE_MAX_WIRE_BYTES, PROJECTILE_STATE_WIRE_BYTES, ProjectileState,
+    ProjectileStateRecord,
 };
 pub use remote_player_despawn::RemotePlayerDespawn;
 pub use remote_player_spawn::RemotePlayerSpawn;
