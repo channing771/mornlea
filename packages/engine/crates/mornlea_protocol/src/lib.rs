@@ -8,10 +8,12 @@
 
 #![deny(unsafe_code)]
 
+mod client_hello;
 mod error;
 mod frame;
 mod varint;
 
+pub use client_hello::ClientHello;
 pub use error::ProtocolError;
 pub use frame::{MAX_FRAME_BYTES, read_frame, write_frame};
 pub use varint::{decode_uvarint, encode_uvarint};

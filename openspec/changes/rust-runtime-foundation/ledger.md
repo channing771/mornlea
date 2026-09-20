@@ -84,3 +84,12 @@
 - Discovered tests (`rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked -- --list`): 11.
 - PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
 - Architecture skill: no change. Framing is the first protocol-family port under the existing crate-split rule.
+
+## 2026-09-20 — 2.3 protocol.client.ClientHello
+
+- Baseline: `c567e42b feat(engine): port protocol frame codec`.
+- Existing unrelated work: deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded.
+- Ruling: handshake packet ID 0 payload is a canonical protocol-version uvarint. Encode/decode accept only `Identities::current().protocol` (golden `0x2d` for v45). Unsupported versions, truncated varints, and trailing bytes fail before publication. Remaining protocol families stay unchecked in `tasks.md`.
+- Discovered tests (`-- --list`): 13.
+- PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
+- Architecture skill: no change.

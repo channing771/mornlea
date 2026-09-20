@@ -6,4 +6,6 @@ pub enum ProtocolError {
     Truncated,
     NonCanonicalUvarint,
     InvalidUvarint,
+    UnsupportedVersion,
+    TrailingBytes,
 }

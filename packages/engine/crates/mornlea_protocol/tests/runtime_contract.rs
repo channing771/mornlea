@@ -144,6 +144,40 @@ fn canonical_uvarint_round_trips_and_rejects_malformed() {
     }
 }
 
+#[test]
+fn client_hello_round_trip_preserves_current_version_bytes() {
+    let hello = mornlea_protocol::ClientHello::new(45).expect("current hello");
+    let payload = hello.encode();
+    assert_eq!(payload, [0x2d]);
+    assert_eq!(mornlea_protocol::ClientHello::PACKET_ID, 0);
+    let decoded = mornlea_protocol::ClientHello::decode(&payload).expect("decode hello");
+    assert_eq!(decoded, hello);
+    assert_eq!(decoded.protocol_version, 45);
+}
+
+#[test]
+fn client_hello_rejects_unknown_version_and_malformed_payload() {
+    assert_eq!(
+        mornlea_protocol::ClientHello::new(0),
+        Err(mornlea_protocol::ProtocolError::UnsupportedVersion)
+    );
+    assert_eq!(
+        mornlea_protocol::ClientHello::new(46),
+        Err(mornlea_protocol::ProtocolError::UnsupportedVersion)
+    );
+    assert_eq!(
+        mornlea_protocol::ClientHello::decode(&[0x2e]),
+        Err(mornlea_protocol::ProtocolError::UnsupportedVersion)
+    );
+    assert!(mornlea_protocol::ClientHello::decode(&[]).is_err());
+    assert!(mornlea_protocol::ClientHello::decode(&[0x80]).is_err());
+    assert!(mornlea_protocol::ClientHello::decode(&[0x81, 0x00]).is_err());
+    assert_eq!(
+        mornlea_protocol::ClientHello::decode(&[0x2d, 0x00]),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }
