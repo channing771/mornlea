@@ -111,22 +111,22 @@ func Discover(root string) ([]Family, Identities, error) {
 
 	protocolVersionText := strconv.Itoa(protocolVersion)
 	families := []Family{
-		protocolFamily("protocol.frame", "input", protocolVersionText, "packages/shared/network/codec/frame.go",
+		protocolFamily(root, "protocol.frame", "input", protocolVersionText, "packages/shared/network/codec/frame.go",
 			[]string{"packages/shared/network/codec/frame.go", "packages/shared/network/codec/frame_test.go"}),
-		saveFamily("save.chunk", strconv.Itoa(chunkCurrent), intsToStrings(chunkSupported),
+		saveFamily(root, "save.chunk", strconv.Itoa(chunkCurrent), intsToStrings(chunkSupported),
 			"packages/server/storage/chunk/chunk_codec.go", versionedBins("packages/server/storage/chunk/testdata", "chunk", chunkSupported)),
-		saveFamily("save.player", strconv.Itoa(playerCurrent), intsToStrings(playerSupported),
+		saveFamily(root, "save.player", strconv.Itoa(playerCurrent), intsToStrings(playerSupported),
 			"packages/server/storage/player/player_codec.go", versionedBins("packages/server/storage/player/testdata", "player", playerSupported)),
-		saveFamily("save.companion", strconv.Itoa(companionCurrent), intsToStrings(companionSupported),
+		saveFamily(root, "save.companion", strconv.Itoa(companionCurrent), intsToStrings(companionSupported),
 			"packages/server/storage/companion/companion_codec.go", versionedBins("packages/server/storage/companion/testdata", "companions", companionSupported)),
-		saveFamily("save.hostile", strconv.Itoa(hostileCurrent), intsToStrings(hostileSupported),
+		saveFamily(root, "save.hostile", strconv.Itoa(hostileCurrent), intsToStrings(hostileSupported),
 			"packages/server/storage/hostile/hostile_codec.go", versionedBins("packages/server/storage/hostile/testdata", "hostile-mobs", hostileSupported)),
-		saveFamily("save.passive", strconv.Itoa(passiveCurrent), intsToStrings(passiveSupported),
+		saveFamily(root, "save.passive", strconv.Itoa(passiveCurrent), intsToStrings(passiveSupported),
 			"packages/server/storage/passive/passive_codec.go", versionedBins("packages/server/storage/passive/testdata", "passive-mobs", passiveSupported)),
-		saveFamily("save.world-metadata", strconv.Itoa(metadataCurrent), intsToStrings(metadataSupported),
+		saveFamily(root, "save.world-metadata", strconv.Itoa(metadataCurrent), intsToStrings(metadataSupported),
 			"packages/server/storage/metadata.go",
 			[]string{"packages/server/storage/metadata.go", "packages/server/storage/metadata_test.go"}),
-		saveFamily("save.region", strconv.Itoa(regionCurrent), []string{strconv.Itoa(regionCurrent)},
+		saveFamily(root, "save.region", strconv.Itoa(regionCurrent), []string{strconv.Itoa(regionCurrent)},
 			"packages/server/storage/region/region_format.go",
 			[]string{"packages/server/storage/region/region_format.go", "packages/server/storage/region/region_format_test.go"}),
 		{
@@ -134,51 +134,51 @@ func Discover(root string) ([]Family, Identities, error) {
 			CurrentVersion: "1", SupportedVersions: []string{"1"},
 			Source: "packages/shared/pathfind/pathfind.go", EventualOwner: ownerEngine,
 			NumericSemantics: "integer path costs; fixed neighbor expansion order; bounded node budget; distinct unreachable and budget failures",
-			Fixtures:         []string{"packages/shared/pathfind/pathfind.go", "packages/shared/pathfind/pathfind_test.go"},
+			Sources:          makeSourceSpecs(root, []string{"packages/shared/pathfind/pathfind.go", "packages/shared/pathfind/pathfind_test.go"}),
 		},
 		{
 			ID: "agent.http", Kind: "agent", Role: "input",
 			CurrentVersion: agentHTTP, SupportedVersions: []string{agentHTTP},
 			Source: "packages/contracts/companion-agent/http-v1/manifest.json", EventualOwner: ownerAgent,
 			NumericSemantics: "JSON request/response contracts; bounded bodies; loopback-only service",
-			Fixtures: []string{
+			Sources: makeSourceSpecs(root, []string{
 				"packages/contracts/companion-agent/http-v1/manifest.json",
 				"packages/contracts/companion-agent/http-v1/golden/valid.json",
 				"packages/contracts/companion-agent/http-v1/golden/invalid.json",
-			},
+			}),
 		},
 		{
 			ID: "agent.mcp", Kind: "agent", Role: "event",
 			CurrentVersion: agentMCP, SupportedVersions: []string{agentMCP},
 			Source: "packages/contracts/companion-agent/mcp-v1/manifest.json", EventualOwner: ownerAgent,
 			NumericSemantics: "JSON tool contracts; deterministic array order; bounded result bytes",
-			Fixtures: []string{
+			Sources: makeSourceSpecs(root, []string{
 				"packages/contracts/companion-agent/mcp-v1/manifest.json",
 				"packages/contracts/companion-agent/mcp-v1/golden/valid.json",
 				"packages/contracts/companion-agent/mcp-v1/golden/invalid.json",
-			},
+			}),
 		},
 		{
-			ID: "domain.input", Kind: "protocol", Role: "input",
+			ID: "domain.input", Kind: "domain", Role: "input",
 			CurrentVersion: protocolVersionText, SupportedVersions: []string{protocolVersionText},
 			Source: "packages/shared/network/protocol/message_command.go", EventualOwner: ownerDomain,
 			NumericSemantics: protocolLE,
-			Fixtures:         []string{"packages/shared/network/protocol/message_command.go", "packages/shared/network/protocol/packet_test.go"},
+			Sources:          makeSourceSpecs(root, []string{"packages/shared/network/protocol/message_command.go", "packages/shared/network/protocol/packet_test.go"}),
 		},
 		{
-			ID: "domain.event", Kind: "protocol", Role: "event",
+			ID: "domain.event", Kind: "domain", Role: "event",
 			CurrentVersion: "1", SupportedVersions: []string{"1"},
 			Source: "packages/client/presentation/transcript_corpus_test.go", EventualOwner: ownerDomain,
 			NumericSemantics: replayIdentity,
-			Fixtures:         []string{"packages/client/presentation/transcript_corpus_test.go"},
+			Sources:          makeSourceSpecs(root, []string{"packages/client/presentation/transcript_corpus_test.go"}),
 		},
 	}
 	for _, name := range clientPackets {
-		families = append(families, protocolFamily("protocol.client."+name, "input", protocolVersionText,
+		families = append(families, protocolFamily(root, "protocol.client."+name, "input", protocolVersionText,
 			"packages/shared/network/protocol/registry.go", protocolPacketFixtures(name)))
 	}
 	for _, name := range serverPackets {
-		families = append(families, protocolFamily("protocol.server."+name, "event", protocolVersionText,
+		families = append(families, protocolFamily(root, "protocol.server."+name, "event", protocolVersionText,
 			"packages/shared/network/protocol/registry.go", protocolPacketFixtures(name)))
 	}
 	families = append(families, kernels...)
@@ -186,21 +186,41 @@ func Discover(root string) ([]Family, Identities, error) {
 	return families, live, nil
 }
 
-func protocolFamily(id, role, version, source string, fixtures []string) Family {
+func makeSourceSpecs(root string, paths []string) []SourceSpec {
+	specs := make([]SourceSpec, 0, len(paths))
+	for _, p := range paths {
+		full := filepath.Join(root, filepath.FromSlash(p))
+		hash, err := hashFile(full)
+		if err != nil {
+			hash = ""
+		}
+		specs = append(specs, SourceSpec{Path: p, SHA256: hash})
+	}
+	return specs
+}
+
+func protocolFamily(root, id, role, version, source string, fixtures []string) Family {
+	var cases []string
+	if id == "protocol.frame" {
+		cases = []string{"protocol.frame/45/valid"}
+	}
 	return Family{
 		ID: id, Kind: "protocol", Role: role,
 		CurrentVersion: version, SupportedVersions: []string{version},
 		Source: source, EventualOwner: ownerProtocol,
-		NumericSemantics: protocolLE, Fixtures: fixtures,
+		NumericSemantics: protocolLE,
+		Sources:          makeSourceSpecs(root, fixtures),
+		Cases:            cases,
 	}
 }
 
-func saveFamily(id, current string, supported []string, source string, fixtures []string) Family {
+func saveFamily(root, id, current string, supported []string, source string, fixtures []string) Family {
 	return Family{
 		ID: id, Kind: "save", Role: "event",
 		CurrentVersion: current, SupportedVersions: supported,
 		Source: source, EventualOwner: ownerStorage,
-		NumericSemantics: saveLE, Fixtures: fixtures,
+		NumericSemantics: saveLE,
+		Sources:          makeSourceSpecs(root, fixtures),
 	}
 }
 
@@ -264,7 +284,8 @@ func discoverEngineKernels(root string, abi int) ([]Family, error) {
 			CurrentVersion: version, SupportedVersions: []string{version},
 			Source: "packages/engine/include/mornlea_engine.h", EventualOwner: ownerEngine,
 			NumericSemantics: kernelSemantics(name),
-			Fixtures:         kernelFixtures(name),
+			Sources:          makeSourceSpecs(root, kernelFixtures(name)),
+			Cases:            nil,
 		})
 	}
 	if len(families) == 0 {
@@ -510,4 +531,32 @@ func encodeInventory(inventory Inventory) ([]byte, error) {
 	cloned.Families = append([]Family(nil), inventory.Families...)
 	sort.Slice(cloned.Families, func(i, j int) bool { return cloned.Families[i].ID < cloned.Families[j].ID })
 	return json.MarshalIndent(cloned, "", "  ")
+}
+
+// DiscoverCases returns all current test cases in the corpus.
+func DiscoverCases(root string) ([]CaseSpec, error) {
+	frameInput := "testdata/runtime-migration/cases/frame/valid.bin"
+	frameInputHash, err := hashFile(filepath.Join(root, filepath.FromSlash(frameInput)))
+	if err != nil {
+		return nil, fmt.Errorf("hash frame input: %w", err)
+	}
+	frameExpected := "testdata/runtime-migration/cases/frame/valid.expected.json"
+	frameExpectedHash, err := hashFile(filepath.Join(root, filepath.FromSlash(frameExpected)))
+	if err != nil {
+		return nil, fmt.Errorf("hash frame expected: %w", err)
+	}
+
+	return []CaseSpec{
+		{
+			ID:           "protocol.frame/45/valid",
+			Family:       "protocol.frame",
+			Version:      "45",
+			Operation:    "decode",
+			Input:        AssetRef{Path: frameInput, SHA256: frameInputHash},
+			InputFormat:  "binary",
+			Expected:     AssetRef{Path: frameExpected, SHA256: frameExpectedHash},
+			Checkpoints:  []string{"0"},
+			RustConsumer: "corpus_frame",
+		},
+	}, nil
 }

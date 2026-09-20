@@ -182,7 +182,8 @@ func fixtureHashes(t *testing.T, root string) map[string]string {
 	}
 	hashes := map[string]string{}
 	for _, family := range inventory.Families {
-		for _, fixture := range family.Fixtures {
+		for _, src := range family.Sources {
+			fixture := src.Path
 			path := filepath.Join(root, filepath.FromSlash(fixture))
 			digest, err := fileDigest(path)
 			if err != nil {

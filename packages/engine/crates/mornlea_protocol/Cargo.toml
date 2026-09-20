@@ -13,3 +13,7 @@ mornlea_domain = { path = "../mornlea_domain" }
 # checksum, so the codec needs a real encoder and decoder rather than a
 # decode-only crate. This is the crate's only compression dependency.
 zstd = "=0.13.3"
+
+[dev-dependencies]
+serde_json = "=1.0.151"
+sha2 = "0.10"

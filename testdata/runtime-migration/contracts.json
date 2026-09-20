@@ -1,5 +1,6 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "source_revision": "60c476645ee6dae1f6392336a7f3c593d2163ae3",
   "identities": {
     "protocol": 45,
     "chunk_schema": 9,
@@ -25,11 +26,21 @@
       "source": "packages/contracts/companion-agent/http-v1/manifest.json",
       "eventual_owner": "companion-agent-service",
       "numeric_semantics": "JSON request/response contracts; bounded bodies; loopback-only service",
-      "fixtures": [
-        "packages/contracts/companion-agent/http-v1/manifest.json",
-        "packages/contracts/companion-agent/http-v1/golden/valid.json",
-        "packages/contracts/companion-agent/http-v1/golden/invalid.json"
-      ]
+      "sources": [
+        {
+          "path": "packages/contracts/companion-agent/http-v1/manifest.json",
+          "sha256": "sha256:fcee776de48c054f51c54aa33d5dc2405dd2d8791db422d645a8800f03975df4"
+        },
+        {
+          "path": "packages/contracts/companion-agent/http-v1/golden/valid.json",
+          "sha256": "sha256:51431edaa821e1631615d1ac394262f1d06e4e2291a32e4c971a1ddc3cea4d23"
+        },
+        {
+          "path": "packages/contracts/companion-agent/http-v1/golden/invalid.json",
+          "sha256": "sha256:d9218c4b40e977c877b6efc88a36fcee13d21b8cec07ccdee129288870ce6521"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "agent.mcp",
@@ -42,15 +53,25 @@
       "source": "packages/contracts/companion-agent/mcp-v1/manifest.json",
       "eventual_owner": "companion-agent-service",
       "numeric_semantics": "JSON tool contracts; deterministic array order; bounded result bytes",
-      "fixtures": [
-        "packages/contracts/companion-agent/mcp-v1/manifest.json",
-        "packages/contracts/companion-agent/mcp-v1/golden/valid.json",
-        "packages/contracts/companion-agent/mcp-v1/golden/invalid.json"
-      ]
+      "sources": [
+        {
+          "path": "packages/contracts/companion-agent/mcp-v1/manifest.json",
+          "sha256": "sha256:2b4b822c099e43fd7eb3486692ff68fc43d684dc5c890bcde6c65d4fab79eeaa"
+        },
+        {
+          "path": "packages/contracts/companion-agent/mcp-v1/golden/valid.json",
+          "sha256": "sha256:5cec42c9335eec73a90ead41163b5489d752208295b9549b1fadec4f1d3100d4"
+        },
+        {
+          "path": "packages/contracts/companion-agent/mcp-v1/golden/invalid.json",
+          "sha256": "sha256:1817914d3b784f4a5b1394393a60a13136a4df89b5f00e984ba70b837a237417"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "domain.event",
-      "kind": "protocol",
+      "kind": "domain",
       "role": "event",
       "current_version": "1",
       "supported_versions": [
@@ -59,13 +80,17 @@
       "source": "packages/client/presentation/transcript_corpus_test.go",
       "eventual_owner": "mornlea_domain",
       "numeric_semantics": "source revision, contract versions, fixture digest, seed, ordered input, tick schedule, normalized observations",
-      "fixtures": [
-        "packages/client/presentation/transcript_corpus_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/client/presentation/transcript_corpus_test.go",
+          "sha256": "sha256:87cd4d61d2074d1076ab883c893cfa2a1f9cfd3a86bb54c4fd87842e8adc3005"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "domain.input",
-      "kind": "protocol",
+      "kind": "domain",
       "role": "input",
       "current_version": "45",
       "supported_versions": [
@@ -74,10 +99,17 @@
       "source": "packages/shared/network/protocol/message_command.go",
       "eventual_owner": "mornlea_domain",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/protocol/message_command.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/protocol/message_command.go",
+          "sha256": "sha256:f0a95793cd7021ba7a137373e26cad2d16e6742092f2ecb94d13c44b69d114f1"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "kernel.mornlea_collision_resolve",
@@ -90,11 +122,21 @@
       "source": "packages/engine/include/mornlea_engine.h",
       "eventual_owner": "mornlea_engine",
       "numeric_semantics": "IEEE-754 binary32 little-endian; swept AABB; fail closed on invalid layout",
-      "fixtures": [
-        "packages/engine/include/mornlea_engine.h",
-        "packages/shared/nativeabi/native_test.go",
-        "packages/engine/crates/mornlea_engine/src/collision.rs"
-      ]
+      "sources": [
+        {
+          "path": "packages/engine/include/mornlea_engine.h",
+          "sha256": "sha256:26d19f6fc265ebee750ff7ce9f15212321237c2f94f137ff2ff7af652dc58c9f"
+        },
+        {
+          "path": "packages/shared/nativeabi/native_test.go",
+          "sha256": "sha256:43e3da7c40a54cd568e1497c4e92d73b8ee497818732e78f8706073a18fef20c"
+        },
+        {
+          "path": "packages/engine/crates/mornlea_engine/src/collision.rs",
+          "sha256": "sha256:ed8adb64ca6a14c0b205eba6d262b632089ba2bce4fc3e4fc029b1702aa99507"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "kernel.mornlea_fluid_eval_batch",
@@ -107,11 +149,21 @@
       "source": "packages/engine/include/mornlea_engine.h",
       "eventual_owner": "mornlea_engine",
       "numeric_semantics": "deterministic integer fluid ranks; little-endian packed records; fail closed on overflow",
-      "fixtures": [
-        "packages/engine/include/mornlea_engine.h",
-        "packages/shared/nativeabi/native_test.go",
-        "packages/engine/crates/mornlea_engine/src/fluid_eval.rs"
-      ]
+      "sources": [
+        {
+          "path": "packages/engine/include/mornlea_engine.h",
+          "sha256": "sha256:26d19f6fc265ebee750ff7ce9f15212321237c2f94f137ff2ff7af652dc58c9f"
+        },
+        {
+          "path": "packages/shared/nativeabi/native_test.go",
+          "sha256": "sha256:43e3da7c40a54cd568e1497c4e92d73b8ee497818732e78f8706073a18fef20c"
+        },
+        {
+          "path": "packages/engine/crates/mornlea_engine/src/fluid_eval.rs",
+          "sha256": "sha256:47716d86f213cd003cae72bc4773ff39ea08546bea83f234b2bcc503d3bbc2a0"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "kernel.mornlea_fluid_rescan",
@@ -124,11 +176,21 @@
       "source": "packages/engine/include/mornlea_engine.h",
       "eventual_owner": "mornlea_engine",
       "numeric_semantics": "deterministic integer fluid ranks; little-endian packed records; fail closed on overflow",
-      "fixtures": [
-        "packages/engine/include/mornlea_engine.h",
-        "packages/shared/nativeabi/native_test.go",
-        "packages/engine/crates/mornlea_engine/src/fluid_rescan.rs"
-      ]
+      "sources": [
+        {
+          "path": "packages/engine/include/mornlea_engine.h",
+          "sha256": "sha256:26d19f6fc265ebee750ff7ce9f15212321237c2f94f137ff2ff7af652dc58c9f"
+        },
+        {
+          "path": "packages/shared/nativeabi/native_test.go",
+          "sha256": "sha256:43e3da7c40a54cd568e1497c4e92d73b8ee497818732e78f8706073a18fef20c"
+        },
+        {
+          "path": "packages/engine/crates/mornlea_engine/src/fluid_rescan.rs",
+          "sha256": "sha256:d9fab8dc772fc66496ddee739c6e30bdc8e648473141680b340f2d41be658fd9"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "kernel.mornlea_lod_shell",
@@ -141,11 +203,21 @@
       "source": "packages/engine/include/mornlea_engine.h",
       "eventual_owner": "mornlea_engine",
       "numeric_semantics": "deterministic integer worldgen; little-endian packed voxels; layout-versioned MGW1/MTB1",
-      "fixtures": [
-        "packages/engine/include/mornlea_engine.h",
-        "packages/shared/nativeabi/native_test.go",
-        "packages/engine/crates/mornlea_engine/src/lod.rs"
-      ]
+      "sources": [
+        {
+          "path": "packages/engine/include/mornlea_engine.h",
+          "sha256": "sha256:26d19f6fc265ebee750ff7ce9f15212321237c2f94f137ff2ff7af652dc58c9f"
+        },
+        {
+          "path": "packages/shared/nativeabi/native_test.go",
+          "sha256": "sha256:43e3da7c40a54cd568e1497c4e92d73b8ee497818732e78f8706073a18fef20c"
+        },
+        {
+          "path": "packages/engine/crates/mornlea_engine/src/lod.rs",
+          "sha256": "sha256:dfdc994ed2cf305e32679b2f0500f7634e060f65dae6de458836071aba20f62a"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "kernel.mornlea_mesh_section",
@@ -158,11 +230,21 @@
       "source": "packages/engine/include/mornlea_engine.h",
       "eventual_owner": "mornlea_engine",
       "numeric_semantics": "little-endian packed records; fail closed on invalid layout, aliasing, or overflow",
-      "fixtures": [
-        "packages/engine/include/mornlea_engine.h",
-        "packages/shared/nativeabi/native_test.go",
-        "packages/engine/crates/mornlea_engine/src/greedy/mod.rs"
-      ]
+      "sources": [
+        {
+          "path": "packages/engine/include/mornlea_engine.h",
+          "sha256": "sha256:26d19f6fc265ebee750ff7ce9f15212321237c2f94f137ff2ff7af652dc58c9f"
+        },
+        {
+          "path": "packages/shared/nativeabi/native_test.go",
+          "sha256": "sha256:43e3da7c40a54cd568e1497c4e92d73b8ee497818732e78f8706073a18fef20c"
+        },
+        {
+          "path": "packages/engine/crates/mornlea_engine/src/greedy/mod.rs",
+          "sha256": "sha256:b24091657579b1d3c1aa996a445fc6c9d2c2edadc89f054ae762553b15e98b50"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "kernel.mornlea_physics_step",
@@ -175,11 +257,21 @@
       "source": "packages/engine/include/mornlea_engine.h",
       "eventual_owner": "mornlea_engine",
       "numeric_semantics": "IEEE-754 binary32 little-endian; layout-versioned MGP1 header; reject non-finite used inputs",
-      "fixtures": [
-        "packages/engine/include/mornlea_engine.h",
-        "packages/shared/nativeabi/native_test.go",
-        "packages/engine/crates/mornlea_engine/src/step.rs"
-      ]
+      "sources": [
+        {
+          "path": "packages/engine/include/mornlea_engine.h",
+          "sha256": "sha256:26d19f6fc265ebee750ff7ce9f15212321237c2f94f137ff2ff7af652dc58c9f"
+        },
+        {
+          "path": "packages/shared/nativeabi/native_test.go",
+          "sha256": "sha256:43e3da7c40a54cd568e1497c4e92d73b8ee497818732e78f8706073a18fef20c"
+        },
+        {
+          "path": "packages/engine/crates/mornlea_engine/src/step.rs",
+          "sha256": "sha256:fd1648625bf2d176dd46d02c0d67ce22d918c4f69def4b447ff81f39b996db67"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "kernel.mornlea_raycast_batch",
@@ -192,11 +284,21 @@
       "source": "packages/engine/include/mornlea_engine.h",
       "eventual_owner": "mornlea_engine",
       "numeric_semantics": "IEEE-754 binary32 little-endian; bounded batch; fail closed on invalid layout",
-      "fixtures": [
-        "packages/engine/include/mornlea_engine.h",
-        "packages/shared/nativeabi/native_test.go",
-        "packages/engine/crates/mornlea_engine/src/raycast.rs"
-      ]
+      "sources": [
+        {
+          "path": "packages/engine/include/mornlea_engine.h",
+          "sha256": "sha256:26d19f6fc265ebee750ff7ce9f15212321237c2f94f137ff2ff7af652dc58c9f"
+        },
+        {
+          "path": "packages/shared/nativeabi/native_test.go",
+          "sha256": "sha256:43e3da7c40a54cd568e1497c4e92d73b8ee497818732e78f8706073a18fef20c"
+        },
+        {
+          "path": "packages/engine/crates/mornlea_engine/src/raycast.rs",
+          "sha256": "sha256:61acf71d6bf411a4d0fc3e2698ab6881f0baa7e26ba4d184abdb3cad53dd5652"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "kernel.mornlea_tree_blocks",
@@ -209,11 +311,21 @@
       "source": "packages/engine/include/mornlea_engine.h",
       "eventual_owner": "mornlea_engine",
       "numeric_semantics": "deterministic integer worldgen; little-endian packed voxels; layout-versioned MGW1/MTB1",
-      "fixtures": [
-        "packages/engine/include/mornlea_engine.h",
-        "packages/shared/nativeabi/native_test.go",
-        "packages/engine/crates/mornlea_engine/src/worldgen.rs"
-      ]
+      "sources": [
+        {
+          "path": "packages/engine/include/mornlea_engine.h",
+          "sha256": "sha256:26d19f6fc265ebee750ff7ce9f15212321237c2f94f137ff2ff7af652dc58c9f"
+        },
+        {
+          "path": "packages/shared/nativeabi/native_test.go",
+          "sha256": "sha256:43e3da7c40a54cd568e1497c4e92d73b8ee497818732e78f8706073a18fef20c"
+        },
+        {
+          "path": "packages/engine/crates/mornlea_engine/src/worldgen.rs",
+          "sha256": "sha256:1bd2d720ee17e975bc62a8ca0673a504b81634cc506adcd1e262beb6bffb66bd"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "kernel.mornlea_worldgen_chunk",
@@ -226,11 +338,21 @@
       "source": "packages/engine/include/mornlea_engine.h",
       "eventual_owner": "mornlea_engine",
       "numeric_semantics": "deterministic integer worldgen; little-endian packed voxels; layout-versioned MGW1/MTB1",
-      "fixtures": [
-        "packages/engine/include/mornlea_engine.h",
-        "packages/shared/nativeabi/native_test.go",
-        "packages/engine/crates/mornlea_engine/src/worldgen.rs"
-      ]
+      "sources": [
+        {
+          "path": "packages/engine/include/mornlea_engine.h",
+          "sha256": "sha256:26d19f6fc265ebee750ff7ce9f15212321237c2f94f137ff2ff7af652dc58c9f"
+        },
+        {
+          "path": "packages/shared/nativeabi/native_test.go",
+          "sha256": "sha256:43e3da7c40a54cd568e1497c4e92d73b8ee497818732e78f8706073a18fef20c"
+        },
+        {
+          "path": "packages/engine/crates/mornlea_engine/src/worldgen.rs",
+          "sha256": "sha256:1bd2d720ee17e975bc62a8ca0673a504b81634cc506adcd1e262beb6bffb66bd"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "kernel.mornlea_worldgen_probe",
@@ -243,11 +365,21 @@
       "source": "packages/engine/include/mornlea_engine.h",
       "eventual_owner": "mornlea_engine",
       "numeric_semantics": "deterministic integer worldgen; little-endian packed voxels; layout-versioned MGW1/MTB1",
-      "fixtures": [
-        "packages/engine/include/mornlea_engine.h",
-        "packages/shared/nativeabi/native_test.go",
-        "packages/engine/crates/mornlea_engine/src/worldgen.rs"
-      ]
+      "sources": [
+        {
+          "path": "packages/engine/include/mornlea_engine.h",
+          "sha256": "sha256:26d19f6fc265ebee750ff7ce9f15212321237c2f94f137ff2ff7af652dc58c9f"
+        },
+        {
+          "path": "packages/shared/nativeabi/native_test.go",
+          "sha256": "sha256:43e3da7c40a54cd568e1497c4e92d73b8ee497818732e78f8706073a18fef20c"
+        },
+        {
+          "path": "packages/engine/crates/mornlea_engine/src/worldgen.rs",
+          "sha256": "sha256:1bd2d720ee17e975bc62a8ca0673a504b81634cc506adcd1e262beb6bffb66bd"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "kernel.pathfind",
@@ -260,10 +392,17 @@
       "source": "packages/shared/pathfind/pathfind.go",
       "eventual_owner": "mornlea_engine",
       "numeric_semantics": "integer path costs; fixed neighbor expansion order; bounded node budget; distinct unreachable and budget failures",
-      "fixtures": [
-        "packages/shared/pathfind/pathfind.go",
-        "packages/shared/pathfind/pathfind_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/pathfind/pathfind.go",
+          "sha256": "sha256:228bbfa1c2682a242f89084f59c2843a415829fae534ad3b0c048494b7263878"
+        },
+        {
+          "path": "packages/shared/pathfind/pathfind_test.go",
+          "sha256": "sha256:540bbaf3d8d3d12b2717e0c2daa9e8e38d22a6e469d895c7ea22d0970571e031"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.BoneMeal",
@@ -276,10 +415,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.ChatCommand",
@@ -292,10 +438,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.ClientHello",
@@ -308,10 +461,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.CloseContainer",
@@ -324,10 +484,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.CollectWater",
@@ -340,10 +507,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.DropSelectedItem",
@@ -356,10 +530,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.DropStack",
@@ -372,10 +553,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.EquipArmor",
@@ -388,10 +576,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.KeepAliveReply",
@@ -404,10 +599,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.LoginStart",
@@ -420,10 +622,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.MoveContainerStack",
@@ -436,10 +645,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.MoveCraftingStack",
@@ -452,10 +668,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.MoveInventoryStack",
@@ -468,10 +691,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.MoveStackPartial",
@@ -484,10 +714,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.OpenContainer",
@@ -500,10 +737,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.PlaceBlock",
@@ -516,10 +760,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.PlaceWater",
@@ -532,10 +783,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.PlayerInput",
@@ -548,10 +806,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.QuickMoveStack",
@@ -564,10 +829,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.RequestChunkResync",
@@ -580,10 +852,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.SelectHotbar",
@@ -596,10 +875,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.TakeCraftingOutput",
@@ -612,10 +898,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.client.TillSoil",
@@ -628,10 +921,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.frame",
@@ -644,9 +944,18 @@
       "source": "packages/shared/network/codec/frame.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/frame.go",
-        "packages/shared/network/codec/frame_test.go"
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/frame.go",
+          "sha256": "sha256:7806f55d02084852d1a79e1a7c37118dbc2b379eff9740b0dceb1fffd59cf531"
+        },
+        {
+          "path": "packages/shared/network/codec/frame_test.go",
+          "sha256": "sha256:cab8fd240b0973197388812c43bfd77102e440dcc9b290cdd9239d3d3253e5d8"
+        }
+      ],
+      "cases": [
+        "protocol.frame/45/valid"
       ]
     },
     {
@@ -660,10 +969,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.ChatEvent",
@@ -676,10 +992,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.ChestState",
@@ -692,10 +1015,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.ChunkSnapshot",
@@ -708,11 +1038,21 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/testdata/chunk-snapshot-v1.bin",
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/testdata/chunk-snapshot-v1.bin",
+          "sha256": "sha256:d1397d23db8c1180bff91d3144ba5fcaba3b0a07a379b7be516ac50829f39bb2"
+        },
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.CombatHit",
@@ -725,10 +1065,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.CommandRejected",
@@ -741,10 +1088,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.CompanionDespawn",
@@ -757,10 +1111,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.CompanionSpawn",
@@ -773,10 +1134,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.CompanionStates",
@@ -789,10 +1157,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.ContainerClosed",
@@ -805,10 +1180,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.CraftingState",
@@ -821,10 +1203,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.Disconnect",
@@ -837,10 +1226,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.ForgetChunks",
@@ -853,10 +1249,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.FurnaceState",
@@ -869,10 +1272,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.HandshakeReject",
@@ -885,10 +1295,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.HostileDespawn",
@@ -901,10 +1318,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.HostileSpawn",
@@ -917,10 +1341,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.HostileState",
@@ -933,10 +1364,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.InventoryState",
@@ -949,10 +1387,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.ItemDropRemoves",
@@ -965,10 +1410,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.ItemDropUpserts",
@@ -981,10 +1433,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.KeepAlive",
@@ -997,10 +1456,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.LoginReject",
@@ -1013,10 +1479,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.LoginSuccess",
@@ -1029,10 +1502,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.PassiveDespawn",
@@ -1045,10 +1525,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.PassiveSpawn",
@@ -1061,10 +1548,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.PassiveState",
@@ -1077,10 +1571,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.PlaceBlockSucceeded",
@@ -1093,10 +1594,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.PlayerState",
@@ -1109,10 +1617,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.ProjectileDespawn",
@@ -1125,10 +1640,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.ProjectileSpawn",
@@ -1141,10 +1663,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.ProjectileState",
@@ -1157,10 +1686,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.RemotePlayerDespawn",
@@ -1173,10 +1709,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.RemotePlayerSpawn",
@@ -1189,10 +1732,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.RemotePlayerStates",
@@ -1205,10 +1755,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "protocol.server.ServerHello",
@@ -1221,10 +1778,17 @@
       "source": "packages/shared/network/protocol/registry.go",
       "eventual_owner": "mornlea_protocol",
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
-      "fixtures": [
-        "packages/shared/network/codec/codec_golden_test.go",
-        "packages/shared/network/protocol/packet_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/shared/network/codec/codec_golden_test.go",
+          "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet_test.go",
+          "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "save.chunk",
@@ -1245,17 +1809,45 @@
       "source": "packages/server/storage/chunk/chunk_codec.go",
       "eventual_owner": "mornlea_storage",
       "numeric_semantics": "little-endian integers; CRC integrity; exact byte round-trip; no implicit repair",
-      "fixtures": [
-        "packages/server/storage/chunk/testdata/chunk-v1.bin",
-        "packages/server/storage/chunk/testdata/chunk-v2.bin",
-        "packages/server/storage/chunk/testdata/chunk-v3.bin",
-        "packages/server/storage/chunk/testdata/chunk-v4.bin",
-        "packages/server/storage/chunk/testdata/chunk-v5.bin",
-        "packages/server/storage/chunk/testdata/chunk-v6.bin",
-        "packages/server/storage/chunk/testdata/chunk-v7.bin",
-        "packages/server/storage/chunk/testdata/chunk-v8.bin",
-        "packages/server/storage/chunk/testdata/chunk-v9.bin"
-      ]
+      "sources": [
+        {
+          "path": "packages/server/storage/chunk/testdata/chunk-v1.bin",
+          "sha256": "sha256:fb482fbaf4468154898f6f5841873ab0f53c4e20a94eac9d28a3a3273d4a5387"
+        },
+        {
+          "path": "packages/server/storage/chunk/testdata/chunk-v2.bin",
+          "sha256": "sha256:07b4553db0db57a3c0a86e42c80e1fe838b86e1dbbd6026f0d8fb721e37a8696"
+        },
+        {
+          "path": "packages/server/storage/chunk/testdata/chunk-v3.bin",
+          "sha256": "sha256:c8cfb5a4511dbc95eced4fc57b799e84aed90f7427eebdaff3be413d052727be"
+        },
+        {
+          "path": "packages/server/storage/chunk/testdata/chunk-v4.bin",
+          "sha256": "sha256:c4a313076ef51e93ac0e598001e3c5d3a0e8bf0fa110ce149e6a721645307e48"
+        },
+        {
+          "path": "packages/server/storage/chunk/testdata/chunk-v5.bin",
+          "sha256": "sha256:f503afdf324aed2b32ce9861f312c47ed1a17806a9bd6aa4f3ec66bd44ecb488"
+        },
+        {
+          "path": "packages/server/storage/chunk/testdata/chunk-v6.bin",
+          "sha256": "sha256:275d4321f9ee352fe7310845deee67b7e39466ff3484006c5a46503cc0ca043f"
+        },
+        {
+          "path": "packages/server/storage/chunk/testdata/chunk-v7.bin",
+          "sha256": "sha256:b03f94e917a204842547e6b2a65933bb633858f2d6c9ec95a35e2b5c990f8a4a"
+        },
+        {
+          "path": "packages/server/storage/chunk/testdata/chunk-v8.bin",
+          "sha256": "sha256:3628d8d473e394664e36c9cd43d1b417277f7ddd997c03f24de25514052751c5"
+        },
+        {
+          "path": "packages/server/storage/chunk/testdata/chunk-v9.bin",
+          "sha256": "sha256:ec762d1160fedbc3c548fadc4a90f0a8791a6cb53e0729ab0d43bbb0cf4a713e"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "save.companion",
@@ -1272,13 +1864,29 @@
       "source": "packages/server/storage/companion/companion_codec.go",
       "eventual_owner": "mornlea_storage",
       "numeric_semantics": "little-endian integers; CRC integrity; exact byte round-trip; no implicit repair",
-      "fixtures": [
-        "packages/server/storage/companion/testdata/companions-v1.bin",
-        "packages/server/storage/companion/testdata/companions-v2.bin",
-        "packages/server/storage/companion/testdata/companions-v3.bin",
-        "packages/server/storage/companion/testdata/companions-v4.bin",
-        "packages/server/storage/companion/testdata/companions-v5.bin"
-      ]
+      "sources": [
+        {
+          "path": "packages/server/storage/companion/testdata/companions-v1.bin",
+          "sha256": "sha256:0153f16082e8b1ac5e47ac7d4a22d8cfb117fe2fc222bd46bec9b116d394120c"
+        },
+        {
+          "path": "packages/server/storage/companion/testdata/companions-v2.bin",
+          "sha256": "sha256:b919eaa4bfac80d676645980b759414a05370361958efe83f5c3c47e68f65db3"
+        },
+        {
+          "path": "packages/server/storage/companion/testdata/companions-v3.bin",
+          "sha256": "sha256:3c004af9be5fa57bd25ae6dca6b63fc6beeceb60d269b9b568ff4c5fae05e05d"
+        },
+        {
+          "path": "packages/server/storage/companion/testdata/companions-v4.bin",
+          "sha256": "sha256:6f8a81ee7c096a63e935e27a408797b88925b077145ad9bd704d844a61ffbea9"
+        },
+        {
+          "path": "packages/server/storage/companion/testdata/companions-v5.bin",
+          "sha256": "sha256:9f267e9d1fbcb7f4a83d38c699595d1d5ab4c02d13cab54cc0db8d7b16c89391"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "save.hostile",
@@ -1292,10 +1900,17 @@
       "source": "packages/server/storage/hostile/hostile_codec.go",
       "eventual_owner": "mornlea_storage",
       "numeric_semantics": "little-endian integers; CRC integrity; exact byte round-trip; no implicit repair",
-      "fixtures": [
-        "packages/server/storage/hostile/testdata/hostile-mobs-v1.bin",
-        "packages/server/storage/hostile/testdata/hostile-mobs-v2.bin"
-      ]
+      "sources": [
+        {
+          "path": "packages/server/storage/hostile/testdata/hostile-mobs-v1.bin",
+          "sha256": "sha256:d63d0e433499587da31f7896031adff6e65e21adbb067bbce27e124053b6c7b5"
+        },
+        {
+          "path": "packages/server/storage/hostile/testdata/hostile-mobs-v2.bin",
+          "sha256": "sha256:1b1c55e5e8688339a3bd7b13e6546a94b5dcfffe2453e06199862eda24175705"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "save.passive",
@@ -1308,9 +1923,13 @@
       "source": "packages/server/storage/passive/passive_codec.go",
       "eventual_owner": "mornlea_storage",
       "numeric_semantics": "little-endian integers; CRC integrity; exact byte round-trip; no implicit repair",
-      "fixtures": [
-        "packages/server/storage/passive/testdata/passive-mobs-v1.bin"
-      ]
+      "sources": [
+        {
+          "path": "packages/server/storage/passive/testdata/passive-mobs-v1.bin",
+          "sha256": "sha256:844081e4cde9678543762350e95aa5aacc4f363b5806fb788caa9a9d4e417281"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "save.player",
@@ -1331,17 +1950,45 @@
       "source": "packages/server/storage/player/player_codec.go",
       "eventual_owner": "mornlea_storage",
       "numeric_semantics": "little-endian integers; CRC integrity; exact byte round-trip; no implicit repair",
-      "fixtures": [
-        "packages/server/storage/player/testdata/player-v1.bin",
-        "packages/server/storage/player/testdata/player-v2.bin",
-        "packages/server/storage/player/testdata/player-v3.bin",
-        "packages/server/storage/player/testdata/player-v4.bin",
-        "packages/server/storage/player/testdata/player-v5.bin",
-        "packages/server/storage/player/testdata/player-v6.bin",
-        "packages/server/storage/player/testdata/player-v7.bin",
-        "packages/server/storage/player/testdata/player-v8.bin",
-        "packages/server/storage/player/testdata/player-v9.bin"
-      ]
+      "sources": [
+        {
+          "path": "packages/server/storage/player/testdata/player-v1.bin",
+          "sha256": "sha256:b6e58761ea17aa0568d8826d5eb6c73acc9d1ce4c7ccdead2aa6d9f5725d2c43"
+        },
+        {
+          "path": "packages/server/storage/player/testdata/player-v2.bin",
+          "sha256": "sha256:b57ef74085adbcd22a284bd757e847bdebb4ed3163e8610d793fb55d4846def8"
+        },
+        {
+          "path": "packages/server/storage/player/testdata/player-v3.bin",
+          "sha256": "sha256:66f27fbe651a54966ff6281a6507a48c17b195bb446ba50aa015e14a577c8dda"
+        },
+        {
+          "path": "packages/server/storage/player/testdata/player-v4.bin",
+          "sha256": "sha256:bd04d189cb6365a8d0dd2aecbbd26c26d28c5e7c13f809667998bd4282dcfd06"
+        },
+        {
+          "path": "packages/server/storage/player/testdata/player-v5.bin",
+          "sha256": "sha256:6e82a565a94da378e7d4cd6bb1556a54766817d6c475a7844feb279e693e1928"
+        },
+        {
+          "path": "packages/server/storage/player/testdata/player-v6.bin",
+          "sha256": "sha256:3389932b08d9a7fbca11d505c1b1d8061699a09396d8cfe0f2879d58a3242f1b"
+        },
+        {
+          "path": "packages/server/storage/player/testdata/player-v7.bin",
+          "sha256": "sha256:4e8186ff1831067126fb99915582fe2bc7e9b39f2772ca2a986c427094e89b57"
+        },
+        {
+          "path": "packages/server/storage/player/testdata/player-v8.bin",
+          "sha256": "sha256:741ccc4e313a52e3abbc2680dbc71abc20800c2d6eb9f0bfb82e2b22ff958b62"
+        },
+        {
+          "path": "packages/server/storage/player/testdata/player-v9.bin",
+          "sha256": "sha256:319688a67e844c1a51a734985a42aef39194d58d7f32ce3cc023bfe9ca5d6188"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "save.region",
@@ -1354,10 +2001,17 @@
       "source": "packages/server/storage/region/region_format.go",
       "eventual_owner": "mornlea_storage",
       "numeric_semantics": "little-endian integers; CRC integrity; exact byte round-trip; no implicit repair",
-      "fixtures": [
-        "packages/server/storage/region/region_format.go",
-        "packages/server/storage/region/region_format_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/server/storage/region/region_format.go",
+          "sha256": "sha256:dcb7eb0436af74b68b5d7d5bddba20869f658c9a4d10d26bbf0631715ec019e0"
+        },
+        {
+          "path": "packages/server/storage/region/region_format_test.go",
+          "sha256": "sha256:fba650f85d1084bb8266cbdaa4c93952afeb0138e918e1e26da8aa44743c3232"
+        }
+      ],
+      "cases": null
     },
     {
       "id": "save.world-metadata",
@@ -1375,10 +2029,38 @@
       "source": "packages/server/storage/metadata.go",
       "eventual_owner": "mornlea_storage",
       "numeric_semantics": "little-endian integers; CRC integrity; exact byte round-trip; no implicit repair",
-      "fixtures": [
-        "packages/server/storage/metadata.go",
-        "packages/server/storage/metadata_test.go"
-      ]
+      "sources": [
+        {
+          "path": "packages/server/storage/metadata.go",
+          "sha256": "sha256:97480b9638bdc673e2307cb6479e1dfe646f451bb4a49813bf7eeea17c98023d"
+        },
+        {
+          "path": "packages/server/storage/metadata_test.go",
+          "sha256": "sha256:2da1720a01648d0cfbc21b8fc9f9b4069d2aa8322659c292da7389d45659b4cf"
+        }
+      ],
+      "cases": null
+    }
+  ],
+  "cases": [
+    {
+      "id": "protocol.frame/45/valid",
+      "family": "protocol.frame",
+      "version": "45",
+      "operation": "decode",
+      "input": {
+        "path": "testdata/runtime-migration/cases/frame/valid.bin",
+        "sha256": "sha256:530988962b3acfb674a6c3a9b9a16cdb2ae2e81c6f3b2ce3883de4137585dacf"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/frame/valid.expected.json",
+        "sha256": "sha256:51c203339576355688c5fd8fa1dd3d0b80494da8b8fe5dbe0cb992dca9939b0c"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "corpus_frame"
     }
   ]
 }

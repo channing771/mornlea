@@ -16,8 +16,13 @@ var updateRuntimeInventory = flag.Bool(
 
 func TestContractInventoryReconcilesFrozenCorpus(t *testing.T) {
 	root, families, live := discoverLive(t)
+	cases, err := DiscoverCases(root)
+	if err != nil {
+		t.Fatalf("discover cases: %v", err)
+	}
+
 	if *updateRuntimeInventory {
-		encoded, err := encodeInventory(inventoryFrom(live, families))
+		encoded, err := encodeInventory(inventoryFrom(live, families, cases))
 		if err != nil {
 			t.Fatalf("encode inventory: %v", err)
 		}
@@ -37,6 +42,13 @@ func TestContractInventoryReconcilesFrozenCorpus(t *testing.T) {
 	if err := Reconcile(root, inventory, families, live); err != nil {
 		t.Fatalf("frozen inventory drifted from current registries: %v", err)
 	}
+	digest, err := CanonicalCorpusDigest(inventory)
+	if err != nil {
+		t.Fatalf("compute canonical corpus digest: %v", err)
+	}
+	if !strings.HasPrefix(digest, "sha256:") || len(digest) != 71 {
+		t.Fatalf("unexpected canonical corpus digest format: %q", digest)
+	}
 	assertRequiredCoverage(t, inventory.Families)
 }
 
@@ -45,18 +57,24 @@ func TestContractInventoryRejectsMissingFamily(t *testing.T) {
 	if len(families) == 0 {
 		t.Fatal("discover produced no families")
 	}
-	inventory := inventoryFrom(live, families[1:])
-	err := Reconcile(root, inventory, families, live)
+	cases, err := DiscoverCases(root)
+	if err != nil {
+		t.Fatalf("discover cases: %v", err)
+	}
+
+	inventory := inventoryFrom(live, families[1:], cases)
+	err = Reconcile(root, inventory, families, live)
 	if err == nil || !strings.Contains(err.Error(), "uncovered family "+families[0].ID) {
 		t.Fatalf("missing family %s: error=%v", families[0].ID, err)
 	}
 
-	inventory = inventoryFrom(live, families)
+	inventory = inventoryFrom(live, families, cases)
 	inventory.Families = append(inventory.Families, Family{
 		ID: "protocol.missing.Synthetic", Kind: "protocol", Role: "input",
 		CurrentVersion: "1", SupportedVersions: []string{"1"},
 		Source: "does-not-exist.go", EventualOwner: ownerProtocol,
-		NumericSemantics: protocolLE, Fixtures: []string{"does-not-exist.go"},
+		NumericSemantics: protocolLE,
+		Sources:          []SourceSpec{{Path: "packages/shared/network/codec/frame.go", SHA256: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}},
 	})
 	err = Reconcile(root, inventory, families, live)
 	if err == nil || !strings.Contains(err.Error(), "inventory family protocol.missing.Synthetic is not in current registries") {
@@ -66,13 +84,18 @@ func TestContractInventoryRejectsMissingFamily(t *testing.T) {
 
 func TestContractInventoryRejectsVersionMismatch(t *testing.T) {
 	root, families, live := discoverLive(t)
-	inventory := inventoryFrom(live, families)
+	cases, err := DiscoverCases(root)
+	if err != nil {
+		t.Fatalf("discover cases: %v", err)
+	}
+
+	inventory := inventoryFrom(live, families, cases)
 	inventory.Identities.Protocol++
 	if inventory.Families[0].CurrentVersion == "" {
 		t.Fatal("discovered family is missing a current version")
 	}
 	inventory.Families[0].CurrentVersion = "0"
-	err := Reconcile(root, inventory, families, live)
+	err = Reconcile(root, inventory, families, live)
 	if err == nil {
 		t.Fatal("version mismatch was accepted")
 	}
@@ -85,29 +108,42 @@ func TestContractInventoryRejectsVersionMismatch(t *testing.T) {
 	}
 }
 
-func TestContractInventoryRejectsMissingCoverageFixture(t *testing.T) {
+func TestContractInventoryRejectsMissingProvenanceSource(t *testing.T) {
 	root, families, live := discoverLive(t)
-	inventory := inventoryFrom(live, families)
-	inventory.Families[0].Fixtures = []string{"testdata/runtime-migration/missing-fixture.bin"}
-	err := Reconcile(root, inventory, families, live)
-	if err == nil || !strings.Contains(err.Error(), "fixture testdata/runtime-migration/missing-fixture.bin is missing") {
-		t.Fatalf("missing fixture: error=%v", err)
+	cases, err := DiscoverCases(root)
+	if err != nil {
+		t.Fatalf("discover cases: %v", err)
 	}
 
-	inventory = inventoryFrom(live, families)
-	inventory.Families[0].Fixtures = nil
+	inventory := inventoryFrom(live, families, cases)
+	inventory.Families[0].Sources = []SourceSpec{{
+		Path:   "testdata/runtime-migration/missing-source.go",
+		SHA256: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+	}}
 	err = Reconcile(root, inventory, families, live)
-	if err == nil || !strings.Contains(err.Error(), "family "+families[0].ID+" has no coverage fixture") {
-		t.Fatalf("empty fixtures: error=%v", err)
+	if err == nil || !strings.Contains(err.Error(), "missing") {
+		t.Fatalf("missing source: error=%v", err)
+	}
+
+	inventory = inventoryFrom(live, families, cases)
+	inventory.Families[0].Sources = nil
+	err = Reconcile(root, inventory, families, live)
+	if err == nil || !strings.Contains(err.Error(), "has no provenance sources") {
+		t.Fatalf("empty sources: error=%v", err)
 	}
 }
 
 func TestContractInventoryRejectsIncompleteIdentity(t *testing.T) {
 	root, families, live := discoverLive(t)
-	inventory := inventoryFrom(live, families)
+	cases, err := DiscoverCases(root)
+	if err != nil {
+		t.Fatalf("discover cases: %v", err)
+	}
+
+	inventory := inventoryFrom(live, families, cases)
 	inventory.Identities.AgentHTTP = ""
 	inventory.Identities.EngineABI = 0
-	err := Reconcile(root, inventory, families, live)
+	err = Reconcile(root, inventory, families, live)
 	if err == nil {
 		t.Fatal("incomplete identity was accepted")
 	}
@@ -133,17 +169,21 @@ func discoverLive(t *testing.T) (string, []Family, Identities) {
 	return root, families, live
 }
 
-func inventoryFrom(live Identities, families []Family) Inventory {
+func inventoryFrom(live Identities, families []Family, cases []CaseSpec) Inventory {
 	cloned := make([]Family, len(families))
 	for i, family := range families {
 		family.SupportedVersions = append([]string(nil), family.SupportedVersions...)
-		family.Fixtures = append([]string(nil), family.Fixtures...)
+		family.Sources = append([]SourceSpec(nil), family.Sources...)
+		family.Cases = append([]string(nil), family.Cases...)
 		cloned[i] = family
 	}
+	clonedCases := append([]CaseSpec(nil), cases...)
 	return Inventory{
-		SchemaVersion: inventorySchemaVersion,
-		Identities:    live,
-		Families:      cloned,
+		SchemaVersion:  inventorySchemaVersion,
+		SourceRevision: BaselineSourceRevision,
+		Identities:     live,
+		Families:       cloned,
+		Cases:          clonedCases,
 	}
 }
 
@@ -160,7 +200,7 @@ func assertRequiredCoverage(t *testing.T, families []Family) {
 		roles[family.Role]++
 		owners[family.EventualOwner]++
 	}
-	for _, kind := range []string{"protocol", "save", "kernel", "agent"} {
+	for _, kind := range []string{"domain", "protocol", "save", "kernel", "agent"} {
 		if seen[kind] == 0 {
 			t.Fatalf("inventory is missing kind %s", kind)
 		}

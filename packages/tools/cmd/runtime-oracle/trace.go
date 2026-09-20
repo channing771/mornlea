@@ -230,7 +230,8 @@ func copyFixtures(root, workDir string, families []Family) ([]FixtureDigest, err
 	seen := map[string]bool{}
 	var paths []string
 	for _, family := range families {
-		for _, fixture := range family.Fixtures {
+		for _, src := range family.Sources {
+			fixture := src.Path
 			if fixture == "" || seen[fixture] {
 				continue
 			}

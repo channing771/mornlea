@@ -1,21 +1,39 @@
 package main
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
-const inventorySchemaVersion = 1
+const (
+	inventorySchemaVersion  = 2
+	BaselineSourceRevision  = "60c476645ee6dae1f6392336a7f3c593d2163ae3"
+	MaxManifestBytes        = 4 * 1024 * 1024
+	MaxCaseJSONBytes        = 256 * 1024
+	MaxBinaryBytes          = 4 * 1024 * 1024
+	MaxCases                = 8192
+	MaxObservations         = 32768
+)
+
+var hexSha256Pattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+var sourceRevPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
 // Inventory is the frozen language-neutral contract coverage list.
 type Inventory struct {
-	SchemaVersion int        `json:"schema_version"`
-	Identities    Identities `json:"identities"`
-	Families      []Family   `json:"families"`
+	SchemaVersion  int        `json:"schema_version"`
+	SourceRevision string     `json:"source_revision"`
+	Identities     Identities `json:"identities"`
+	Families       []Family   `json:"families"`
+	Cases          []CaseSpec `json:"cases"`
 }
 
 // Identities pins current supported versions. Empty or zero values are
@@ -34,17 +52,52 @@ type Identities struct {
 	AgentMCP           string `json:"agent_mcp"`
 }
 
+// SourceSpec represents one provenance source file and its sha256 digest.
+type SourceSpec struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+}
+
 // Family is one supported protocol, save, kernel, or agent contract.
 type Family struct {
-	ID                string   `json:"id"`
-	Kind              string   `json:"kind"`
-	Role              string   `json:"role"`
-	CurrentVersion    string   `json:"current_version"`
-	SupportedVersions []string `json:"supported_versions"`
-	Source            string   `json:"source"`
-	EventualOwner     string   `json:"eventual_owner"`
-	NumericSemantics  string   `json:"numeric_semantics"`
-	Fixtures          []string `json:"fixtures"`
+	ID                string       `json:"id"`
+	Kind              string       `json:"kind"`
+	Role              string       `json:"role"`
+	CurrentVersion    string       `json:"current_version"`
+	SupportedVersions []string     `json:"supported_versions"`
+	Source            string       `json:"source"`
+	EventualOwner     string       `json:"eventual_owner"`
+	NumericSemantics  string       `json:"numeric_semantics"`
+	Sources           []SourceSpec `json:"sources"`
+	Cases             []string     `json:"cases"`
+}
+
+// CaseSpec defines one executable test case in the corpus.
+type CaseSpec struct {
+	ID           string         `json:"id"`
+	Family       string         `json:"family"`
+	Version      string         `json:"version"`
+	Operation    string         `json:"operation"`
+	PacketKey    *PacketKeySpec `json:"packet_key,omitempty"`
+	Input        AssetRef       `json:"input"`
+	InputFormat  string         `json:"input_format"`
+	Expected     AssetRef       `json:"expected"`
+	Encoded      *AssetRef      `json:"encoded,omitempty"`
+	Checkpoints  []string       `json:"checkpoints"`
+	RustConsumer string         `json:"rust_consumer"`
+}
+
+// PacketKeySpec identifies a wire packet direction, state, and ID.
+type PacketKeySpec struct {
+	Direction string `json:"direction"`
+	State     string `json:"state"`
+	ID        uint32 `json:"id"`
+}
+
+// AssetRef identifies an input, expected outcome, or encoded binary file.
+type AssetRef struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
 }
 
 // InventoryError lists every coverage, version, or fixture failure.
@@ -61,29 +114,49 @@ func (err *InventoryError) Error() string {
 
 // LoadInventory reads a frozen inventory JSON file.
 func LoadInventory(path string) (Inventory, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return Inventory{}, fmt.Errorf("runtime-oracle: stat inventory: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return Inventory{}, fmt.Errorf("runtime-oracle: inventory cannot be a symlink: %s", path)
+	}
+	if info.Size() > MaxManifestBytes {
+		return Inventory{}, fmt.Errorf("runtime-oracle: inventory size %d exceeds max %d", info.Size(), MaxManifestBytes)
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return Inventory{}, fmt.Errorf("runtime-oracle: read inventory: %w", err)
 	}
+	if err := validateNoDuplicateKeys(data); err != nil {
+		return Inventory{}, fmt.Errorf("runtime-oracle: inventory duplicate keys: %w", err)
+	}
 	var inventory Inventory
-	if err := json.Unmarshal(data, &inventory); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	if err := dec.Decode(&inventory); err != nil {
 		return Inventory{}, fmt.Errorf("runtime-oracle: decode inventory: %w", err)
 	}
 	if inventory.SchemaVersion != inventorySchemaVersion {
 		return Inventory{}, fmt.Errorf("runtime-oracle: inventory schema_version %d, want %d", inventory.SchemaVersion, inventorySchemaVersion)
 	}
+	if len(inventory.Cases) > MaxCases {
+		return Inventory{}, fmt.Errorf("runtime-oracle: cases count %d exceeds maximum %d", len(inventory.Cases), MaxCases)
+	}
 	return inventory, nil
 }
 
 // Reconcile compares a frozen inventory with families discovered from
-// current registries and source. A missing supported family, version
-// mismatch, extra inventory row, or missing fixture fails acceptance.
+// current registries and source.
 func Reconcile(root string, inventory Inventory, discovered []Family, live Identities) error {
 	var problems []string
 	problems = append(problems, identityProblems(inventory.Identities, live)...)
 
 	if inventory.SchemaVersion != inventorySchemaVersion {
 		problems = append(problems, fmt.Sprintf("inventory schema_version %d, want %d", inventory.SchemaVersion, inventorySchemaVersion))
+	}
+	if !sourceRevPattern.MatchString(inventory.SourceRevision) {
+		problems = append(problems, fmt.Sprintf("invalid source_revision %q (must be 40 lowercase hex digits)", inventory.SourceRevision))
 	}
 
 	inventoryByID := make(map[string]Family, len(inventory.Families))
@@ -137,20 +210,33 @@ func Reconcile(root string, inventory Inventory, discovered []Family, live Ident
 		if strings.TrimSpace(listed.NumericSemantics) == "" {
 			problems = append(problems, "family "+family.ID+" is missing numeric semantics")
 		}
-		if !sameStringSet(listed.Fixtures, family.Fixtures) {
-			problems = append(problems, fmt.Sprintf("family %s fixtures %v do not match code %v", family.ID, listed.Fixtures, family.Fixtures))
-		}
-		if len(listed.Fixtures) == 0 {
-			problems = append(problems, "family "+family.ID+" has no coverage fixture")
+
+		if len(listed.Sources) == 0 {
+			problems = append(problems, "family "+family.ID+" has no provenance sources")
 			continue
 		}
-		for _, fixture := range listed.Fixtures {
-			if fixture == "" {
-				problems = append(problems, "family "+family.ID+" has an empty fixture path")
+		for _, src := range listed.Sources {
+			if err := validateCorpusPath(src.Path); err != nil {
+				problems = append(problems, fmt.Sprintf("family %s source path: %v", family.ID, err))
 				continue
 			}
-			if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(fixture))); err != nil {
-				problems = append(problems, fmt.Sprintf("family %s fixture %s is missing", family.ID, fixture))
+			if !hexSha256Pattern.MatchString(src.SHA256) {
+				problems = append(problems, fmt.Sprintf("family %s source %s has invalid sha256 %s", family.ID, src.Path, src.SHA256))
+			}
+			fullPath := filepath.Join(root, filepath.FromSlash(src.Path))
+			if err := checkNoSymlinks(root, src.Path); err != nil {
+				if os.IsNotExist(err) {
+					problems = append(problems, fmt.Sprintf("family %s source %s is missing", family.ID, src.Path))
+				} else {
+					problems = append(problems, fmt.Sprintf("family %s source %s has symlink: %v", family.ID, src.Path, err))
+				}
+				continue
+			}
+			hash, err := hashFile(fullPath)
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("family %s source %s is missing or unreadable: %v", family.ID, src.Path, err))
+			} else if hash != src.SHA256 {
+				problems = append(problems, fmt.Sprintf("family %s source %s sha256 %s does not match disk %s", family.ID, src.Path, src.SHA256, hash))
 			}
 		}
 	}
@@ -161,12 +247,334 @@ func Reconcile(root string, inventory Inventory, discovered []Family, live Ident
 		}
 	}
 
+	caseByID := make(map[string]CaseSpec, len(inventory.Cases))
+	casesByFamily := make(map[string][]string)
+	for _, c := range inventory.Cases {
+		if c.ID == "" {
+			problems = append(problems, "case has empty id")
+			continue
+		}
+		if _, exists := caseByID[c.ID]; exists {
+			problems = append(problems, "duplicate case "+c.ID)
+			continue
+		}
+		caseByID[c.ID] = c
+		casesByFamily[c.Family] = append(casesByFamily[c.Family], c.ID)
+
+		if err := validateCaseSpec(root, c, inventoryByID); err != nil {
+			problems = append(problems, fmt.Sprintf("case %s: %v", c.ID, err))
+		}
+	}
+
+	for familyID, family := range inventoryByID {
+		expectedCases := casesByFamily[familyID]
+		if !sameStringSet(family.Cases, expectedCases) {
+			problems = append(problems, fmt.Sprintf("family %s cases %v do not match registered cases %v", familyID, family.Cases, expectedCases))
+		}
+	}
+
 	problems = append(problems, requiredKindProblems(inventory.Families)...)
 	if len(problems) == 0 {
 		return nil
 	}
 	sort.Strings(problems)
 	return &InventoryError{Problems: problems}
+}
+
+func validateCaseSpec(root string, c CaseSpec, families map[string]Family) error {
+	fam, ok := families[c.Family]
+	if !ok {
+		return fmt.Errorf("unknown family %s", c.Family)
+	}
+	expectedPrefix := c.Family + "/" + c.Version + "/"
+	if !strings.HasPrefix(c.ID, expectedPrefix) || len(c.ID) <= len(expectedPrefix) {
+		return fmt.Errorf("id %q must match %s<label>", c.ID, expectedPrefix)
+	}
+
+	switch c.Operation {
+	case "decode", "encode", "migrate", "admit", "order", "kernel", "agent-contract":
+	default:
+		return fmt.Errorf("invalid operation %q", c.Operation)
+	}
+
+	if c.InputFormat != "binary" && c.InputFormat != "json" {
+		return fmt.Errorf("invalid input_format %q (must be 'binary' or 'json')", c.InputFormat)
+	}
+	if strings.TrimSpace(c.RustConsumer) == "" {
+		return fmt.Errorf("missing rust_consumer")
+	}
+	if len(c.Checkpoints) == 0 {
+		return fmt.Errorf("empty checkpoints")
+	}
+	for _, cp := range c.Checkpoints {
+		if _, err := strconv.ParseUint(cp, 10, 64); err != nil {
+			return fmt.Errorf("invalid checkpoint %q (must be u64 decimal string)", cp)
+		}
+	}
+
+	// Validate input asset
+	if err := validateAsset(root, c.Input, c.InputFormat == "json", MaxBinaryBytes); err != nil {
+		return fmt.Errorf("input asset %s: %w", c.Input.Path, err)
+	}
+	// Validate expected asset (always JSON)
+	if err := validateAsset(root, c.Expected, true, MaxCaseJSONBytes); err != nil {
+		return fmt.Errorf("expected asset %s: %w", c.Expected.Path, err)
+	}
+	// Validate encoded asset (optional)
+	if c.Encoded != nil {
+		if err := validateAsset(root, *c.Encoded, false, MaxBinaryBytes); err != nil {
+			return fmt.Errorf("encoded asset %s: %w", c.Encoded.Path, err)
+		}
+	}
+
+	_ = fam
+	return nil
+}
+
+func validateAsset(root string, asset AssetRef, isJSON bool, maxBytes int64) error {
+	if err := validateCorpusPath(asset.Path); err != nil {
+		return err
+	}
+	if !hexSha256Pattern.MatchString(asset.SHA256) {
+		return fmt.Errorf("invalid sha256 %s", asset.SHA256)
+	}
+	if isJSON && !strings.HasSuffix(asset.Path, ".json") {
+		return fmt.Errorf("json asset must have .json extension: %s", asset.Path)
+	}
+	if !isJSON && strings.HasSuffix(asset.Path, ".go") {
+		return fmt.Errorf("binary asset cannot be a Go source file: %s", asset.Path)
+	}
+	if err := checkNoSymlinks(root, asset.Path); err != nil {
+		return err
+	}
+	fullPath := filepath.Join(root, filepath.FromSlash(asset.Path))
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		return fmt.Errorf("stat: %w", err)
+	}
+	if info.Size() > maxBytes {
+		return fmt.Errorf("file size %d exceeds budget %d", info.Size(), maxBytes)
+	}
+	hash, err := hashFile(fullPath)
+	if err != nil {
+		return fmt.Errorf("hash: %w", err)
+	}
+	if hash != asset.SHA256 {
+		return fmt.Errorf("sha256 %s does not match disk %s", asset.SHA256, hash)
+	}
+	if isJSON {
+		content, err := os.ReadFile(fullPath)
+		if err != nil {
+			return err
+		}
+		if err := validateNoDuplicateKeys(content); err != nil {
+			return fmt.Errorf("duplicate json keys: %w", err)
+		}
+	}
+	return nil
+}
+
+func validateCorpusPath(p string) error {
+	if p == "" {
+		return fmt.Errorf("path cannot be empty")
+	}
+	if filepath.IsAbs(p) || strings.HasPrefix(p, "/") || strings.HasPrefix(p, "\\") {
+		return fmt.Errorf("path %q cannot be absolute", p)
+	}
+	if strings.Contains(p, "\\") {
+		return fmt.Errorf("path %q must use forward slashes", p)
+	}
+	for _, part := range strings.Split(p, "/") {
+		if part == ".." || part == "." {
+			return fmt.Errorf("path %q cannot contain parent or current directory elements", p)
+		}
+	}
+	return nil
+}
+
+func checkNoSymlinks(root, rel string) error {
+	parts := strings.Split(rel, "/")
+	curr := root
+	for _, part := range parts {
+		curr = filepath.Join(curr, part)
+		info, err := os.Lstat(curr)
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("path component %s is a symlink", curr)
+		}
+	}
+	return nil
+}
+
+func hashFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	return fmt.Sprintf("sha256:%x", sum), nil
+}
+
+// CanonicalManifestBytes serializes manifest JSON with recursively sorted keys,
+// no insignificant whitespace, and one terminal newline.
+func CanonicalManifestBytes(inv Inventory) ([]byte, error) {
+	raw, err := json.Marshal(inv)
+	if err != nil {
+		return nil, err
+	}
+	var generic any
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	if err := dec.Decode(&generic); err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	if err := writeCanonicalJSON(&buf, generic); err != nil {
+		return nil, err
+	}
+	buf.WriteByte('\n')
+	return buf.Bytes(), nil
+}
+
+// CanonicalCorpusDigest computes the schema-2 canonical corpus digest.
+func CanonicalCorpusDigest(inv Inventory) (string, error) {
+	manifestBytes, err := CanonicalManifestBytes(inv)
+	if err != nil {
+		return "", err
+	}
+	hasher := sha256.New()
+	hasher.Write([]byte("mornlea-corpus-v2\n"))
+	hasher.Write(manifestBytes)
+
+	sortedCases := append([]CaseSpec(nil), inv.Cases...)
+	sort.Slice(sortedCases, func(i, j int) bool {
+		return sortedCases[i].ID < sortedCases[j].ID
+	})
+
+	for _, c := range sortedCases {
+		encodedSHA := ""
+		if c.Encoded != nil {
+			encodedSHA = c.Encoded.SHA256
+		}
+		record := fmt.Sprintf("%s\x00%s\x00%s\x00%s\n", c.ID, c.Input.SHA256, c.Expected.SHA256, encodedSHA)
+		hasher.Write([]byte(record))
+	}
+	return fmt.Sprintf("sha256:%x", hasher.Sum(nil)), nil
+}
+
+func writeCanonicalJSON(buf *bytes.Buffer, val any) error {
+	switch v := val.(type) {
+	case map[string]any:
+		buf.WriteByte('{')
+		keys := make([]string, 0, len(v))
+		for k := range v {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for i, k := range keys {
+			if i > 0 {
+				buf.WriteByte(',')
+			}
+			keyBytes, err := json.Marshal(k)
+			if err != nil {
+				return err
+			}
+			buf.Write(keyBytes)
+			buf.WriteByte(':')
+			if err := writeCanonicalJSON(buf, v[k]); err != nil {
+				return err
+			}
+		}
+		buf.WriteByte('}')
+	case []any:
+		buf.WriteByte('[')
+		for i, item := range v {
+			if i > 0 {
+				buf.WriteByte(',')
+			}
+			if err := writeCanonicalJSON(buf, item); err != nil {
+				return err
+			}
+		}
+		buf.WriteByte(']')
+	default:
+		raw, err := json.Marshal(v)
+		if err != nil {
+			return err
+		}
+		buf.Write(raw)
+	}
+	return nil
+}
+
+func validateNoDuplicateKeys(data []byte) error {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	type objFrame struct {
+		isObj     bool
+		expectKey bool
+		keys      map[string]bool
+	}
+	var stack []objFrame
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		switch t := tok.(type) {
+		case json.Delim:
+			switch t {
+			case '{':
+				if len(stack) > 0 && stack[len(stack)-1].isObj && stack[len(stack)-1].expectKey {
+					return fmt.Errorf("unexpected '{' when expecting object key")
+				}
+				stack = append(stack, objFrame{isObj: true, expectKey: true, keys: make(map[string]bool)})
+			case '}':
+				if len(stack) == 0 || !stack[len(stack)-1].isObj {
+					return fmt.Errorf("unexpected '}'")
+				}
+				stack = stack[:len(stack)-1]
+				if len(stack) > 0 && stack[len(stack)-1].isObj {
+					stack[len(stack)-1].expectKey = true
+				}
+			case '[':
+				if len(stack) > 0 && stack[len(stack)-1].isObj && stack[len(stack)-1].expectKey {
+					return fmt.Errorf("unexpected '[' when expecting object key")
+				}
+				stack = append(stack, objFrame{isObj: false})
+			case ']':
+				if len(stack) == 0 || stack[len(stack)-1].isObj {
+					return fmt.Errorf("unexpected ']'")
+				}
+				stack = stack[:len(stack)-1]
+				if len(stack) > 0 && stack[len(stack)-1].isObj {
+					stack[len(stack)-1].expectKey = true
+				}
+			}
+		case string:
+			if len(stack) > 0 && stack[len(stack)-1].isObj {
+				f := &stack[len(stack)-1]
+				if f.expectKey {
+					if f.keys[t] {
+						return fmt.Errorf("duplicate key %q", t)
+					}
+					f.keys[t] = true
+					f.expectKey = false
+				} else {
+					f.expectKey = true
+				}
+			}
+		default:
+			if len(stack) > 0 && stack[len(stack)-1].isObj {
+				stack[len(stack)-1].expectKey = true
+			}
+		}
+	}
+	return nil
 }
 
 func identityProblems(got, live Identities) []string {
@@ -227,7 +635,7 @@ func requiredKindProblems(families []Family) []string {
 		roles[family.Role] = true
 	}
 	var problems []string
-	for _, kind := range []string{"protocol", "save", "kernel", "agent"} {
+	for _, kind := range []string{"domain", "protocol", "save", "kernel", "agent"} {
 		if !seen[kind] {
 			problems = append(problems, "inventory is missing kind "+kind)
 		}

@@ -5,6 +5,9 @@
 use std::fs;
 use std::path::PathBuf;
 
+#[path = "../../../tests/runtime_corpus.rs"]
+mod runtime_corpus;
+
 const FORBIDDEN_PRODUCTION_DEPS: &[&str] = &[
     "mornlea_storage",
     "mornlea_engine",
@@ -4877,4 +4880,35 @@ fn chunk_snapshot_rejects_malformed_logical_payload() {
             "accepted truncated logical snapshot at {length}"
         );
     }
+}
+
+#[test]
+fn corpus_frame() {
+    let case = runtime_corpus::load_case("protocol.frame/45/valid");
+    assert_eq!(case.family, "protocol.frame");
+    let (packet_id, payload, used) = mornlea_protocol::read_frame(&case.input)
+        .expect("read_frame should succeed on valid framing case");
+    assert_eq!(used, case.input.len());
+    let actual = serde_json::json!({
+        "category": "frame",
+        "fields": {
+            "packet_id": packet_id,
+            "payload": format!("{:02x}", payload[0]),
+            "payload_len": payload.len()
+        },
+        "kind": "ok"
+    });
+    runtime_corpus::assert_normalized(&case, actual);
+
+    // Negative mutation check: mutating the decoded ID must fail assertion.
+    let mutated = serde_json::json!({
+        "category": "frame",
+        "fields": {
+            "packet_id": packet_id + 1,
+            "payload": format!("{:02x}", payload[0]),
+            "payload_len": payload.len()
+        },
+        "kind": "ok"
+    });
+    assert_ne!(case.normalized, mutated);
 }

@@ -14,3 +14,7 @@ mornlea_domain = { path = "../mornlea_domain" }
 # decode-only crate. This crate is the only place that compression dependency
 # is allowed.
 zstd = "0.13"
+
+[dev-dependencies]
+serde_json = "=1.0.151"
+sha2 = "0.10"
