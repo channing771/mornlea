@@ -264,6 +264,16 @@ and `domain_does_not_depend_on_protocol`).
   (`collect_water_round_trip_preserves_golden_bytes`,
   `collect_water_rejects_non_finite_and_malformed_payload`).
 
+## Place water (`src/place_water.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 17 payload is a little-endian `u64` sequence followed by
+  two little-endian `f32` look angles, with no slot byte. The server
+  validates that the held bucket is water-filled and owns the resulting
+  block write. A zero sequence is legal. Non-finite yaw/pitch are
+  `InvalidFloat`; truncated payloads and trailing bytes fail before
+  publication (`place_water_round_trip_preserves_golden_bytes`,
+  `place_water_rejects_non_finite_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash
