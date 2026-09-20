@@ -13,6 +13,7 @@ mod client_hello;
 mod error;
 mod frame;
 mod handshake_reject;
+mod login_reject;
 mod login_start;
 mod login_success;
 mod player_id;
@@ -23,6 +24,10 @@ pub use client_hello::ClientHello;
 pub use error::ProtocolError;
 pub use frame::{MAX_FRAME_BYTES, read_frame, write_frame};
 pub use handshake_reject::{HANDSHAKE_VERSION_MISMATCH, HandshakeReject};
+pub use login_reject::{
+    LOGIN_ALREADY_ONLINE, LOGIN_INTERNAL_ERROR, LOGIN_INVALID_IDENTITY, LOGIN_PLAYER_DATA_CORRUPT,
+    LOGIN_PROTOCOL_VIOLATION, LOGIN_SERVER_FULL, LOGIN_STORE_UNAVAILABLE, LoginReject,
+};
 pub use login_start::{LOGIN_VIEW_DISTANCE_MAX, LOGIN_VIEW_DISTANCE_MIN, LoginStart};
 pub use login_success::LoginSuccess;
 pub use player_id::PlayerId;

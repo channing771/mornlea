@@ -129,3 +129,12 @@
 - Discovered tests (`-- --list`): 22.
 - PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
 - Architecture skill: no change.
+
+## 2026-09-20 — 2.3 protocol.server.LoginReject
+
+- Baseline: `4bb12a65 docs(openspec): record login success codec evidence`.
+- Existing unrelated work: deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded.
+- Ruling: login packet ID 1 payload is a reject code `1..=7` plus a length-prefixed UTF-8 message (max 256 bytes/runes). Unknown codes are `InvalidEnum`; invalid UTF-8 and oversized declared lengths are `InvalidString`. Golden bytes match Go `02026e6f` and empty-message `0100`..`0700`. Remaining protocol families stay unchecked in `tasks.md`.
+- Discovered tests (`-- --list`): 25.
+- PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
+- Architecture skill: no change.

@@ -85,6 +85,17 @@ and `domain_does_not_depend_on_protocol`).
   (`login_success_round_trip_preserves_golden_bytes`,
   `login_success_rejects_invalid_identity_and_malformed_payload`).
 
+## Login reject (`src/login_reject.rs`, `tests/runtime_contract.rs`)
+
+- Login packet ID 1 payload is a one-byte reject code and a length-prefixed
+  UTF-8 message (max 256 bytes/runes). Published codes are the closed
+  interval `1..=7` copied from Go `LoginRejectCode`. Unknown codes are
+  `InvalidEnum`; invalid UTF-8 and oversized declared lengths are
+  `InvalidString`; trailing bytes fail before publication
+  (`login_reject_round_trip_preserves_golden_bytes`,
+  `login_reject_round_trip_preserves_empty_message_codes`,
+  `login_reject_rejects_unknown_code_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash
