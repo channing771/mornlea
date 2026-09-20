@@ -867,6 +867,34 @@ fn move_crafting_stack_rejects_invalid_slots_and_malformed_payload() {
     );
 }
 
+#[test]
+fn close_container_round_trip_preserves_golden_bytes() {
+    let close = mornlea_protocol::CloseContainer::new(5);
+    let payload = close.encode();
+    assert_eq!(payload, [0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    assert_eq!(mornlea_protocol::CloseContainer::PACKET_ID, 10);
+    let decoded = mornlea_protocol::CloseContainer::decode(&payload).expect("decode");
+    assert_eq!(decoded, close);
+    assert_eq!(decoded.sequence, 5);
+}
+
+#[test]
+fn close_container_rejects_malformed_payload_and_accepts_zero_sequence() {
+    assert!(mornlea_protocol::CloseContainer::decode(&[0x05]).is_err());
+    let mut trailing = vec![0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::CloseContainer::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    let zero = mornlea_protocol::CloseContainer::new(0);
+    assert_eq!(zero.sequence, 0);
+    assert_eq!(
+        mornlea_protocol::CloseContainer::decode(&zero.encode()).expect("decode zero"),
+        zero
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

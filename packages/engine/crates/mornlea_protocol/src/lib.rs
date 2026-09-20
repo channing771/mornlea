@@ -10,6 +10,7 @@
 
 mod bytes;
 mod client_hello;
+mod close_container;
 mod command_rejected;
 mod disconnect;
 mod drop_selected_item;
@@ -32,6 +33,7 @@ mod take_crafting_output;
 mod varint;
 
 pub use client_hello::ClientHello;
+pub use close_container::CloseContainer;
 pub use command_rejected::{
     CommandRejected, REJECT_BUCKET_MISMATCH, REJECT_CHUNK_NOT_READY, REJECT_CONTAINER_CAPACITY,
     REJECT_DROP_CAPACITY, REJECT_HOTBAR_FULL, REJECT_INVALID_BLOCK, REJECT_INVALID_INPUT,

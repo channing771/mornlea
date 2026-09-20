@@ -190,6 +190,14 @@ and `domain_does_not_depend_on_protocol`).
   before publication (`move_crafting_stack_round_trip_preserves_golden_bytes`,
   `move_crafting_stack_rejects_invalid_slots_and_malformed_payload`).
 
+## Close container (`src/close_container.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 10 payload is a little-endian `u64` sequence. Zero
+  sequences are legal. The viewed container identity stays server-owned.
+  Truncated payloads and trailing bytes fail before publication
+  (`close_container_round_trip_preserves_golden_bytes`,
+  `close_container_rejects_malformed_payload_and_accepts_zero_sequence`).
+
 ## Focused Verification
 
 ```bash

@@ -238,3 +238,13 @@
 - PASS: `rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml -p mornlea_protocol -- --check`
 - PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
 - Architecture skill: no change.
+
+## 2026-09-20 — 2.3 protocol.client.CloseContainer
+
+- Baseline: `b77aa791 feat(engine): port move crafting stack codec`.
+- Existing unrelated work: deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded.
+- Ruling: play packet ID 10 payload is little-endian `u64` sequence. Zero sequences are legal. The viewed container identity stays server-owned. Golden bytes match Go furnace fixture sequence 5 (`0500000000000000`). Remaining protocol families stay unchecked in `tasks.md`.
+- Discovered tests (`-- --list`): 51.
+- PASS: `rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml -p mornlea_protocol -- --check`
+- PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
+- Architecture skill: no change.
