@@ -243,6 +243,16 @@ and `domain_does_not_depend_on_protocol`).
   publication (`till_soil_round_trip_preserves_golden_bytes`,
   `till_soil_rejects_non_finite_and_malformed_payload`).
 
+## Bone meal (`src/bone_meal.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 14 payload is a little-endian `u64` sequence followed by
+  two little-endian `f32` look angles, with no slot byte. The server
+  validates that the ray-cast target is a fertilizable plant block and
+  owns the resulting block write. A zero sequence is legal. Non-finite
+  yaw/pitch are `InvalidFloat`; truncated payloads and trailing bytes
+  fail before publication (`bone_meal_round_trip_preserves_golden_bytes`,
+  `bone_meal_rejects_non_finite_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash
