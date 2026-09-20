@@ -509,3 +509,12 @@ and `domain_does_not_depend_on_protocol`).
   beyond its own size (`crafting_state_round_trip_preserves_golden_bytes`,
   `crafting_state_rejects_unknown_size_residue_and_malformed_payload`).
 
+## Inventory state (`src/inventory_state.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 10 payload is the selected hotbar byte, the fixed nine
+  hotbar slots, and the fixed `BACKPACK_SLOTS` (`27`) backpack slots, which
+  makes the payload stride `INVENTORY_STATE_WIRE_BYTES` (`181`). The selected
+  index is a domain `HotbarSlot`; every slot is a validated item stack
+  (`inventory_state_round_trip_preserves_golden_bytes`,
+  `inventory_state_rejects_unknown_selected_and_malformed_payload`).
+

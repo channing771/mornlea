@@ -2619,3 +2619,65 @@ fn crafting_state_rejects_unknown_size_residue_and_malformed_payload() {
     );
 }
 
+#[test]
+fn inventory_state_round_trip_preserves_golden_bytes() {
+    let mut hotbar = [mornlea_protocol::ItemStack::EMPTY; mornlea_protocol::HOTBAR_SLOTS];
+    hotbar[0] = mornlea_protocol::ItemStack::new(1, 5, 0).expect("stone");
+    hotbar[4] = mornlea_protocol::ItemStack::new(3, 64, 0).expect("grass");
+    let mut backpack = [mornlea_protocol::ItemStack::EMPTY; mornlea_protocol::BACKPACK_SLOTS];
+    backpack[0] = mornlea_protocol::ItemStack::new(2, 1, 0).expect("dirt");
+    backpack[mornlea_protocol::BACKPACK_SLOTS - 1] =
+        mornlea_protocol::ItemStack::new(1, 9, 0).expect("stone");
+    let state = mornlea_protocol::InventoryState::new(2, hotbar, backpack).expect("state");
+    let payload = state.encode();
+    assert_eq!(mornlea_protocol::InventoryState::PACKET_ID, 10);
+    assert_eq!(payload.len(), mornlea_protocol::INVENTORY_STATE_WIRE_BYTES);
+    assert_eq!(payload[0], 2);
+    assert_eq!(&payload[1..6], &[0x01, 0x00, 0x05, 0x00, 0x00]);
+    assert_eq!(&payload[21..26], &[0x03, 0x00, 0x40, 0x00, 0x00]);
+    let backpack_start = 1 + mornlea_protocol::HOTBAR_SLOTS * 5;
+    assert_eq!(
+        &payload[backpack_start..backpack_start + 5],
+        &[0x02, 0x00, 0x01, 0x00, 0x00]
+    );
+    let tail = payload.len() - 5;
+    assert_eq!(&payload[tail..], &[0x01, 0x00, 0x09, 0x00, 0x00]);
+    assert_eq!(
+        mornlea_protocol::InventoryState::decode(&payload).expect("decode"),
+        state
+    );
+}
+
+#[test]
+fn inventory_state_rejects_unknown_selected_and_malformed_payload() {
+    let empty_hotbar = [mornlea_protocol::ItemStack::EMPTY; mornlea_protocol::HOTBAR_SLOTS];
+    let empty_backpack = [mornlea_protocol::ItemStack::EMPTY; mornlea_protocol::BACKPACK_SLOTS];
+    assert_eq!(
+        mornlea_protocol::InventoryState::new(9, empty_hotbar, empty_backpack),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert!(mornlea_protocol::InventoryState::new(8, empty_hotbar, empty_backpack).is_ok());
+    let state =
+        mornlea_protocol::InventoryState::new(0, empty_hotbar, empty_backpack).expect("state");
+    let payload = state.encode();
+    assert!(mornlea_protocol::InventoryState::decode(&payload[..payload.len() - 1]).is_err());
+    let mut trailing = payload.clone();
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::InventoryState::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    // An unregistered item number in any slot is rejected.
+    // Item 66 is the exclusive upper bound of registered item numbers.
+    assert!(mornlea_protocol::ItemStack::new(66, 1, 0).is_err());
+    let mut hotbar = empty_hotbar;
+    hotbar[3] = mornlea_protocol::ItemStack::new(65, 1, 0).expect("item");
+    let encoded = mornlea_protocol::InventoryState::new(0, hotbar, empty_backpack)
+        .expect("state")
+        .encode();
+    let slot = 1 + 3 * 5;
+    let mut corrupt = encoded.clone();
+    corrupt[slot] = 0xff;
+    corrupt[slot + 1] = 0xff;
+    assert!(mornlea_protocol::InventoryState::decode(&corrupt).is_err());
+}
