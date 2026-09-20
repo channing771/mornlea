@@ -44,6 +44,13 @@ impl ByteEncoder {
         self.data.extend_from_slice(value);
     }
 
+    pub(crate) fn u64(&mut self, value: u64) {
+        if self.err.is_some() {
+            return;
+        }
+        self.data.extend_from_slice(&value.to_le_bytes());
+    }
+
     pub(crate) fn string(&mut self, value: &str, max_bytes: usize) {
         if self.err.is_some() {
             return;
@@ -108,6 +115,10 @@ impl<'a> ByteDecoder<'a> {
         let mut value = [0u8; N];
         value.copy_from_slice(slice);
         Ok(value)
+    }
+
+    pub(crate) fn u64(&mut self) -> Result<u64, ProtocolError> {
+        Ok(u64::from_le_bytes(self.bytes()?))
     }
 
     pub(crate) fn string(

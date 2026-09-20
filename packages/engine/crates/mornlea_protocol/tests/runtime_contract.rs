@@ -320,6 +320,45 @@ fn login_start_rejects_invalid_identity_name_range_and_malformed_payload() {
     );
 }
 
+#[test]
+fn login_success_round_trip_preserves_golden_bytes() {
+    let id = mornlea_protocol::PlayerId::new(GOLDEN_PLAYER_ID).expect("uuid v4");
+    let success = mornlea_protocol::LoginSuccess::new(id, 0x1122_3344_5566_7788);
+    let payload = success.encode();
+    assert_eq!(
+        payload,
+        [
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xff, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,
+        ]
+    );
+    assert_eq!(mornlea_protocol::LoginSuccess::PACKET_ID, 0);
+    let decoded = mornlea_protocol::LoginSuccess::decode(&payload).expect("decode");
+    assert_eq!(decoded, success);
+    assert_eq!(decoded.player_id, id);
+    assert_eq!(decoded.world_seed, 0x1122_3344_5566_7788);
+}
+
+#[test]
+fn login_success_rejects_invalid_identity_and_malformed_payload() {
+    let zero = mornlea_protocol::LoginSuccess::decode(&[0; 24]);
+    assert_eq!(zero, Err(mornlea_protocol::ProtocolError::InvalidIdentity));
+    assert!(mornlea_protocol::LoginSuccess::decode(&[0; 15]).is_err());
+    let mut trailing = GOLDEN_PLAYER_ID.to_vec();
+    trailing.extend_from_slice(&[0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0x00]);
+    assert_eq!(
+        mornlea_protocol::LoginSuccess::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    let id = mornlea_protocol::PlayerId::new(GOLDEN_PLAYER_ID).expect("uuid v4");
+    let zero_seed = mornlea_protocol::LoginSuccess::new(id, 0);
+    assert_eq!(zero_seed.world_seed, 0);
+    assert_eq!(
+        mornlea_protocol::LoginSuccess::decode(&zero_seed.encode()).expect("decode zero seed"),
+        zero_seed
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

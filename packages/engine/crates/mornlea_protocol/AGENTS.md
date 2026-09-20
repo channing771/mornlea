@@ -77,6 +77,14 @@ and `domain_does_not_depend_on_protocol`).
   (`login_start_round_trip_preserves_golden_bytes`,
   `login_start_rejects_invalid_identity_name_range_and_malformed_payload`).
 
+## Login success (`src/login_success.rs`, `tests/runtime_contract.rs`)
+
+- Login packet ID 0 payload is a 16-byte UUIDv4 followed by a little-endian
+  `u64` world seed. Zero seeds are legal. Non-v4 identities, truncated
+  payloads, and trailing bytes fail before publication
+  (`login_success_round_trip_preserves_golden_bytes`,
+  `login_success_rejects_invalid_identity_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash
