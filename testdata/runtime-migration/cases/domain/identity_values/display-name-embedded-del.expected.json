@@ -1,0 +1,8 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "name": "Alice",
+    "rule": "display_name.control"
+  }
+}

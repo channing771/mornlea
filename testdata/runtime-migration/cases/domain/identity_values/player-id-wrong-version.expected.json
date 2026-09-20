@@ -1,0 +1,8 @@
+{
+  "kind": "error",
+  "category": "invalid-identity",
+  "fields": {
+    "rule": "player_id.version_v4",
+    "uuid": "00112233445536778899aabbccddeeff"
+  }
+}

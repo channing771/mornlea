@@ -28,15 +28,33 @@ type GoOperation func(CaseSpec, []byte) (Outcome, []byte, error)
 // instead of silently dropping that coverage.
 var goOperations = map[string]GoOperation{
 	"decode": runFrameDecode,
-	"admit":  runDomainValues,
+	"admit":  runDomainAdmit,
 }
 
 // goFamilyOperations binds every family this package can execute to the
 // operation that executes it. A manifest naming an unsupported family is a hard
 // error, so a newly added corpus case cannot pass by being ignored.
 var goFamilyOperations = map[string]string{
-	"protocol.frame": "decode",
-	"domain.values":  "admit",
+	"protocol.frame":         "decode",
+	"domain.values":          "admit",
+	"domain.identity_values": "admit",
+}
+
+// runDomainAdmit dispatches one admission case to the producer that owns its
+// family. The domain families share one admission operation because each
+// case asks a Go authority whether one value is admitted, so the operation name
+// registered in `goFamilyOperations` cannot select the family; the family
+// itself does, and a family with no producer is a hard error rather than a
+// silently skipped case.
+func runDomainAdmit(c CaseSpec, input []byte) (Outcome, []byte, error) {
+	switch c.Family {
+	case domainValuesFamily:
+		return runDomainValues(c, input)
+	case domainIdentityFamily:
+		return runDomainIdentityValues(c, input)
+	default:
+		return Outcome{}, nil, fmt.Errorf("runtime-oracle: case %s names admission family %q, which has no Go producer", c.ID, c.Family)
+	}
 }
 
 // producedCheckpoint pairs one produced outcome with the checkpoint that

@@ -1,0 +1,8 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "name": " Alice",
+    "rule": "display_name.canonical_trim"
+  }
+}

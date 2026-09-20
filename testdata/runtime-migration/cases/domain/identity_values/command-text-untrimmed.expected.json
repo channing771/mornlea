@@ -1,0 +1,8 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "rule": "command_text.untrimmed",
+    "text": " mine "
+  }
+}
