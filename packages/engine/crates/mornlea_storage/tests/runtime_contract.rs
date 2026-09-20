@@ -5,8 +5,7 @@
 use mornlea_storage::{
     BANK_A_START_SECTOR, BANK_B_START_SECTOR, BANK_SIZE, COMPANION_CURRENT_SCHEMA,
     COMPANION_ENVELOPE_VERSION, COMPANION_MAX_FIFO_ENTRIES, COMPANION_MAX_FILE_LENGTH,
-    COMPANION_MAX_PLAN_STEPS, COMPANION_MAX_STORED, COMPANION_MAX_SUMMARY_BYTES,
-    COMPANION_MAX_TASK_COMMAND_BYTES, COMPANION_PLAN_STEP_FOLLOW, COMPANION_PLAN_STEP_GO_TO,
+    COMPANION_MAX_STORED, COMPANION_PLAN_STEP_FOLLOW, COMPANION_PLAN_STEP_GO_TO,
     COMPANION_PLAN_STEP_MINE, COMPANION_PLAN_STEP_PLACE, COMPANION_SCHEMA_V1, COMPANION_SCHEMA_V2,
     COMPANION_SCHEMA_V3, COMPANION_SCHEMA_V4, COMPANION_TASK_FAIL_NONE, COMPANION_TASK_RUNNING,
     ChunkKey, CompanionBody, CompanionSave, DATA_START_SECTOR, HOSTILE_CURRENT_SCHEMA,
@@ -14,12 +13,14 @@ use mornlea_storage::{
     HostileMobsSave, Inventory, ItemStack, MAX_COMPRESSED_CHUNK, MAX_HOSTILE_MOBS,
     MAX_PASSIVE_MOBS, METADATA_CURRENT_VERSION, METADATA_V1, METADATA_V2, METADATA_V3, METADATA_V4,
     METADATA_V5, Metadata, MetadataChunkPos, PASSIVE_CURRENT_SCHEMA, PASSIVE_ENVELOPE_VERSION,
-    PASSIVE_MAX_FILE_LENGTH, PassiveMob, PassiveMobsSave, PlanStep, PlayerId, REGION_SLOTS,
+    PASSIVE_MAX_FILE_LENGTH, PLAYER_CURRENT_SCHEMA, PLAYER_ENVELOPE_LENGTH, PLAYER_MAX_PAYLOAD,
+    PassiveMob, PassiveMobsSave, PlanStep, PlayerId, PlayerLocation, PlayerSave, REGION_SLOTS,
     RegionBank, RegionEntry, RegionKey, SECTOR_SIZE, StorageError, StoredCompanionLifecycle,
-    StoredCompanionQueue, StoredCompanionTask, crc32c, crc32c_join, decode_companions,
-    decode_hostile_mobs, decode_passive_mobs, decode_region_bank, decode_superblock,
-    decode_world_metadata, encode_companions, encode_hostile_mobs, encode_passive_mobs,
-    encode_region_bank, encode_superblock, encode_world_metadata, region_for, select_region_bank,
+    StoredCompanionQueue, StoredCompanionTask, StoredPlayer, crc32c, crc32c_join,
+    decode_companions, decode_hostile_mobs, decode_passive_mobs, decode_player, decode_region_bank,
+    decode_superblock, decode_world_metadata, encode_companions, encode_hostile_mobs,
+    encode_passive_mobs, encode_player, encode_region_bank, encode_superblock,
+    encode_world_metadata, item_max_durability, region_for, select_region_bank,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -1879,6 +1880,407 @@ fn companion_golden_save() -> CompanionSave {
         lifecycles: vec![nonzero, zero, inactive],
         queues: companion_v3_queues(),
     }
+}
+#[test]
+fn player_v9_fixture_round_trips_byte_for_byte() {
+    let golden = read_go_fixture("server/storage/player/testdata/player-v9.bin");
+    assert_eq!(u32_at(&golden, 8), PLAYER_CURRENT_SCHEMA);
+    assert_eq!(golden.len(), PLAYER_ENVELOPE_LENGTH + 273);
+    let before = golden.clone();
+    let decoded = decode_player(player_id(), &golden).expect("decode committed player v9 fixture");
+    assert_eq!(golden, before, "decoding must not rewrite the input bytes");
+    assert_eq!(decoded.revision, 19);
+    assert!(!decoded.needs_rewrite);
+    let save = stored_to_save(&decoded);
+    let reencoded = encode_player(&save).expect("re-encode committed player v9 fixture");
+    assert_eq!(
+        reencoded, golden,
+        "the Rust encoder must reproduce the committed Go bytes exactly"
+    );
+    let round = decode_player(player_id(), &reencoded).expect("decode re-encoded player");
+    assert_eq!(round, decoded);
+}
+
+#[test]
+fn player_current_schema_round_trip_preserves_fields() {
+    let mut save = fixture_player_save(7);
+    save.respawn_present = true;
+    save.respawn_position = [7.0, 65.0, -9.0];
+    save.respawn_dimension = 0;
+    save.armor = armor_fixture_stacks();
+    let encoded = encode_player(&save).expect("encode player");
+    assert_eq!(u32_at(&encoded, 8), PLAYER_CURRENT_SCHEMA);
+    let got = decode_player(save.player_id, &encoded).expect("decode player");
+    assert_eq!(got.display_name, "Chen");
+    assert_eq!(got.current, save.current);
+    assert_eq!(got.safe, save.safe);
+    assert_eq!(got.yaw, 1.25);
+    assert_eq!(got.pitch, -0.5);
+    assert_eq!(got.inventory, save.inventory);
+    assert_eq!(got.health, 13);
+    assert_eq!(got.hunger, 12);
+    assert_eq!(got.saturation_milli, 2500);
+    assert_eq!(got.exhaustion_milli, 1750);
+    assert!(got.respawn_present);
+    assert_eq!(got.respawn_position, save.respawn_position);
+    assert_eq!(got.respawn_dimension, 0);
+    assert_eq!(got.armor, save.armor);
+    assert!(!got.needs_rewrite);
+    // The decoded safe location must not alias the save payload.
+    assert!(save.safe.is_some());
+}
+
+#[test]
+fn player_without_respawn_encodes_independently_of_residue() {
+    let save = fixture_player_save(7);
+    let encoded = encode_player(&save).expect("encode player");
+    let got = decode_player(save.player_id, &encoded).expect("decode player");
+    assert!(!got.respawn_present);
+    assert_eq!(got.respawn_position, [0.0; 3]);
+    assert_eq!(got.respawn_dimension, 0);
+
+    let mut residue = save.clone();
+    residue.respawn_position = [1.0, 2.0, 3.0];
+    residue.respawn_dimension = 0;
+    let residue_encoded = encode_player(&residue).expect("encode residue player");
+    assert_eq!(
+        encoded, residue_encoded,
+        "present=0 must encode deterministically regardless of residue"
+    );
+}
+
+#[test]
+fn player_armor_section_is_the_fixed_twenty_byte_tail() {
+    let mut save = fixture_player_save(9);
+    save.respawn_present = true;
+    save.respawn_position = [7.0, 65.0, -9.0];
+    save.respawn_dimension = 0;
+    save.armor = armor_fixture_stacks();
+    let encoded = encode_player(&save).expect("encode armored player");
+
+    let mut unequipped = save.clone();
+    unequipped.armor = [ItemStack::default(); 4];
+    let plain = encode_player(&unequipped).expect("encode unequipped player");
+    assert_eq!(encoded.len(), plain.len());
+    assert_eq!(
+        &encoded[PLAYER_ENVELOPE_LENGTH..encoded.len() - 20],
+        &plain[PLAYER_ENVELOPE_LENGTH..plain.len() - 20],
+        "the armor section must sit at the fixed end of the payload"
+    );
+    assert_ne!(
+        &encoded[encoded.len() - 20..],
+        &plain[plain.len() - 20..],
+        "the armor fixture must carry nonzero bytes for the tail assertion"
+    );
+}
+
+#[test]
+fn player_depths_locations_round_trip() {
+    let mut save = fixture_player_save(7);
+    save.current.dimension = 1;
+    if let Some(safe) = &mut save.safe {
+        safe.dimension = 1;
+    }
+    save.respawn_present = true;
+    save.respawn_position = [7.0, 65.0, -9.0];
+    save.respawn_dimension = 1;
+    let encoded = encode_player(&save).expect("encode depths player");
+    let got = decode_player(save.player_id, &encoded).expect("decode depths player");
+    assert_eq!(got.current.dimension, 1);
+    assert_eq!(got.safe.as_ref().map(|safe| safe.dimension), Some(1));
+    assert_eq!(got.respawn_dimension, 1);
+}
+
+#[test]
+fn player_legacy_fixtures_decode_without_repair() {
+    for schema in 1..=8u32 {
+        let golden = read_go_fixture(&format!(
+            "server/storage/player/testdata/player-v{schema}.bin"
+        ));
+        assert_eq!(u32_at(&golden, 8), schema, "player-v{schema}.bin schema");
+        let before = golden.clone();
+        let decoded = decode_player(player_id(), &golden)
+            .unwrap_or_else(|err| panic!("player-v{schema}.bin: {err}"));
+        assert_eq!(
+            golden, before,
+            "player-v{schema}.bin: decode must not rewrite the input bytes"
+        );
+        assert_eq!(decoded.revision, 19, "player-v{schema}.bin revision");
+        assert!(
+            decoded.needs_rewrite,
+            "player-v{schema}.bin: a legacy schema must be marked for rewrite"
+        );
+    }
+}
+
+#[test]
+fn player_legacy_migrations_normalize_documented_defaults() {
+    let v1 = read_go_fixture("server/storage/player/testdata/player-v1.bin");
+    let decoded = decode_player(player_id(), &v1).expect("decode player v1");
+    assert_eq!(decoded.inventory.hotbar.selected, 0);
+    assert!(
+        decoded
+            .inventory
+            .hotbar
+            .slots
+            .iter()
+            .all(|slot| *slot == ItemStack::default()),
+        "v1 has no item payload and must migrate to an empty hotbar"
+    );
+
+    // v6 shares the v5 payload layout and gains only the item registry, so the
+    // v6 migration step fills the hunger defaults.
+    let v6 = read_go_fixture("server/storage/player/testdata/player-v6.bin");
+    let decoded = decode_player(player_id(), &v6).expect("decode player v6");
+    // Health is persisted from v5, so the v6 fixture keeps its own value; only
+    // the hunger state is a migration default.
+    assert_eq!(decoded.hunger, 20);
+    assert_eq!(decoded.saturation_milli, 5000);
+    assert_eq!(decoded.exhaustion_milli, 0);
+
+    // v8 still lacks the armor section, which migrates to four empty slots;
+    // the respawn point it carries survives untouched.
+    let v8 = read_go_fixture("server/storage/player/testdata/player-v8.bin");
+    let decoded = decode_player(player_id(), &v8).expect("decode player v8");
+    assert_eq!(decoded.armor, [ItemStack::default(); 4]);
+
+    // v7 has no personal respawn point, which migrates to "no respawn".
+    let v7 = read_go_fixture("server/storage/player/testdata/player-v7.bin");
+    let decoded = decode_player(player_id(), &v7).expect("decode player v7");
+    assert!(!decoded.respawn_present);
+    assert_eq!(decoded.respawn_position, [0.0; 3]);
+    assert_eq!(decoded.respawn_dimension, 0);
+    assert_eq!(decoded.hunger, 12);
+    assert_eq!(decoded.saturation_milli, 2500);
+    assert_eq!(decoded.exhaustion_milli, 1750);
+
+    // v3 stacks carry no durability, so tools migrate to full durability.
+    let v3 = read_go_fixture("server/storage/player/testdata/player-v3.bin");
+    let decoded = decode_player(player_id(), &v3).expect("decode player v3");
+    assert!(
+        decoded
+            .inventory
+            .hotbar
+            .slots
+            .iter()
+            .chain(decoded.inventory.backpack.iter())
+            .all(|slot| slot.item == 0
+                || slot.durability != 0
+                || item_max_durability(slot.item).is_none())
+    );
+}
+
+#[test]
+fn player_decode_rejects_future_versions() {
+    let encoded = encode_player(&fixture_player_save(7)).expect("encode player");
+
+    let mut future_schema = encoded.clone();
+    future_schema[8..12].copy_from_slice(&(PLAYER_CURRENT_SCHEMA + 1).to_le_bytes());
+    assert_eq!(
+        decode_player(player_id(), &future_schema).unwrap_err(),
+        StorageError::FutureVersion("player schema: 10".to_owned()),
+    );
+
+    let mut future_envelope = encoded.clone();
+    future_envelope[4..8].copy_from_slice(&2u32.to_le_bytes());
+    assert_eq!(
+        decode_player(player_id(), &future_envelope).unwrap_err(),
+        StorageError::FutureVersion("player envelope version: 2".to_owned()),
+    );
+}
+
+#[test]
+fn player_decode_rejects_corrupt_and_partial_bytes() {
+    let encoded = encode_player(&fixture_player_save(7)).expect("encode player");
+
+    for length in [0, 4, 43, 44, 45, encoded.len() - 1] {
+        assert!(
+            decode_player(player_id(), &encoded[..length]).is_err(),
+            "truncated player file of {length} bytes must be rejected"
+        );
+    }
+
+    let mut trailing = encoded.clone();
+    trailing.push(0);
+    assert!(decode_player(player_id(), &trailing).is_err());
+
+    let mut broken_crc = encoded.clone();
+    let last = broken_crc.len() - 1;
+    broken_crc[last] ^= 0xff;
+    assert!(decode_player(player_id(), &broken_crc).is_err());
+
+    // A payload longer than the declared envelope length is rejected before
+    // any allocation.
+    let mut oversized_payload = encoded.clone();
+    oversized_payload[36..40].copy_from_slice(&(PLAYER_MAX_PAYLOAD as u32 + 1).to_le_bytes());
+    assert!(decode_player(player_id(), &oversized_payload).is_err());
+
+    // A payload that is one byte shorter than the inventory requires is a
+    // layout mismatch, not a record.
+    let mut short_inventory = encoded.clone();
+    let declared = u32::from_le_bytes(short_inventory[36..40].try_into().expect("four bytes"));
+    short_inventory[36..40].copy_from_slice(&(declared - 1).to_le_bytes());
+    assert!(decode_player(player_id(), &short_inventory).is_err());
+
+    let mut bad_safe_flag = encoded.clone();
+    let safe_flag_offset = PLAYER_ENVELOPE_LENGTH + payload_prefix_length(&encoded);
+    bad_safe_flag[safe_flag_offset] = 2;
+    reseal_player(&mut bad_safe_flag);
+    assert!(decode_player(player_id(), &bad_safe_flag).is_err());
+}
+
+#[test]
+fn player_decode_rejects_foreign_and_invalid_identities() {
+    let encoded = encode_player(&fixture_player_save(7)).expect("encode player");
+    let mut foreign = player_id().to_bytes();
+    foreign[15] = 0x00;
+    assert!(decode_player(PlayerId::from_bytes(foreign), &encoded).is_err());
+    assert!(decode_player(PlayerId::default(), &encoded).is_err());
+}
+
+#[test]
+fn player_encode_rejects_invalid_saves() {
+    let mut zero_revision = fixture_player_save(0);
+    assert!(encode_player(&zero_revision).is_err());
+    zero_revision.revision = 7;
+    zero_revision.display_name = "   ".to_owned();
+    assert!(encode_player(&zero_revision).is_err());
+    zero_revision.display_name = "Chen".to_owned();
+    zero_revision.health = 21;
+    assert!(encode_player(&zero_revision).is_err());
+    zero_revision.health = 20;
+    zero_revision.current.dimension = 2;
+    assert!(encode_player(&zero_revision).is_err());
+    zero_revision.current.dimension = 0;
+    zero_revision.pitch = 2.0;
+    assert!(encode_player(&zero_revision).is_err());
+}
+
+fn payload_prefix_length(encoded: &[u8]) -> usize {
+    // Name length prefix plus the name bytes, ending at the yaw field.
+    let name_length = u32::from_le_bytes(
+        encoded[PLAYER_ENVELOPE_LENGTH..PLAYER_ENVELOPE_LENGTH + 4]
+            .try_into()
+            .expect("four bytes"),
+    ) as usize;
+    4 + name_length + 4 + 12 + 4 + 4
+}
+
+/// Recomputes the MCPL envelope checksum in place so a semantic mutation is
+/// rejected by the record validator rather than the CRC gate.
+fn reseal_player(bytes: &mut [u8]) {
+    let payload_length = u32::from_le_bytes(bytes[36..40].try_into().expect("four bytes")) as usize;
+    let checksum = crc32c_join(&[&bytes[8..40], &bytes[PLAYER_ENVELOPE_LENGTH..]]);
+    let _ = payload_length;
+    bytes[40..44].copy_from_slice(&checksum.to_le_bytes());
+}
+
+fn player_id() -> PlayerId {
+    PlayerId::from_bytes([
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+        0xff,
+    ])
+}
+
+fn stored_to_save(stored: &StoredPlayer) -> PlayerSave {
+    PlayerSave {
+        player_id: stored.player_id,
+        revision: stored.revision,
+        display_name: stored.display_name.clone(),
+        current: stored.current.clone(),
+        yaw: stored.yaw,
+        pitch: stored.pitch,
+        safe: stored.safe.clone(),
+        inventory: stored.inventory,
+        health: stored.health,
+        hunger: stored.hunger,
+        saturation_milli: stored.saturation_milli,
+        exhaustion_milli: stored.exhaustion_milli,
+        respawn_present: stored.respawn_present,
+        respawn_position: stored.respawn_position,
+        respawn_dimension: stored.respawn_dimension,
+        armor: stored.armor,
+    }
+}
+
+fn fixture_player_save(revision: u64) -> PlayerSave {
+    let mut inventory = Inventory::default();
+    inventory.hotbar.selected = 3;
+    inventory.hotbar.slots[0] = ItemStack {
+        item: 1,
+        count: 64,
+        durability: 0,
+    };
+    inventory.hotbar.slots[4] = ItemStack {
+        item: 10,
+        count: 1,
+        durability: 131,
+    };
+    inventory.hotbar.slots[6] = ItemStack {
+        item: 3,
+        count: 1,
+        durability: 0,
+    };
+    inventory.backpack[0] = ItemStack {
+        item: 2,
+        count: 12,
+        durability: 0,
+    };
+    inventory.backpack[7] = ItemStack {
+        item: 11,
+        count: 1,
+        durability: 250,
+    };
+    inventory.backpack[26] = ItemStack {
+        item: 1,
+        count: 5,
+        durability: 0,
+    };
+    PlayerSave {
+        player_id: player_id(),
+        revision,
+        display_name: "Chen".to_owned(),
+        current: PlayerLocation {
+            dimension: 0,
+            position: [2.5, 70.0, -3.5],
+        },
+        yaw: 1.25,
+        pitch: -0.5,
+        safe: Some(PlayerLocation {
+            dimension: 0,
+            position: [1.5, 65.0, -2.5],
+        }),
+        inventory,
+        health: 13,
+        hunger: 12,
+        saturation_milli: 2500,
+        exhaustion_milli: 1750,
+        respawn_present: false,
+        respawn_position: [0.0; 3],
+        respawn_dimension: 0,
+        armor: [ItemStack::default(); 4],
+    }
+}
+
+fn armor_fixture_stacks() -> [ItemStack; 4] {
+    [
+        ItemStack {
+            item: 58,
+            count: 1,
+            durability: 165,
+        },
+        ItemStack {
+            item: 59,
+            count: 1,
+            durability: 0,
+        },
+        ItemStack {
+            item: 60,
+            count: 0,
+            durability: 165,
+        },
+        ItemStack::default(),
+    ]
 }
 fn read_go_fixture(relative: &str) -> Vec<u8> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

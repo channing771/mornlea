@@ -14,6 +14,7 @@ mod hostile;
 mod identity;
 mod items;
 mod passive;
+mod player;
 mod region;
 mod world_metadata;
 
@@ -60,6 +61,12 @@ pub use passive::{
     CURRENT_SCHEMA as PASSIVE_CURRENT_SCHEMA, ENVELOPE_VERSION as PASSIVE_ENVELOPE_VERSION,
     MAX_FILE_LENGTH as PASSIVE_MAX_FILE_LENGTH, MAX_PASSIVE_MOBS, PassiveMob, PassiveMobs,
     PassiveMobsSave, decode as decode_passive_mobs, encode as encode_passive_mobs,
+};
+pub use player::{
+    CURRENT_SCHEMA as PLAYER_CURRENT_SCHEMA, ENVELOPE_LENGTH as PLAYER_ENVELOPE_LENGTH,
+    MAX_PAYLOAD as PLAYER_MAX_PAYLOAD, OLDEST_SCHEMA as PLAYER_OLDEST_SCHEMA, PlayerLocation,
+    PlayerSave, StoredPlayer, decode as decode_player, encode as encode_player,
+    schema_readable as player_schema_readable,
 };
 pub use region::{
     BANK_A_START_SECTOR, BANK_B_START_SECTOR, BANK_SIZE, Bank as RegionBank,

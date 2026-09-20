@@ -75,17 +75,6 @@ impl<'a> ByteReader<'a> {
         value.copy_from_slice(slice);
         Ok(value)
     }
-
-    /// Reads a length-prefixed UTF-8 string whose byte length is validated
-    /// against the remaining bytes before anything is allocated.
-    pub(crate) fn string(&mut self, field: &str) -> Result<String, String> {
-        let length = self.u32()? as usize;
-        if length > self.remaining() {
-            return Err(format!("{field} length {length} exceeds remaining bytes"));
-        }
-        let bytes = self.take(length)?;
-        String::from_utf8(bytes.to_vec()).map_err(|_| format!("{field} is not valid UTF-8"))
-    }
 }
 
 /// Append-only little-endian writer used to build canonical save bytes.
