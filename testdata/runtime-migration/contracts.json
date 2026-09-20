@@ -32,15 +32,100 @@
           "sha256": "sha256:fcee776de48c054f51c54aa33d5dc2405dd2d8791db422d645a8800f03975df4"
         },
         {
+          "path": "packages/contracts/companion-agent/http-v1/schema.json",
+          "sha256": "sha256:ebac9cb27c34ed667a83f747902a5f3190d996186bf5cbcf141914ef187e6366"
+        },
+        {
           "path": "packages/contracts/companion-agent/http-v1/golden/valid.json",
           "sha256": "sha256:51431edaa821e1631615d1ac394262f1d06e4e2291a32e4c971a1ddc3cea4d23"
         },
         {
           "path": "packages/contracts/companion-agent/http-v1/golden/invalid.json",
           "sha256": "sha256:d9218c4b40e977c877b6efc88a36fcee13d21b8cec07ccdee129288870ce6521"
+        },
+        {
+          "path": "packages/contracts/companion-agent/mcp-v1/schema.json",
+          "sha256": "sha256:9498f1f7aba9268d7ce7179b3f518c5652d17138f46cdd1b3d91f54fdad0e4a0"
         }
       ],
-      "cases": null
+      "cases": [
+        "agent.http/v1/acquire-must-not-carry-a-lease-1",
+        "agent.http/v1/active-memory-reconcile-carries-mirror-0",
+        "agent.http/v1/active-reconcile-cannot-carry-tombstone-1",
+        "agent.http/v1/active-reconcile-response-returns-runtime-memory-0",
+        "agent.http/v1/cancel-carries-run-identity-but-no-companion-identity-0",
+        "agent.http/v1/cancel-must-not-carry-companion-identity-1",
+        "agent.http/v1/cancel-response-echoes-run-identity-0",
+        "agent.http/v1/completed-terminal-fact-rejects-failure-reason-1",
+        "agent.http/v1/dialogue-line-accepts-exact-256-byte-utf-8-boundary-0",
+        "agent.http/v1/dialogue-line-cannot-be-null-1",
+        "agent.http/v1/dialogue-line-is-bounded-1",
+        "agent.http/v1/dialogue-line-rejects-leading-unicode-whitespace-1",
+        "agent.http/v1/dialogue-line-rejects-nul-1",
+        "agent.http/v1/dialogue-line-rejects-unicode-control-1",
+        "agent.http/v1/dialogue-line-uses-utf-8-byte-rather-than-code-point-limit-1",
+        "agent.http/v1/dialogue-requires-memory-epoch-1",
+        "agent.http/v1/error-must-not-echo-domain-identity-1",
+        "agent.http/v1/failed-dialogue-fact-carries-stable-reason-0",
+        "agent.http/v1/failed-terminal-fact-requires-a-stable-reason-1",
+        "agent.http/v1/first-arrival-dialogue-fact-has-no-payload-0",
+        "agent.http/v1/go-to-progress-dialogue-fact-is-nonterminal-0",
+        "agent.http/v1/health-probe-must-not-carry-application-identity-1",
+        "agent.http/v1/heartbeat-carries-lease-only-0",
+        "agent.http/v1/heartbeat-echoes-lease-0",
+        "agent.http/v1/heartbeat-requires-a-lease-1",
+        "agent.http/v1/identity-must-be-canonical-lowercase-uuidv4-1",
+        "agent.http/v1/idle-dialogue-fact-is-nonterminal-0",
+        "agent.http/v1/inactive-memory-reconcile-carries-tombstone-only-0",
+        "agent.http/v1/inactive-reconcile-cannot-carry-active-mirror-1",
+        "agent.http/v1/inactive-reconcile-response-returns-tombstone-only-0",
+        "agent.http/v1/instruction-uses-utf-8-byte-limit-1",
+        "agent.http/v1/live-probe-has-no-application-identity-0",
+        "agent.http/v1/mcp-endpoint-rejects-a-hostname-1",
+        "agent.http/v1/mcp-endpoint-rejects-a-public-ip-1",
+        "agent.http/v1/mcp-endpoint-rejects-fragment-1",
+        "agent.http/v1/mcp-endpoint-rejects-https-1",
+        "agent.http/v1/mcp-endpoint-rejects-query-1",
+        "agent.http/v1/mcp-endpoint-rejects-userinfo-1",
+        "agent.http/v1/mcp-endpoint-requires-the-exact-path-1",
+        "agent.http/v1/memory-commit-carries-cas-identity-0",
+        "agent.http/v1/memory-commit-requires-operation-1",
+        "agent.http/v1/memory-commit-response-echoes-operation-and-revision-0",
+        "agent.http/v1/memory-delete-advances-epoch-0",
+        "agent.http/v1/memory-delete-requires-nonzero-new-epoch-1",
+        "agent.http/v1/memory-delete-response-returns-current-epoch-0",
+        "agent.http/v1/memory-summary-accepts-exact-2048-byte-utf-8-boundary-0",
+        "agent.http/v1/memory-summary-rejects-nul-1",
+        "agent.http/v1/memory-summary-uses-utf-8-byte-limit-1",
+        "agent.http/v1/namespace-acquire-omits-lease-0",
+        "agent.http/v1/namespace-acquire-returns-fencing-lease-0",
+        "agent.http/v1/nonterminal-dialogue-response-has-no-proposal-0",
+        "agent.http/v1/nonterminal-dialogue-run-0",
+        "agent.http/v1/nonterminal-response-forbids-memory-proposal-1",
+        "agent.http/v1/persona-accepts-exact-4096-byte-utf-8-boundary-0",
+        "agent.http/v1/persona-rejects-nul-1",
+        "agent.http/v1/persona-uses-utf-8-byte-limit-1",
+        "agent.http/v1/place-progress-dialogue-fact-is-nonterminal-0",
+        "agent.http/v1/planner-mcp-endpoint-accepts-bracketed-ipv6-loopback-0",
+        "agent.http/v1/planner-request-rejects-unknown-fields-1",
+        "agent.http/v1/planner-requires-generation-1",
+        "agent.http/v1/planner-response-echoes-all-run-and-snapshot-identity-0",
+        "agent.http/v1/planner-response-rejects-an-explicit-null-plan-1",
+        "agent.http/v1/planner-run-carries-snapshot-identity-0",
+        "agent.http/v1/pre-auth-error-has-null-request-identity-0",
+        "agent.http/v1/ready-probe-has-no-application-identity-0",
+        "agent.http/v1/release-echoes-lease-0",
+        "agent.http/v1/start-dialogue-fact-has-no-payload-0",
+        "agent.http/v1/stopped-dialogue-fact-has-no-failure-reason-0",
+        "agent.http/v1/terminal-dialogue-request-carries-completed-fact-0",
+        "agent.http/v1/terminal-dialogue-response-proposes-memory-without-committing-0",
+        "agent.http/v1/terminal-request-rejects-idle-fact-1",
+        "agent.http/v1/terminal-response-requires-memory-proposal-1",
+        "agent.http/v1/timed-out-dialogue-fact-has-no-failure-reason-0",
+        "agent.http/v1/unsupported-contract-version-is-invalid-for-v1-schema-1",
+        "agent.http/v1/validated-error-echoes-request-identity-only-0",
+        "agent.http/v1/zero-revision-cannot-carry-an-operation-1"
+      ]
     },
     {
       "id": "agent.mcp",
@@ -59,15 +144,102 @@
           "sha256": "sha256:2b4b822c099e43fd7eb3486692ff68fc43d684dc5c890bcde6c65d4fab79eeaa"
         },
         {
+          "path": "packages/contracts/companion-agent/mcp-v1/schema.json",
+          "sha256": "sha256:9498f1f7aba9268d7ce7179b3f518c5652d17138f46cdd1b3d91f54fdad0e4a0"
+        },
+        {
           "path": "packages/contracts/companion-agent/mcp-v1/golden/valid.json",
           "sha256": "sha256:5cec42c9335eec73a90ead41163b5489d752208295b9549b1fadec4f1d3100d4"
         },
         {
           "path": "packages/contracts/companion-agent/mcp-v1/golden/invalid.json",
           "sha256": "sha256:1817914d3b784f4a5b1394393a60a13136a4df89b5f00e984ba70b837a237417"
+        },
+        {
+          "path": "packages/contracts/companion-agent/mcp-v1/golden/mine-validation.json",
+          "sha256": "sha256:8f4ac695e628c1c3a12e43d2d84064946749fd5d7fe09c648dcf0af01f315035"
         }
       ],
-      "cases": null
+      "cases": [
+        "agent.mcp/v1/affordance-input-exposes-no-runtime-identity-2",
+        "agent.mcp/v1/affordance-step-kinds-are-fixed-and-ordered-3",
+        "agent.mcp/v1/affordance-visible-summary-rejects-coordinate-disorder-3",
+        "agent.mcp/v1/affordances-include-fixed-steps-and-mine-classifications-2",
+        "agent.mcp/v1/block-without-a-drop-remains-rejected-4",
+        "agent.mcp/v1/bounded-tool-name-rejects-blank-unicode-whitespace-3",
+        "agent.mcp/v1/bounded-tool-name-rejects-empty-string-3",
+        "agent.mcp/v1/bounded-tool-name-rejects-escaped-nul-3",
+        "agent.mcp/v1/bounded-tool-name-rejects-invalid-utf-8-bytes-3",
+        "agent.mcp/v1/bounded-tool-name-rejects-unicode-control-3",
+        "agent.mcp/v1/bounded-tool-name-uses-utf-8-byte-limit-3",
+        "agent.mcp/v1/chest-container-batch-remains-accepted-4",
+        "agent.mcp/v1/farmland-remains-rejected-despite-a-registered-drop-4",
+        "agent.mcp/v1/fixed-context-input-exposes-no-runtime-identity-2",
+        "agent.mcp/v1/follow-must-be-the-final-step-3",
+        "agent.mcp/v1/furnace-container-batch-remains-accepted-4",
+        "agent.mcp/v1/immature-crop-remains-rejected-despite-a-registered-drop-4",
+        "agent.mcp/v1/inventory-count-follows-authoritative-stack-limit-3",
+        "agent.mcp/v1/inventory-limit-is-bounded-3",
+        "agent.mcp/v1/inventory-offset-is-bounded-3",
+        "agent.mcp/v1/inventory-query-is-paged-2",
+        "agent.mcp/v1/inventory-result-contains-bounded-occupied-slots-2",
+        "agent.mcp/v1/ordinary-single-drop-remains-accepted-4",
+        "agent.mcp/v1/plan-rejects-unknown-step-kind-3",
+        "agent.mcp/v1/plan-rejects-unknown-top-level-field-3",
+        "agent.mcp/v1/plan-steps-cannot-be-empty-3",
+        "agent.mcp/v1/plan-summary-accepts-exact-512-byte-utf-8-boundary-2",
+        "agent.mcp/v1/plan-summary-rejects-unicode-control-3",
+        "agent.mcp/v1/plan-summary-uses-utf-8-byte-limit-3",
+        "agent.mcp/v1/planning-context-cannot-expose-persona-3",
+        "agent.mcp/v1/planning-context-follows-authoritative-chunk-revision-limit-3",
+        "agent.mcp/v1/planning-context-is-a-bounded-projection-2",
+        "agent.mcp/v1/planning-instruction-accepts-exact-1024-byte-utf-8-boundary-2",
+        "agent.mcp/v1/planning-instruction-uses-utf-8-byte-limit-3",
+        "agent.mcp/v1/runtime-snapshot-identity-is-not-model-visible-input-3",
+        "agent.mcp/v1/step-rejects-explicit-null-exclusive-field-3",
+        "agent.mcp/v1/task-status-accepts-exact-96-byte-utf-8-boundary-2",
+        "agent.mcp/v1/task-status-uses-utf-8-byte-limit-3",
+        "agent.mcp/v1/terrain-domain-failure-rejects-partial-success-3",
+        "agent.mcp/v1/terrain-domain-failure-rejects-unknown-field-3",
+        "agent.mcp/v1/terrain-domain-failure-rejects-wrong-code-3",
+        "agent.mcp/v1/terrain-domain-failure-requires-code-3",
+        "agent.mcp/v1/terrain-outside-projection-is-a-normal-domain-failure-2",
+        "agent.mcp/v1/terrain-query-cannot-be-empty-3",
+        "agent.mcp/v1/terrain-query-preserves-input-order-2",
+        "agent.mcp/v1/terrain-query-y-is-a-world-block-coordinate-3",
+        "agent.mcp/v1/terrain-result-must-match-input-positions-and-order-3",
+        "agent.mcp/v1/terrain-result-preserves-input-order-2",
+        "agent.mcp/v1/terrain-success-rejects-non-array-collection-3",
+        "agent.mcp/v1/terrain-success-rejects-null-collection-3",
+        "agent.mcp/v1/torch-remains-rejected-despite-a-registered-drop-4",
+        "agent.mcp/v1/undelivered-multi-drop-crop-remains-rejected-4",
+        "agent.mcp/v1/unknown-visible-block-is-a-normal-domain-failure-2",
+        "agent.mcp/v1/validator-accepted-result-echoes-digest-and-canonical-plan-2",
+        "agent.mcp/v1/validator-accepted-result-rejects-failure-fields-3",
+        "agent.mcp/v1/validator-accepts-the-complete-delivered-step-set-2",
+        "agent.mcp/v1/validator-failure-code-is-stable-3",
+        "agent.mcp/v1/validator-hint-accepts-exact-1-byte-boundary-2",
+        "agent.mcp/v1/validator-hint-accepts-exact-256-byte-utf-8-boundary-2",
+        "agent.mcp/v1/validator-hint-is-bounded-3",
+        "agent.mcp/v1/validator-hint-rejects-edge-whitespace-3",
+        "agent.mcp/v1/validator-hint-rejects-empty-string-3",
+        "agent.mcp/v1/validator-hint-rejects-invalid-utf-8-bytes-3",
+        "agent.mcp/v1/validator-hint-rejects-nul-3",
+        "agent.mcp/v1/validator-hint-rejects-unicode-control-3",
+        "agent.mcp/v1/validator-hint-uses-utf-8-byte-limit-3",
+        "agent.mcp/v1/validator-rejected-result-contains-one-stable-code-and-bounded-hint-2",
+        "agent.mcp/v1/visible-block-domain-failure-rejects-non-string-hint-3",
+        "agent.mcp/v1/visible-block-domain-failure-rejects-null-hint-3",
+        "agent.mcp/v1/visible-block-domain-failure-rejects-success-fields-3",
+        "agent.mcp/v1/visible-block-domain-failure-rejects-unknown-field-3",
+        "agent.mcp/v1/visible-block-domain-failure-rejects-wrong-code-3",
+        "agent.mcp/v1/visible-block-domain-failure-requires-hint-3",
+        "agent.mcp/v1/visible-block-names-must-be-unique-3",
+        "agent.mcp/v1/visible-block-query-cannot-be-empty-3",
+        "agent.mcp/v1/visible-block-query-is-bounded-2",
+        "agent.mcp/v1/visible-block-result-is-coordinate-ordered-2",
+        "agent.mcp/v1/visible-block-result-rejects-coordinate-disorder-3"
+      ]
     },
     {
       "id": "domain.event",
@@ -2081,6 +2253,2932 @@
         "0"
       ],
       "rust_consumer": "corpus_frame"
+    },
+    {
+      "id": "agent.http/v1/acquire-must-not-carry-a-lease-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/acquire-must-not-carry-a-lease-1.input.json",
+        "sha256": "sha256:ae1855186d06df4146083b9e47496ab5d6664508165e20b05bf6af94c9198752"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/acquire-must-not-carry-a-lease-1.expected.json",
+        "sha256": "sha256:94023d12ce0fe130e89f3f597d88238efcda4791b65cec3db713b41fcf20219f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/active-memory-reconcile-carries-mirror-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/active-memory-reconcile-carries-mirror-0.input.json",
+        "sha256": "sha256:961fd241fb64066c07931ca35bc7209beb26e1f93d46afc61734e2825d82e11a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/active-memory-reconcile-carries-mirror-0.expected.json",
+        "sha256": "sha256:71d14f623d026131f3475fcaa8acdfa95a592481768064e61f00e7d5d71a4e46"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/active-reconcile-cannot-carry-tombstone-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/active-reconcile-cannot-carry-tombstone-1.input.json",
+        "sha256": "sha256:488a7083e6a2bc83f8a673b1edf46c298943c2d27bd29b4eb63f89544ecffecf"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/active-reconcile-cannot-carry-tombstone-1.expected.json",
+        "sha256": "sha256:5a62cdc5ef75331d299bf68dc82273ccef5d365582935c62407cc735037bc740"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/active-reconcile-response-returns-runtime-memory-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/active-reconcile-response-returns-runtime-memory-0.input.json",
+        "sha256": "sha256:1b2a0f35dcda40a5a8e36bfb477cb398e0d5f0118ed8916198200c7a66706683"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/active-reconcile-response-returns-runtime-memory-0.expected.json",
+        "sha256": "sha256:27e846c7dfbd9d6e269efdf71ca313884e4b2cd19c02e8c003dc56da3af760ab"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/cancel-carries-run-identity-but-no-companion-identity-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/cancel-carries-run-identity-but-no-companion-identity-0.input.json",
+        "sha256": "sha256:fac56ea566c1ba5544533b784c3fa60cbcbb384646869d4300477e33d884410e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/cancel-carries-run-identity-but-no-companion-identity-0.expected.json",
+        "sha256": "sha256:58ab0207e02c9bc8fed5bb2816c67f3fcfecfcebadc56f477f756c80d90f4784"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/cancel-must-not-carry-companion-identity-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/cancel-must-not-carry-companion-identity-1.input.json",
+        "sha256": "sha256:e31806dc5fb7c2f0edf694956339e2ddf80c4353b42b354017452ad86a28aff9"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/cancel-must-not-carry-companion-identity-1.expected.json",
+        "sha256": "sha256:4dc3b90aa9c286c5ee8027569e74b9c80f50565ea7f968a29b13a0f32f9b4f4b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/cancel-response-echoes-run-identity-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/cancel-response-echoes-run-identity-0.input.json",
+        "sha256": "sha256:b99eac8fdd237d6f12b3f59ac1c177e7f3466bbf175f830d388393ccce8572c0"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/cancel-response-echoes-run-identity-0.expected.json",
+        "sha256": "sha256:6944953aa9650c88ee178b0b076dd753da24e81badc46dfd9e64eb2b65b6235b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/completed-terminal-fact-rejects-failure-reason-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/completed-terminal-fact-rejects-failure-reason-1.input.json",
+        "sha256": "sha256:ba761d7c6211caedec07350ecd8317ecb69e6993742c1331943d95b76b1c133d"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/completed-terminal-fact-rejects-failure-reason-1.expected.json",
+        "sha256": "sha256:61a839e8ea38073f9a3131b24e9ef09641eb7ab580ece956953d7b033eb290eb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/dialogue-line-accepts-exact-256-byte-utf-8-boundary-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/dialogue-line-accepts-exact-256-byte-utf-8-boundary-0.input.json",
+        "sha256": "sha256:3afc9a6a9f7a2ea46f3c52e6a0b6e49ea3c39545637a3d83817544f1fb5a05c0"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/dialogue-line-accepts-exact-256-byte-utf-8-boundary-0.expected.json",
+        "sha256": "sha256:cad19593389132deda3602f684254aaf8cca27d14cdef9ee7b8f325276060c83"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/dialogue-line-cannot-be-null-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/dialogue-line-cannot-be-null-1.input.json",
+        "sha256": "sha256:5e557fc830be8d5dbb245b6fb6fe66f9a20e739e749f33b1f1268db2a20cfb1f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/dialogue-line-cannot-be-null-1.expected.json",
+        "sha256": "sha256:f03fe76a1a890d50a325e41c059575c4a69d4efabf3c833024826c3da394bf39"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/dialogue-line-is-bounded-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/dialogue-line-is-bounded-1.input.json",
+        "sha256": "sha256:836906b7baa3e8c1d00b67aefcd6c3e07f4b679784defc9b682e897ae6094569"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/dialogue-line-is-bounded-1.expected.json",
+        "sha256": "sha256:3f30c4824d7fd47706993065bdadfcdbb1f240973e4571d671b86b388e4980ee"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/dialogue-line-rejects-leading-unicode-whitespace-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/dialogue-line-rejects-leading-unicode-whitespace-1.input.json",
+        "sha256": "sha256:3047690e399e8c2ac97caf18d5a0d644da9195bead2d4ef7b5bffd749ce9f779"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/dialogue-line-rejects-leading-unicode-whitespace-1.expected.json",
+        "sha256": "sha256:f00130dc5989a004f808e5e7f0204b6cb63ec7a7a2c416053e725cb683a303e7"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/dialogue-line-rejects-nul-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/dialogue-line-rejects-nul-1.input.json",
+        "sha256": "sha256:5b7271555bdab72498b89f81a63348bf5c61bfb45b19350f56b3b1b4fae8e39b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/dialogue-line-rejects-nul-1.expected.json",
+        "sha256": "sha256:28b83f160d4eb3419f42e5a937a8169146ca1fec90c8fc1317b87115d967ee8d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/dialogue-line-rejects-unicode-control-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/dialogue-line-rejects-unicode-control-1.input.json",
+        "sha256": "sha256:82e0d508433f85f3e1a1ba2b4f9b2f78f4f39e94652602d2c4a2a900d05332df"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/dialogue-line-rejects-unicode-control-1.expected.json",
+        "sha256": "sha256:49898f7329eb40a37568727e3c1514cb066ea6b660b23ee9301b0ef483417521"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/dialogue-line-uses-utf-8-byte-rather-than-code-point-limit-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/dialogue-line-uses-utf-8-byte-rather-than-code-point-limit-1.input.json",
+        "sha256": "sha256:19597328d121c62bb7969e4aac68b645b8d36634197338e2a503a6c53ec5b617"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/dialogue-line-uses-utf-8-byte-rather-than-code-point-limit-1.expected.json",
+        "sha256": "sha256:cd407dc37a576e5ce2903b0f840ebd3ae57d56d4a724d74c4666719a80e8d22c"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/dialogue-requires-memory-epoch-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/dialogue-requires-memory-epoch-1.input.json",
+        "sha256": "sha256:454e16597d1a12d7fa5cfb818197a451f7abc41dea86ea68f8c67eed4db4e6d6"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/dialogue-requires-memory-epoch-1.expected.json",
+        "sha256": "sha256:ef3b51b901c4f11d6a20c13494ad3621f05452cf30648bfd13c1111b246bae39"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/error-must-not-echo-domain-identity-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/error-must-not-echo-domain-identity-1.input.json",
+        "sha256": "sha256:f0372c6f71c0d4e43e7a7a5df4648b27d9462e0f6b973244dcaf3c13f26b7def"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/error-must-not-echo-domain-identity-1.expected.json",
+        "sha256": "sha256:561c58b9625ffdfa49b5418f9fe5812e26dbd3697bfdb97bb7fe841391a9457f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/failed-dialogue-fact-carries-stable-reason-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/failed-dialogue-fact-carries-stable-reason-0.input.json",
+        "sha256": "sha256:65f714f245a2b26d8e63a90e598681d5645fb99a656612e12f72ec808aba5631"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/failed-dialogue-fact-carries-stable-reason-0.expected.json",
+        "sha256": "sha256:42e80e711d1bd9c937a9d7957a1e798bc349f75fc19523e8340487893db5efd0"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/failed-terminal-fact-requires-a-stable-reason-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/failed-terminal-fact-requires-a-stable-reason-1.input.json",
+        "sha256": "sha256:6aa1905894e065d2942312aa38d621136158b5552ebd652573a2fe26bc2f3982"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/failed-terminal-fact-requires-a-stable-reason-1.expected.json",
+        "sha256": "sha256:011ec93c892a3022f7c504f5820ada3144ac3a6f324aded4989594d1bf700094"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/first-arrival-dialogue-fact-has-no-payload-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/first-arrival-dialogue-fact-has-no-payload-0.input.json",
+        "sha256": "sha256:8492ae3ca45fccac416fce34e7457ade1179286f41ea76e0e14fca47909e20f6"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/first-arrival-dialogue-fact-has-no-payload-0.expected.json",
+        "sha256": "sha256:5c41fa47addfc0cacf9c95f1951121c19f5e300ccddabae14376f86902eb7ceb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/go-to-progress-dialogue-fact-is-nonterminal-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/go-to-progress-dialogue-fact-is-nonterminal-0.input.json",
+        "sha256": "sha256:d4a5b197a4aa6fd68d769a461d98780665f4141cdaabb2fa35c2dfaf4576b6c8"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/go-to-progress-dialogue-fact-is-nonterminal-0.expected.json",
+        "sha256": "sha256:d86bde42cfcc48dd3f5eae76287570c5437bf4cbe501c5b13ab3b6d1829038c3"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/health-probe-must-not-carry-application-identity-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/health-probe-must-not-carry-application-identity-1.input.json",
+        "sha256": "sha256:31fb55a6a9284d6ac700687484f33bed81c051b89c0ac37163a4ad43c53f0ce0"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/health-probe-must-not-carry-application-identity-1.expected.json",
+        "sha256": "sha256:2b0ee87a7f97b060831d3509352680e78046ceb700924f4f136773e615a0a196"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/heartbeat-carries-lease-only-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/heartbeat-carries-lease-only-0.input.json",
+        "sha256": "sha256:350dc03aba4c778143b6227dab24694a98ffe99abeb1477551670a98a99473b3"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/heartbeat-carries-lease-only-0.expected.json",
+        "sha256": "sha256:61a7f5d1d828bb1d38a1f8d2d002cd5b0a737f3750dd94538ef855b188eb5e2d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/heartbeat-echoes-lease-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/heartbeat-echoes-lease-0.input.json",
+        "sha256": "sha256:6d18aa997451c9ef3fd5e7a00c58acf327a5a913cc07d10434cbb971ff5048b7"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/heartbeat-echoes-lease-0.expected.json",
+        "sha256": "sha256:02c259b0ef67a6b19a107926a9be4667f21c69f27df82d8d89824dfc249e4ae4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/heartbeat-requires-a-lease-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/heartbeat-requires-a-lease-1.input.json",
+        "sha256": "sha256:6870d77a1d718b173767910d5a3466260ecb5bc7c786449b6e426a4e84642911"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/heartbeat-requires-a-lease-1.expected.json",
+        "sha256": "sha256:22836ac85521d60d8b8b32f19da1f17d6a21e7fec83a4ee48d0ea53cab6bfc56"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/identity-must-be-canonical-lowercase-uuidv4-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/identity-must-be-canonical-lowercase-uuidv4-1.input.json",
+        "sha256": "sha256:824908f7ceaf5536ae94772af18dc1da38fccaaa8e6b433ffb0a15809290cc66"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/identity-must-be-canonical-lowercase-uuidv4-1.expected.json",
+        "sha256": "sha256:5027975b3e93ccebf3a4c329a6b892387812cd3a53295160e85a97e7f8075579"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/idle-dialogue-fact-is-nonterminal-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/idle-dialogue-fact-is-nonterminal-0.input.json",
+        "sha256": "sha256:a225aed5890e0b0a5d2068bc444311e834f1cf3d395d8945c49ade5fc8b5d48f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/idle-dialogue-fact-is-nonterminal-0.expected.json",
+        "sha256": "sha256:5c41fa47addfc0cacf9c95f1951121c19f5e300ccddabae14376f86902eb7ceb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/inactive-memory-reconcile-carries-tombstone-only-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/inactive-memory-reconcile-carries-tombstone-only-0.input.json",
+        "sha256": "sha256:d21bb74cc640848827cb147c0bdde9cedc0a8352b60aecc2d51fd34ed99d8080"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/inactive-memory-reconcile-carries-tombstone-only-0.expected.json",
+        "sha256": "sha256:71d14f623d026131f3475fcaa8acdfa95a592481768064e61f00e7d5d71a4e46"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/inactive-reconcile-cannot-carry-active-mirror-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/inactive-reconcile-cannot-carry-active-mirror-1.input.json",
+        "sha256": "sha256:ee9a265c4b744af572d75472c588cb293e6555394cf8ce5ab65d195f4a088131"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/inactive-reconcile-cannot-carry-active-mirror-1.expected.json",
+        "sha256": "sha256:25096e109828c44d85b1e75383f8cbb79c383bef1889cd0f556a6a5ca503b33c"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/inactive-reconcile-response-returns-tombstone-only-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/inactive-reconcile-response-returns-tombstone-only-0.input.json",
+        "sha256": "sha256:25af7d3fc956bfe08bd99c15822b5f09b49d3c6fb9818ae2ab7de9677b93c356"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/inactive-reconcile-response-returns-tombstone-only-0.expected.json",
+        "sha256": "sha256:27e846c7dfbd9d6e269efdf71ca313884e4b2cd19c02e8c003dc56da3af760ab"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/instruction-uses-utf-8-byte-limit-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/instruction-uses-utf-8-byte-limit-1.input.json",
+        "sha256": "sha256:3befd3ffe8a7ce16a96d78918aedd7413147afa90d23bb50bc89b499756a53a5"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/instruction-uses-utf-8-byte-limit-1.expected.json",
+        "sha256": "sha256:e9ee6808d747359ea3be801919767b344e9162dcdd8b2e0c8c42634d8009d48b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/live-probe-has-no-application-identity-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/live-probe-has-no-application-identity-0.input.json",
+        "sha256": "sha256:8e5ecba70bf82d2ead4ab91875098e57748179f7e297b3e5e79be68e96c41c6c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/live-probe-has-no-application-identity-0.expected.json",
+        "sha256": "sha256:828da3cb981183ba113997d526de35bf3fefaaf37357019c7bd7ecb994b148be"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/mcp-endpoint-rejects-a-hostname-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/mcp-endpoint-rejects-a-hostname-1.input.json",
+        "sha256": "sha256:4eea714abaca34a587842fdbee7e0212c399c1aacab41efbc82129fcb50c308b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/mcp-endpoint-rejects-a-hostname-1.expected.json",
+        "sha256": "sha256:76c461c5fdcebd4b0db7bbd606b874e4353bfb62e91974bbb9f37d858ed06f54"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/mcp-endpoint-rejects-a-public-ip-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/mcp-endpoint-rejects-a-public-ip-1.input.json",
+        "sha256": "sha256:0e3c6b9d635bba2be5827e91e87fcfaa06d36788fd5e7bc697b90c570ba00d38"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/mcp-endpoint-rejects-a-public-ip-1.expected.json",
+        "sha256": "sha256:76c461c5fdcebd4b0db7bbd606b874e4353bfb62e91974bbb9f37d858ed06f54"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/mcp-endpoint-rejects-fragment-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/mcp-endpoint-rejects-fragment-1.input.json",
+        "sha256": "sha256:9ccd5b87d2113ae3d429f4060368d7d7ef72c3390823ae64def6c544b402f4f4"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/mcp-endpoint-rejects-fragment-1.expected.json",
+        "sha256": "sha256:4c7a278a038f6e820c0472da83be8654056bf78a902708b0c3b90867f5bedb91"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/mcp-endpoint-rejects-https-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/mcp-endpoint-rejects-https-1.input.json",
+        "sha256": "sha256:245a4bcc1367a3503eb448f78e0fd461e94b0da206fffabe06b84d1f2c32c4da"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/mcp-endpoint-rejects-https-1.expected.json",
+        "sha256": "sha256:9d62da608c8d1bebdef1a6ed02a5d98edcc9cb91bdf136057292761f75105037"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/mcp-endpoint-rejects-query-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/mcp-endpoint-rejects-query-1.input.json",
+        "sha256": "sha256:3a3346b2c155a14e871042a77c93bd948c9e32e083d0d6de626df4fab1a0d798"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/mcp-endpoint-rejects-query-1.expected.json",
+        "sha256": "sha256:aaf2ffba454055a871f3ff46ebadfd2eb76e06383766e38b9a75c3511973c2c9"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/mcp-endpoint-rejects-userinfo-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/mcp-endpoint-rejects-userinfo-1.input.json",
+        "sha256": "sha256:c155630b3fc04ccccf679fd595ca9d8987b9e63d985644f58dc7352875c7be1d"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/mcp-endpoint-rejects-userinfo-1.expected.json",
+        "sha256": "sha256:fced82cbbd0c27350826a03510dd4ad84b35dd66114b8df20d1492e9b9eb2428"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/mcp-endpoint-requires-the-exact-path-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/mcp-endpoint-requires-the-exact-path-1.input.json",
+        "sha256": "sha256:8a912c85c1896a2ce1d52591f8a9980d8e184e97806580fb2ca3077c96343835"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/mcp-endpoint-requires-the-exact-path-1.expected.json",
+        "sha256": "sha256:4eb04edd03226965746908abf2509a957cc67a54422ccd89b79f6f660c9a94b2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/memory-commit-carries-cas-identity-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/memory-commit-carries-cas-identity-0.input.json",
+        "sha256": "sha256:4d99132714bb597c0e04e0965900d2d77ad0867d91dbf43af3112e4f11bd42de"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/memory-commit-carries-cas-identity-0.expected.json",
+        "sha256": "sha256:189378267417d8b03613093622e909a23589bf28e1d6b4b521e937b2f4c41337"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/memory-commit-requires-operation-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/memory-commit-requires-operation-1.input.json",
+        "sha256": "sha256:916fcdfb9596986c774f1d6e858512b4b22e82c8e65876629ee2e06024d3ed42"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/memory-commit-requires-operation-1.expected.json",
+        "sha256": "sha256:e2501f788842801866ebd57d93e0376d884288732b047ec47dc8b9d307c09aec"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/memory-commit-response-echoes-operation-and-revision-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/memory-commit-response-echoes-operation-and-revision-0.input.json",
+        "sha256": "sha256:2b7c73f880b3175cda43cd49aacd4c64a4c2bd945b0e7666d0b448226ea50016"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/memory-commit-response-echoes-operation-and-revision-0.expected.json",
+        "sha256": "sha256:44f02e108dbf37075f89f7a0cda08169e72a0362eb3feb2c704416501de99f8e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/memory-delete-advances-epoch-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/memory-delete-advances-epoch-0.input.json",
+        "sha256": "sha256:161375403d0da7041945f813d25af2b34276c6ee93c2799af9b84182a6141796"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/memory-delete-advances-epoch-0.expected.json",
+        "sha256": "sha256:664cb640b5bff04b3fdd0e7a1bfe7896742d6ba2cb645d5c474d5902b6590bec"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/memory-delete-requires-nonzero-new-epoch-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/memory-delete-requires-nonzero-new-epoch-1.input.json",
+        "sha256": "sha256:a215a39d8daf9a33c88d728da4c13d7561904fc5fdcb77095649d51af8615603"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/memory-delete-requires-nonzero-new-epoch-1.expected.json",
+        "sha256": "sha256:09499cc3542dfd453923b383ad142c8b2f268285085450ec28ad7b18efe461ef"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/memory-delete-response-returns-current-epoch-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/memory-delete-response-returns-current-epoch-0.input.json",
+        "sha256": "sha256:b505c323f6bcdf2eb437ba35ba5794c969e300fc6b74b95e6ff834474ba3ef68"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/memory-delete-response-returns-current-epoch-0.expected.json",
+        "sha256": "sha256:11ec2b188b0419b1a3d0d4c408f3c52e1e61d751a9f8658a85ab0d1fc2494f1b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/memory-summary-accepts-exact-2048-byte-utf-8-boundary-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/memory-summary-accepts-exact-2048-byte-utf-8-boundary-0.input.json",
+        "sha256": "sha256:672660fb1ef03ac39c0c5327f7f863b91f1fbf3c1f24a7b65bfca95e056402d0"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/memory-summary-accepts-exact-2048-byte-utf-8-boundary-0.expected.json",
+        "sha256": "sha256:391a17ec2c3cf1489ca0d6df9ab431afa355f5be9ac6a206b9dca4d1be9f2b7f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/memory-summary-rejects-nul-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/memory-summary-rejects-nul-1.input.json",
+        "sha256": "sha256:163fa189926fa865abf8d0a12e853a5a8201a255cdc85c58b5ca2321ac182d72"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/memory-summary-rejects-nul-1.expected.json",
+        "sha256": "sha256:e3dfc9118debee6f2d3ea5161f12ee5c3b099793e89df90296f2fcdf0492d08b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/memory-summary-uses-utf-8-byte-limit-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/memory-summary-uses-utf-8-byte-limit-1.input.json",
+        "sha256": "sha256:54e927b9a1e0b84f66025c65bc9b5c8fd2bfeb830d5954a5728bcf9a66459d9a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/memory-summary-uses-utf-8-byte-limit-1.expected.json",
+        "sha256": "sha256:d88e4de10540b12f21c9f7c2e7da725e2b91267921fddf854a1009f31cac7af5"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/namespace-acquire-omits-lease-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/namespace-acquire-omits-lease-0.input.json",
+        "sha256": "sha256:52ce8efd81e9c4a765cdab1033ac7a7e0d933a89bad0c240cc83997506c96a4a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/namespace-acquire-omits-lease-0.expected.json",
+        "sha256": "sha256:25f9ae6062776e3ef1a89f9d7ea0090777a95e55627b042856070d29a5a6c7a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/namespace-acquire-returns-fencing-lease-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/namespace-acquire-returns-fencing-lease-0.input.json",
+        "sha256": "sha256:2b5839d140e8d8b7d27a07a684965b5753c25e186493b4e67588ff27dcc403c8"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/namespace-acquire-returns-fencing-lease-0.expected.json",
+        "sha256": "sha256:6f254b21651c28ee6ef7dbe7316a1eccdc59e7b47f9d883c0299a48f0b94b1f1"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/nonterminal-dialogue-response-has-no-proposal-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/nonterminal-dialogue-response-has-no-proposal-0.input.json",
+        "sha256": "sha256:b01dec1f2fe9fd7e7130d0fca9f97040941d3a17df3ba97a9a1e72aa1eb5fdb0"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/nonterminal-dialogue-response-has-no-proposal-0.expected.json",
+        "sha256": "sha256:85cbdca8f1c945609bedb903c74ae9b05059348d00bdc253a164c8fb1ffdf1af"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/nonterminal-dialogue-run-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/nonterminal-dialogue-run-0.input.json",
+        "sha256": "sha256:69488531152a8358c0bb7ad395842bedd65ae8203e8eae81b0a7ebebc27bb847"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/nonterminal-dialogue-run-0.expected.json",
+        "sha256": "sha256:fa095634cdfbb75a69a68975aca98aa22a7ccfa0aca21b8f57d740f629e11ca2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/nonterminal-response-forbids-memory-proposal-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/nonterminal-response-forbids-memory-proposal-1.input.json",
+        "sha256": "sha256:adb8fccd080bbbf0637e0c501db19b5df9dd239b9b8763f3ae4e792e84b1586a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/nonterminal-response-forbids-memory-proposal-1.expected.json",
+        "sha256": "sha256:70b198e5352654e60db41354748bfeef7bd1b0f0f43498a6805b47cd69494b76"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/persona-accepts-exact-4096-byte-utf-8-boundary-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/persona-accepts-exact-4096-byte-utf-8-boundary-0.input.json",
+        "sha256": "sha256:e08dcaa60ea0e3847f6ff8726779cdad197044a348f3dcec634558653e4c4871"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/persona-accepts-exact-4096-byte-utf-8-boundary-0.expected.json",
+        "sha256": "sha256:e1e853f7f2f97bdc855911c3c36f3b2fb6998eacd9043a8f5b4804494399b183"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/persona-rejects-nul-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/persona-rejects-nul-1.input.json",
+        "sha256": "sha256:45e53cab149017cba63ef9fcee745c1f3852fd201b54baf1a46bec6e66d20371"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/persona-rejects-nul-1.expected.json",
+        "sha256": "sha256:d56e639976569019d217eac7e7c6afb050b07849d15b5878aafeddc06250bd53"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/persona-uses-utf-8-byte-limit-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/persona-uses-utf-8-byte-limit-1.input.json",
+        "sha256": "sha256:00be6c06e734dfa32c1eccb63390a0a025bbf8a35ea059ef082feeee6ca76ba4"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/persona-uses-utf-8-byte-limit-1.expected.json",
+        "sha256": "sha256:1fe2be96ddb939aa1ab81fa06d6f2ef461c3cb245aeb6047585cd9bbf1322b80"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/place-progress-dialogue-fact-is-nonterminal-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/place-progress-dialogue-fact-is-nonterminal-0.input.json",
+        "sha256": "sha256:09bc9198fd0e2d099e59e0fb0e8024d33b4dca6207e53e7ae716177e04429d27"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/place-progress-dialogue-fact-is-nonterminal-0.expected.json",
+        "sha256": "sha256:d86bde42cfcc48dd3f5eae76287570c5437bf4cbe501c5b13ab3b6d1829038c3"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/planner-mcp-endpoint-accepts-bracketed-ipv6-loopback-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/planner-mcp-endpoint-accepts-bracketed-ipv6-loopback-0.input.json",
+        "sha256": "sha256:5bb01bf7c0ef7f14fc66aa2cd53b6987a630215d007e88d21aac8af56f64be87"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/planner-mcp-endpoint-accepts-bracketed-ipv6-loopback-0.expected.json",
+        "sha256": "sha256:cbc6067b715b21edf20bcf29cc7d4dcaa3688a7ea57c0b1b620995e817ccdb33"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/planner-request-rejects-unknown-fields-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/planner-request-rejects-unknown-fields-1.input.json",
+        "sha256": "sha256:1c45b0f4efaf04e885e47a1aa96395f530d4a0623a647127786f6b5c74264af3"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/planner-request-rejects-unknown-fields-1.expected.json",
+        "sha256": "sha256:e76b6ca455640d7e4465bfabe7f812d832d61256d8ac0ffb6c2186802d6026ab"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/planner-requires-generation-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/planner-requires-generation-1.input.json",
+        "sha256": "sha256:72e31374865146ebad36111098fc7d6c66d710d8b0c2fbb8b5bd7c0b9c5e11e0"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/planner-requires-generation-1.expected.json",
+        "sha256": "sha256:87c97bf58a5b525dbfb9e72437f5c330f0fd0faf3eb3cf6034630977295533bc"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/planner-response-echoes-all-run-and-snapshot-identity-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/planner-response-echoes-all-run-and-snapshot-identity-0.input.json",
+        "sha256": "sha256:d07747c4f365701e28f3a8af2e6406b1b9d87164ecf0d18eda017864aee63fea"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/planner-response-echoes-all-run-and-snapshot-identity-0.expected.json",
+        "sha256": "sha256:dc9c912fb7b4460fc5d0b8760cbbb463e3975a58b7626497d1eb0c7e800fa11c"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/planner-response-rejects-an-explicit-null-plan-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/planner-response-rejects-an-explicit-null-plan-1.input.json",
+        "sha256": "sha256:eda465e6206eee8cb19ce4dd5b737262fb698f13ed550a27aad99bf3b410b6bf"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/planner-response-rejects-an-explicit-null-plan-1.expected.json",
+        "sha256": "sha256:77c807e29be25e25568c1cc02d13c1c0a750966600f4e683f4b4062d47602d27"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/planner-run-carries-snapshot-identity-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/planner-run-carries-snapshot-identity-0.input.json",
+        "sha256": "sha256:07b78904d2e45f36e77708e92339e2fe65d0d072ef70492a27268bbc2ce0c4ee"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/planner-run-carries-snapshot-identity-0.expected.json",
+        "sha256": "sha256:55df0c9869a380f93bd17bc637629c3e37e68beadf754166eb5aa61159fc9eed"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/pre-auth-error-has-null-request-identity-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/pre-auth-error-has-null-request-identity-0.input.json",
+        "sha256": "sha256:8a61ef62d41523781809a2c030099d788ed75c7522666f62d676e6b258855168"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/pre-auth-error-has-null-request-identity-0.expected.json",
+        "sha256": "sha256:43c72cd2ccab5cd13c3321ea61cf683f43cc387373793a452db8720fd18b1358"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/ready-probe-has-no-application-identity-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/ready-probe-has-no-application-identity-0.input.json",
+        "sha256": "sha256:8467d6d3bef797a54982dac9a430aae6cc2bb357ccb786281f410e8b4be6376f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/ready-probe-has-no-application-identity-0.expected.json",
+        "sha256": "sha256:11a8b983687522d488ad560c9ddb754ef98dd2b4554b45cdd52bd2ef9663c426"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/release-echoes-lease-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/release-echoes-lease-0.input.json",
+        "sha256": "sha256:49e5f9398c988b44595b184a73c335f858b822ce590a7598cd3a1d5bbb4bc844"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/release-echoes-lease-0.expected.json",
+        "sha256": "sha256:6c84999714381675fe493c78b791a70382f7ada7ccc8d2e494f5e83768a637f7"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/start-dialogue-fact-has-no-payload-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/start-dialogue-fact-has-no-payload-0.input.json",
+        "sha256": "sha256:fb46f466c86f718cb53b1bf9f5b0f0d444121a576764624078ae87a9a68a0fd1"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/start-dialogue-fact-has-no-payload-0.expected.json",
+        "sha256": "sha256:5c41fa47addfc0cacf9c95f1951121c19f5e300ccddabae14376f86902eb7ceb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/stopped-dialogue-fact-has-no-failure-reason-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/stopped-dialogue-fact-has-no-failure-reason-0.input.json",
+        "sha256": "sha256:bbf237347a376d8f40d185e318f0246b40d0d39e894e520fe05b0eb2c3b75b5b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/stopped-dialogue-fact-has-no-failure-reason-0.expected.json",
+        "sha256": "sha256:42e80e711d1bd9c937a9d7957a1e798bc349f75fc19523e8340487893db5efd0"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/terminal-dialogue-request-carries-completed-fact-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/terminal-dialogue-request-carries-completed-fact-0.input.json",
+        "sha256": "sha256:3c88d21d4c5828febe305f1bb16f96fe06a39d8a76dbadef841ef75d613285cb"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/terminal-dialogue-request-carries-completed-fact-0.expected.json",
+        "sha256": "sha256:fa095634cdfbb75a69a68975aca98aa22a7ccfa0aca21b8f57d740f629e11ca2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/terminal-dialogue-response-proposes-memory-without-committing-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/terminal-dialogue-response-proposes-memory-without-committing-0.input.json",
+        "sha256": "sha256:a8ca42d6dd186a0eda82eb945df0d8c982003c4ddaed72198ab12f71b254eac1"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/terminal-dialogue-response-proposes-memory-without-committing-0.expected.json",
+        "sha256": "sha256:6929fefba57d2a8acd9ac5a7e1b1c1bb5aa9655e00d6638c12ee432ffbb76ff1"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/terminal-request-rejects-idle-fact-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/terminal-request-rejects-idle-fact-1.input.json",
+        "sha256": "sha256:ad09d632d1c605c4229d8c9618f5cc3bd067a36873744148fc3da5bdd64b72c0"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/terminal-request-rejects-idle-fact-1.expected.json",
+        "sha256": "sha256:3746065effe25dd9f08f7c5695f27efe6ea66258f5edf91834b6554b20f3e20f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/terminal-response-requires-memory-proposal-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/terminal-response-requires-memory-proposal-1.input.json",
+        "sha256": "sha256:8ed4ad1272c0d4885a2cdf5693f661a831d9b0c314d18c9348d6ab0943a8ed64"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/terminal-response-requires-memory-proposal-1.expected.json",
+        "sha256": "sha256:62f15a7f4cfafdd8693cf4683fad442384db76783c8731123a27c56ccb98e3c1"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/timed-out-dialogue-fact-has-no-failure-reason-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/timed-out-dialogue-fact-has-no-failure-reason-0.input.json",
+        "sha256": "sha256:78da2fbd2bd665f8cc5d7e15100c494e767479ec4033017d3fbedf1b7311aaae"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/timed-out-dialogue-fact-has-no-failure-reason-0.expected.json",
+        "sha256": "sha256:42e80e711d1bd9c937a9d7957a1e798bc349f75fc19523e8340487893db5efd0"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/unsupported-contract-version-is-invalid-for-v1-schema-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/unsupported-contract-version-is-invalid-for-v1-schema-1.input.json",
+        "sha256": "sha256:13baaaef274d3101d9bd0fe4bd05950fdd9d24622cf60d084c4bf4c22e8125fe"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/unsupported-contract-version-is-invalid-for-v1-schema-1.expected.json",
+        "sha256": "sha256:14e8e4235faff926f130787d1e1efad4f82e99df93fc15346c58a511623a49f8"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/validated-error-echoes-request-identity-only-0",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/validated-error-echoes-request-identity-only-0.input.json",
+        "sha256": "sha256:3c5c09a353a920171542b97416ed33077a257b421a090d9de332a87d164ffdff"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-valid/validated-error-echoes-request-identity-only-0.expected.json",
+        "sha256": "sha256:43c72cd2ccab5cd13c3321ea61cf683f43cc387373793a452db8720fd18b1358"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.http/v1/zero-revision-cannot-carry-an-operation-1",
+      "family": "agent.http",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/zero-revision-cannot-carry-an-operation-1.input.json",
+        "sha256": "sha256:f36510af603b5d8d64825b05f34c14a95e14d2f11d2b1d8d55525a2c797735d8"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/http-invalid/zero-revision-cannot-carry-an-operation-1.expected.json",
+        "sha256": "sha256:cf7e0889acacd2efd99481bfd1c4a87bf9a0b90942a84027f3acac6544c0f150"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/affordance-input-exposes-no-runtime-identity-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/affordance-input-exposes-no-runtime-identity-2.input.json",
+        "sha256": "sha256:c9f0adef427cdb68e76584e9f5efbb67421d8aa3e1658c9a2ea66dd365a4d82a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/affordance-input-exposes-no-runtime-identity-2.expected.json",
+        "sha256": "sha256:080e8d4a3e5cce2310b3e007958967779b2e4d405e3812bb0a513a6c7e9c4bf5"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/affordance-step-kinds-are-fixed-and-ordered-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/affordance-step-kinds-are-fixed-and-ordered-3.input.json",
+        "sha256": "sha256:128536c805468a78a5b05000cd757b770b9eb7cfb1fea2adcda2a8b2c8f0f66b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/affordance-step-kinds-are-fixed-and-ordered-3.expected.json",
+        "sha256": "sha256:84b292a592d20cbb70c61d6102eb7e4b10baa17bc3fdc6567f7d2552e8ab2a1a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/affordance-visible-summary-rejects-coordinate-disorder-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/affordance-visible-summary-rejects-coordinate-disorder-3.input.json",
+        "sha256": "sha256:bb5eee3dd2a2f4eac5e38524bb1f6d4c6d4155f33f80bd8ce0af49a81b16f5d4"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/affordance-visible-summary-rejects-coordinate-disorder-3.expected.json",
+        "sha256": "sha256:7dbce91b135695091ecf845342e2c3584900745c626cc65c9533f3bb2deec622"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/affordances-include-fixed-steps-and-mine-classifications-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/affordances-include-fixed-steps-and-mine-classifications-2.input.json",
+        "sha256": "sha256:1f9903519022320c557159beaf0de06900428988e7af0880bf88e5a726a0c5b5"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/affordances-include-fixed-steps-and-mine-classifications-2.expected.json",
+        "sha256": "sha256:81e8a9894c5dbb385d1632f5cd155057486370f9ec41ed30ee7b5381407f8663"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/block-without-a-drop-remains-rejected-4",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-mine-validation/block-without-a-drop-remains-rejected-4.input.json",
+        "sha256": "sha256:83538d08ebdf85ff41b4aa54365ab39f0fcc1079f1ff8112dce42ebf372f4af8"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-mine-validation/block-without-a-drop-remains-rejected-4.expected.json",
+        "sha256": "sha256:083bd49a05164345b1fa342c251cb274ceed44473699d6adc1d39b85638887f7"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/bounded-tool-name-rejects-blank-unicode-whitespace-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/bounded-tool-name-rejects-blank-unicode-whitespace-3.input.json",
+        "sha256": "sha256:4cdbcd1d0b3f7cad6f6b128a3467b087d2dec1ee132bc4e1551c9f2ad1c01b3e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/bounded-tool-name-rejects-blank-unicode-whitespace-3.expected.json",
+        "sha256": "sha256:d1adb268b60956bfbab38ca21f33c76382e3b916a5b270f05b6b1a61373ffa43"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/bounded-tool-name-rejects-empty-string-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/bounded-tool-name-rejects-empty-string-3.input.json",
+        "sha256": "sha256:2b8ca09593109de329e62f630df6487624ff85aa20069bbe7306a386b62f11fe"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/bounded-tool-name-rejects-empty-string-3.expected.json",
+        "sha256": "sha256:cabd7f1755e518af8ef709772dfa2221f983056cca547aa9579092c73c561d0d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/bounded-tool-name-rejects-escaped-nul-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/bounded-tool-name-rejects-escaped-nul-3.input.json",
+        "sha256": "sha256:7e134fd77b69ccdfa53363d273917f52caf921ce1d70cf772a9bdeba8f475069"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/bounded-tool-name-rejects-escaped-nul-3.expected.json",
+        "sha256": "sha256:5251bdb8c7a6082b542b159fdc99d64d35d10cccb2aa4789a1b4293e3d868f67"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/bounded-tool-name-rejects-invalid-utf-8-bytes-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/bounded-tool-name-rejects-invalid-utf-8-bytes-3.input.json",
+        "sha256": "sha256:40763777c8503eaef3a3da0a5e70304a049f3bbe92e0d446545b97e78634f53d"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/bounded-tool-name-rejects-invalid-utf-8-bytes-3.expected.json",
+        "sha256": "sha256:aacf46e7c8543848076693b03b6a862ca748b53ae54ecd783aba7b680b7062da"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/bounded-tool-name-rejects-unicode-control-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/bounded-tool-name-rejects-unicode-control-3.input.json",
+        "sha256": "sha256:3e20127dc032c62db885b7e1e2774e3ae46c5c4cacd5a8e4ac44a30bed8de5a1"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/bounded-tool-name-rejects-unicode-control-3.expected.json",
+        "sha256": "sha256:5251bdb8c7a6082b542b159fdc99d64d35d10cccb2aa4789a1b4293e3d868f67"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/bounded-tool-name-uses-utf-8-byte-limit-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/bounded-tool-name-uses-utf-8-byte-limit-3.input.json",
+        "sha256": "sha256:afeb0128d2d09b397f350142938ae12683b09cca9ea2df141c1ed8f2c5241ff5"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/bounded-tool-name-uses-utf-8-byte-limit-3.expected.json",
+        "sha256": "sha256:37e90868c6e4b086361af4e9e9e968fe1360592385026bea7b13e72807f35206"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/chest-container-batch-remains-accepted-4",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-mine-validation/chest-container-batch-remains-accepted-4.input.json",
+        "sha256": "sha256:ae9426415bce7160669aca1a069b30d1067526bd7d542e263592cca709e4a05f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-mine-validation/chest-container-batch-remains-accepted-4.expected.json",
+        "sha256": "sha256:5b996d1be0f9bb1333967c9113ba28c96282f40b080f09a585d7d7180998ad50"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/farmland-remains-rejected-despite-a-registered-drop-4",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-mine-validation/farmland-remains-rejected-despite-a-registered-drop-4.input.json",
+        "sha256": "sha256:95b76bf17e6ea701c66c8b154342b50864af603530cb612f507ffdf97d256326"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-mine-validation/farmland-remains-rejected-despite-a-registered-drop-4.expected.json",
+        "sha256": "sha256:f472b907aa5ef38ff8ed13c73e13407b45fb0ec1c0970f4c46d6769b7362043f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/fixed-context-input-exposes-no-runtime-identity-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/fixed-context-input-exposes-no-runtime-identity-2.input.json",
+        "sha256": "sha256:820e92c2fe331bed04fb1d81cc174cc05281e1b24719a151a9ab0b44f11d36fc"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/fixed-context-input-exposes-no-runtime-identity-2.expected.json",
+        "sha256": "sha256:06f89f2e61106d4cfc3101fb87697c990312e2295f8c32255217d7fb62d0eed3"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/follow-must-be-the-final-step-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/follow-must-be-the-final-step-3.input.json",
+        "sha256": "sha256:42e8489dede6e0aee26bb6f475f0ccbf3ab31c43bfc743bd3fde2bd09e0c4b5b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/follow-must-be-the-final-step-3.expected.json",
+        "sha256": "sha256:6986f240516c63b77328bd544d8dbe818f66563a90b5f98013895071108a07e7"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/furnace-container-batch-remains-accepted-4",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-mine-validation/furnace-container-batch-remains-accepted-4.input.json",
+        "sha256": "sha256:14998d1207d485e99873227731b915599552b522dac121b84bf6bb184d5d7842"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-mine-validation/furnace-container-batch-remains-accepted-4.expected.json",
+        "sha256": "sha256:6d382ba74ae94171ded3d3bf19f521afb5b06311c978f1ea0f0dc996509c90a0"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/immature-crop-remains-rejected-despite-a-registered-drop-4",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-mine-validation/immature-crop-remains-rejected-despite-a-registered-drop-4.input.json",
+        "sha256": "sha256:708e9287db155e662f3598c084e84175193f7f196f3ce18bd678614d424c119a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-mine-validation/immature-crop-remains-rejected-despite-a-registered-drop-4.expected.json",
+        "sha256": "sha256:010ce28c03b34c7dca3f2a411e8885cb48af8c67fc55724b1464bac3fdb6fc5e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/inventory-count-follows-authoritative-stack-limit-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/inventory-count-follows-authoritative-stack-limit-3.input.json",
+        "sha256": "sha256:b11446aaf12db9f3ea20b58066e8db194a55e278435cccdaac7a3477d3b87124"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/inventory-count-follows-authoritative-stack-limit-3.expected.json",
+        "sha256": "sha256:a6a5a8ecbec0cdcc2b3c2b10fd9577e4670dc4fec116f963a7bbbd7a7ee5c696"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/inventory-limit-is-bounded-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/inventory-limit-is-bounded-3.input.json",
+        "sha256": "sha256:b95abac19a12e21b01b22d7e0b436ef92b68d8b0f3f334d3c705b394660b310e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/inventory-limit-is-bounded-3.expected.json",
+        "sha256": "sha256:60540f2d03b0aca0a798b54f84f857d02e7e4bd54b8583954e1b43dbf840b4c7"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/inventory-offset-is-bounded-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/inventory-offset-is-bounded-3.input.json",
+        "sha256": "sha256:e513856d3ba5985a3fdf58c85d4f878c9a91501d851dbfe85013c2755b0dc376"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/inventory-offset-is-bounded-3.expected.json",
+        "sha256": "sha256:34cf6fb2aea2bbd354dfd60a10825206ee78031215be57b5b6baf7d5fa048162"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/inventory-query-is-paged-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/inventory-query-is-paged-2.input.json",
+        "sha256": "sha256:ce8947bdd99fedd166932f3bbddb8282b5ce0d4fe32e614d4f25220d4828524c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/inventory-query-is-paged-2.expected.json",
+        "sha256": "sha256:38239a5e1582a33d9ec3c00f54b56c9831357d0ddb735a5ef485bf0c2356dc6e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/inventory-result-contains-bounded-occupied-slots-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/inventory-result-contains-bounded-occupied-slots-2.input.json",
+        "sha256": "sha256:7ad2a0d2915b81bca1ffd24e0e926786494adc8af4078121b8c258d29392c2e4"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/inventory-result-contains-bounded-occupied-slots-2.expected.json",
+        "sha256": "sha256:c6ca2e155fa1a5eb80157af50b2906b36f2d6799ff601263ea1d8309a9693a2e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/ordinary-single-drop-remains-accepted-4",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-mine-validation/ordinary-single-drop-remains-accepted-4.input.json",
+        "sha256": "sha256:69b5bb62a43fce04c9dbf07d3ede06e7ecaafb87d0e862f4ddfdb63b2890d2e2"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-mine-validation/ordinary-single-drop-remains-accepted-4.expected.json",
+        "sha256": "sha256:d8eb134d27ae75311a0bf35480b30649c5a3108eba554ebddb65872809aa586c"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/plan-rejects-unknown-step-kind-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/plan-rejects-unknown-step-kind-3.input.json",
+        "sha256": "sha256:880f819919ebafe6811895ac7644a443e3e3f6a423f5a4b0023f4796ebbebebf"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/plan-rejects-unknown-step-kind-3.expected.json",
+        "sha256": "sha256:c08b05a9e330cd79fa2bd4273d15a71799508223825b157646b8666ec01bf3ea"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/plan-rejects-unknown-top-level-field-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/plan-rejects-unknown-top-level-field-3.input.json",
+        "sha256": "sha256:1c46b56c062fea11aa22fa0d9d3732e8a6e398ab832f3f9fcdf9ea75b3ecd49f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/plan-rejects-unknown-top-level-field-3.expected.json",
+        "sha256": "sha256:2bd2fe0e0450447142cc62f5a86d47f5602cb654157148e40a8da56342b325f6"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/plan-steps-cannot-be-empty-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/plan-steps-cannot-be-empty-3.input.json",
+        "sha256": "sha256:cbbad16f3f1c60cf78a4c196ada94965cb9c3928a078e94a98d60603b73ed055"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/plan-steps-cannot-be-empty-3.expected.json",
+        "sha256": "sha256:2d68913f7634469dec61909e1685cef16a9c0804a3f9080acc345dc3913a5c75"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/plan-summary-accepts-exact-512-byte-utf-8-boundary-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/plan-summary-accepts-exact-512-byte-utf-8-boundary-2.input.json",
+        "sha256": "sha256:5d86bc5ee809a129367b26b7d1e946fe2f36ce98c7341f303453cb4d8e89fd82"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/plan-summary-accepts-exact-512-byte-utf-8-boundary-2.expected.json",
+        "sha256": "sha256:bd44e43df9290e6c9b5f1aa900c5b08a61c7205c98e9ea378d372a15321ec892"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/plan-summary-rejects-unicode-control-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/plan-summary-rejects-unicode-control-3.input.json",
+        "sha256": "sha256:1f6a8a3334bf8a4309c41681c7d1c3ee49570f73549a5608c9551ff8e93dfe74"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/plan-summary-rejects-unicode-control-3.expected.json",
+        "sha256": "sha256:e8e2e7bb446918b42e7672c5fc658cd307a12f4e4afc8f42481069ad3f5ece36"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/plan-summary-uses-utf-8-byte-limit-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/plan-summary-uses-utf-8-byte-limit-3.input.json",
+        "sha256": "sha256:9b0621d6233a34bec80d5588ba4abe0652b0ea1d7ad00c973e4eae37c06f419d"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/plan-summary-uses-utf-8-byte-limit-3.expected.json",
+        "sha256": "sha256:526fc8d3b691a26624885483265c38b7e4542636035dfc8d34967c6940079d64"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/planning-context-cannot-expose-persona-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/planning-context-cannot-expose-persona-3.input.json",
+        "sha256": "sha256:cdb8ecdddf20684e882bf7ff7bc20e25cf0705294dece80a9caa9c603a11ebfb"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/planning-context-cannot-expose-persona-3.expected.json",
+        "sha256": "sha256:8f36558ff2b3453dd25392fe3a99126664ee4197893935ce212daa189df730cd"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/planning-context-follows-authoritative-chunk-revision-limit-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/planning-context-follows-authoritative-chunk-revision-limit-3.input.json",
+        "sha256": "sha256:338fa2a0de46b89ebf22149352c06efb8bff250856c987bef805f1a926231e58"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/planning-context-follows-authoritative-chunk-revision-limit-3.expected.json",
+        "sha256": "sha256:ad55d016fa0d3b743f418c70a23c0e1d933ef2b05a92795c267061b843b8482b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/planning-context-is-a-bounded-projection-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/planning-context-is-a-bounded-projection-2.input.json",
+        "sha256": "sha256:54b5388a7c49d526d4356c441adb3af0b910f5d381a207a7e60f61ad64c60bbb"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/planning-context-is-a-bounded-projection-2.expected.json",
+        "sha256": "sha256:baf6519e614832dd754c2e1f2f948679c5349a07141cbb50b8e6cfc1560c7e29"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/planning-instruction-accepts-exact-1024-byte-utf-8-boundary-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/planning-instruction-accepts-exact-1024-byte-utf-8-boundary-2.input.json",
+        "sha256": "sha256:b1b0fd526e2dfa31764f9055f74001c6716540811b808c1f5b7bfa8fa6f4fe85"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/planning-instruction-accepts-exact-1024-byte-utf-8-boundary-2.expected.json",
+        "sha256": "sha256:ac8628a1255518a8dfe3c07a4454edea12f1382f3f1a6d4002ffdd427729905e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/planning-instruction-uses-utf-8-byte-limit-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/planning-instruction-uses-utf-8-byte-limit-3.input.json",
+        "sha256": "sha256:426ccb8fb03e7efbc86c151e330685d9537e6c8b6d309a0de5eb1b0205104875"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/planning-instruction-uses-utf-8-byte-limit-3.expected.json",
+        "sha256": "sha256:e9ee6808d747359ea3be801919767b344e9162dcdd8b2e0c8c42634d8009d48b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/runtime-snapshot-identity-is-not-model-visible-input-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/runtime-snapshot-identity-is-not-model-visible-input-3.input.json",
+        "sha256": "sha256:776a4f3d55eb3fa36d8ed3e7c68c5b66bd57185cb0cdcc725a5b1847adac166a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/runtime-snapshot-identity-is-not-model-visible-input-3.expected.json",
+        "sha256": "sha256:ad0a67d9531c9fd8243df06bced45ac69da7fd5de72d8e4359261112fa3ef64d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/step-rejects-explicit-null-exclusive-field-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/step-rejects-explicit-null-exclusive-field-3.input.json",
+        "sha256": "sha256:7bc8deb7320418bac6da8601bec75332b630cfb5654dd28db8ca71c0f645301e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/step-rejects-explicit-null-exclusive-field-3.expected.json",
+        "sha256": "sha256:b89dd275aea3ffafb33187afa5f323d376573d1f052982c60f9c4347ca788d09"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/task-status-accepts-exact-96-byte-utf-8-boundary-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/task-status-accepts-exact-96-byte-utf-8-boundary-2.input.json",
+        "sha256": "sha256:e4f9f2501cc2f8c475613b3841b59c5d8d07a7ddf5cea30a9cc696d5d4fef851"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/task-status-accepts-exact-96-byte-utf-8-boundary-2.expected.json",
+        "sha256": "sha256:2eedd4a53a83abf9a52a6d987ca3ad12d39d6e513e0e78f58e9c386c72c30d01"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/task-status-uses-utf-8-byte-limit-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/task-status-uses-utf-8-byte-limit-3.input.json",
+        "sha256": "sha256:3f4d651ff3a32d7042e12c259886dc848475ba64b845a952808a6fceffbaa599"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/task-status-uses-utf-8-byte-limit-3.expected.json",
+        "sha256": "sha256:ebb0c71e14a6d184154ed2f3f240efad12adffd54f7770db3e0b19777030cc93"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/terrain-domain-failure-rejects-partial-success-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/terrain-domain-failure-rejects-partial-success-3.input.json",
+        "sha256": "sha256:45842bcb2be387777c6b4dd039b490ff397ad01c493a210f421290c0e5c81d4f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/terrain-domain-failure-rejects-partial-success-3.expected.json",
+        "sha256": "sha256:c345ddec0986abf127092efbd54c78e88cc62898d9056c1dbe05d465607bef59"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/terrain-domain-failure-rejects-unknown-field-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/terrain-domain-failure-rejects-unknown-field-3.input.json",
+        "sha256": "sha256:11cd9e79387787e93ca26cc3f7e1f22cf56b42b6bfcf5c3541343a3b59c1145b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/terrain-domain-failure-rejects-unknown-field-3.expected.json",
+        "sha256": "sha256:c345ddec0986abf127092efbd54c78e88cc62898d9056c1dbe05d465607bef59"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/terrain-domain-failure-rejects-wrong-code-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/terrain-domain-failure-rejects-wrong-code-3.input.json",
+        "sha256": "sha256:a3529d07263f36c81b8508f8860f458686c6ec0122859e12f86ca7da5455b0db"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/terrain-domain-failure-rejects-wrong-code-3.expected.json",
+        "sha256": "sha256:c345ddec0986abf127092efbd54c78e88cc62898d9056c1dbe05d465607bef59"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/terrain-domain-failure-requires-code-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/terrain-domain-failure-requires-code-3.input.json",
+        "sha256": "sha256:5aaf3057d3aae7e5093e59975feddb71fd69acd4e153d11826f9601f64655c5e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/terrain-domain-failure-requires-code-3.expected.json",
+        "sha256": "sha256:c345ddec0986abf127092efbd54c78e88cc62898d9056c1dbe05d465607bef59"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/terrain-outside-projection-is-a-normal-domain-failure-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/terrain-outside-projection-is-a-normal-domain-failure-2.input.json",
+        "sha256": "sha256:132f44b216f3bf7c1f58d461c9984a37a84f2aab4b8df59bfa45e22387592dc0"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/terrain-outside-projection-is-a-normal-domain-failure-2.expected.json",
+        "sha256": "sha256:1ee297fd4238502551869800273853883ac5a06f83cff5724bc97c8f29e1fc92"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/terrain-query-cannot-be-empty-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/terrain-query-cannot-be-empty-3.input.json",
+        "sha256": "sha256:1cd8a5d6aa46e9b4662ce20d106c769d2a3ca5cf508011cd757d8dccdf197641"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/terrain-query-cannot-be-empty-3.expected.json",
+        "sha256": "sha256:2f3e8d3442ae9930a8dd94d128b784c75b86f5666f153c60a1ba210375c17f77"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/terrain-query-preserves-input-order-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/terrain-query-preserves-input-order-2.input.json",
+        "sha256": "sha256:c050892ea1172c370ca518812e04c1cea2c1fecc0488284e72eac4d3d8286550"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/terrain-query-preserves-input-order-2.expected.json",
+        "sha256": "sha256:d20c79cedb7bb2e7dbfdc65b6746a46868e23ad7ceeb44bfc55e7463f63992df"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/terrain-query-y-is-a-world-block-coordinate-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/terrain-query-y-is-a-world-block-coordinate-3.input.json",
+        "sha256": "sha256:b59beeed4b892b0865de2d62fb826db4e565c9900edd19418b8c1af91665e549"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/terrain-query-y-is-a-world-block-coordinate-3.expected.json",
+        "sha256": "sha256:c9eab0e1c6742f9be31b744f3ff3b668e5d31f096526c64bf0ccb7ad8401c1b1"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/terrain-result-must-match-input-positions-and-order-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/terrain-result-must-match-input-positions-and-order-3.input.json",
+        "sha256": "sha256:8d13fc94326a7d794b9b32d3a0c03f46ca7d9941322f3e99173bd608fdd109fc"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/terrain-result-must-match-input-positions-and-order-3.expected.json",
+        "sha256": "sha256:21fd4d89895db724679fa5768aaa643582af8d5806636e49cb0b46f4181279ce"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/terrain-result-preserves-input-order-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/terrain-result-preserves-input-order-2.input.json",
+        "sha256": "sha256:6b4149a00fece4bae4e3b14d94966cc534bfe7959a808541a2235fa5c5eb245f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/terrain-result-preserves-input-order-2.expected.json",
+        "sha256": "sha256:8658dc34bdaf345505e8efe231d2c2bf77e26d267efdc16befe886892c312bb0"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/terrain-success-rejects-non-array-collection-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/terrain-success-rejects-non-array-collection-3.input.json",
+        "sha256": "sha256:4cc20adf6ac372e6744c4401eefa8b982d12e3a75a40aad9fa27d4e8b75e5529"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/terrain-success-rejects-non-array-collection-3.expected.json",
+        "sha256": "sha256:c345ddec0986abf127092efbd54c78e88cc62898d9056c1dbe05d465607bef59"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/terrain-success-rejects-null-collection-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/terrain-success-rejects-null-collection-3.input.json",
+        "sha256": "sha256:bf57b1e4c1eae0d7ae896eeaecbd658ca89cec62e16bcde021a77057eee9b8ad"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/terrain-success-rejects-null-collection-3.expected.json",
+        "sha256": "sha256:c345ddec0986abf127092efbd54c78e88cc62898d9056c1dbe05d465607bef59"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/torch-remains-rejected-despite-a-registered-drop-4",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-mine-validation/torch-remains-rejected-despite-a-registered-drop-4.input.json",
+        "sha256": "sha256:b5f21c8f0b4a2166b00d16e341dd6d8cd1b08ba15dc602918371cd77c879b586"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-mine-validation/torch-remains-rejected-despite-a-registered-drop-4.expected.json",
+        "sha256": "sha256:50ed3c6d80378b7dc46699a1b9362f9056c0572dfd879792abf5d791488a7fc2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/undelivered-multi-drop-crop-remains-rejected-4",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-mine-validation/undelivered-multi-drop-crop-remains-rejected-4.input.json",
+        "sha256": "sha256:5fbe24b7cfa006f2d765e5e92fdac0643ea893eb0d8bfc234c00ed900f85d33b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-mine-validation/undelivered-multi-drop-crop-remains-rejected-4.expected.json",
+        "sha256": "sha256:5f5595b0b77399687c6386b40a8635c65438e7bd1b9d382622fb8aefe0aeb6f2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/unknown-visible-block-is-a-normal-domain-failure-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/unknown-visible-block-is-a-normal-domain-failure-2.input.json",
+        "sha256": "sha256:6035659fc01c481d9bef0750555ac6fcc113211d353610ae5a69b3e489a03142"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/unknown-visible-block-is-a-normal-domain-failure-2.expected.json",
+        "sha256": "sha256:46bcf99fe51d103229fde3972f7563783dc681bf282cafc84435cc21a052b806"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/validator-accepted-result-echoes-digest-and-canonical-plan-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/validator-accepted-result-echoes-digest-and-canonical-plan-2.input.json",
+        "sha256": "sha256:d9cf529ec674397b6a5b3b1a5fbc9ef1bedd5613efa002c692a039b6f71f0f63"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/validator-accepted-result-echoes-digest-and-canonical-plan-2.expected.json",
+        "sha256": "sha256:bd6584874aa89af34c3ce0baff74899ab71e2ccecc377b6f36089a92fc181e21"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/validator-accepted-result-rejects-failure-fields-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/validator-accepted-result-rejects-failure-fields-3.input.json",
+        "sha256": "sha256:042384327760cc13fb67d436d40a151aab15b7bbd4785d10f17b31af0af8b3a4"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/validator-accepted-result-rejects-failure-fields-3.expected.json",
+        "sha256": "sha256:f5d7846393fd08d15fb242a814e39d763d537b2b46266da6d59cb85cd27d1b7a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/validator-accepts-the-complete-delivered-step-set-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/validator-accepts-the-complete-delivered-step-set-2.input.json",
+        "sha256": "sha256:6cf5ab7862c6094ba8a8c6fe9933ce6bf87e1457b40fa4e404551e5064f6c3fb"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/validator-accepts-the-complete-delivered-step-set-2.expected.json",
+        "sha256": "sha256:cd21a9a7f0b13bcd627c659f0054b4b70adb9e689b186e79c5189d1d616e2caa"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/validator-failure-code-is-stable-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/validator-failure-code-is-stable-3.input.json",
+        "sha256": "sha256:808c6b8bc9b9b81cf209dc3873f0bc7fc094a941fe24be588bac64286ec8b6b5"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/validator-failure-code-is-stable-3.expected.json",
+        "sha256": "sha256:a20f78cdcbae36ba00fc8509cba1d35c7b1788417a9b1e02ede47af85dd0f213"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/validator-hint-accepts-exact-1-byte-boundary-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/validator-hint-accepts-exact-1-byte-boundary-2.input.json",
+        "sha256": "sha256:9cb878819189526219a5d0ce3c6dd5affeab2b8a68607c61210577dc2d8cb2ce"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/validator-hint-accepts-exact-1-byte-boundary-2.expected.json",
+        "sha256": "sha256:3b662b331f6ef02ea02d9ba7004ab16e3364366a71e659e7c6cbe8d73ff5066e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/validator-hint-accepts-exact-256-byte-utf-8-boundary-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/validator-hint-accepts-exact-256-byte-utf-8-boundary-2.input.json",
+        "sha256": "sha256:1964c4da7f6920cde6cf2ffcfe8a8f773d1383c594f73818f9cda268467b21dc"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/validator-hint-accepts-exact-256-byte-utf-8-boundary-2.expected.json",
+        "sha256": "sha256:3b662b331f6ef02ea02d9ba7004ab16e3364366a71e659e7c6cbe8d73ff5066e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/validator-hint-is-bounded-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/validator-hint-is-bounded-3.input.json",
+        "sha256": "sha256:1761d62a87928fff3da5c8b1d84575101700e3fe05ed80664c2f55e561d5eed8"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/validator-hint-is-bounded-3.expected.json",
+        "sha256": "sha256:c9d6fcf4503cc921c41191bac694e9c69779ae341dee0baafe8b051294a650dc"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/validator-hint-rejects-edge-whitespace-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/validator-hint-rejects-edge-whitespace-3.input.json",
+        "sha256": "sha256:b1c78f722b86353cc478b25a8567a256b9c25e2db680a8a7b0605c6e5ff89e00"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/validator-hint-rejects-edge-whitespace-3.expected.json",
+        "sha256": "sha256:64cf2aeb15ff7d38659c082f815e3a739fb7befa0350ceb77a432e8408c0ed77"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/validator-hint-rejects-empty-string-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/validator-hint-rejects-empty-string-3.input.json",
+        "sha256": "sha256:b12edaefaaa3abf72869640f27d334bffcc6cdc9debc511742be96427f7d3819"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/validator-hint-rejects-empty-string-3.expected.json",
+        "sha256": "sha256:ab016695d0d01c1f69ada8f29c7a59fc27167e6f358e3ce470a6b7b5c10a6c2f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/validator-hint-rejects-invalid-utf-8-bytes-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/validator-hint-rejects-invalid-utf-8-bytes-3.input.json",
+        "sha256": "sha256:d34681a48ff65f04f6c975f40f9a0535ea5b0a28875e2a32ac3f4ea001a6942c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/validator-hint-rejects-invalid-utf-8-bytes-3.expected.json",
+        "sha256": "sha256:61c83723895f55ceb220b4f5b0f83a588d8b7bdc253215c96316c0d652a06d40"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/validator-hint-rejects-nul-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/validator-hint-rejects-nul-3.input.json",
+        "sha256": "sha256:a9f24c501be0fa266d8f00a9dce48a490b68a3021819aab221dce8aa09bc8120"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/validator-hint-rejects-nul-3.expected.json",
+        "sha256": "sha256:ab2dc63a450bbffd01fbd15564c1bbedc2d8d8b55e4b2522d2f91dc76a9ced0c"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/validator-hint-rejects-unicode-control-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/validator-hint-rejects-unicode-control-3.input.json",
+        "sha256": "sha256:15ee84292b3bdde1c84af7a69f174e338477f0b3364b19a298d94765f9bc5f6d"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/validator-hint-rejects-unicode-control-3.expected.json",
+        "sha256": "sha256:c5614835d4aab4fd7435c3f02f6ace9968e94a5e69f04f826056d93e67fe7596"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/validator-hint-uses-utf-8-byte-limit-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/validator-hint-uses-utf-8-byte-limit-3.input.json",
+        "sha256": "sha256:e05c1041da17e8bbb9ed6da9ee0a5773a4ccc94b75506517699a6847772847ca"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/validator-hint-uses-utf-8-byte-limit-3.expected.json",
+        "sha256": "sha256:0bbcc3033aaec2f0d130be9cb042d61e2a301186cc8b668a9e6ee0b35f3757b3"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/validator-rejected-result-contains-one-stable-code-and-bounded-hint-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/validator-rejected-result-contains-one-stable-code-and-bounded-hint-2.input.json",
+        "sha256": "sha256:c7a550d70b5052808a8eaf072c632dde3e2c351f2879d3a6461713f27b8f72b7"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/validator-rejected-result-contains-one-stable-code-and-bounded-hint-2.expected.json",
+        "sha256": "sha256:9ad43ad5212b3f06f9302c80d96c81e82a051f06b7929a237785d52794afea43"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/visible-block-domain-failure-rejects-non-string-hint-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/visible-block-domain-failure-rejects-non-string-hint-3.input.json",
+        "sha256": "sha256:0ff92e8498b35e733956d426d30a998faf5c9b82083f3a0a22f18a59f7393fb0"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/visible-block-domain-failure-rejects-non-string-hint-3.expected.json",
+        "sha256": "sha256:1b553f484810a913262275287f13d2f33c7732496d4082460fdc15865e01b1eb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/visible-block-domain-failure-rejects-null-hint-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/visible-block-domain-failure-rejects-null-hint-3.input.json",
+        "sha256": "sha256:f547f3cd8319b6685273df2e9d3eea1fff6ebdb92d10d5bb9a10145ffb56ab59"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/visible-block-domain-failure-rejects-null-hint-3.expected.json",
+        "sha256": "sha256:1b553f484810a913262275287f13d2f33c7732496d4082460fdc15865e01b1eb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/visible-block-domain-failure-rejects-success-fields-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/visible-block-domain-failure-rejects-success-fields-3.input.json",
+        "sha256": "sha256:19cc5b246b9bd21d37ce9aa955a36de7b6cf56ba7f681049a41f37ec5ff056f8"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/visible-block-domain-failure-rejects-success-fields-3.expected.json",
+        "sha256": "sha256:1b553f484810a913262275287f13d2f33c7732496d4082460fdc15865e01b1eb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/visible-block-domain-failure-rejects-unknown-field-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/visible-block-domain-failure-rejects-unknown-field-3.input.json",
+        "sha256": "sha256:3bf35a7cc1fa708d33cf5c7516a8d192bab8f81978d6b60068ba3b4ccc61f325"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/visible-block-domain-failure-rejects-unknown-field-3.expected.json",
+        "sha256": "sha256:1b553f484810a913262275287f13d2f33c7732496d4082460fdc15865e01b1eb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/visible-block-domain-failure-rejects-wrong-code-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/visible-block-domain-failure-rejects-wrong-code-3.input.json",
+        "sha256": "sha256:959f9b97155b07fda6770785367f1314108e6c0da97906907e37f340c0c68d1a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/visible-block-domain-failure-rejects-wrong-code-3.expected.json",
+        "sha256": "sha256:1b553f484810a913262275287f13d2f33c7732496d4082460fdc15865e01b1eb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/visible-block-domain-failure-requires-hint-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/visible-block-domain-failure-requires-hint-3.input.json",
+        "sha256": "sha256:c4307e6c42a45d4d21774a7d9f5fdb68e99746132ff494466ab9ee7212ccf7e9"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/visible-block-domain-failure-requires-hint-3.expected.json",
+        "sha256": "sha256:1b553f484810a913262275287f13d2f33c7732496d4082460fdc15865e01b1eb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/visible-block-names-must-be-unique-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/visible-block-names-must-be-unique-3.input.json",
+        "sha256": "sha256:4f3cbb7f68417c0cce76ea9ff09c3f579442499e9ef87c17d6e999c45e02182f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/visible-block-names-must-be-unique-3.expected.json",
+        "sha256": "sha256:ca24d70db519de18302e760e5f05029cc4943c5106da498bbe00dbbe53d31f88"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/visible-block-query-cannot-be-empty-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/visible-block-query-cannot-be-empty-3.input.json",
+        "sha256": "sha256:1ec59104be257d035daf828719dd9a497cb665dc99c1863f679e1a86d1d6cb51"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/visible-block-query-cannot-be-empty-3.expected.json",
+        "sha256": "sha256:c7e73bf7bd0224bbf0f6bb3a9dda234fd1e5a19821e9671b4200f82c53de085a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/visible-block-query-is-bounded-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/visible-block-query-is-bounded-2.input.json",
+        "sha256": "sha256:e1d159217da98d4b3a956fabf5b47cf488a14717dbc0450af3ee831f1586fc5a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/visible-block-query-is-bounded-2.expected.json",
+        "sha256": "sha256:de78cc45fa335b8e01613f892bcab0a82ae9912e1e596fa819ebe7ca6bf7bbb6"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/visible-block-result-is-coordinate-ordered-2",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/visible-block-result-is-coordinate-ordered-2.input.json",
+        "sha256": "sha256:75afe0abcdc9001ba32e92d72da2619546268a4e7d76a0542f4057dbc9bc2785"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-valid/visible-block-result-is-coordinate-ordered-2.expected.json",
+        "sha256": "sha256:a05a44ebb5a303b7e86fb49b7fb0614528dcddc673188f94354cba0648c4c6b1"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "agent.mcp/v1/visible-block-result-rejects-coordinate-disorder-3",
+      "family": "agent.mcp",
+      "version": "v1",
+      "operation": "agent-contract",
+      "input": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/visible-block-result-rejects-coordinate-disorder-3.input.json",
+        "sha256": "sha256:4ecf4cc6336faa4804165f5e3c393a23b50e55906d6173ebb0217d496c838d03"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/agent/mcp-invalid/visible-block-result-rejects-coordinate-disorder-3.expected.json",
+        "sha256": "sha256:355103c4a3bfd6112f1e042e826ec0f292fde6410c921cc8c291a459930d0da5"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "external:agent-contract"
     }
   ]
 }
