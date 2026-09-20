@@ -52,9 +52,10 @@ or Agent process packages. These boundaries are enforced by `packages/audit`
   as leaving the repository: a component whose name merely starts with `..`
   (a sibling such as `..cache`) is a child of the repository, not an escape
   from it.
-- Corpus assets a run consumes must be regular files reachable without a
-  symlink component and inside their byte budget; that gate runs before
-  reconciliation publishes any verdict about the corpus.
+- Corpus assets are validated by the canonical inventory validator during
+  reconciliation: every case's input, expected, and encoded asset must be
+  reachable without a symlink component, stay inside its byte budget, and
+  match its recorded digest.
 - Incomplete source revision, missing contract identity, empty corpus digest,
   empty tick schedule, or missing observations fail closed. `LoadTrace`
   rejects truncated bytes, non-object JSON, and unsupported `schema_version`
