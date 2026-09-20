@@ -16,7 +16,7 @@ Execution order follows direct dependencies, not numeric headings: evidence prim
 - [x] 1.2 [Narrow oracle dependency and header-provenance gates](plans/01-evidence.md#node-1-2). Direct prerequisites: 1.1. Execute the linked packet's named red/green and integration commands.
 - [x] 1.3 [Schema-2 trace completeness](plans/01-evidence.md#node-1-3). Direct prerequisites: 1.1. Execute the linked packet's named red/green and integration commands.
 - [x] 1.4 [Exclusive temporary work and atomic export](plans/01-evidence.md#node-1-4). Direct prerequisites: 1.3. Execute the linked packet's named red/green and integration commands.
-- [ ] 1.5 [Independent operation runners](plans/01-evidence.md#node-1-5). Direct prerequisites: 1.2, 1.3, 1.4. Execute the linked packet's named red/green and integration commands.
+- [x] 1.5 [Independent operation runners](plans/01-evidence.md#node-1-5). Direct prerequisites: 1.2, 1.3, 1.4. Execute the linked packet's named red/green and integration commands.
 - [ ] 1.6 [Agent HTTP/MCP contract evidence without a service](plans/01-evidence.md#node-1-6). Direct prerequisites: 1.5. Execute the linked packet's named red/green and integration commands.
 
 ## 2. Domain and shared ownership
