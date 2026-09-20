@@ -21,6 +21,23 @@ is enforced by `packages/audit` `TestInternalDependenciesAreOneWay`.
   `TestContractInventoryRejectsMissingCoverageFixture`,
   `TestContractInventoryRejectsIncompleteIdentity`.
 
+## Isolated replay (`trace.go`)
+
+- `RunTrace` copies coverage fixtures into a caller-supplied work directory,
+  hashes the copies, and emits a versioned `Trace` identity (source revision,
+  contract versions, corpus digest, seed, ordered checkpoint inputs, tick
+  schedule, and normalized fixture observations). Two isolated runs of the
+  same request produce identical JSON; the repository tree is read-only.
+- `WorkDir` and `OutputPath` inside the repository are live-path writes and
+  fail before any directory is created. Incomplete source revision, missing
+  contract identity, empty corpus digest, empty tick schedule, or missing
+  observations fail closed.
+- `LoadTrace` rejects truncated bytes, non-object JSON, and unsupported
+  `schema_version` before trusting identity fields.
+- Enforcement: `TestTraceRunIsDeterministicAndIsolated`,
+  `TestTraceRejectsIncompleteIdentity`, `TestTraceRejectsLivePathWrites`,
+  `TestTraceRejectsMalformedInput`, `TestTraceRejectsIncompleteTraces`.
+
 ## Focused Verification
 
 ```bash

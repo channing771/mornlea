@@ -37,3 +37,14 @@
 - PASS: `go test ./packages/audit -run 'TestInternalDependenciesAreOneWay|TestCommentBacktickIdentifiersExist' -count=1`
 - Directory guidance: added `packages/tools/cmd/runtime-oracle/AGENTS.md` for the offline-leaf invariant. `packages/tools/` remains without a module overview; it has no independent new boundary beyond this command.
 - Architecture skill: no change. The empty-import oracle leaf is a change-local tooling rule, not a new cross-task ownership convention.
+
+## 2026-09-20 — 1.2 isolated oracle traces
+
+- Baseline: `c6a8bef7 feat(tools): freeze runtime contract inventory`.
+- Adopted orphan untracked `packages/tools/cmd/runtime-oracle/trace_test.go` from an aborted worker after empirical review: the five tests match task 1.2 and the replay-identity spec, contain no contract violations, and were kept byte-for-byte. Production APIs (`Trace`, `TraceRequest`, `RunTrace`, `LoadTrace`, `ValidateTrace`) were added in `trace.go` without overwriting the test file. Deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded.
+- Ruling: traces are stdlib-only. `RunTrace` copies coverage fixtures into an isolated work directory, hashes the copies, and omits absolute work paths so two temp dirs yield identical JSON. Paths under the repository root are live-path writes and fail before `MkdirAll`. The oracle still does not import protocol, storage, native ABI, or live authority packages.
+- Corpus digest: `sha256:1d87c666fc6612edaa78688f36fe8eda22598c1f04b486d9aca65582e10df022` for `testdata/runtime-migration/contracts.json` (unchanged from 1.1).
+- Discovered tests (`go test ./packages/tools/cmd/runtime-oracle -list 'TestTrace|TestContract'`): inventory 5 + trace 5 = 10 (`TestTraceRunIsDeterministicAndIsolated`, `TestTraceRejectsIncompleteIdentity`, `TestTraceRejectsLivePathWrites`, `TestTraceRejectsMalformedInput`, `TestTraceRejectsIncompleteTraces`).
+- PASS: `go test ./packages/tools/cmd/runtime-oracle -race -count=1`
+- Directory guidance: `packages/tools/cmd/runtime-oracle/AGENTS.md` now documents isolated replay alongside inventory freeze.
+- Architecture skill: no change. Isolated temp-dir replay is the existing foundation tooling rule, not a new cross-task ownership convention.
