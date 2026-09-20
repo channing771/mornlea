@@ -8,6 +8,9 @@
 
 #![deny(unsafe_code)]
 
+mod batch;
+mod block;
+mod block_changes;
 mod bone_meal;
 mod bytes;
 mod chat_command;
@@ -46,6 +49,8 @@ mod take_crafting_output;
 mod till_soil;
 mod varint;
 
+pub use block::{BLOCK_ID_MAX, BLOCKS_PER_SECTION, MAX_Y, MIN_Y, SECTION_SIZE, SECTIONS_PER_CHUNK};
+pub use block_changes::{BlockChange, BlockChanges, MAX_BLOCK_CHANGES};
 pub use bone_meal::BoneMeal;
 pub use chat_command::{CHAT_COMMAND_TEXT_MAX_BYTES, ChatCommand};
 pub use client_hello::ClientHello;

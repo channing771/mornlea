@@ -44,6 +44,13 @@ impl ByteEncoder {
         self.data.extend_from_slice(value);
     }
 
+    pub(crate) fn u16(&mut self, value: u16) {
+        if self.err.is_some() {
+            return;
+        }
+        self.data.extend_from_slice(&value.to_le_bytes());
+    }
+
     pub(crate) fn u32(&mut self, value: u32) {
         if self.err.is_some() {
             return;
@@ -116,7 +123,7 @@ impl<'a> ByteDecoder<'a> {
         Self { data, offset: 0 }
     }
 
-    fn remaining(&self) -> usize {
+    pub(crate) fn remaining(&self) -> usize {
         self.data.len().saturating_sub(self.offset)
     }
 
@@ -134,6 +141,10 @@ impl<'a> ByteDecoder<'a> {
         let (value, used) = decode_uvarint(&self.data[self.offset..])?;
         self.offset += used;
         Ok(value)
+    }
+
+    pub(crate) fn u16(&mut self) -> Result<u16, ProtocolError> {
+        Ok(u16::from_le_bytes(self.bytes()?))
     }
 
     pub(crate) fn u8(&mut self) -> Result<u8, ProtocolError> {

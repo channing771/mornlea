@@ -383,6 +383,44 @@ and `domain_does_not_depend_on_protocol`).
 - `ByteEncoder` / `ByteDecoder` `boolean` helpers copy the Go primitive:
   only 0 and 1 are accepted, and anything else is `InvalidEnum`.
 
+## Item stack (`src/item_stack.rs`, `tests/runtime_contract.rs`)
+
+- `ItemStack` is the fixed 5-byte slot value every inventory-carrying family
+  shares: `u16` item, `u8` count, `u16` durability. The empty stack is the
+  zero value. This module is the single owner of the registered item table
+  the Go side consults for `ItemStack.Valid`: stack limits, tool and armor
+  durability maxima, and the smelting input/output whitelists. Families must
+  not fork a second copy of those rules.
+- Unregistered item numbers are `InvalidEnum`; a non-canonical empty stack, a
+  zero or over-limit count, and a durability outside the item budget are
+  `InvalidRange`.
+
+## Record arrays and batch headers (`src/batch.rs`, `src/block.rs`)
+
+- `read_fixed` / `write_fixed` encode fixed-count record arrays, and
+  `ByteCountBatch` / `UvarintCountBatch` are the two batch headers the
+  entity families share: a server tick plus a one-byte or canonical-uvarint
+  record count. A zero count and a count above the family's fixed maximum are
+  `InvalidRange`; a remaining length that is not exactly `count` records of
+  the family stride is `Truncated` before any record is published.
+- `src/block.rs` owns registered block numbering, the world vertical span,
+  and the chunk-ordered block index that sorted block-change batches compare.
+
+## Block changes (`src/block_changes.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 1 payload is the dimension, two chunk coordinates, the
+  base and new revision, a canonical uvarint change count, and the
+  fixed-stride changes. Zero changes stay legal as a revision barrier for an
+  item-only tick; the count is bounded by `MAX_BLOCK_CHANGES` (`4096`).
+- The revision transition must be exactly `base + 1` from a non-zero,
+  non-saturated base; every change must name a registered block, stay inside
+  the world span and the announced chunk, and keep the batch strictly
+  increasing by chunk-ordered block index. Failures are `InvalidEnum`,
+  `InvalidRange`, or `Truncated` before publication; trailing bytes fail
+  after the last change
+  (`block_changes_round_trip_preserves_golden_bytes`,
+  `block_changes_rejects_invalid_revision_position_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash

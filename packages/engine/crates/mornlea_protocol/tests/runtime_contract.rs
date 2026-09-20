@@ -1895,3 +1895,166 @@ fn production_dependency_keys(manifest: &str) -> Vec<String> {
         })
         .collect()
 }
+
+#[test]
+fn block_changes_round_trip_preserves_golden_bytes() {
+    let changes = mornlea_protocol::BlockChanges::new(
+        mornlea_domain::Dimension::OVERWORLD,
+        1,
+        -1,
+        1,
+        2,
+        vec![mornlea_protocol::BlockChange {
+            x: 16,
+            y: -64,
+            z: -1,
+            block: 2,
+        }],
+    )
+    .expect("changes");
+    let payload = changes.encode();
+    assert_eq!(
+        payload,
+        [
+            0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0x01, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x01, 0x10, 0x00, 0x00, 0x00, 0xc0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x02,
+            0x00,
+        ]
+    );
+    assert_eq!(mornlea_protocol::BlockChanges::PACKET_ID, 1);
+    assert_eq!(payload.len(), 43);
+    let decoded = mornlea_protocol::BlockChanges::decode(&payload).expect("decode");
+    assert_eq!(decoded, changes);
+}
+
+#[test]
+fn block_changes_rejects_invalid_revision_position_and_malformed_payload() {
+    let change = mornlea_protocol::BlockChange {
+        x: 16,
+        y: -64,
+        z: -1,
+        block: 2,
+    };
+    let valid = mornlea_protocol::BlockChanges::new(
+        mornlea_domain::Dimension::OVERWORLD,
+        1,
+        -1,
+        1,
+        2,
+        vec![change],
+    )
+    .expect("valid");
+    assert!(
+        mornlea_protocol::BlockChanges::new(
+            mornlea_domain::Dimension::OVERWORLD,
+            1,
+            -1,
+            0,
+            1,
+            vec![change],
+        )
+        .is_err()
+    );
+    assert!(
+        mornlea_protocol::BlockChanges::new(
+            mornlea_domain::Dimension::OVERWORLD,
+            1,
+            -1,
+            1,
+            3,
+            vec![change],
+        )
+        .is_err()
+    );
+    assert!(
+        mornlea_protocol::BlockChanges::new(
+            mornlea_domain::Dimension::OVERWORLD,
+            1,
+            -1,
+            u64::MAX,
+            0,
+            vec![change],
+        )
+        .is_err()
+    );
+    // The block must stay inside the announced chunk.
+    assert!(
+        mornlea_protocol::BlockChanges::new(
+            mornlea_domain::Dimension::OVERWORLD,
+            1,
+            -1,
+            1,
+            2,
+            vec![mornlea_protocol::BlockChange {
+                x: 32,
+                y: -64,
+                z: -1,
+                block: 2,
+            }],
+        )
+        .is_err()
+    );
+    // World span ends below the highest Y.
+    assert!(
+        mornlea_protocol::BlockChanges::new(
+            mornlea_domain::Dimension::OVERWORLD,
+            1,
+            -1,
+            1,
+            2,
+            vec![mornlea_protocol::BlockChange {
+                x: 16,
+                y: 320,
+                z: -1,
+                block: 2,
+            }],
+        )
+        .is_err()
+    );
+    // Unregistered block numbers are rejected.
+    assert!(
+        mornlea_protocol::BlockChanges::new(
+            mornlea_domain::Dimension::OVERWORLD,
+            1,
+            -1,
+            1,
+            2,
+            vec![mornlea_protocol::BlockChange {
+                x: 16,
+                y: -64,
+                z: -1,
+                block: 90,
+            }],
+        )
+        .is_err()
+    );
+    // Records must be sorted by chunk-ordered block index.
+    assert!(
+        mornlea_protocol::BlockChanges::new(
+            mornlea_domain::Dimension::OVERWORLD,
+            1,
+            -1,
+            1,
+            2,
+            vec![
+                mornlea_protocol::BlockChange {
+                    x: 17,
+                    y: -64,
+                    z: -1,
+                    block: 2,
+                },
+                change,
+            ],
+        )
+        .is_err()
+    );
+    // Truncated and trailing payloads fail before publication.
+    assert!(mornlea_protocol::BlockChanges::decode(&valid.encode()[..42]).is_err());
+    let mut trailing = valid.encode();
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::BlockChanges::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}
