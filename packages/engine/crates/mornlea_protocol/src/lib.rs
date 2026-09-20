@@ -33,6 +33,7 @@ mod request_chunk_resync;
 mod select_hotbar;
 mod server_hello;
 mod take_crafting_output;
+mod till_soil;
 mod varint;
 
 pub use client_hello::ClientHello;
@@ -70,6 +71,7 @@ pub use request_chunk_resync::RequestChunkResync;
 pub use select_hotbar::SelectHotbar;
 pub use server_hello::ServerHello;
 pub use take_crafting_output::TakeCraftingOutput;
+pub use till_soil::TillSoil;
 pub use varint::{decode_uvarint, encode_uvarint};
 
 /// Workspace crate identity consumed by the foundation registration tests.

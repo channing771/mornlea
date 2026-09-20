@@ -1078,6 +1078,51 @@ fn request_chunk_resync_rejects_unknown_dimension_and_malformed_payload() {
     );
 }
 
+#[test]
+fn till_soil_round_trip_preserves_golden_bytes() {
+    let till = mornlea_protocol::TillSoil::new(12, 2.0, -1.0).expect("till");
+    let payload = till.encode();
+    assert_eq!(
+        payload,
+        [
+            0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00,
+            0x80, 0xbf
+        ]
+    );
+    assert_eq!(mornlea_protocol::TillSoil::PACKET_ID, 13);
+    let decoded = mornlea_protocol::TillSoil::decode(&payload).expect("decode");
+    assert_eq!(decoded, till);
+    assert_eq!(decoded.yaw, 2.0);
+    assert_eq!(decoded.pitch, -1.0);
+}
+
+#[test]
+fn till_soil_rejects_non_finite_and_malformed_payload() {
+    assert_eq!(
+        mornlea_protocol::TillSoil::new(1, f32::NAN, 0.0),
+        Err(mornlea_protocol::ProtocolError::InvalidFloat)
+    );
+    assert_eq!(
+        mornlea_protocol::TillSoil::new(1, 0.0, f32::NEG_INFINITY),
+        Err(mornlea_protocol::ProtocolError::InvalidFloat)
+    );
+    assert!(mornlea_protocol::TillSoil::decode(&[0x0c]).is_err());
+    let mut trailing = vec![
+        0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x80,
+        0xbf,
+    ];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::TillSoil::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    let zero = mornlea_protocol::TillSoil::new(0, 0.0, 0.0).expect("zero");
+    assert_eq!(
+        mornlea_protocol::TillSoil::decode(&zero.encode()).expect("decode zero"),
+        zero
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

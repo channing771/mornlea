@@ -233,6 +233,16 @@ and `domain_does_not_depend_on_protocol`).
 - `ByteEncoder` / `ByteDecoder` `i32` helpers use two's-complement
   little-endian encoding, matching the Go primitive.
 
+## Till soil (`src/till_soil.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 13 payload is a little-endian `u64` sequence followed by
+  two little-endian `f32` look angles, with no slot byte. The server
+  validates that the ray-cast target is fluid-adjacent dirt and owns the
+  resulting block write. A zero sequence is legal. Non-finite yaw/pitch
+  are `InvalidFloat`; truncated payloads and trailing bytes fail before
+  publication (`till_soil_round_trip_preserves_golden_bytes`,
+  `till_soil_rejects_non_finite_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash
