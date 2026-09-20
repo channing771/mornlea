@@ -156,3 +156,12 @@
 - Discovered tests (`-- --list`): 30.
 - PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
 - Architecture skill: no change.
+
+## 2026-09-20 — 2.3 protocol.client.KeepAliveReply
+
+- Baseline: `23695793 feat(engine): port keep alive codec`.
+- Existing unrelated work: deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded.
+- Ruling: play packet ID 4 payload is a little-endian `u64` token. Zero tokens fail as `InvalidRange`. Golden bytes match Go `0600000000000000`. Remaining protocol families stay unchecked in `tasks.md`.
+- Discovered tests (`-- --list`): 32.
+- PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
+- Architecture skill: no change.
