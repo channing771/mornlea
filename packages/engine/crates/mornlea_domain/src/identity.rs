@@ -8,6 +8,24 @@ pub enum DomainError {
     InvalidText,
     NonFiniteRotation,
     UnknownId,
+    /// The item number is outside the registered range, so no stack limit,
+    /// durability budget or smelting rule exists for it.
+    InvalidItem,
+    /// The count is zero or above the item's per-slot limit.
+    InvalidCount,
+    /// The durability is zero on a durable item, above its budget, or nonzero
+    /// on a nondurable one.
+    InvalidDurability,
+    /// The drop slot is at or above the fixed per-chunk drop slot count.
+    InvalidDropSlot,
+    /// The drop generation is zero, which names a slot that was never used.
+    InvalidDropGeneration,
+    /// The container slot is outside the addressed kind's fixed per-chunk
+    /// array.
+    InvalidContainerSlot,
+    /// The container generation is zero, which names a slot that was never
+    /// used.
+    InvalidContainerGeneration,
 }
 
 /// Reports whether the 16 bytes are a non-zero UUIDv4 in wire order.

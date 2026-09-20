@@ -10,6 +10,8 @@
 mod event;
 mod identity;
 mod input;
+mod items;
+mod locations;
 mod text;
 mod values;
 
@@ -19,6 +21,10 @@ pub use identity::{
     ReplayIdentity,
 };
 pub use input::{PlaceBlock, PlayerInput, SelectHotbar, SemanticInput, order_inputs};
+pub use items::{
+    ItemStack, durability_max, is_smelting_product, item_stack_limit, smelting_output,
+};
+pub use locations::{ChunkPos, ContainerKind, ContainerRef, DropId};
 pub use text::{CommandText, CompanionName, DisplayName, SpeechText};
 pub use values::{Dimension, FiniteVec3, HotbarSlot, LookAngles};
 
