@@ -83,22 +83,44 @@ func runFrameDecode(c CaseSpec, input []byte) (Outcome, []byte, error) {
 	}, nil, nil
 }
 
-// frameWorkingManifest loads the manifest this node executes inside a
+// frameWorkingManifest assembles the manifest this node executes inside a
 // harness-owned temporary directory.
 //
-// Both framing cases are registered in the frozen manifest, so the working
-// manifest is the frozen one: the helper asserts the framing family's case list
-// and the case index agree on exactly the two framing identities, then
-// round-trips the manifest through a temporary file so the run still proves the
-// working manifest loads through the production loader. Appending a locally
-// built entry instead would register the frozen case twice and fail
-// reconciliation as a duplicate.
+// The frozen manifest now carries the merged Agent contract cases alongside the
+// two framing cases, and this package registers no Go producer for the Agent
+// families: their schema validator is package-local to
+// packages/shared/companion. The working manifest is therefore a family-scoped
+// selection of the frozen one: `Cases` holds exactly the `protocol.frame` cases
+// the frozen manifest registers, and every other family's case list is cleared,
+// because `Reconcile` requires each family's `cases` list to match the cases
+// this selection registers for it. Appending a locally built entry instead
+// would register the frozen case twice and fail reconciliation as a duplicate,
+// and leaving the other families listed would hand their cases to a runner with
+// no producer for them.
 func frameWorkingManifest(t *testing.T, root string) Inventory {
 	t.Helper()
 	frozen := loadRealManifest(t, root)
 	assertFrameCasesAreFrozen(t, frozen)
 
-	encoded, err := encodeInventory(frozen)
+	cloned := Inventory{
+		SchemaVersion:  frozen.SchemaVersion,
+		SourceRevision: frozen.SourceRevision,
+		Identities:     frozen.Identities,
+		Families:       append([]Family(nil), frozen.Families...),
+		Cases:          frameCases(frozen),
+	}
+	frameCaseIDs := frameFamilyCaseIDs(cloned.Cases, frameFamily)
+	for index := range cloned.Families {
+		// A family this selection does not execute registers no case, so its
+		// list must be empty for reconciliation to accept the scoped manifest.
+		if cloned.Families[index].ID != frameFamily {
+			cloned.Families[index].Cases = nil
+			continue
+		}
+		cloned.Families[index].Cases = frameCaseIDs
+	}
+
+	encoded, err := encodeInventory(cloned)
 	if err != nil {
 		t.Fatalf("encode working manifest: %v", err)
 	}
@@ -155,6 +177,34 @@ func assertFrameCasesAreFrozen(t *testing.T, manifest Inventory) {
 			t.Fatalf("case %s is missing from the frozen manifest case index", id)
 		}
 	}
+}
+
+// frameCases selects the frozen manifest's framing cases, preserving the
+// manifest's own case order.
+//
+// The order matters because the scoped family case list is built from the same
+// selection, so the working manifest reproduces the frozen manifest's framing
+// family list exactly rather than re-deriving a different one.
+func frameCases(manifest Inventory) []CaseSpec {
+	cases := make([]CaseSpec, 0, len(manifest.Cases))
+	for _, c := range manifest.Cases {
+		if c.Family == frameFamily {
+			cases = append(cases, c)
+		}
+	}
+	return cases
+}
+
+// frameFamilyCaseIDs lists the case identities of one family in selection
+// order.
+func frameFamilyCaseIDs(cases []CaseSpec, family string) []string {
+	ids := make([]string, 0, len(cases))
+	for _, c := range cases {
+		if c.Family == family {
+			ids = append(ids, c.ID)
+		}
+	}
+	return ids
 }
 
 // frameCaseByID indexes a manifest selection by case identity.
