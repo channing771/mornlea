@@ -278,6 +278,12 @@ func ExportTrace(root, target string, trace Trace, manifest Inventory) error {
 	if err != nil {
 		return fmt.Errorf("runtime-oracle: resolve repository root: %w", err)
 	}
+	// The symlink-component walk below compares lexically against the root the
+	// caller named rather than against its resolved form, so a target addressed
+	// through that same root is still recognized as a repository descendant when
+	// a system directory on the way (macOS /var, for example) is itself a
+	// symlink. Containment stays on resolved paths and is judged by isLivePath.
+	lexicalRoot := absRoot
 	if resolved, err := filepath.EvalSymlinks(absRoot); err == nil {
 		absRoot = resolved
 	}
@@ -327,10 +333,32 @@ func ExportTrace(root, target string, trace Trace, manifest Inventory) error {
 	if live {
 		return fmt.Errorf("runtime-oracle: live-path write rejected: output path %s", target)
 	}
-	if existingInfo.Mode()&os.ModeSymlink != 0 {
-		// The ancestor resolves outside the repository, but publishing through
-		// a symlink is still refused: the export path is owned by the harness.
-		return fmt.Errorf("runtime-oracle: symlink component rejected: %s", existing)
+	// Refuse to publish through a symlink anywhere on the existing portion of
+	// the requested target. os.Lstat on a deeper path follows intermediate
+	// symlinks, so testing only the deepest existing component would let a
+	// higher symlink with an existing descendant redirect the publication; every
+	// existing component strictly below the repository root is therefore
+	// inspected, with the root itself as the boundary that is never inspected.
+	// The deepest component is inspected even when it lies outside the
+	// repository because it is the entry the publication goes through, while the
+	// components above the repository are deliberately skipped: a full
+	// absolute-chain check would reject legitimate targets on platforms where a
+	// system directory such as /var is a symlink, and containment on the
+	// resolved path still protects the repository for those targets.
+	for component := existing; ; component = filepath.Dir(component) {
+		belowRoot := strings.HasPrefix(component, lexicalRoot+string(filepath.Separator))
+		if belowRoot || component == existing {
+			info, statErr := os.Lstat(component)
+			if statErr != nil {
+				return fmt.Errorf("runtime-oracle: stat output path %s: %w", component, statErr)
+			}
+			if info.Mode()&os.ModeSymlink != 0 {
+				return fmt.Errorf("runtime-oracle: symlink component rejected: %s", component)
+			}
+		}
+		if !belowRoot {
+			break
+		}
 	}
 	if len(missing) == 0 {
 		if existingInfo.IsDir() {

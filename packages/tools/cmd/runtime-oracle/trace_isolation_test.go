@@ -253,6 +253,36 @@ func TestTracePathRejectsSymlinkAncestorResolvingOutsideRepository(t *testing.T)
 	}
 }
 
+// TestTracePathRejectsIntermediateSymlinkComponentWithExistingDescendant pins
+// the case a deepest-component-only guard misses: the symlink sits higher in
+// the chain and a directory below it already exists, so the deepest existing
+// component is a plain directory and the publication would otherwise be
+// redirected through the symlink.
+func TestTracePathRejectsIntermediateSymlinkComponentWithExistingDescendant(t *testing.T) {
+	repo := fakeRepository(t)
+	parent := filepath.Dir(repo)
+	outside := filepath.Join(parent, "outside")
+	if err := os.MkdirAll(filepath.Join(outside, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// The link lives inside the repository, so the requested target is lexically
+	// below the repository root while it resolves outside it.
+	link := filepath.Join(repo, "link")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(link, "sub", "out.json")
+
+	trace, manifest := traceFixture(t)
+	err := ExportTrace(repo, target, trace, manifest)
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("expected symlink rejection, got: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(outside, "sub", "out.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("report was published outside the repository: %v", statErr)
+	}
+}
+
 func TestTraceOutputRefusesPreexistingTarget(t *testing.T) {
 	repo := fakeRepository(t)
 	target := filepath.Join(filepath.Dir(repo), "reports", "out.json")
