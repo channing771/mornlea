@@ -22,7 +22,7 @@ Execution order follows direct dependencies, not numeric headings: evidence prim
 ## 2. Domain and shared ownership
 
 - [x] 2.1 Register `mornlea_domain`, `mornlea_protocol`, `mornlea_storage`, scoped guides and nonempty existing runtime_contract targets. Retained acceptance from the prior revision; this does not accept behavior. Discovery: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain -p mornlea_protocol -p mornlea_storage --test runtime_contract --locked -- --list`.
-- [ ] 2.2 [Identity, text and scalar values](plans/02-domain.md#node-2-2). Direct prerequisites: 1.5. Execute the linked packet's named red/green and integration commands.
+- [x] 2.2 [Identity, text and scalar values](plans/02-domain.md#node-2-2). Direct prerequisites: 1.5. Execute the linked packet's named red/green and integration commands.
 - [ ] 2.3 [Item, drop and container values](plans/02-domain.md#node-2-3). Direct prerequisites: 2.2, 1.5. Execute the linked packet's named red/green and integration commands.
 - [ ] 2.4 [Movement and ray command payloads](plans/02-domain.md#node-2-4). Direct prerequisites: 2.3. Execute the linked packet's named red/green and integration commands.
 - [ ] 2.5 [Inventory, container and chat intents](plans/02-domain.md#node-2-5). Direct prerequisites: 2.3, 2.4. Execute the linked packet's named red/green and integration commands.
