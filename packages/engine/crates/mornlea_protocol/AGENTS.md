@@ -181,6 +181,15 @@ and `domain_does_not_depend_on_protocol`).
   publication (`move_inventory_stack_round_trip_preserves_golden_bytes`,
   `move_inventory_stack_rejects_invalid_slots_and_malformed_payload`).
 
+## Move crafting stack (`src/move_crafting_stack.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 7 payload is a little-endian `u64` sequence plus unified
+  view slots. Grid is `0..CRAFTING_GRID_SLOTS-1`; inventory is
+  `CRAFTING_GRID_SLOTS..GRID_CRAFTING_VIEW_SLOTS-1`. Same-slot, out-of-range,
+  and inventory-to-inventory pairs are `InvalidRange`; trailing bytes fail
+  before publication (`move_crafting_stack_round_trip_preserves_golden_bytes`,
+  `move_crafting_stack_rejects_invalid_slots_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash

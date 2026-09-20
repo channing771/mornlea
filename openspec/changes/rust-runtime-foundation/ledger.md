@@ -228,3 +228,13 @@
 - Discovered tests (`-- --list`): 47.
 - PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
 - Architecture skill: no change.
+
+## 2026-09-20 — 2.3 protocol.client.MoveCraftingStack
+
+- Baseline: `a98f112c feat(engine): port move inventory stack codec`.
+- Adopted leftover `packages/engine/crates/mornlea_protocol/{src/move_crafting_stack.rs,src/lib.rs,tests/runtime_contract.rs,AGENTS.md}` from an aborted worker after empirical review: golden `0b000000000000000900`, packet ID 7, same-slot, out-of-range, inventory-to-inventory, truncated, and trailing-byte cases match Go `codec_golden_test.go` and `TestGridCraftingMoveValueDomain`. rustfmt collapsed the crate re-export onto one line; tests and production constructor were kept. Deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded. Conversation-start untracked `packages/tools/cmd/runtime-oracle/trace_test.go` is already committed and was not rewritten.
+- Ruling: play packet ID 7 payload is little-endian `u64` sequence plus unified view slots. Grid is `0..CRAFTING_GRID_SLOTS-1` (`9`); inventory is `9..GRID_CRAFTING_VIEW_SLOTS-1` (`45`). Same-slot, out-of-range, and inventory-to-inventory pairs fail as `InvalidRange`. Inventory-to-inventory stays on `MoveInventoryStack`. Golden bytes match Go `0b000000000000000900`. Remaining protocol families stay unchecked in `tasks.md`.
+- Discovered tests (`-- --list`): 49.
+- PASS: `rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml -p mornlea_protocol -- --check`
+- PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
+- Architecture skill: no change.

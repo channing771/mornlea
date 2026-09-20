@@ -809,6 +809,64 @@ fn move_inventory_stack_rejects_invalid_slots_and_malformed_payload() {
     );
 }
 
+#[test]
+fn move_crafting_stack_round_trip_preserves_golden_bytes() {
+    let mov = mornlea_protocol::MoveCraftingStack::new(11, 9, 0).expect("move");
+    let payload = mov.encode();
+    assert_eq!(
+        payload,
+        [0x0b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09, 0x00]
+    );
+    assert_eq!(mornlea_protocol::MoveCraftingStack::PACKET_ID, 7);
+    assert_eq!(mornlea_protocol::CRAFTING_GRID_SLOTS, 9);
+    assert_eq!(mornlea_protocol::GRID_CRAFTING_VIEW_SLOTS, 45);
+    let decoded = mornlea_protocol::MoveCraftingStack::decode(&payload).expect("decode");
+    assert_eq!(decoded, mov);
+    assert_eq!(decoded.sequence, 11);
+    assert_eq!(decoded.from, 9);
+    assert_eq!(decoded.to, 0);
+}
+
+#[test]
+fn move_crafting_stack_rejects_invalid_slots_and_malformed_payload() {
+    assert_eq!(
+        mornlea_protocol::MoveCraftingStack::new(1, 45, 0),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::MoveCraftingStack::new(1, 0, 45),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::MoveCraftingStack::new(1, 2, 2),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::MoveCraftingStack::new(1, 9, 10),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::MoveCraftingStack::decode(&[
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 9, 10
+        ]),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert!(mornlea_protocol::MoveCraftingStack::decode(&[0x0b]).is_err());
+    let mut trailing = vec![0x0b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09, 0x00];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::MoveCraftingStack::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    let grid_to_inv = mornlea_protocol::MoveCraftingStack::new(0, 0, 44).expect("grid to inv");
+    assert_eq!(grid_to_inv.from, 0);
+    assert_eq!(grid_to_inv.to, 44);
+    assert_eq!(
+        mornlea_protocol::MoveCraftingStack::decode(&grid_to_inv.encode()).expect("decode"),
+        grid_to_inv
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

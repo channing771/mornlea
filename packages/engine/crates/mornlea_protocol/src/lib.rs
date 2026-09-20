@@ -22,6 +22,7 @@ mod keep_alive_reply;
 mod login_reject;
 mod login_start;
 mod login_success;
+mod move_crafting_stack;
 mod move_inventory_stack;
 mod place_block_succeeded;
 mod player_id;
@@ -54,6 +55,7 @@ pub use login_reject::{
 };
 pub use login_start::{LOGIN_VIEW_DISTANCE_MAX, LOGIN_VIEW_DISTANCE_MIN, LoginStart};
 pub use login_success::LoginSuccess;
+pub use move_crafting_stack::{CRAFTING_GRID_SLOTS, GRID_CRAFTING_VIEW_SLOTS, MoveCraftingStack};
 pub use move_inventory_stack::{INVENTORY_SLOTS, MoveInventoryStack};
 pub use place_block_succeeded::PlaceBlockSucceeded;
 pub use player_id::PlayerId;
