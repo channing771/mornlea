@@ -37,10 +37,19 @@ fn crate_identity_matches_workspace_name() {
     assert_eq!(mornlea_storage::CRATE_NAME, env!("CARGO_PKG_NAME"));
 }
 
+/// `mornlea_storage` may depend only on `mornlea_domain` plus the single
+/// approved compression crate. The `save.chunk` envelope is a zstd frame, so
+/// decoding the committed Go fixtures needs a zstd decoder, and re-encoding was
+/// approved to attempt byte-exact parity with the Go `Encode` output (content
+/// checksum included). `zstd` — the crate that binds the reference libzstd C
+/// implementation — is therefore the one permitted non-domain production
+/// dependency. Everything else stays forbidden: protocol codecs, the numerical
+/// kernel, a graphical host, and the Godot bridge. The permitted set is pinned
+/// exactly so the dependency surface cannot drift silently.
 #[test]
 fn production_manifest_depends_only_on_domain() {
     let keys = production_dependency_keys(&read_manifest(env!("CARGO_MANIFEST_DIR")));
-    assert_eq!(keys, ["mornlea_domain"]);
+    assert_eq!(keys, ["mornlea_domain", "zstd"]);
     for forbidden in FORBIDDEN_PRODUCTION_DEPS {
         assert!(
             !keys.iter().any(|key| key == forbidden),

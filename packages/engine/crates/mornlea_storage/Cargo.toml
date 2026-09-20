@@ -9,3 +9,8 @@ crate-type = ["rlib"]
 
 [dependencies]
 mornlea_domain = { path = "../mornlea_domain" }
+# The save.chunk envelope is a zstd frame carrying an xxhash-64 content
+# checksum, so the codec needs a real encoder and decoder rather than a
+# decode-only crate. This crate is the only place that compression dependency
+# is allowed.
+zstd = "0.13"
