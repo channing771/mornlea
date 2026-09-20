@@ -44,11 +44,29 @@ impl ByteEncoder {
         self.data.extend_from_slice(value);
     }
 
+    pub(crate) fn u32(&mut self, value: u32) {
+        if self.err.is_some() {
+            return;
+        }
+        self.data.extend_from_slice(&value.to_le_bytes());
+    }
+
     pub(crate) fn u64(&mut self, value: u64) {
         if self.err.is_some() {
             return;
         }
         self.data.extend_from_slice(&value.to_le_bytes());
+    }
+
+    pub(crate) fn f32(&mut self, value: f32) {
+        if self.err.is_some() {
+            return;
+        }
+        if !value.is_finite() {
+            self.fail(ProtocolError::InvalidFloat);
+            return;
+        }
+        self.u32(value.to_bits());
     }
 
     pub(crate) fn string(&mut self, value: &str, max_bytes: usize) {
@@ -117,8 +135,20 @@ impl<'a> ByteDecoder<'a> {
         Ok(value)
     }
 
+    pub(crate) fn u32(&mut self) -> Result<u32, ProtocolError> {
+        Ok(u32::from_le_bytes(self.bytes()?))
+    }
+
     pub(crate) fn u64(&mut self) -> Result<u64, ProtocolError> {
         Ok(u64::from_le_bytes(self.bytes()?))
+    }
+
+    pub(crate) fn f32(&mut self) -> Result<f32, ProtocolError> {
+        let value = f32::from_bits(self.u32()?);
+        if !value.is_finite() {
+            return Err(ProtocolError::InvalidFloat);
+        }
+        Ok(value)
     }
 
     pub(crate) fn string(

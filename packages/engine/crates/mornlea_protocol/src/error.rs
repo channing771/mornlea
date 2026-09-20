@@ -12,4 +12,5 @@ pub enum ProtocolError {
     InvalidString,
     InvalidIdentity,
     InvalidRange,
+    InvalidFloat,
 }

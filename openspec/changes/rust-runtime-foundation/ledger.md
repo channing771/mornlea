@@ -248,3 +248,13 @@
 - PASS: `rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml -p mornlea_protocol -- --check`
 - PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
 - Architecture skill: no change.
+
+## 2026-09-20 — 2.3 protocol.client.PlaceBlock
+
+- Baseline: `14103024 feat(engine): port close container codec`.
+- Existing unrelated work: deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded.
+- Ruling: play packet ID 2 payload is little-endian `u64` sequence, two little-endian `f32` look angles, and a hotbar slot u8. Slot validation reuses domain `HotbarSlot` (`0..=8`). Non-finite yaw/pitch fail as `InvalidFloat`; out-of-range slots fail as `InvalidRange`. `ByteEncoder`/`ByteDecoder` now copy the Go `f32` primitive (NaN/Inf fail before publication). Golden bytes match Go `030000000000000000000040000080bf04`. Remaining protocol families stay unchecked in `tasks.md`.
+- Discovered tests (`-- --list`): 53.
+- PASS: `rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml -p mornlea_protocol -- --check`
+- PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
+- Architecture skill: no change.

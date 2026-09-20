@@ -198,6 +198,17 @@ and `domain_does_not_depend_on_protocol`).
   (`close_container_round_trip_preserves_golden_bytes`,
   `close_container_rejects_malformed_payload_and_accepts_zero_sequence`).
 
+## Place block (`src/place_block.rs`, `src/bytes.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 2 payload is a little-endian `u64` sequence, two
+  little-endian `f32` look angles, and a hotbar slot byte. Slot must be
+  inside domain `HotbarSlot` (`0..=8`). Non-finite yaw/pitch are
+  `InvalidFloat`; out-of-range slots are `InvalidRange`; trailing bytes
+  fail before publication (`place_block_round_trip_preserves_golden_bytes`,
+  `place_block_rejects_invalid_slot_non_finite_and_malformed_payload`).
+- `ByteEncoder` / `ByteDecoder` `f32` helpers copy the Go primitive: NaN
+  and Inf fail before a payload is published.
+
 ## Focused Verification
 
 ```bash

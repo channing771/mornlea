@@ -895,6 +895,75 @@ fn close_container_rejects_malformed_payload_and_accepts_zero_sequence() {
     );
 }
 
+#[test]
+fn place_block_round_trip_preserves_golden_bytes() {
+    let place = mornlea_protocol::PlaceBlock::new(3, 2.0, -1.0, 4).expect("place");
+    let payload = place.encode();
+    assert_eq!(
+        payload,
+        [
+            0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00,
+            0x80, 0xbf, 0x04
+        ]
+    );
+    assert_eq!(mornlea_protocol::PlaceBlock::PACKET_ID, 2);
+    let decoded = mornlea_protocol::PlaceBlock::decode(&payload).expect("decode");
+    assert_eq!(decoded, place);
+    assert_eq!(decoded.sequence, 3);
+    assert_eq!(decoded.yaw, 2.0);
+    assert_eq!(decoded.pitch, -1.0);
+    assert_eq!(decoded.slot, 4);
+}
+
+#[test]
+fn place_block_rejects_invalid_slot_non_finite_and_malformed_payload() {
+    assert_eq!(
+        mornlea_protocol::PlaceBlock::new(1, 0.0, 0.0, 9),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::PlaceBlock::new(1, f32::NAN, 0.0, 0),
+        Err(mornlea_protocol::ProtocolError::InvalidFloat)
+    );
+    assert_eq!(
+        mornlea_protocol::PlaceBlock::new(1, 0.0, f32::INFINITY, 0),
+        Err(mornlea_protocol::ProtocolError::InvalidFloat)
+    );
+    let mut nan_yaw = vec![0u8; 8];
+    nan_yaw.extend_from_slice(&0x7fc0_0000u32.to_le_bytes());
+    nan_yaw.extend_from_slice(&0f32.to_le_bytes());
+    nan_yaw.push(0);
+    assert_eq!(
+        mornlea_protocol::PlaceBlock::decode(&nan_yaw),
+        Err(mornlea_protocol::ProtocolError::InvalidFloat)
+    );
+    assert_eq!(
+        mornlea_protocol::PlaceBlock::decode(&[
+            0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00,
+            0x80, 0xbf, 0x09
+        ]),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert!(mornlea_protocol::PlaceBlock::decode(&[0x03]).is_err());
+    let mut trailing = vec![
+        0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x80,
+        0xbf, 0x04,
+    ];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::PlaceBlock::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    let first = mornlea_protocol::PlaceBlock::new(0, 0.0, 0.0, 0).expect("slot zero");
+    let last = mornlea_protocol::PlaceBlock::new(0, 0.0, 0.0, 8).expect("slot eight");
+    assert_eq!(first.slot, 0);
+    assert_eq!(last.slot, 8);
+    assert_eq!(
+        mornlea_protocol::PlaceBlock::decode(&first.encode()).expect("decode slot zero"),
+        first
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }
