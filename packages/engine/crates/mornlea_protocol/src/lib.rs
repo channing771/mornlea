@@ -24,6 +24,7 @@ mod disconnect;
 mod drop_selected_item;
 mod equip_armor;
 mod error;
+mod forget_chunks;
 mod frame;
 mod handshake_reject;
 mod keep_alive;
@@ -76,6 +77,7 @@ pub use disconnect::{
 pub use drop_selected_item::DropSelectedItem;
 pub use equip_armor::EquipArmor;
 pub use error::ProtocolError;
+pub use forget_chunks::{ForgetChunks, MAX_FORGET_CHUNKS};
 pub use frame::{MAX_FRAME_BYTES, read_frame, write_frame};
 pub use handshake_reject::{HANDSHAKE_VERSION_MISMATCH, HandshakeReject};
 pub use keep_alive::KeepAlive;

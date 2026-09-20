@@ -421,6 +421,17 @@ and `domain_does_not_depend_on_protocol`).
   (`block_changes_round_trip_preserves_golden_bytes`,
   `block_changes_rejects_invalid_revision_position_and_malformed_payload`).
 
+## Forget chunks (`src/forget_chunks.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 2 payload is the dimension, a canonical uvarint chunk
+  count, and the fixed-stride chunk coordinates. The count is bounded by
+  `MAX_FORGET_CHUNKS` (`4096`), a zero count is `InvalidRange`, duplicate
+  coordinates are `InvalidRange`, and a remaining length shorter than the
+  declared records is `Truncated` before publication; trailing bytes fail
+  after the last coordinate
+  (`forget_chunks_round_trip_preserves_golden_bytes`,
+  `forget_chunks_rejects_empty_duplicate_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash

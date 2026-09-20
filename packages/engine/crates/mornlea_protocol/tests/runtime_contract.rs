@@ -2058,3 +2058,62 @@ fn block_changes_rejects_invalid_revision_position_and_malformed_payload() {
         Err(mornlea_protocol::ProtocolError::TrailingBytes)
     );
 }
+
+#[test]
+fn forget_chunks_round_trip_preserves_golden_bytes() {
+    let forget = mornlea_protocol::ForgetChunks::new(
+        mornlea_domain::Dimension::OVERWORLD,
+        vec![(1, -1), (2, 3)],
+    )
+    .expect("forget");
+    let payload = forget.encode();
+    assert_eq!(
+        payload,
+        [
+            0x00, 0x00, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0x02,
+            0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+        ]
+    );
+    assert_eq!(mornlea_protocol::ForgetChunks::PACKET_ID, 2);
+    assert_eq!(payload.len(), 21);
+    let decoded = mornlea_protocol::ForgetChunks::decode(&payload).expect("decode");
+    assert_eq!(decoded, forget);
+}
+
+#[test]
+fn forget_chunks_rejects_empty_duplicate_and_malformed_payload() {
+    let forget = mornlea_protocol::ForgetChunks::new(
+        mornlea_domain::Dimension::OVERWORLD,
+        vec![(1, -1), (2, 3)],
+    )
+    .expect("forget");
+    assert_eq!(
+        mornlea_protocol::ForgetChunks::new(mornlea_domain::Dimension::OVERWORLD, Vec::new()),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert!(
+        mornlea_protocol::ForgetChunks::new(
+            mornlea_domain::Dimension::OVERWORLD,
+            vec![(1, -1), (1, -1)],
+        )
+        .is_err()
+    );
+    assert!(
+        mornlea_protocol::ForgetChunks::new(
+            mornlea_domain::Dimension::DEPTHS,
+            vec![(1, -1), (2, 3)],
+        )
+        .is_ok()
+    );
+    // A truncated batch never publishes partial coordinates.
+    assert!(mornlea_protocol::ForgetChunks::decode(&forget.encode()[..17]).is_err());
+    // A zero count carries no observable meaning.
+    assert!(mornlea_protocol::ForgetChunks::decode(&[0, 0, 0, 0, 0]).is_err());
+    let mut trailing = forget.encode();
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::ForgetChunks::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}
+
