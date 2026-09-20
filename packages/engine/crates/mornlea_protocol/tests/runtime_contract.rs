@@ -3691,3 +3691,173 @@ fn remote_player_spawn_rejects_invalid_identity_name_and_pose() {
     bad_length[16] = 200;
     assert!(mornlea_protocol::RemotePlayerSpawn::decode(&bad_length).is_err());
 }
+
+#[test]
+fn remote_player_states_round_trip_preserves_golden_bytes() {
+    let states = mornlea_protocol::RemotePlayerStates::new(
+        2,
+        vec![mornlea_protocol::RemotePlayerState {
+            player_id: mornlea_protocol::PlayerId::new([
+                0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+                0xee, 0xff,
+            ])
+            .expect("player id"),
+            dimension: mornlea_domain::Dimension::OVERWORLD,
+            position: [1.0, 2.0, 3.0],
+            yaw: 4.0,
+            pitch: -5.0,
+            reset: true,
+        }],
+    )
+    .expect("states");
+    let payload = states.encode();
+    assert_eq!(mornlea_protocol::RemotePlayerStates::PACKET_ID, 9);
+    assert_eq!(payload.len(), 8 + 1 + 41);
+    assert_eq!(&payload[..8], &2u64.to_le_bytes());
+    assert_eq!(payload[8], 1);
+    assert_eq!(
+        &payload[9..25],
+        &[
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xff,
+        ]
+    );
+    assert_eq!(&payload[25..29], &[0x00, 0x00, 0x00, 0x00]);
+    assert_eq!(&payload[29..33], &1.0f32.to_bits().to_le_bytes());
+    assert_eq!(&payload[41..45], &4.0f32.to_bits().to_le_bytes());
+    assert_eq!(&payload[45..49], &(-5.0f32).to_bits().to_le_bytes());
+    assert_eq!(payload[49], 1);
+    assert_eq!(
+        mornlea_protocol::RemotePlayerStates::decode(&payload).expect("decode"),
+        states
+    );
+    // The depths are a legal dimension for a peer session, as for its spawn.
+    let depths = mornlea_protocol::RemotePlayerStates::new(
+        2,
+        vec![mornlea_protocol::RemotePlayerState {
+            dimension: mornlea_domain::Dimension::DEPTHS,
+            ..states.players[0]
+        }],
+    )
+    .expect("depths states");
+    assert_eq!(
+        mornlea_protocol::RemotePlayerStates::decode(&depths.encode()).expect("decode"),
+        depths
+    );
+}
+
+#[test]
+fn remote_player_states_rejects_unsorted_invalid_and_malformed_payload() {
+    let first = mornlea_protocol::PlayerId::new([
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+        0xf0,
+    ])
+    .expect("first player id");
+    let second = mornlea_protocol::PlayerId::new([
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+        0xff,
+    ])
+    .expect("second player id");
+    let record = mornlea_protocol::RemotePlayerState {
+        player_id: first,
+        dimension: mornlea_domain::Dimension::OVERWORLD,
+        position: [1.0, 2.0, 3.0],
+        yaw: 4.0,
+        pitch: -5.0,
+        reset: false,
+    };
+
+    let mut bad_position = record;
+    bad_position.position = [f32::NAN, 0.0, 0.0];
+    let mut bad_yaw = record;
+    bad_yaw.yaw = f32::INFINITY;
+    for bad in [bad_position, bad_yaw] {
+        assert!(
+            mornlea_protocol::RemotePlayerStates::new(1, vec![bad]).is_err(),
+            "accepted invalid remote player state record"
+        );
+    }
+    assert!(mornlea_protocol::RemotePlayerStates::new(1, Vec::new()).is_err());
+    assert!(
+        mornlea_protocol::RemotePlayerStates::new(1, vec![record, record]).is_err(),
+        "accepted duplicate remote player state records"
+    );
+    assert!(
+        mornlea_protocol::RemotePlayerStates::new(
+            1,
+            vec![
+                mornlea_protocol::RemotePlayerState {
+                    player_id: second,
+                    ..record
+                },
+                record,
+            ]
+        )
+        .is_err(),
+        "accepted descending remote player state records"
+    );
+    // The batch ceiling is the fixed peer-session budget, not the companion
+    // activity limit.
+    let full: Vec<_> = (0..mornlea_protocol::MAX_REMOTE_PLAYER_STATES)
+        .map(|index| mornlea_protocol::RemotePlayerState {
+            player_id: mornlea_protocol::PlayerId::new([
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0x40 + index as u8,
+                0,
+                0x80 + index as u8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ])
+            .expect("player id"),
+            ..record
+        })
+        .collect();
+    assert!(
+        mornlea_protocol::RemotePlayerStates::new(1, full).is_ok(),
+        "rejected a full remote player state batch"
+    );
+
+    let valid = mornlea_protocol::RemotePlayerStates::new(1, vec![record]).expect("states");
+    let payload = valid.encode();
+    for length in 0..payload.len() {
+        assert!(
+            mornlea_protocol::RemotePlayerStates::decode(&payload[..length]).is_err(),
+            "accepted truncated remote player states at {length}"
+        );
+    }
+    let mut padded = payload.clone();
+    padded.push(0x00);
+    assert_eq!(
+        mornlea_protocol::RemotePlayerStates::decode(&padded),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    let mut mismatched = payload.clone();
+    mismatched[8] = 2;
+    assert_eq!(
+        mornlea_protocol::RemotePlayerStates::decode(&mismatched),
+        Err(mornlea_protocol::ProtocolError::Truncated)
+    );
+    let mut empty = payload.clone();
+    empty[8] = 0;
+    assert!(mornlea_protocol::RemotePlayerStates::decode(&empty).is_err());
+    let mut over = payload.clone();
+    over[8] = (mornlea_protocol::MAX_REMOTE_PLAYER_STATES + 1) as u8;
+    assert!(mornlea_protocol::RemotePlayerStates::decode(&over).is_err());
+    // A payload above the fixed wire ceiling is rejected before any record is
+    // read, which is the pre-allocation guard the Go decoder applies.
+    let oversized = vec![0u8; mornlea_protocol::REMOTE_PLAYER_STATES_MAX_WIRE_BYTES + 1];
+    assert_eq!(
+        mornlea_protocol::RemotePlayerStates::decode(&oversized),
+        Err(mornlea_protocol::ProtocolError::FrameTooLarge)
+    );
+}

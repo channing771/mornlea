@@ -62,6 +62,7 @@ mod player_state;
 mod projectile_despawn;
 mod remote_player_despawn;
 mod remote_player_spawn;
+mod remote_player_states;
 mod request_chunk_resync;
 mod select_hotbar;
 mod server_hello;
@@ -171,6 +172,10 @@ pub use projectile_despawn::{
 };
 pub use remote_player_despawn::RemotePlayerDespawn;
 pub use remote_player_spawn::RemotePlayerSpawn;
+pub use remote_player_states::{
+    MAX_REMOTE_PLAYER_STATES, REMOTE_PLAYER_STATE_WIRE_BYTES, REMOTE_PLAYER_STATES_MAX_WIRE_BYTES,
+    RemotePlayerState, RemotePlayerStates,
+};
 pub use request_chunk_resync::RequestChunkResync;
 pub use select_hotbar::SelectHotbar;
 pub use server_hello::ServerHello;
