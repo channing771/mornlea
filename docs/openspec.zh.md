@@ -1,6 +1,6 @@
 ---
 doc_id: openspec-workflow
-doc_revision: 2026-09-19.1
+doc_revision: 2026-09-20.1
 language: zh-CN
 counterpart: openspec.md
 ---
@@ -38,6 +38,12 @@ openspec validate --all --strict --no-interactive
 需要提前合并 delta 时使用 `$openspec-sync-specs`，完成后使用 `$openspec-archive-change`。每轮实现结束提升稳定架构发现，否则记录 `Architecture skill: no change`。
 
 归档会将 delta 合并到 `openspec/specs/<capability>/spec.md`，并把完整 change 移到 `openspec/changes/archive/`；不得批量改写历史 change 或计划。
+
+## 在 OpenSpec 内使用 Superpowers 规划
+
+新建或实质修订多步骤计划时，主 Agent 必须使用已安装的 Superpowers `brainstorming` 和 `writing-plans`。架构与功能拆分由主 Agent 完整确定，worker 负责实现明确契约。设计、接口和取舍写入 `design.md`，任务状态只写入 `tasks.md`，可直接执行的详细任务说明链接到同一 change 内，不在 `docs/superpowers/` 另建活跃计划。
+
+任务说明须列出精确文件和依赖、输入/输出类型、算法及失败/资源边界、具体失败测试和预期输出、命令、禁止范围与回滚。派发前按项目编排 skill 的检查表核对需求覆盖、接口一致性和无环依赖。不得将架构选择、测试基准选择或未定义的边界情况留给 worker。已有授权及已选执行方式持续有效，规划完成不等于实现已验收。
 
 ## 日常命令
 

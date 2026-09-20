@@ -1,0 +1,55 @@
+# Worker planning contract
+
+Use this reference while authoring or reviewing a multi-step implementation plan, after reading the installed Superpowers `brainstorming` and `writing-plans` skills. Root `AGENTS.md` controls scope, authorization and execution policy.
+
+## Main Agent decisions
+
+Resolve these before producing a dispatchable task:
+
+1. Observable outcome, non-goals, supported versions and compatibility source.
+2. Responsibility and dependency boundaries; one owner for every shared type, registry and invariant.
+3. Exact public inputs/outputs, field types, units, ordering, mutability and conversion boundaries.
+4. Lifecycle/state transitions, resource ownership, concurrency, cancellation and failure publication.
+5. Algorithms, integer/float semantics, count/byte/work/allocation limits and overflow behavior.
+6. Independent oracle, concrete positive/negative/boundary cases and deterministic expected results.
+7. Dependency DAG, serial integration points, exclusive editable files and rollback unit.
+
+Read-only discovery and independent reviews can supply evidence. The main Agent must choose and justify the design, settle conflicts and author the final plan itself. A worker can choose local variable names and equivalent private code organization within its file ownership; it cannot redefine any decision above.
+
+For migrations, explicitly separate preserved external behavior from target-language representation. A legacy implementation supplies compatibility evidence, not an instruction to copy its ownership, unbounded work, allocation patterns or abstraction layers.
+
+## Required task packet
+
+Each node must contain or explicitly link all of the following. Common contracts may be shared, but the task must identify exactly which section it consumes.
+
+- **Identity and readiness:** stable node ID, baseline, direct predecessors and one independently reviewable deliverable. A dependency wait is not unfinished design.
+- **Files:** exact create/modify/test paths and read-only authority; single owner for exports/shared tests. Include scoped-guide updates when boundaries change.
+- **Interfaces:** fully spelled input/output signatures and field maps; specify whether named types are existing or which predecessor produces them.
+- **Behavior:** ordered algorithm or state-transition steps, invariants, error precedence, publication and resource limits. State actual numeric bounds and units.
+- **Test first:** concrete test code or a fully specified table consumed by named test helpers; include the helper's defining node, inputs, expected outcomes and what fails on the baseline. Do not label a test as behavioral if it only fails to import an absent type.
+- **Implementation:** code for the non-obvious logic and precise transformation steps; no undefined helpers, ellipses standing for the algorithm, or instructions to invent edge cases. Full unrelated production files need not be pasted into a plan.
+- **Validation:** exact discovery and run commands, nonzero expected case set, focused regression scope, performance counters when relevant, expected red/green distinction.
+- **Closure:** exclusions, dependent integration check, controller review evidence, scoped commit message and rollback behavior. Workers report; the controller updates the task status and ledger after verification.
+
+Steps are small actions: write a specific regression, run and observe it fail for the intended reason, implement the prescribed change, run the focused checks, submit evidence and commit the verified node. A task groups the steps needed for one independently testable behavior. Do not make scaffolding-only microtasks that cannot prove a behavior; do not make an entire subsystem one task.
+
+## Readiness review
+
+The controller must answer yes to each question:
+
+- Can a worker implement from this packet plus its named contracts, without the controller transcript?
+- Can every requirement and review finding be traced to a node and an acceptance case?
+- Do producer/consumer signatures and unit/ownership/error conventions agree?
+- Are dependencies acyclic, with exactly one status source and a clear serial integration order?
+- Are all compatibility, invalid-input, cancellation, resource and publication decisions settled?
+- Does the negative case exercise the real boundary rather than mirror implementation details?
+- Can a reviewer reject this node without invalidating an unrelated completed node?
+- Does the plan preserve unrelated changes and leave external actions within existing authorization?
+
+Reject a packet that says only “port the family”, “add appropriate validation”, “handle edge cases”, “same as the previous task”, or “the controller will design the interface later”. Replace it with the exact decisions and examples before dispatch. A discovery result that changes the contract returns to the main Agent and updates every affected task before implementation continues.
+
+## Source and authorization handling
+
+Keep decisions and implementation briefs within `openspec/changes/<change>/`; `tasks.md` is the single checkbox/status source. Supporting briefs name node IDs but do not maintain competing completion checkboxes. Do not edit installed plugin caches or create a second active plan in `docs/superpowers/`. Discover skill locations through available skill/plugin metadata or local installed `SKILL.md` resources.
+
+Respect user-supplied scope, chosen execution method and existing authorization. A request to revise design and plan authorizes those reversible artifacts, not runtime deployment. Skill defaults must not create repeated approvals, external notifications or model/provider changes. If a required skill truly cannot be found, state which one is missing and which dependent work cannot be truthfully performed.

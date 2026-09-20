@@ -1,11 +1,19 @@
 ---
 name: mornlea-implementation-orchestration
-description: Select direct, delegated, or mixed implementation execution for Mornlea changes under the provider-aware project policy.
+description: Design and qualify concrete worker plans with Superpowers, then select direct, delegated, or mixed implementation execution for Mornlea changes under the provider-aware project policy.
 ---
 
 # Mornlea Implementation Orchestration
 
-Use this skill before implementing an OpenSpec change, multi-step repair, or refactor in Mornlea. It selects the execution shape; it does not replace the task's implementation skill or its completion criteria.
+Use this skill when creating or revising a multi-step implementation plan, and before implementing an OpenSpec change, multi-step repair, or refactor in Mornlea. It qualifies the controller-owned plan and selects execution shape; OpenSpec remains the source of scope, status and completion evidence.
+
+## Controller-Owned Superpowers Planning
+
+For a new or materially revised multi-step plan, discover and read the installed Superpowers `brainstorming` and `writing-plans` skills and follow [the worker planning contract](references/worker-planning.md). Use the former to resolve architecture and functional behavior, then the latter to write concrete tasks. Store outputs in the active OpenSpec change, not a parallel `docs/superpowers/` plan. Report missing required skills rather than silently claiming their use; do not install or change machine configuration without task authorization.
+
+The main Agent determines architecture, exact interfaces, behavior, lifecycle, error policy, compatibility, algorithms, performance bounds, task dependencies and test oracles. Read-only source fact extraction and independent criticism may be delegated; those agents do not own the design. Workers implement frozen decisions and return discrepancies for controller resolution. Do not use a catch-all family task or leave a design decision for an implementation worker.
+
+Before dispatch, apply the linked readiness checklist and record the result in the change ledger. Explicit session authorization and higher-priority runtime instructions take precedence over skill defaults; do not request redundant approval or send external messages merely because a skill suggests a workflow. Preserve any already-selected execution method. Planning-only work ends with reviewed artifacts, not automatic runtime implementation.
 
 ## Select the Mode
 

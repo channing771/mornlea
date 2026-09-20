@@ -1,6 +1,6 @@
 ---
 doc_id: openspec-workflow
-doc_revision: 2026-09-19.1
+doc_revision: 2026-09-20.1
 language: en
 counterpart: openspec.zh.md
 ---
@@ -38,6 +38,12 @@ openspec validate --all --strict --no-interactive
 Use `$openspec-sync-specs` when delta specifications must be promoted before archival. At the end of each implementation round, promote stable architectural findings to `mornlea-architecture`, or record `Architecture skill: no change`.
 
 Archival merges delta requirements into `openspec/specs/<capability>/spec.md` and moves the complete change to `openspec/changes/archive/`. Do not bulk-rewrite historical changes or plans.
+
+## Superpowers planning within OpenSpec
+
+The main Agent must use installed Superpowers `brainstorming` and `writing-plans` for new or materially revised multi-step plans. The main Agent fully resolves architecture and functional decomposition; workers implement explicit contracts. Keep the design, interfaces and trade-offs in `design.md`, task status in `tasks.md`, and linked executable task briefs inside the same change. Do not create a second active plan under `docs/superpowers/`.
+
+A task brief names exact files and dependencies, consumed/produced types, the algorithm and failure/resource boundaries, concrete failing tests and expected outputs, commands, exclusions and rollback. Before dispatch, verify coverage, matching interfaces and acyclic dependencies using the project orchestration skill's readiness checklist. No task may defer architecture, test-oracle selection or unspecified edge cases to its worker. Existing authorization and the selected execution method remain controlling; planning does not imply implementation acceptance.
 
 ## Daily commands
 

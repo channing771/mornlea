@@ -130,7 +130,7 @@
       ],
       "english_path": "docs/development-process.md",
       "chinese_path": "docs/development-process.zh.md",
-      "revision": "2026-09-19.1"
+      "revision": "2026-09-20.1"
     },
     {
       "id": "feature-backlog",
@@ -310,7 +310,7 @@
       ],
       "english_path": "docs/openspec.md",
       "chinese_path": "docs/openspec.zh.md",
-      "revision": "2026-09-19.1"
+      "revision": "2026-09-20.1"
     },
     {
       "id": "test-organization",
