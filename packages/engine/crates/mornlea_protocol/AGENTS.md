@@ -357,6 +357,18 @@ and `domain_does_not_depend_on_protocol`).
   byte is `InvalidEnum`; truncated payloads and trailing bytes fail
   before publication (`player_input_round_trip_preserves_golden_bytes`,
   `player_input_rejects_non_finite_and_malformed_payload`).
+
+## Combat hit (`src/combat_hit.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 25 payload is a fixed 10-byte confirmation: a
+  little-endian `u64` server tick, a damage byte, and a target kind byte.
+  The server tick must be non-zero, damage must be inside `1..=MAX_HEALTH`
+  (`20`, copied from Go `core.MaxHealth`), and the kind must be inside
+  `COMBAT_TARGET_PLAYER..=COMBAT_TARGET_PASSIVE` (`1..=3`). Out-of-range
+  values are `InvalidRange`; unknown kinds are `InvalidEnum`; truncated
+  payloads and trailing bytes fail before publication
+  (`combat_hit_round_trip_preserves_golden_bytes`,
+  `combat_hit_rejects_invalid_range_and_malformed_payload`).
 - `ByteEncoder` / `ByteDecoder` `i8` helpers use two's-complement
   little-endian encoding, matching the Go primitive.
 - `ByteEncoder` / `ByteDecoder` `boolean` helpers copy the Go primitive:

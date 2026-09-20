@@ -1747,6 +1747,69 @@ fn player_input_rejects_non_finite_and_malformed_payload() {
     assert!(mornlea_protocol::PlayerInput::decode(&bad_flag).is_err());
 }
 
+#[test]
+fn combat_hit_round_trip_preserves_golden_bytes() {
+    let hit = mornlea_protocol::CombatHit::new(0x0102_0304_0506_0708, 6, 2).expect("hit");
+    let payload = hit.encode();
+    assert_eq!(
+        payload,
+        [0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x06, 0x02]
+    );
+    assert_eq!(mornlea_protocol::CombatHit::PACKET_ID, 25);
+    assert_eq!(payload.len(), 10);
+    let decoded = mornlea_protocol::CombatHit::decode(&payload).expect("decode");
+    assert_eq!(decoded, hit);
+    assert_eq!(decoded.damage, 6);
+    assert_eq!(decoded.target_kind, 2);
+}
+
+#[test]
+fn combat_hit_rejects_invalid_range_and_malformed_payload() {
+    assert_eq!(
+        mornlea_protocol::CombatHit::new(0, 6, 2),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::CombatHit::new(1, 0, 2),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::CombatHit::new(1, mornlea_protocol::MAX_HEALTH + 1, 2),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::CombatHit::new(1, 6, 0),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    assert_eq!(
+        mornlea_protocol::CombatHit::new(1, 6, 4),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    for kind in [
+        mornlea_protocol::COMBAT_TARGET_PLAYER,
+        mornlea_protocol::COMBAT_TARGET_HOSTILE,
+        mornlea_protocol::COMBAT_TARGET_PASSIVE,
+    ] {
+        let full = mornlea_protocol::CombatHit::new(1, 1, kind).expect("kind");
+        assert_eq!(
+            mornlea_protocol::CombatHit::decode(&full.encode()).expect("decode full"),
+            full
+        );
+    }
+    assert!(
+        mornlea_protocol::CombatHit::decode(&[
+            0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x06
+        ])
+        .is_err()
+    );
+    let mut trailing = vec![0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x06, 0x02];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::CombatHit::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }
