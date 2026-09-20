@@ -10,6 +10,7 @@
 
 mod bytes;
 mod client_hello;
+mod disconnect;
 mod error;
 mod frame;
 mod handshake_reject;
@@ -21,6 +22,10 @@ mod server_hello;
 mod varint;
 
 pub use client_hello::ClientHello;
+pub use disconnect::{
+    DISCONNECT_INTERNAL_ERROR, DISCONNECT_PROTOCOL_VIOLATION, DISCONNECT_SERVER_SHUTDOWN,
+    DISCONNECT_SLOW_CLIENT, DISCONNECT_TIMEOUT, Disconnect,
+};
 pub use error::ProtocolError;
 pub use frame::{MAX_FRAME_BYTES, read_frame, write_frame};
 pub use handshake_reject::{HANDSHAKE_VERSION_MISMATCH, HandshakeReject};

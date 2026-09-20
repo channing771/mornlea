@@ -424,6 +424,69 @@ fn login_reject_rejects_unknown_code_and_malformed_payload() {
     );
 }
 
+#[test]
+fn disconnect_round_trip_preserves_golden_bytes() {
+    let disconnect = mornlea_protocol::Disconnect::new(2, "bye").expect("disconnect");
+    let payload = disconnect.encode();
+    assert_eq!(payload, [0x02, 0x03, b'b', b'y', b'e']);
+    assert_eq!(mornlea_protocol::Disconnect::PACKET_ID, 6);
+    let decoded = mornlea_protocol::Disconnect::decode(&payload).expect("decode");
+    assert_eq!(decoded, disconnect);
+    assert_eq!(decoded.code, 2);
+    assert_eq!(decoded.message, "bye");
+}
+
+#[test]
+fn disconnect_round_trip_preserves_empty_message_codes() {
+    for (code, wire) in [
+        (1u8, [0x01, 0x00]),
+        (2, [0x02, 0x00]),
+        (3, [0x03, 0x00]),
+        (4, [0x04, 0x00]),
+        (5, [0x05, 0x00]),
+    ] {
+        let disconnect = mornlea_protocol::Disconnect::new(code, "").expect("empty message");
+        let payload = disconnect.encode();
+        assert_eq!(payload, wire, "code {code}");
+        let decoded = mornlea_protocol::Disconnect::decode(&payload).expect("decode");
+        assert_eq!(decoded, disconnect);
+        assert_eq!(decoded.code, code);
+        assert_eq!(decoded.message, "");
+    }
+}
+
+#[test]
+fn disconnect_rejects_unknown_code_and_malformed_payload() {
+    assert_eq!(
+        mornlea_protocol::Disconnect::new(0, ""),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    assert_eq!(
+        mornlea_protocol::Disconnect::new(6, ""),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    assert_eq!(
+        mornlea_protocol::Disconnect::decode(&[0x00, 0x00]),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    assert!(mornlea_protocol::Disconnect::decode(&[]).is_err());
+    assert_eq!(
+        mornlea_protocol::Disconnect::decode(&[0x02, 0x03, b'b', b'y', b'e', 0x00]),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    assert_eq!(
+        mornlea_protocol::Disconnect::decode(&[0x02, 0x01, 0xff]),
+        Err(mornlea_protocol::ProtocolError::InvalidString)
+    );
+    let mut oversized = vec![0x02];
+    oversized.extend(mornlea_protocol::encode_uvarint(257));
+    oversized.extend(std::iter::repeat_n(b'a', 257));
+    assert_eq!(
+        mornlea_protocol::Disconnect::decode(&oversized),
+        Err(mornlea_protocol::ProtocolError::InvalidString)
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

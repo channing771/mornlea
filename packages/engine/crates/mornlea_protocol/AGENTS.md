@@ -96,6 +96,17 @@ and `domain_does_not_depend_on_protocol`).
   `login_reject_round_trip_preserves_empty_message_codes`,
   `login_reject_rejects_unknown_code_and_malformed_payload`).
 
+## Disconnect (`src/disconnect.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 6 payload is a one-byte disconnect code and a
+  length-prefixed UTF-8 message (max 256 bytes/runes). Published codes are
+  the closed interval `1..=5` copied from Go `DisconnectCode`. Unknown
+  codes are `InvalidEnum`; invalid UTF-8 and oversized declared lengths are
+  `InvalidString`; trailing bytes fail before publication
+  (`disconnect_round_trip_preserves_golden_bytes`,
+  `disconnect_round_trip_preserves_empty_message_codes`,
+  `disconnect_rejects_unknown_code_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash

@@ -138,3 +138,12 @@
 - Discovered tests (`-- --list`): 25.
 - PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
 - Architecture skill: no change.
+
+## 2026-09-20 — 2.3 protocol.server.Disconnect
+
+- Baseline: `aa180e38 feat(engine): port login reject codec`.
+- Existing unrelated work: deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded.
+- Ruling: play packet ID 6 payload is a disconnect code `1..=5` plus a length-prefixed UTF-8 message (max 256 bytes/runes). Unknown codes are `InvalidEnum`; invalid UTF-8 and oversized declared lengths are `InvalidString`. Golden bytes match Go `0203627965` and empty-message `0100`..`0500`. Remaining protocol families stay unchecked in `tasks.md`.
+- Discovered tests (`-- --list`): 28.
+- PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
+- Architecture skill: no change.
