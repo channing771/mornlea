@@ -29,8 +29,10 @@ impl CompanionId {
 
 /// Reports whether a display name is in canonical form for the wire:
 /// 1..=32 runes, at most 128 bytes, valid UTF-8, no control characters, and
-/// no surrounding whitespace.
-pub(crate) fn valid_display_name(name: &str) -> bool {
+/// no surrounding whitespace. The rule matches the Go
+/// `core.NormalizeDisplayName` result compared against its own input, so a
+/// name the authority would have to trim is rejected rather than normalized.
+pub fn valid_display_name(name: &str) -> bool {
     const MAX_BYTES: usize = 128;
     const MAX_RUNES: usize = 32;
     if name.len() > MAX_BYTES || name.trim() != name {

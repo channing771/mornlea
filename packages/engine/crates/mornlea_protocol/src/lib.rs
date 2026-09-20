@@ -61,6 +61,7 @@ mod player_input;
 mod player_state;
 mod projectile_despawn;
 mod remote_player_despawn;
+mod remote_player_spawn;
 mod request_chunk_resync;
 mod select_hotbar;
 mod server_hello;
@@ -107,7 +108,7 @@ pub use disconnect::{
 };
 pub use drop_id::{DROP_ID_WIRE_BYTES, DROPS_PER_CHUNK, DropId, MAX_ITEM_DROP_BATCH};
 pub use drop_selected_item::DropSelectedItem;
-pub use entity_id::{CompanionId, valid_companion_name};
+pub use entity_id::{CompanionId, valid_companion_name, valid_display_name};
 pub use equip_armor::EquipArmor;
 pub use error::ProtocolError;
 pub use forget_chunks::{ForgetChunks, MAX_FORGET_CHUNKS};
@@ -169,6 +170,7 @@ pub use projectile_despawn::{
     MAX_PROJECTILE_RECORDS, PROJECTILE_DESPAWN_WIRE_BYTES, ProjectileDespawn,
 };
 pub use remote_player_despawn::RemotePlayerDespawn;
+pub use remote_player_spawn::RemotePlayerSpawn;
 pub use request_chunk_resync::RequestChunkResync;
 pub use select_hotbar::SelectHotbar;
 pub use server_hello::ServerHello;

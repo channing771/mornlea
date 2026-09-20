@@ -3563,3 +3563,131 @@ fn item_drop_removes_rejects_invalid_ids_and_malformed_payload() {
     over[8] = (mornlea_protocol::MAX_ITEM_DROP_BATCH + 1) as u8;
     assert!(mornlea_protocol::ItemDropRemoves::decode(&over).is_err());
 }
+
+#[test]
+fn remote_player_spawn_round_trip_preserves_golden_bytes() {
+    let spawn = mornlea_protocol::RemotePlayerSpawn::new(
+        mornlea_protocol::PlayerId::new([
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xff,
+        ])
+        .expect("player id"),
+        "陈".to_owned(),
+        1,
+        mornlea_domain::Dimension::OVERWORLD,
+        [1.0, 2.0, 3.0],
+        4.0,
+        -5.0,
+    )
+    .expect("spawn");
+    let payload = spawn.encode();
+    assert_eq!(mornlea_protocol::RemotePlayerSpawn::PACKET_ID, 7);
+    // 16 identity + (1 length prefix + 3 name bytes) + 8 tick + 4 dimension
+    // + 12 position + 4 yaw + 4 pitch.
+    assert_eq!(payload.len(), 52);
+    assert_eq!(
+        &payload[..16],
+        &[
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xff,
+        ]
+    );
+    assert_eq!(payload[16], 3);
+    assert_eq!(&payload[17..20], &[0xe9, 0x99, 0x88]);
+    assert_eq!(&payload[20..28], &1u64.to_le_bytes());
+    assert_eq!(&payload[28..32], &[0x00, 0x00, 0x00, 0x00]);
+    assert_eq!(&payload[32..36], &1.0f32.to_bits().to_le_bytes());
+    assert_eq!(&payload[36..40], &2.0f32.to_bits().to_le_bytes());
+    assert_eq!(&payload[40..44], &3.0f32.to_bits().to_le_bytes());
+    assert_eq!(&payload[44..48], &4.0f32.to_bits().to_le_bytes());
+    assert_eq!(&payload[48..52], &(-5.0f32).to_bits().to_le_bytes());
+    assert_eq!(
+        mornlea_protocol::RemotePlayerSpawn::decode(&payload).expect("decode"),
+        spawn
+    );
+    // Remote players, unlike companions and mobs, may appear in the depths.
+    let depths = mornlea_protocol::RemotePlayerSpawn::new(
+        spawn.player_id(),
+        "陈".to_owned(),
+        1,
+        mornlea_domain::Dimension::DEPTHS,
+        [1.0, 2.0, 3.0],
+        4.0,
+        -5.0,
+    )
+    .expect("depths spawn");
+    assert_eq!(
+        mornlea_protocol::RemotePlayerSpawn::decode(&depths.encode()).expect("decode"),
+        depths
+    );
+}
+
+#[test]
+fn remote_player_spawn_rejects_invalid_identity_name_and_pose() {
+    let spawn = mornlea_protocol::RemotePlayerSpawn::new(
+        mornlea_protocol::PlayerId::new([
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xff,
+        ])
+        .expect("player id"),
+        "陈".to_owned(),
+        1,
+        mornlea_domain::Dimension::OVERWORLD,
+        [1.0, 2.0, 3.0],
+        4.0,
+        -5.0,
+    )
+    .expect("spawn");
+
+    let mut padded_name = spawn.clone();
+    padded_name.display_name = " 陈".to_owned();
+    let mut long_name = spawn.clone();
+    long_name.display_name = "x".repeat(33);
+    let mut control_name = spawn.clone();
+    control_name.display_name = "a\u{0}b".to_owned();
+    let mut empty_name = spawn.clone();
+    empty_name.display_name = String::new();
+    let mut bad_position = spawn.clone();
+    bad_position.position = [f32::NAN, 0.0, 0.0];
+    let mut bad_yaw = spawn.clone();
+    bad_yaw.yaw = f32::INFINITY;
+    let mut bad_pitch = spawn.clone();
+    bad_pitch.pitch = f32::NEG_INFINITY;
+    for bad in [
+        padded_name,
+        long_name,
+        control_name,
+        empty_name,
+        bad_position,
+        bad_yaw,
+        bad_pitch,
+    ] {
+        assert!(
+            bad.validate().is_err(),
+            "accepted invalid remote player spawn field"
+        );
+    }
+    assert!(
+        mornlea_protocol::PlayerId::new([0xff; 16]).is_err(),
+        "accepted non-UUIDv4 player identity"
+    );
+
+    let payload = spawn.encode();
+    for length in 0..payload.len() {
+        assert!(
+            mornlea_protocol::RemotePlayerSpawn::decode(&payload[..length]).is_err(),
+            "accepted truncated remote player spawn at {length}"
+        );
+    }
+    let mut padded = payload.clone();
+    padded.push(0x00);
+    assert_eq!(
+        mornlea_protocol::RemotePlayerSpawn::decode(&padded),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    // A name length prefix that overruns the remaining payload is rejected
+    // before any bytes are copied.
+    let mut bad_length = payload.clone();
+    bad_length[16] = 200;
+    assert!(mornlea_protocol::RemotePlayerSpawn::decode(&bad_length).is_err());
+}
