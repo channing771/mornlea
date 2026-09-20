@@ -1532,6 +1532,68 @@ fn quick_move_stack_rejects_invalid_view_and_malformed_payload() {
     );
 }
 
+#[test]
+fn drop_stack_round_trip_preserves_golden_bytes() {
+    let container = mornlea_protocol::ContainerRef::new(0, -3, 7, 1, 5, 9).expect("chest");
+    let drop = mornlea_protocol::DropStack::new(21, container, 2, 62).expect("drop");
+    let payload = drop.encode();
+    assert_eq!(
+        payload,
+        [
+            0x15, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfd, 0xff,
+            0xff, 0xff, 0x07, 0x00, 0x00, 0x00, 0x01, 0x05, 0x09, 0x00, 0x00, 0x00, 0x02, 0x3e
+        ]
+    );
+    assert_eq!(mornlea_protocol::DropStack::PACKET_ID, 21);
+    assert_eq!(payload.len(), 28);
+    let decoded = mornlea_protocol::DropStack::decode(&payload).expect("decode");
+    assert_eq!(decoded, drop);
+    assert_eq!(decoded.slot, 62);
+    assert_eq!(decoded.view, 2);
+    let inventory =
+        mornlea_protocol::DropStack::new(1, mornlea_protocol::ContainerRef::NONE, 0, 35)
+            .expect("drop");
+    assert_eq!(
+        mornlea_protocol::DropStack::decode(&inventory.encode()).expect("decode inventory"),
+        inventory
+    );
+}
+
+#[test]
+fn drop_stack_rejects_invalid_view_and_malformed_payload() {
+    let container = mornlea_protocol::ContainerRef::new(0, -3, 7, 1, 5, 9).expect("chest");
+    assert_eq!(
+        mornlea_protocol::DropStack::new(1, container, 2, 63),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::DropStack::new(1, mornlea_protocol::ContainerRef::NONE, 0, 36),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::DropStack::new(1, mornlea_protocol::ContainerRef::NONE, 1, 45),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::DropStack::new(1, mornlea_protocol::ContainerRef::NONE, 7, 0),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    assert_eq!(
+        mornlea_protocol::DropStack::new(1, container, 1, 0),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert!(mornlea_protocol::DropStack::decode(&[0x15]).is_err());
+    let mut trailing = vec![
+        0x15, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfd, 0xff, 0xff,
+        0xff, 0x07, 0x00, 0x00, 0x00, 0x01, 0x05, 0x09, 0x00, 0x00, 0x00, 0x02, 0x3e,
+    ];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::DropStack::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

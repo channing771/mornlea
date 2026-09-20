@@ -324,6 +324,19 @@ and `domain_does_not_depend_on_protocol`).
   publication (`quick_move_stack_round_trip_preserves_golden_bytes`,
   `quick_move_stack_rejects_invalid_view_and_malformed_payload`).
 
+## Drop stack (`src/move_stack_partial.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 21 payload is a `u64` sequence, an 18-byte container
+  reference, a view byte, and a unified slot byte. The drop position is
+  derived by the server from the authoritative player state, so the wire
+  carries no coordinates. The static view, container-reference, and index
+  bounds match the other view-addressed commands; unknown views and kinds
+  are `InvalidEnum`; truncated payloads and trailing bytes fail before
+  publication (`drop_stack_round_trip_preserves_golden_bytes`,
+  `drop_stack_rejects_invalid_view_and_malformed_payload`).
+- `ByteEncoder` / `ByteDecoder` `boolean` helpers copy the Go primitive:
+  only 0 and 1 are accepted, and anything else is `InvalidEnum`.
+
 ## Focused Verification
 
 ```bash
