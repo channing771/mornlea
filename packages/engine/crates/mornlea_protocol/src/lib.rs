@@ -11,11 +11,13 @@
 mod client_hello;
 mod error;
 mod frame;
+mod server_hello;
 mod varint;
 
 pub use client_hello::ClientHello;
 pub use error::ProtocolError;
 pub use frame::{MAX_FRAME_BYTES, read_frame, write_frame};
+pub use server_hello::ServerHello;
 pub use varint::{decode_uvarint, encode_uvarint};
 
 /// Workspace crate identity consumed by the foundation registration tests.

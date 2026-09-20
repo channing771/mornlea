@@ -41,6 +41,16 @@ and `domain_does_not_depend_on_protocol`).
   (`client_hello_round_trip_preserves_current_version_bytes`,
   `client_hello_rejects_unknown_version_and_malformed_payload`).
 
+## Server hello (`src/server_hello.rs`, `tests/runtime_contract.rs`)
+
+- Handshake packet ID 0 payload is the same canonical protocol-version
+  uvarint as ClientHello, on the server-to-client handshake ID space.
+- `ServerHello::new` / `decode` accept only `Identities::current().protocol`.
+  Other versions are `UnsupportedVersion`; trailing bytes and truncated
+  varints fail before publication
+  (`server_hello_round_trip_preserves_current_version_bytes`,
+  `server_hello_rejects_unknown_version_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash

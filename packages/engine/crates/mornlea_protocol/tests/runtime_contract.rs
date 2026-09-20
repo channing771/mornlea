@@ -178,6 +178,34 @@ fn client_hello_rejects_unknown_version_and_malformed_payload() {
     );
 }
 
+#[test]
+fn server_hello_round_trip_preserves_current_version_bytes() {
+    let hello = mornlea_protocol::ServerHello::new(45).expect("current hello");
+    let payload = hello.encode();
+    assert_eq!(payload, [0x2d]);
+    assert_eq!(mornlea_protocol::ServerHello::PACKET_ID, 0);
+    let decoded = mornlea_protocol::ServerHello::decode(&payload).expect("decode hello");
+    assert_eq!(decoded, hello);
+    assert_eq!(decoded.protocol_version, 45);
+}
+
+#[test]
+fn server_hello_rejects_unknown_version_and_malformed_payload() {
+    assert_eq!(
+        mornlea_protocol::ServerHello::new(0),
+        Err(mornlea_protocol::ProtocolError::UnsupportedVersion)
+    );
+    assert_eq!(
+        mornlea_protocol::ServerHello::decode(&[0x2e]),
+        Err(mornlea_protocol::ProtocolError::UnsupportedVersion)
+    );
+    assert!(mornlea_protocol::ServerHello::decode(&[]).is_err());
+    assert_eq!(
+        mornlea_protocol::ServerHello::decode(&[0x2d, 0x00]),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

@@ -93,3 +93,12 @@
 - Discovered tests (`-- --list`): 13.
 - PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
 - Architecture skill: no change.
+
+## 2026-09-20 — 2.3 protocol.server.ServerHello
+
+- Baseline: `61386d5b feat(engine): port client hello codec`.
+- Adopted leftover `packages/engine/crates/mornlea_protocol/tests/runtime_contract.rs` ServerHello cases from an aborted worker after empirical review: golden `0x2d`, packet ID 0, unsupported version, truncated payload, and trailing bytes match the ClientHello family and Go `codec_golden_test.go`. Production `ServerHello` was added without rewriting those tests. Deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded. Conversation-start untracked `packages/tools/cmd/runtime-oracle/trace_test.go` is already committed and was not rewritten.
+- Ruling: handshake server packet ID 0 payload is the same canonical protocol-version uvarint as ClientHello. Encode/decode accept only `Identities::current().protocol`. Remaining protocol families stay unchecked in `tasks.md`.
+- Discovered tests (`rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked -- --list`): 15.
+- PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
+- Architecture skill: no change.
