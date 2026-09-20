@@ -74,3 +74,13 @@
 - Discovered tests (`rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test runtime_contract --locked -- --list`): 10 (`crate_identity_matches_workspace_name`, `production_manifest_has_no_codec_kernel_or_host_dependencies`, `inventory_assigns_domain_families_to_this_crate`, `current_identities_match_frozen_inventory`, `incomplete_identity_is_rejected`, `invalid_dimension_and_hotbar_ranges_are_rejected`, `non_finite_input_rotation_is_rejected`, `semantic_inputs_order_by_sequence_then_kind`, `observations_order_by_tick_then_family`, `unknown_observation_family_is_rejected`). Zero-test discovery would have been rejected.
 - PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test runtime_contract --locked`
 - Architecture skill: no change. Version pins, range checks, and observation ordering are crate-local contracts already covered by the foundation crate-split rule.
+
+## 2026-09-20 — 2.3 protocol.frame
+
+- Baseline: `15314951 feat(engine): port domain identity and input records`.
+- Existing unrelated work: deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded.
+- Ruling: `write_frame` / `read_frame` copy the Go length-prefix contract. Length is a canonical uvarint excluding itself. Empty, oversized, truncated, overlong, and non-canonical prefixes fail before a payload is copied. `MAX_FRAME_BYTES` is the Go `MaxFrameBytes` pin. Canonical uvarint helpers are public because framing and later packet families share them. Remaining protocol families stay unchecked in `tasks.md` until each has its own tested commit.
+- Directory guidance: updated `packages/engine/crates/mornlea_protocol/AGENTS.md` for framing. Crate layout adds `src/{error,varint,frame}.rs`.
+- Discovered tests (`rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked -- --list`): 11.
+- PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
+- Architecture skill: no change. Framing is the first protocol-family port under the existing crate-split rule.
