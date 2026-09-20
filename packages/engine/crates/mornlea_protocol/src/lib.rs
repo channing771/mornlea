@@ -54,6 +54,7 @@ mod move_stack_partial;
 mod open_container;
 mod passive_despawn;
 mod passive_spawn;
+mod passive_state;
 mod place_block;
 mod place_block_succeeded;
 mod place_water;
@@ -161,6 +162,9 @@ pub use passive_despawn::{
 pub use passive_spawn::{
     MAX_PASSIVE_SPAWN_RECORDS, PASSIVE_SPAWN_MAX_WIRE_BYTES, PASSIVE_SPAWN_WIRE_BYTES,
     PassiveSpawn, PassiveSpawnRecord,
+};
+pub use passive_state::{
+    PASSIVE_STATE_MAX_WIRE_BYTES, PASSIVE_STATE_WIRE_BYTES, PassiveState, PassiveStateRecord,
 };
 pub use place_block::PlaceBlock;
 pub use place_block_succeeded::PlaceBlockSucceeded;
