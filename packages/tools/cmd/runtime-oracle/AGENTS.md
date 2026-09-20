@@ -3,8 +3,15 @@
 `packages/tools/cmd/runtime-oracle` is the offline contract inventory and replay
 oracle for OpenSpec change `rust-runtime-foundation`. It observes repository
 sources and testdata only. Production code must not import live authority,
-native ABI, network transports, or storage codecs; the empty allowed import set
-is enforced by `packages/audit` `TestInternalDependenciesAreOneWay`.
+native ABI, network transports, or storage codecs; production files have an
+empty allowed internal import set. Only `_test.go` files are permitted to import
+designated offline codec, world, companion, and storage packages
+(`shared/network/codec`, `shared/network/protocol`, `shared/core`,
+`shared/world`, `shared/companion`, `shared/pathfind`, `shared/nativeabi`, and
+`server/storage/{chunk,player,companion,hostile,passive,region}`). Neither
+production nor test files may import `server/server`, file stores, client/render,
+or Agent process packages. These boundaries are enforced by `packages/audit`
+`TestRuntimeOracleInternalDependencies` and `TestInternalDependenciesAreOneWay`.
 
 ## Inventory freeze (`inventory.go`, `discover.go`, `root.go`)
 

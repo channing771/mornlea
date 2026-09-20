@@ -672,3 +672,92 @@ func TestSimDependencyViolationsDetectDrift(t *testing.T) {
 		}
 	})
 }
+
+var oracleAllowedTestImports = map[string]bool{
+	"packages/shared/network/codec":    true,
+	"packages/shared/network/protocol": true,
+	"packages/shared/core":             true,
+	"packages/shared/world":            true,
+	"packages/shared/companion":        true,
+	"packages/shared/pathfind":         true,
+	"packages/shared/nativeabi":        true,
+	"packages/server/storage/chunk":     true,
+	"packages/server/storage/player":    true,
+	"packages/server/storage/companion": true,
+	"packages/server/storage/hostile":   true,
+	"packages/server/storage/passive":   true,
+	"packages/server/storage/region":    true,
+}
+
+func validateOracleImports(filename, src string) error {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, filename, src, parser.ImportsOnly)
+	if err != nil {
+		return fmt.Errorf("parse error: %w", err)
+	}
+	isTest := strings.HasSuffix(filename, "_test.go")
+	for _, imp := range f.Imports {
+		importPath := strings.Trim(imp.Path.Value, `"`)
+		rel := localName(importPath)
+		if rel == importPath {
+			if strings.HasPrefix(importPath, "github.com/channing771/mornlea/") {
+				return fmt.Errorf("unknown internal import %s", importPath)
+			}
+			continue
+		}
+		if !isTest {
+			return fmt.Errorf("production oracle file %s cannot import internal package %s", filename, rel)
+		}
+		if !oracleAllowedTestImports[rel] {
+			return fmt.Errorf("oracle test file %s not permitted to import %s", filename, rel)
+		}
+	}
+	return nil
+}
+
+func TestRuntimeOracleInternalDependencies(t *testing.T) {
+	root := filepath.Join(repositoryRoot(t), "packages", "tools", "cmd", "runtime-oracle")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatalf("read oracle dir: %v", err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+			continue
+		}
+		path := filepath.Join(root, entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if err := validateOracleImports(entry.Name(), string(data)); err != nil {
+			t.Errorf("%s violates oracle import rules: %v", entry.Name(), err)
+		}
+	}
+}
+
+func TestOracleDependencyRedMatrix(t *testing.T) {
+	// 4. rejected ordinary .go codec import in oracle
+	srcProdCodec := `package main
+import _ "github.com/channing771/mornlea/packages/shared/network/codec"
+`
+	if err := validateOracleImports("discover.go", srcProdCodec); err == nil {
+		t.Fatal("production oracle codec import must be rejected")
+	}
+
+	// 5. accepted _test.go codec import in oracle
+	srcTestCodec := `package main
+import _ "github.com/channing771/mornlea/packages/shared/network/codec"
+`
+	if err := validateOracleImports("runner_test.go", srcTestCodec); err != nil {
+		t.Fatalf("test oracle codec import should be accepted, got: %v", err)
+	}
+
+	// 6. rejected _test.go online server import in oracle
+	srcTestServer := `package main
+import _ "github.com/channing771/mornlea/packages/server/server"
+`
+	if err := validateOracleImports("runner_test.go", srcTestServer); err == nil {
+		t.Fatal("test oracle online server import must be rejected")
+	}
+}
