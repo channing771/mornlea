@@ -110,28 +110,52 @@ fn invalid_dimension_and_hotbar_ranges_are_rejected() {
 
 #[test]
 fn non_finite_input_rotation_is_rejected() {
-    let err =
-        mornlea_domain::PlayerInput::new(1, 0, 1, false, f32::NAN, 0.0, false, false, false, false)
-            .expect_err("NaN yaw must fail");
+    let err = mornlea_domain::LookAngles::try_new(f32::NAN, 0.0).expect_err("NaN yaw must fail");
     assert_eq!(err, mornlea_domain::DomainError::NonFiniteRotation);
 
-    let err = mornlea_domain::PlaceBlock::new(1, 0.0, f32::INFINITY, 0)
+    let err = mornlea_domain::LookAngles::try_new(0.0, f32::INFINITY)
         .expect_err("infinite pitch must fail");
+    assert_eq!(err, mornlea_domain::DomainError::NonFiniteRotation);
+
+    // The grouped payload cannot be built around a non-finite rotation,
+    // because its parts carry an already-validated `LookAngles`.
+    let err = mornlea_domain::LookAngles::try_new(0.0, f32::NAN)
+        .expect_err("NaN pitch must fail before any payload exists");
     assert_eq!(err, mornlea_domain::DomainError::NonFiniteRotation);
 }
 
 #[test]
 fn semantic_inputs_order_by_sequence_then_kind() {
-    let later = mornlea_domain::SemanticInput::Player(
-        mornlea_domain::PlayerInput::new(2, 0, 0, false, 0.0, 0.0, false, false, false, false)
-            .unwrap(),
-    );
-    let place = mornlea_domain::SemanticInput::Place(
-        mornlea_domain::PlaceBlock::new(1, 0.0, 0.0, 3).unwrap(),
-    );
-    let select = mornlea_domain::SemanticInput::SelectHotbar(
-        mornlea_domain::SelectHotbar::new(1, 1).unwrap(),
-    );
+    let player = mornlea_domain::PlayerControl::new(mornlea_domain::PlayerControlParts {
+        movement: mornlea_domain::Movement {
+            move_x: 0,
+            move_z: 0,
+            jump: false,
+        },
+        look: mornlea_domain::LookAngles::try_new(0.0, 0.0).expect("finite angles"),
+        actions: mornlea_domain::HeldActions {
+            primary: false,
+            eating: false,
+            sprinting: false,
+            sneaking: false,
+        },
+    });
+    let later = mornlea_domain::SemanticInput::Player {
+        sequence: 2,
+        control: player,
+    };
+    let place = mornlea_domain::SemanticInput::Place {
+        sequence: 1,
+        intent: mornlea_domain::PlacementIntent::try_new(
+            mornlea_domain::LookAngles::try_new(0.0, 0.0).expect("finite angles"),
+            3,
+        )
+        .expect("slot three"),
+    };
+    let select = mornlea_domain::SemanticInput::SelectHotbar {
+        sequence: 1,
+        slot: mornlea_domain::HotbarSlot::new(1).expect("slot one"),
+    };
     let ordered = mornlea_domain::order_inputs([later.clone(), select.clone(), place.clone()]);
     assert_eq!(
         ordered

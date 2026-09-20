@@ -65,15 +65,34 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   vectors: private fields, getters, no normalization, no clamping, and exact
   `f32` bit preservation including negative zero.
 
-## Value and input bounds (`src/values.rs`, `src/input.rs`, `tests/runtime_contract.rs`)
+## Value and input bounds (`src/values.rs`, `src/input.rs`, `src/input/control.rs`, `tests/runtime_contract.rs`, `tests/command_control.rs`)
 
 - `Dimension` accepts only overworld and depths; any other ID is
   `InvalidDimension` (`invalid_dimension_and_hotbar_ranges_are_rejected`).
-- `HotbarSlot` accepts `0..COUNT-1`; `PlaceBlock` and `SelectHotbar` reuse
-  that range (`invalid_dimension_and_hotbar_ranges_are_rejected`).
-- `PlayerInput` and `PlaceBlock` reject NaN or infinite yaw/pitch as
-  `NonFiniteRotation` (`non_finite_input_rotation_is_rejected`).
-- `order_inputs` sorts by sequence, then kind name
+- `HotbarSlot` accepts `0..COUNT-1`; `PlacementIntent::try_new` and
+  `Command::SelectHotbar` reuse that range
+  (`invalid_dimension_and_hotbar_ranges_are_rejected`,
+  `command_control_placement_slot_eight_succeeds_and_nine_fails`).
+- `LookAngles` is the single owner of the finite-rotation rule: NaN and
+  infinities are `NonFiniteRotation`, and the bits are preserved exactly
+  including negative zero. The grouped payloads in `input/control.rs` carry an
+  already-validated `LookAngles`, so `PlayerControl::new` is total and named
+  `new` rather than `try_new` (`non_finite_input_rotation_is_rejected`,
+  `command_control_non_finite_rotation_fails_look_angles`).
+- `Movement` and `HeldActions` are plain grouped controls with public fields:
+  the move axes keep their full `i8` range because the −1..1 rule belongs to
+  the authority, and `HeldActions::primary` maps exactly to the Go `Mining`
+  bit without implying that mining wins over combat. No payload names a
+  target cell, a hit entity, a placed block, a consumed item or an outcome.
+- `Command` is the extensible intent enum introduced with the movement and
+  ray variants (`PlayerInput`, `PlaceBlock`, `Resync`, `SelectHotbar`,
+  `OpenContainer`, `TillSoil`, `BoneMeal`, `CollectWater`, `PlaceWater`);
+  later inventory, container and chat intents are added as new variants.
+  `ResyncIntent` accepts a zero `have_revision` because it names a chunk the
+  client holds nothing for.
+- `SemanticInput` and `order_inputs` are a temporary replay-ordering test
+  facade that pairs a payload with a sequence and performs no validation of
+  its own; `order_inputs` sorts by sequence, then kind name
   (`semantic_inputs_order_by_sequence_then_kind`).
 
 ## Observations (`src/event.rs`, `tests/runtime_contract.rs`)
@@ -91,4 +110,5 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test runtime_contract --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test identity_values --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test items_locations --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test command_control --locked
 ```

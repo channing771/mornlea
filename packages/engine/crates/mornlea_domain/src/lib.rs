@@ -20,7 +20,10 @@ pub use identity::{
     CompanionId, DomainError, HostileId, Identities, PassiveId, PlayerId, ProjectileId,
     ReplayIdentity,
 };
-pub use input::{PlaceBlock, PlayerInput, SelectHotbar, SemanticInput, order_inputs};
+pub use input::{
+    Command, HeldActions, Movement, PlacementIntent, PlayerControl, PlayerControlParts,
+    ResyncIntent, SemanticInput, order_inputs,
+};
 pub use items::{
     ItemStack, durability_max, is_smelting_product, item_stack_limit, smelting_output,
 };
