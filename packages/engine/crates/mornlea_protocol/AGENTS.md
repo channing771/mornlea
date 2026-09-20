@@ -312,6 +312,18 @@ and `domain_does_not_depend_on_protocol`).
   (`move_stack_partial_round_trip_preserves_golden_bytes`,
   `move_stack_partial_rejects_invalid_view_and_malformed_payload`).
 
+## Quick move stack (`src/move_stack_partial.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 20 payload is the `MoveStackPartial` prefix without the
+  target and single-item flag: a `u64` sequence, an 18-byte container
+  reference, a view byte, and one source byte. The destination is a fixed
+  deterministic contract the server derives, so the wire carries no target
+  slot and there is no same-slot rejection. The same static view,
+  container-reference, and index bounds apply; unknown views and kinds are
+  `InvalidEnum`; truncated payloads and trailing bytes fail before
+  publication (`quick_move_stack_round_trip_preserves_golden_bytes`,
+  `quick_move_stack_rejects_invalid_view_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash

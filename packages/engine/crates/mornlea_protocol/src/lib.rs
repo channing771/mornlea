@@ -78,7 +78,9 @@ pub use move_container_stack::{
 };
 pub use move_crafting_stack::{CRAFTING_GRID_SLOTS, GRID_CRAFTING_VIEW_SLOTS, MoveCraftingStack};
 pub use move_inventory_stack::{INVENTORY_SLOTS, MoveInventoryStack};
-pub use move_stack_partial::{MoveStackPartial, STACK_VIEW_INVENTORY};
+pub use move_stack_partial::{
+    MoveStackPartial, QuickMoveStack, STACK_VIEW_CRAFTING, STACK_VIEW_INVENTORY,
+};
 pub use open_container::OpenContainer;
 pub use place_block::PlaceBlock;
 pub use place_block_succeeded::PlaceBlockSucceeded;

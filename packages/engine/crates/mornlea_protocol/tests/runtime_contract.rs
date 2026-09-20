@@ -1467,6 +1467,71 @@ fn move_stack_partial_rejects_invalid_view_and_malformed_payload() {
     );
 }
 
+#[test]
+fn quick_move_stack_round_trip_preserves_golden_bytes() {
+    let container = mornlea_protocol::ContainerRef::new(0, 4, -2, 0, 3, 5).expect("furnace");
+    let quick = mornlea_protocol::QuickMoveStack::new(20, container, 2, 38).expect("quick");
+    let payload = quick.encode();
+    assert_eq!(
+        payload,
+        [
+            0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00,
+            0x00, 0x00, 0xfe, 0xff, 0xff, 0xff, 0x00, 0x03, 0x05, 0x00, 0x00, 0x00, 0x02, 0x26
+        ]
+    );
+    assert_eq!(mornlea_protocol::QuickMoveStack::PACKET_ID, 20);
+    assert_eq!(payload.len(), 28);
+    let decoded = mornlea_protocol::QuickMoveStack::decode(&payload).expect("decode");
+    assert_eq!(decoded, quick);
+    assert_eq!(decoded.from, 38);
+    let crafting = mornlea_protocol::QuickMoveStack::new(
+        8,
+        mornlea_protocol::ContainerRef::NONE,
+        mornlea_protocol::STACK_VIEW_CRAFTING,
+        44,
+    )
+    .expect("crafting quick");
+    assert_eq!(
+        mornlea_protocol::QuickMoveStack::decode(&crafting.encode()).expect("decode crafting"),
+        crafting
+    );
+}
+
+#[test]
+fn quick_move_stack_rejects_invalid_view_and_malformed_payload() {
+    let container = mornlea_protocol::ContainerRef::new(0, 4, -2, 0, 3, 5).expect("furnace");
+    assert_eq!(
+        mornlea_protocol::QuickMoveStack::new(1, container, 2, 39),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::QuickMoveStack::new(1, mornlea_protocol::ContainerRef::NONE, 0, 36),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::QuickMoveStack::new(1, mornlea_protocol::ContainerRef::NONE, 1, 45),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::QuickMoveStack::new(1, mornlea_protocol::ContainerRef::NONE, 9, 0),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    assert_eq!(
+        mornlea_protocol::QuickMoveStack::new(1, container, 0, 0),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert!(mornlea_protocol::QuickMoveStack::decode(&[0x14]).is_err());
+    let mut trailing = vec![
+        0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00,
+        0x00, 0xfe, 0xff, 0xff, 0xff, 0x00, 0x03, 0x05, 0x00, 0x00, 0x00, 0x02, 0x26,
+    ];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::QuickMoveStack::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }
