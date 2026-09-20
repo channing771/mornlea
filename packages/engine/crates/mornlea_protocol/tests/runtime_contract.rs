@@ -4081,3 +4081,105 @@ fn passive_state_rejects_invalid_records_and_malformed_payload() {
     bad_grazing_payload[46] = 2;
     assert!(mornlea_protocol::PassiveState::decode(&bad_grazing_payload).is_err());
 }
+
+#[test]
+fn projectile_spawn_round_trip_preserves_batch_bytes() {
+    let spawn = mornlea_protocol::ProjectileSpawn::new(
+        0x0102_0304_0506_0708,
+        vec![
+            mornlea_protocol::ProjectileSpawnRecord {
+                id: 7,
+                kind: mornlea_protocol::PROJECTILE_KIND_ARROW,
+                dimension: mornlea_domain::Dimension::OVERWORLD,
+                position: [2.5, 1.0, -3.25],
+                velocity: [0.5, -1.25, 0.0],
+            },
+            mornlea_protocol::ProjectileSpawnRecord {
+                id: 9,
+                kind: mornlea_protocol::PROJECTILE_KIND_SHARD,
+                dimension: mornlea_domain::Dimension::DEPTHS,
+                position: [-8.5, 65.5, 12.75],
+                velocity: [1.0, 2.0, 3.0],
+            },
+        ],
+    )
+    .expect("spawn");
+    let payload = spawn.encode();
+    assert_eq!(mornlea_protocol::ProjectileSpawn::PACKET_ID, 29);
+    assert_eq!(payload.len(), 8 + 1 + 2 * 37);
+    assert_eq!(&payload[..8], &0x0102_0304_0506_0708u64.to_le_bytes());
+    assert_eq!(payload[8], 2);
+    assert_eq!(&payload[9..17], &[0x07, 0, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(payload[17], mornlea_protocol::PROJECTILE_KIND_ARROW);
+    assert_eq!(&payload[18..22], &[0x00, 0x00, 0x00, 0x00]);
+    assert_eq!(&payload[22..26], &[0x00, 0x00, 0x20, 0x40]);
+    assert_eq!(&payload[34..38], &[0x00, 0x00, 0x00, 0x3f]);
+    // The second record starts one fixed 37-byte stride later.
+    assert_eq!(&payload[46..54], &[0x09, 0, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(payload[54], mornlea_protocol::PROJECTILE_KIND_SHARD);
+    assert_eq!(&payload[55..59], &[0x01, 0x00, 0x00, 0x00]);
+    assert_eq!(
+        mornlea_protocol::ProjectileSpawn::decode(&payload).expect("decode"),
+        spawn
+    );
+}
+
+#[test]
+fn projectile_spawn_rejects_invalid_records_and_malformed_payload() {
+    let record = mornlea_protocol::ProjectileSpawnRecord {
+        id: 7,
+        kind: mornlea_protocol::PROJECTILE_KIND_SHARD,
+        dimension: mornlea_domain::Dimension::OVERWORLD,
+        position: [1.0, 2.0, 3.0],
+        velocity: [0.5, 0.0, 0.0],
+    };
+
+    let mut zero_id = record;
+    zero_id.id = 0;
+    let mut bad_kind = record;
+    bad_kind.kind = 2;
+    let mut bad_velocity = record;
+    bad_velocity.velocity = [f32::NAN, 0.0, 0.0];
+    for bad in [zero_id, bad_kind, bad_velocity] {
+        assert!(
+            mornlea_protocol::ProjectileSpawn::new(1, vec![bad]).is_err(),
+            "accepted invalid projectile spawn record"
+        );
+    }
+    assert!(mornlea_protocol::ProjectileSpawn::new(1, vec![record, record]).is_err());
+    assert!(mornlea_protocol::ProjectileSpawn::new(1, Vec::new()).is_err());
+    // A projectile is a peer-reachable entity, so the depths are a legal
+    // dimension here even though mob spawns are overworld-only.
+    let depths = mornlea_protocol::ProjectileSpawnRecord {
+        dimension: mornlea_domain::Dimension::DEPTHS,
+        ..record
+    };
+    assert!(mornlea_protocol::ProjectileSpawn::new(1, vec![depths]).is_ok());
+
+    let valid = mornlea_protocol::ProjectileSpawn::new(1, vec![record]).expect("spawn");
+    let payload = valid.encode();
+    for length in 0..payload.len() {
+        assert!(
+            mornlea_protocol::ProjectileSpawn::decode(&payload[..length]).is_err(),
+            "accepted truncated projectile spawn at {length}"
+        );
+    }
+    let mut padded = payload.clone();
+    padded.push(0x00);
+    assert_eq!(
+        mornlea_protocol::ProjectileSpawn::decode(&padded),
+        Err(mornlea_protocol::ProtocolError::Truncated)
+    );
+    let mut mismatched = payload.clone();
+    mismatched[8] = 2;
+    assert_eq!(
+        mornlea_protocol::ProjectileSpawn::decode(&mismatched),
+        Err(mornlea_protocol::ProtocolError::Truncated)
+    );
+    let mut empty = payload.clone();
+    empty[8] = 0;
+    assert!(mornlea_protocol::ProjectileSpawn::decode(&empty).is_err());
+    let mut over = payload.clone();
+    over[8] = mornlea_protocol::MAX_PROJECTILE_RECORDS + 1;
+    assert!(mornlea_protocol::ProjectileSpawn::decode(&over).is_err());
+}
