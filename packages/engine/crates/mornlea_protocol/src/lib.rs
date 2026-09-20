@@ -53,6 +53,7 @@ mod place_block_succeeded;
 mod place_water;
 mod player_id;
 mod player_input;
+mod player_state;
 mod projectile_despawn;
 mod remote_player_despawn;
 mod request_chunk_resync;
@@ -142,6 +143,11 @@ pub use place_block_succeeded::PlaceBlockSucceeded;
 pub use place_water::PlaceWater;
 pub use player_id::PlayerId;
 pub use player_input::PlayerInput;
+pub use player_state::{
+    BlockPos, DAY_PHASE_TICKS_MAX, MAX_ARMOR_POINTS, MAX_HUNGER, MAX_OXYGEN_TICKS,
+    PLAYER_STATE_WIRE_BYTES, PlayerState, SEASON_AUTUMN, SEASON_SPRING, SEASON_SUMMER,
+    SEASON_WINTER, WEATHER_CLEAR, WEATHER_RAIN, WEATHER_THUNDER,
+};
 pub use projectile_despawn::{
     MAX_PROJECTILE_RECORDS, PROJECTILE_DESPAWN_WIRE_BYTES, ProjectileDespawn,
 };

@@ -2840,3 +2840,239 @@ fn hostile_state_rejects_invalid_records_and_malformed_payload() {
         Err(mornlea_protocol::ProtocolError::Truncated)
     );
 }
+
+#[test]
+fn player_state_round_trip_preserves_golden_bytes() {
+    let active = mornlea_protocol::PlayerState::new(
+        0,
+        0,
+        mornlea_domain::Dimension::OVERWORLD,
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        0.0,
+        0.0,
+        false,
+        false,
+        false,
+        true,
+        mornlea_protocol::BlockPos { x: 1, y: 2, z: 3 },
+        6,
+        15,
+        true,
+        15,
+        300,
+        0,
+        false,
+        0,
+        24000,
+        0,
+        0,
+        0,
+        0,
+        0,
+    )
+    .expect("active player state");
+    let payload = active.encode();
+    assert_eq!(mornlea_protocol::PlayerState::PACKET_ID, 3);
+    assert_eq!(payload.len(), 93);
+    // Mining state sits after the four boolean phase bits.
+    assert_eq!(&payload[52..56], &[0x00, 0x00, 0x00, 0x01]);
+    assert_eq!(&payload[56..60], &[0x01, 0x00, 0x00, 0x00]);
+    assert_eq!(&payload[60..64], &[0x02, 0x00, 0x00, 0x00]);
+    assert_eq!(&payload[64..68], &[0x03, 0x00, 0x00, 0x00]);
+    assert_eq!(&payload[68..70], &[0x06, 0x00]);
+    assert_eq!(&payload[70..72], &[0x0f, 0x00]);
+    assert_eq!(payload[72], 0x01);
+    // Health, then the u16 oxygen, lock the survival field order.
+    assert_eq!(payload[73], 0x0f);
+    assert_eq!(&payload[74..76], &[0x2c, 0x01]);
+    assert_eq!(&payload[80..88], &24000u64.to_le_bytes());
+    assert_eq!(
+        mornlea_protocol::PlayerState::decode(&payload).expect("decode"),
+        active
+    );
+
+    // A mid-range oxygen and day phase offset prove both are u16 little-endian
+    // in their own slots rather than adjacent zero-value neighbours.
+    let drowned = mornlea_protocol::PlayerState::new(
+        0,
+        0,
+        mornlea_domain::Dimension::OVERWORLD,
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        0.0,
+        0.0,
+        false,
+        false,
+        false,
+        false,
+        mornlea_protocol::BlockPos { x: 0, y: 0, z: 0 },
+        0,
+        0,
+        false,
+        15,
+        0x0101,
+        0,
+        false,
+        0x0101,
+        24000,
+        0,
+        0,
+        0,
+        0,
+        0,
+    )
+    .expect("drowned player state");
+    let payload = drowned.encode();
+    assert_eq!(payload.len(), 93);
+    assert_eq!(&payload[74..76], &[0x01, 0x01]);
+    assert_eq!(&payload[78..80], &[0x01, 0x01]);
+    assert_eq!(
+        mornlea_protocol::PlayerState::decode(&payload).expect("decode"),
+        drowned
+    );
+
+    // Weather, season, in-season progress, temperature and armor points are the
+    // five trailing bytes; a mid-value sample per byte pins the order.
+    let seasonal = mornlea_protocol::PlayerState::new(
+        0,
+        0,
+        mornlea_domain::Dimension::OVERWORLD,
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        0.0,
+        0.0,
+        false,
+        false,
+        false,
+        false,
+        mornlea_protocol::BlockPos { x: 0, y: 0, z: 0 },
+        0,
+        0,
+        false,
+        15,
+        300,
+        12,
+        false,
+        0,
+        24000,
+        mornlea_protocol::WEATHER_RAIN,
+        mornlea_protocol::SEASON_AUTUMN,
+        128,
+        -8,
+        15,
+    )
+    .expect("seasonal player state");
+    let payload = seasonal.encode();
+    assert_eq!(payload.len(), 93);
+    assert_eq!(payload[76], 12);
+    assert_eq!(payload[88], mornlea_protocol::WEATHER_RAIN);
+    assert_eq!(payload[89], mornlea_protocol::SEASON_AUTUMN);
+    assert_eq!(payload[90], 128);
+    assert_eq!(payload[91], 0xf8);
+    assert_eq!(payload[92], 15);
+    assert_eq!(
+        mornlea_protocol::PlayerState::decode(&payload).expect("decode"),
+        seasonal
+    );
+}
+
+#[test]
+fn player_state_rejects_out_of_range_fields_and_malformed_payload() {
+    let active = mornlea_protocol::PlayerState::new(
+        7,
+        9,
+        mornlea_domain::Dimension::OVERWORLD,
+        [1.0, 2.0, 3.0],
+        [0.5, 0.0, 0.0],
+        0.25,
+        -0.5,
+        true,
+        true,
+        false,
+        true,
+        mornlea_protocol::BlockPos { x: 4, y: 5, z: 6 },
+        6,
+        15,
+        true,
+        20,
+        300,
+        20,
+        false,
+        23999,
+        24000,
+        2,
+        3,
+        255,
+        45,
+        20,
+    )
+    .expect("active player state");
+
+    let mut bad_health = active.clone();
+    bad_health.health = 21;
+    let mut bad_oxygen = active.clone();
+    bad_oxygen.oxygen = 301;
+    let mut bad_hunger = active.clone();
+    bad_hunger.hunger = 21;
+    let mut bad_phase = active.clone();
+    bad_phase.day_phase_offset = 24000;
+    let mut bad_weather = active.clone();
+    bad_weather.weather_kind = 3;
+    let mut bad_season = active.clone();
+    bad_season.season = 4;
+    let mut bad_armor = active.clone();
+    bad_armor.armor_points = 21;
+    let mut bad_position = active.clone();
+    bad_position.position = [f32::NAN, 0.0, 0.0];
+    let mut bad_yaw = active.clone();
+    bad_yaw.yaw = f32::INFINITY;
+    for bad in [
+        bad_health,
+        bad_oxygen,
+        bad_hunger,
+        bad_phase,
+        bad_weather,
+        bad_season,
+        bad_armor,
+        bad_position,
+        bad_yaw,
+    ] {
+        assert!(
+            bad.validate().is_err(),
+            "accepted out-of-range player state"
+        );
+    }
+
+    // An inactive mining block must be entirely empty, and an active one must
+    // carry progress strictly below the requirement.
+    let mut dirty_inactive = active.clone();
+    dirty_inactive.mining_active = false;
+    dirty_inactive.mining_target = mornlea_protocol::BlockPos { x: 1, y: 0, z: 0 };
+    assert!(dirty_inactive.validate().is_err());
+    let mut dirty_progress = active.clone();
+    dirty_progress.mining_progress_ticks = 0;
+    assert!(dirty_progress.validate().is_err());
+    let mut finished_progress = active.clone();
+    finished_progress.mining_progress_ticks = 15;
+    assert!(finished_progress.validate().is_err());
+
+    let payload = active.encode();
+    for length in 0..payload.len() {
+        assert!(
+            mornlea_protocol::PlayerState::decode(&payload[..length]).is_err(),
+            "accepted truncated player state at {length}"
+        );
+    }
+    let mut padded = payload.clone();
+    padded.push(0x00);
+    assert_eq!(
+        mornlea_protocol::PlayerState::decode(&padded),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    // An out-of-range weather byte is rejected by the same validation the Go
+    // decoder applies after the last field.
+    let mut bad_weather_payload = payload.clone();
+    bad_weather_payload[88] = 3;
+    assert!(mornlea_protocol::PlayerState::decode(&bad_weather_payload).is_err());
+}
