@@ -2311,3 +2311,72 @@ fn passive_despawn_rejects_unsorted_zero_reason_and_malformed_payload() {
     assert!(mornlea_protocol::PassiveDespawn::decode(&[1, 0, 0, 0, 0, 0, 0, 0, 0]).is_err());
 }
 
+#[test]
+fn chest_state_round_trip_preserves_slot_bytes() {
+    let chest = mornlea_protocol::ContainerRef::new(
+        0,
+        5,
+        -6,
+        mornlea_protocol::CONTAINER_KIND_CHEST,
+        3,
+        11,
+    )
+    .expect("chest");
+    let mut items = [mornlea_protocol::ItemStack::EMPTY; mornlea_protocol::CHEST_SLOTS];
+    items[0] = mornlea_protocol::ItemStack::new(1, 5, 0).expect("stone");
+    items[26] = mornlea_protocol::ItemStack::new(2, 1, 0).expect("dirt");
+    let state = mornlea_protocol::ChestState::new(chest, items).expect("state");
+    let payload = state.encode();
+    assert_eq!(mornlea_protocol::ChestState::PACKET_ID, 15);
+    assert_eq!(payload.len(), 18 + mornlea_protocol::CHEST_SLOTS * 5);
+    assert_eq!(&payload[18..23], &[0x01, 0x00, 0x05, 0x00, 0x00]);
+    assert_eq!(
+        &payload[payload.len() - 5..],
+        &[0x02, 0x00, 0x01, 0x00, 0x00]
+    );
+    let decoded = mornlea_protocol::ChestState::decode(&payload).expect("decode");
+    assert_eq!(decoded, state);
+}
+
+#[test]
+fn chest_state_rejects_wrong_reference_and_malformed_payload() {
+    let furnace = mornlea_protocol::ContainerRef::new(
+        0,
+        5,
+        -6,
+        mornlea_protocol::CONTAINER_KIND_FURNACE,
+        3,
+        11,
+    )
+    .expect("furnace");
+    let items = [mornlea_protocol::ItemStack::EMPTY; mornlea_protocol::CHEST_SLOTS];
+    // A chest state must name a chest, not a furnace.
+    assert!(mornlea_protocol::ChestState::new(furnace, items).is_err());
+    assert!(
+        mornlea_protocol::ChestState::new(mornlea_protocol::ContainerRef::NONE, items).is_err()
+    );
+    let chest = mornlea_protocol::ContainerRef::new(
+        0,
+        5,
+        -6,
+        mornlea_protocol::CONTAINER_KIND_CHEST,
+        3,
+        11,
+    )
+    .expect("chest");
+    let state = mornlea_protocol::ChestState::new(chest, items).expect("state");
+    let payload = state.encode();
+    // A registered chest reference is accepted and round-trips.
+    assert_eq!(
+        mornlea_protocol::ChestState::decode(&payload).expect("decode"),
+        state
+    );
+    // Truncated and trailing payloads fail before publication.
+    assert!(mornlea_protocol::ChestState::decode(&payload[..payload.len() - 1]).is_err());
+    let mut trailing = payload.clone();
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::ChestState::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}

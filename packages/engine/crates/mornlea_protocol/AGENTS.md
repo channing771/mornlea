@@ -488,3 +488,9 @@ and `domain_does_not_depend_on_protocol`).
   (`chest_state_round_trip_preserves_slot_bytes`,
   `chest_state_rejects_wrong_reference_and_malformed_payload`).
 
+## Focused Verification
+
+```bash
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked -- --list
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked
+```
