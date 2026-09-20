@@ -10,6 +10,7 @@
 
 mod bone_meal;
 mod bytes;
+mod chat_command;
 mod client_hello;
 mod close_container;
 mod collect_water;
@@ -43,6 +44,7 @@ mod till_soil;
 mod varint;
 
 pub use bone_meal::BoneMeal;
+pub use chat_command::{CHAT_COMMAND_TEXT_MAX_BYTES, ChatCommand};
 pub use client_hello::ClientHello;
 pub use close_container::CloseContainer;
 pub use collect_water::CollectWater;

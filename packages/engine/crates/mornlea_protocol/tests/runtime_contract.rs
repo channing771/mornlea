@@ -1594,6 +1594,62 @@ fn drop_stack_rejects_invalid_view_and_malformed_payload() {
     );
 }
 
+#[test]
+fn chat_command_round_trip_preserves_golden_bytes() {
+    let command = mornlea_protocol::ChatCommand::new("chop oak".to_owned()).expect("command");
+    let payload = command.encode();
+    assert_eq!(
+        payload,
+        [0x08, 0x63, 0x68, 0x6f, 0x70, 0x20, 0x6f, 0x61, 0x6b]
+    );
+    assert_eq!(mornlea_protocol::ChatCommand::PACKET_ID, 12);
+    let decoded = mornlea_protocol::ChatCommand::decode(&payload).expect("decode");
+    assert_eq!(decoded, command);
+    assert_eq!(decoded.text, "chop oak");
+}
+
+#[test]
+fn chat_command_rejects_blank_control_and_malformed_payload() {
+    assert!(mornlea_protocol::ChatCommand::new(String::new()).is_err());
+    assert!(mornlea_protocol::ChatCommand::new("  ".to_owned()).is_err());
+    assert!(mornlea_protocol::ChatCommand::new(" chop".to_owned()).is_err());
+    assert!(mornlea_protocol::ChatCommand::new("chop ".to_owned()).is_err());
+    assert!(mornlea_protocol::ChatCommand::new("ch\u{7}op".to_owned()).is_err());
+    let oversized = "a".repeat(mornlea_protocol::CHAT_COMMAND_TEXT_MAX_BYTES + 1);
+    assert!(mornlea_protocol::ChatCommand::new(oversized).is_err());
+    let maximum = "a".repeat(mornlea_protocol::CHAT_COMMAND_TEXT_MAX_BYTES);
+    assert_eq!(
+        mornlea_protocol::ChatCommand::decode(
+            &mornlea_protocol::ChatCommand::new(maximum.clone())
+                .expect("maximum")
+                .encode()
+        )
+        .expect("decode maximum")
+        .text,
+        maximum
+    );
+    assert_eq!(
+        mornlea_protocol::ChatCommand::decode(&[0x00]),
+        Err(mornlea_protocol::ProtocolError::InvalidString)
+    );
+    assert_eq!(
+        mornlea_protocol::ChatCommand::decode(&[0x08, 0x63, 0x68, 0x6f]),
+        Err(mornlea_protocol::ProtocolError::InvalidString)
+    );
+    assert_eq!(
+        mornlea_protocol::ChatCommand::decode(&[
+            0x08, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
+        ]),
+        Err(mornlea_protocol::ProtocolError::InvalidString)
+    );
+    let mut trailing = vec![0x08, 0x63, 0x68, 0x6f, 0x70, 0x20, 0x6f, 0x61, 0x6b];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::ChatCommand::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

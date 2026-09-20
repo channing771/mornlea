@@ -334,6 +334,17 @@ and `domain_does_not_depend_on_protocol`).
   are `InvalidEnum`; truncated payloads and trailing bytes fail before
   publication (`drop_stack_round_trip_preserves_golden_bytes`,
   `drop_stack_rejects_invalid_view_and_malformed_payload`).
+
+## Chat command (`src/chat_command.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 12 payload is a length-prefixed UTF-8 instruction bounded
+  by `CHAT_COMMAND_TEXT_MAX_BYTES` (`1024`, shared with the planner
+  instruction limit). The text must be 1..=max bytes, valid UTF-8, free of
+  NUL and Unicode control characters, and untrimmed whitespace is
+  rejected. Failures are `InvalidString`; oversized declared lengths and
+  truncated payloads fail before publication; trailing bytes fail after the
+  last field (`chat_command_round_trip_preserves_golden_bytes`,
+  `chat_command_rejects_blank_control_and_malformed_payload`).
 - `ByteEncoder` / `ByteDecoder` `boolean` helpers copy the Go primitive:
   only 0 and 1 are accepted, and anything else is `InvalidEnum`.
 
