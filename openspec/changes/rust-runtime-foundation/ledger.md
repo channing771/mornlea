@@ -219,3 +219,12 @@
 - Discovered tests (`-- --list`): 45.
 - PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
 - Architecture skill: no change.
+
+## 2026-09-20 — 2.3 protocol.client.MoveInventoryStack
+
+- Baseline: `2220d102 feat(engine): port take crafting output codec`.
+- Existing unrelated work: deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded.
+- Ruling: play packet ID 6 payload is little-endian `u64` sequence plus source and target slot u8. Slots must be distinct and inside `0..INVENTORY_SLOTS-1` (`36`, copied from Go `InventorySlots`). Same-slot and out-of-range pairs fail as `InvalidRange`. Golden bytes match Go `0a000000000000000323`. Remaining protocol families stay unchecked in `tasks.md`.
+- Discovered tests (`-- --list`): 47.
+- PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
+- Architecture skill: no change.

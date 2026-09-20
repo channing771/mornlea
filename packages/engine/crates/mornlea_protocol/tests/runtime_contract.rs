@@ -756,6 +756,59 @@ fn take_crafting_output_rejects_zero_sequence_and_malformed_payload() {
     );
 }
 
+#[test]
+fn move_inventory_stack_round_trip_preserves_golden_bytes() {
+    let mov = mornlea_protocol::MoveInventoryStack::new(10, 3, 35).expect("move");
+    let payload = mov.encode();
+    assert_eq!(
+        payload,
+        [0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x23]
+    );
+    assert_eq!(mornlea_protocol::MoveInventoryStack::PACKET_ID, 6);
+    assert_eq!(mornlea_protocol::INVENTORY_SLOTS, 36);
+    let decoded = mornlea_protocol::MoveInventoryStack::decode(&payload).expect("decode");
+    assert_eq!(decoded, mov);
+    assert_eq!(decoded.sequence, 10);
+    assert_eq!(decoded.from, 3);
+    assert_eq!(decoded.to, 35);
+}
+
+#[test]
+fn move_inventory_stack_rejects_invalid_slots_and_malformed_payload() {
+    assert_eq!(
+        mornlea_protocol::MoveInventoryStack::new(1, 36, 0),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::MoveInventoryStack::new(1, 0, 36),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::MoveInventoryStack::new(1, 2, 2),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::MoveInventoryStack::decode(&[
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 36
+        ]),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert!(mornlea_protocol::MoveInventoryStack::decode(&[0x0a]).is_err());
+    let mut trailing = vec![0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x23];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::MoveInventoryStack::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    let first = mornlea_protocol::MoveInventoryStack::new(0, 0, 35).expect("boundary");
+    assert_eq!(first.from, 0);
+    assert_eq!(first.to, 35);
+    assert_eq!(
+        mornlea_protocol::MoveInventoryStack::decode(&first.encode()).expect("decode boundary"),
+        first
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

@@ -172,6 +172,15 @@ and `domain_does_not_depend_on_protocol`).
   (`take_crafting_output_round_trip_preserves_golden_bytes`,
   `take_crafting_output_rejects_zero_sequence_and_malformed_payload`).
 
+## Move inventory stack (`src/move_inventory_stack.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 6 payload is a little-endian `u64` sequence plus source
+  and target slot bytes. Slots must be distinct and inside
+  `0..INVENTORY_SLOTS-1` (`36`, copied from Go `InventorySlots`). Same-slot
+  and out-of-range pairs are `InvalidRange`; trailing bytes fail before
+  publication (`move_inventory_stack_round_trip_preserves_golden_bytes`,
+  `move_inventory_stack_rejects_invalid_slots_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash
