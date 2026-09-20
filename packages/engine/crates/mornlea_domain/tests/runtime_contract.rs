@@ -38,10 +38,10 @@ fn inventory_assigns_domain_families_to_this_crate() {
     let owner = format!("\"eventual_owner\": \"{}\"", env!("CARGO_PKG_NAME"));
     let count = json.matches(&owner).count();
     assert_eq!(
-        count, 2,
+        count, 3,
         "domain inventory rows drifted; update intended domain ports before implementing them"
     );
-    for family in ["domain.event", "domain.input"] {
+    for family in ["domain.event", "domain.values", "domain.input"] {
         assert!(
             json.contains(&format!("\"id\": \"{family}\"")),
             "missing domain family {family}"
