@@ -2771,3 +2771,72 @@ fn hostile_spawn_rejects_invalid_records_and_malformed_payload() {
     );
 }
 
+#[test]
+fn hostile_state_round_trip_preserves_batch_bytes() {
+    let state = mornlea_protocol::HostileState::new(
+        0x0102_0304_0506_0708,
+        vec![mornlea_protocol::HostileStateRecord {
+            id: 7,
+            position: [2.5, 1.0, -3.25],
+            velocity: [0.5, -1.25, 0.0],
+            yaw: 1.25,
+            health: 13,
+            kind: mornlea_protocol::HOSTILE_KIND_BONE_THROWER,
+        }],
+    )
+    .expect("state");
+    let payload = state.encode();
+    assert_eq!(mornlea_protocol::HostileState::PACKET_ID, 23);
+    assert_eq!(payload.len(), 9 + 38);
+    assert_eq!(
+        &payload[..9],
+        &[0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x01]
+    );
+    assert_eq!(&payload[9..17], &[0x07, 0, 0, 0, 0, 0, 0, 0]);
+    // Position is 2.5, 1.0, -3.25 and velocity 0.5, -1.25, 0.0 in that order.
+    assert_eq!(&payload[17..21], &[0x00, 0x00, 0x20, 0x40]);
+    assert_eq!(&payload[21..25], &[0x00, 0x00, 0x80, 0x3f]);
+    assert_eq!(&payload[25..29], &[0x00, 0x00, 0x50, 0xc0]);
+    assert_eq!(&payload[29..33], &[0x00, 0x00, 0x00, 0x3f]);
+    assert_eq!(&payload[33..37], &[0x00, 0x00, 0xa0, 0xbf]);
+    assert_eq!(&payload[37..41], &[0x00, 0x00, 0x00, 0x00]);
+    assert_eq!(payload.len(), 9 + 38);
+    assert_eq!(
+        mornlea_protocol::HostileState::decode(&payload).expect("decode"),
+        state
+    );
+}
+
+#[test]
+fn hostile_state_rejects_invalid_records_and_malformed_payload() {
+    let record = mornlea_protocol::HostileStateRecord {
+        id: 7,
+        position: [1.0, 2.0, 3.0],
+        velocity: [0.0, 0.0, 0.0],
+        yaw: 0.5,
+        health: 10,
+        kind: mornlea_protocol::HOSTILE_KIND_NIGHTWALKER,
+    };
+    let mut zero_id = record;
+    zero_id.id = 0;
+    let mut bad_velocity = record;
+    bad_velocity.velocity = [f32::INFINITY, 0.0, 0.0];
+    let mut bad_health = record;
+    bad_health.health = 21;
+    let mut bad_kind = record;
+    bad_kind.kind = 2;
+    for bad in [zero_id, bad_velocity, bad_health, bad_kind] {
+        assert!(mornlea_protocol::HostileState::new(1, vec![bad]).is_err());
+    }
+    assert!(mornlea_protocol::HostileState::new(1, vec![record, record]).is_err());
+    assert!(mornlea_protocol::HostileState::new(1, Vec::new()).is_err());
+    let valid = mornlea_protocol::HostileState::new(1, vec![record]).expect("state");
+    let payload = valid.encode();
+    assert!(mornlea_protocol::HostileState::decode(&payload[..payload.len() - 1]).is_err());
+    let mut padded = payload.clone();
+    padded.push(0x00);
+    assert_eq!(
+        mornlea_protocol::HostileState::decode(&padded),
+        Err(mornlea_protocol::ProtocolError::Truncated)
+    );
+}

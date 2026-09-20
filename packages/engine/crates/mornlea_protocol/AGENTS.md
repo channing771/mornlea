@@ -529,3 +529,13 @@ and `domain_does_not_depend_on_protocol`).
   (`hostile_spawn_round_trip_preserves_batch_bytes`,
   `hostile_spawn_rejects_invalid_records_and_malformed_payload`).
 
+## Hostile state (`src/hostile_state.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 23 payload is a `u64` server tick, a one-byte record count,
+  and the fixed 38-byte state records: ID, position, velocity, yaw, health,
+  and kind. The dimension is not on the wire because a dimension change
+  always goes through a despawn/spawn pair. The same count, ordering, health,
+  and kind bounds as the spawn batch apply
+  (`hostile_state_round_trip_preserves_batch_bytes`,
+  `hostile_state_rejects_invalid_records_and_malformed_payload`).
+

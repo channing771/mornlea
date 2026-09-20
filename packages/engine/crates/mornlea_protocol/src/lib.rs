@@ -34,6 +34,7 @@ mod furnace_state;
 mod handshake_reject;
 mod hostile_despawn;
 mod hostile_spawn;
+mod hostile_state;
 mod inventory_state;
 mod item_stack;
 mod keep_alive;
@@ -105,6 +106,7 @@ pub use hostile_spawn::{
     HOSTILE_KIND_BONE_THROWER, HOSTILE_KIND_NIGHTWALKER, HOSTILE_SPAWN_MAX_RECORDS,
     HOSTILE_SPAWN_WIRE_BYTES, HostileSpawn, HostileSpawnRecord,
 };
+pub use hostile_state::{
     HOSTILE_STATE_MAX_RECORDS, HOSTILE_STATE_WIRE_BYTES, HostileState, HostileStateRecord,
 };
 pub use inventory_state::{
