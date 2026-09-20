@@ -197,7 +197,6 @@ func TestTraceRunIsDeterministicAndIsolated(t *testing.T) {
 
 	first, err := RunTrace(TraceRequest{
 		Root:           root,
-		WorkDir:        t.TempDir(),
 		SourceRevision: revision,
 		Seed:           "1",
 		TickSchedule:   []uint64{0},
@@ -208,7 +207,6 @@ func TestTraceRunIsDeterministicAndIsolated(t *testing.T) {
 
 	second, err := RunTrace(TraceRequest{
 		Root:           root,
-		WorkDir:        t.TempDir(),
 		SourceRevision: revision,
 		Seed:           "1",
 		TickSchedule:   []uint64{0},
@@ -242,7 +240,6 @@ func TestTraceRejectsIncompleteIdentity(t *testing.T) {
 
 	_, err := RunTrace(TraceRequest{
 		Root:         root,
-		WorkDir:      t.TempDir(),
 		TickSchedule: []uint64{0},
 		Seed:         "1",
 	})
@@ -262,30 +259,35 @@ func TestTraceRejectsIncompleteIdentity(t *testing.T) {
 func TestTraceRejectsLivePathWrites(t *testing.T) {
 	root := mustRepoRoot(t)
 	manifest := loadRealManifest(t, root)
-	liveWork := filepath.Join(root, "worlds", "oracle-live-work")
-	_, err := RunTrace(TraceRequest{
-		Root:           root,
-		WorkDir:        liveWork,
-		SourceRevision: manifest.SourceRevision,
-		Seed:           "1",
-		TickSchedule:   []uint64{0},
-	})
+	trace := validTraceForManifest(manifest)
+
+	// The harness owns the work directory, so a caller can no longer steer a
+	// run into a live-save path; the workspace must stay outside the
+	// repository and be removed again by the harness.
+	workspace, cleanup, err := NewTraceWorkspace(root)
+	if err != nil {
+		t.Fatalf("NewTraceWorkspace: %v", err)
+	}
+	if live, err := isLivePath(root, workspace); err != nil {
+		cleanup()
+		t.Fatal(err)
+	} else if live {
+		cleanup()
+		t.Fatalf("workspace %s resolves inside the repository", workspace)
+	}
+	cleanup()
+
+	liveWork := filepath.Join(root, "worlds", "oracle-live-work", "out.json")
+	err = ExportTrace(root, liveWork, trace, manifest)
 	if err == nil || !strings.Contains(err.Error(), "live-path") {
 		t.Fatalf("live work dir: error=%v", err)
 	}
-	if _, statErr := os.Stat(liveWork); !os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(filepath.Join(root, "worlds", "oracle-live-work")); !os.IsNotExist(statErr) {
 		t.Fatalf("live work dir was created: %v", statErr)
 	}
 
 	output := filepath.Join(root, "packages", "server", "storage", "chunk", "testdata", "chunk-v9.bin")
-	_, err = RunTrace(TraceRequest{
-		Root:           root,
-		WorkDir:        t.TempDir(),
-		OutputPath:     output,
-		SourceRevision: manifest.SourceRevision,
-		Seed:           "1",
-		TickSchedule:   []uint64{0},
-	})
+	err = ExportTrace(root, output, trace, manifest)
 	if err == nil || !strings.Contains(err.Error(), "live-path") {
 		t.Fatalf("live output path: error=%v", err)
 	}

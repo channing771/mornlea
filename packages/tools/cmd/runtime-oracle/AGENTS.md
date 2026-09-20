@@ -30,20 +30,40 @@ or Agent process packages. These boundaries are enforced by `packages/audit`
 
 ## Isolated replay (`trace.go`)
 
-- `RunTrace` copies coverage fixtures into a caller-supplied work directory,
-  hashes the copies, and emits a versioned `Trace` identity (source revision,
-  contract versions, corpus digest, seed, ordered checkpoint inputs, tick
-  schedule, and normalized fixture observations). Two isolated runs of the
-  same request produce identical JSON; the repository tree is read-only.
-- `WorkDir` and `OutputPath` inside the repository are live-path writes and
-  fail before any directory is created. Incomplete source revision, missing
-  contract identity, empty corpus digest, empty tick schedule, or missing
-  observations fail closed.
-- `LoadTrace` rejects truncated bytes, non-object JSON, and unsupported
-  `schema_version` before trusting identity fields.
+- `RunTrace` executes one isolated run and emits a versioned `Trace` identity
+  (source revision, contract versions, corpus digest, seed, ordered checkpoint
+  inputs, tick schedule, and normalized fixture observations). Two isolated runs
+  of the same request produce identical JSON; the repository tree is read-only.
+- The request carries no work directory and no output path. The harness owns the
+  workspace: `RunTrace` calls `NewTraceWorkspace` itself and removes the
+  directory before returning, so no caller can steer a run into a live-save path.
+- `NewTraceWorkspace` creates that exclusive temporary directory with
+  `os.MkdirTemp("", "mornlea-runtime-oracle-")` and returns the cleanup that
+  removes exactly that path. A workspace that would resolve inside the
+  repository is rejected as a live-path write.
+- `ExportTrace(root, target, trace, manifest)` publishes one report and stays
+  separate from execution. It validates the trace first, resolves the target
+  through its existing ancestor, rejects repository containment and symlink
+  components, refuses a preexisting target, creates missing directories one
+  component at a time, and stages the report in the target parent before
+  publishing it with `os.Link`. A link failure is a hard I/O failure;
+  publication never falls back to an overwrite or a rename.
+- Containment is judged on resolved paths, and only a `..` path element counts
+  as leaving the repository: a component whose name merely starts with `..`
+  (a sibling such as `..cache`) is a child of the repository, not an escape
+  from it.
+- Corpus assets a run consumes must be regular files reachable without a
+  symlink component and inside their byte budget; that gate runs before
+  reconciliation publishes any verdict about the corpus.
+- Incomplete source revision, missing contract identity, empty corpus digest,
+  empty tick schedule, or missing observations fail closed. `LoadTrace`
+  rejects truncated bytes, non-object JSON, and unsupported `schema_version`
+  before trusting identity fields.
 - Enforcement: `TestTraceRunIsDeterministicAndIsolated`,
   `TestTraceRejectsIncompleteIdentity`, `TestTraceRejectsLivePathWrites`,
-  `TestTraceRejectsMalformedInput`, `TestTraceRejectsIncompleteTraces`.
+  `TestTraceRejectsMalformedInput`, plus the isolation, path, output, and I/O
+  regressions in `trace_isolation_test.go` (`TestTraceIsolation*`,
+  `TestTracePath*`, `TestTraceOutput*`, `TestTraceIO*`).
 
 ## Focused Verification
 

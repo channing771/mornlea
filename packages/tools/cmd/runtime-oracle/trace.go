@@ -14,11 +14,11 @@ import (
 
 const traceSchemaVersion = 2
 
-// TraceRequest is one isolated offline replay request.
+// TraceRequest is one isolated offline replay request. The harness owns the
+// temporary workspace, so a request never names a work directory, and report
+// publication is the separate ExportTrace step rather than part of a run.
 type TraceRequest struct {
 	Root           string
-	WorkDir        string
-	OutputPath     string
 	SourceRevision string
 	Seed           string
 	TickSchedule   []uint64
@@ -86,7 +86,46 @@ func (err *TraceError) Error() string {
 	return "runtime-oracle: " + strings.Join(err.Problems, "; ")
 }
 
+// traceWorkspacePrefix names the harness-owned temporary directory so a stray
+// workspace is recognizable on disk and is never mistaken for evidence.
+const traceWorkspacePrefix = "mornlea-runtime-oracle-"
+
+// traceStagePrefix names the staged report file inside the target parent. The
+// staged name is deliberately hidden so a partial write is never mistaken for
+// the published report.
+const traceStagePrefix = ".runtime-oracle-trace-"
+
+// NewTraceWorkspace creates the exclusive temporary work directory for one
+// trace run. The directory is always created outside the repository, so no
+// caller can steer a run into a live-save path, and the harness owns it for the
+// whole run: the returned cleanup removes exactly this directory and nothing
+// else, and it is safe to call more than once.
+func NewTraceWorkspace(root string) (string, func(), error) {
+	dir, err := os.MkdirTemp("", traceWorkspacePrefix)
+	if err != nil {
+		return "", nil, fmt.Errorf("runtime-oracle: create trace workspace: %w", err)
+	}
+	cleanup := func() {
+		// Only the harness-owned directory is removed. A cleanup failure cannot
+		// undo a completed run, so it is not retried or escalated.
+		_ = os.RemoveAll(dir)
+	}
+	live, err := isLivePath(root, dir)
+	if err != nil {
+		cleanup()
+		return "", nil, err
+	}
+	if live {
+		cleanup()
+		return "", nil, fmt.Errorf("runtime-oracle: live-path write rejected: workspace %s", dir)
+	}
+	return dir, cleanup, nil
+}
+
 // RunTrace executes an isolated trace run and emits a complete replay identity.
+// The harness holds one exclusively owned workspace outside the repository for
+// the whole call and removes it before returning, so a run never depends on a
+// caller-supplied directory. Publishing a report is ExportTrace's step.
 func RunTrace(request TraceRequest) (Trace, error) {
 	if strings.TrimSpace(request.SourceRevision) == "" {
 		return Trace{}, fmt.Errorf("runtime-oracle: incomplete identity: source revision")
@@ -94,21 +133,15 @@ func RunTrace(request TraceRequest) (Trace, error) {
 	if strings.TrimSpace(request.Root) == "" {
 		return Trace{}, fmt.Errorf("runtime-oracle: incomplete identity: repository root")
 	}
-	if strings.TrimSpace(request.WorkDir) == "" {
-		return Trace{}, fmt.Errorf("runtime-oracle: incomplete identity: work dir")
-	}
-	if live, err := isLivePath(request.Root, request.WorkDir); err != nil {
+
+	// The workspace is the harness-owned isolation root for this call. This run
+	// stages nothing in it yet; holding it keeps the isolation contract
+	// independent of what a later run chooses to stage there.
+	_, cleanup, err := NewTraceWorkspace(request.Root)
+	if err != nil {
 		return Trace{}, err
-	} else if live {
-		return Trace{}, fmt.Errorf("runtime-oracle: live-path write rejected: work dir %s", request.WorkDir)
 	}
-	if request.OutputPath != "" {
-		if live, err := isLivePath(request.Root, request.OutputPath); err != nil {
-			return Trace{}, err
-		} else if live {
-			return Trace{}, fmt.Errorf("runtime-oracle: live-path write rejected: output path %s", request.OutputPath)
-		}
-	}
+	defer cleanup()
 
 	families, live, err := Discover(request.Root)
 	if err != nil {
@@ -119,12 +152,18 @@ func RunTrace(request TraceRequest) (Trace, error) {
 	if err != nil {
 		return Trace{}, err
 	}
-	if err := Reconcile(request.Root, inventory, families, live); err != nil {
+	selectedCases, err := selectTraceCases(request, inventory)
+	if err != nil {
 		return Trace{}, err
 	}
-
-	if err := os.MkdirAll(request.WorkDir, 0o755); err != nil {
-		return Trace{}, fmt.Errorf("runtime-oracle: create work dir: %w", err)
+	// A corpus asset that is not a plain regular file would let the run report
+	// evidence about bytes it never actually read, so this gate runs before
+	// reconciliation publishes any verdict about the corpus.
+	if err := verifyCorpusAssets(request.Root, selectedCases); err != nil {
+		return Trace{}, err
+	}
+	if err := Reconcile(request.Root, inventory, families, live); err != nil {
+		return Trace{}, err
 	}
 
 	corpusDigest, err := CanonicalCorpusDigest(inventory)
@@ -134,24 +173,6 @@ func RunTrace(request TraceRequest) (Trace, error) {
 
 	if request.Seed == "" {
 		request.Seed = "0"
-	}
-
-	manifestCaseByID := make(map[string]CaseSpec, len(inventory.Cases))
-	for _, c := range inventory.Cases {
-		manifestCaseByID[c.ID] = c
-	}
-
-	var selectedCases []CaseSpec
-	if len(request.SelectedCases) > 0 {
-		for _, id := range request.SelectedCases {
-			c, ok := manifestCaseByID[id]
-			if !ok {
-				return Trace{}, fmt.Errorf("runtime-oracle: unknown selected case: %s", id)
-			}
-			selectedCases = append(selectedCases, c)
-		}
-	} else {
-		selectedCases = inventory.Cases
 	}
 
 	type pendingCP struct {
@@ -236,20 +257,229 @@ func RunTrace(request TraceRequest) (Trace, error) {
 		return Trace{}, err
 	}
 
-	if request.OutputPath != "" {
-		encoded, err := json.MarshalIndent(trace, "", "  ")
-		if err != nil {
-			return Trace{}, fmt.Errorf("runtime-oracle: encode trace: %w", err)
+	return trace, nil
+}
+
+// ExportTrace publishes one validated trace report at target. Execution and
+// publication stay separate: the trace is validated first, the target is
+// resolved through its existing ancestor and checked for repository
+// containment and symlink components, and only then is the report staged in the
+// target parent and linked into place. A reader therefore observes either no
+// report or a complete one, a preexisting report is never replaced, and a
+// staging or link failure leaves nothing behind at the target.
+func ExportTrace(root, target string, trace Trace, manifest Inventory) error {
+	if err := ValidateTrace(trace, manifest); err != nil {
+		return err
+	}
+	if strings.TrimSpace(target) == "" {
+		return fmt.Errorf("runtime-oracle: incomplete identity: output path")
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return fmt.Errorf("runtime-oracle: resolve repository root: %w", err)
+	}
+	if resolved, err := filepath.EvalSymlinks(absRoot); err == nil {
+		absRoot = resolved
+	}
+	absTarget, err := filepath.Abs(target)
+	if err != nil {
+		return fmt.Errorf("runtime-oracle: resolve output path %s: %w", target, err)
+	}
+
+	// Walk upward until an existing entry is found, collecting the components
+	// that do not exist yet. Containment is judged on the resolved existing
+	// ancestor, so a symlink into the repository is caught even when the
+	// published name itself does not exist.
+	var missing []string
+	existing := absTarget
+	var existingInfo os.FileInfo
+	for {
+		info, statErr := os.Lstat(existing)
+		if statErr == nil {
+			existingInfo = info
+			break
 		}
-		if err := os.MkdirAll(filepath.Dir(request.OutputPath), 0o755); err != nil {
-			return Trace{}, fmt.Errorf("runtime-oracle: create trace output dir: %w", err)
+		if !os.IsNotExist(statErr) {
+			return fmt.Errorf("runtime-oracle: stat output path %s: %w", existing, statErr)
 		}
-		if err := os.WriteFile(request.OutputPath, append(encoded, '\n'), 0o644); err != nil {
-			return Trace{}, fmt.Errorf("runtime-oracle: write trace: %w", err)
+		missing = append(missing, filepath.Base(existing))
+		parent := filepath.Dir(existing)
+		if parent == existing {
+			return fmt.Errorf("runtime-oracle: output path %s has no existing ancestor", target)
+		}
+		existing = parent
+	}
+	// The suffix was collected leaf-first; publication needs it root-first.
+	for i, j := 0, len(missing)-1; i < j; i, j = i+1, j-1 {
+		missing[i], missing[j] = missing[j], missing[i]
+	}
+
+	resolvedExisting, err := filepath.EvalSymlinks(existing)
+	if err != nil {
+		return fmt.Errorf("runtime-oracle: resolve output ancestor %s: %w", existing, err)
+	}
+	resolvedTarget := filepath.Join(append([]string{resolvedExisting}, missing...)...)
+
+	live, err := isLivePath(absRoot, resolvedTarget)
+	if err != nil {
+		return err
+	}
+	if live {
+		return fmt.Errorf("runtime-oracle: live-path write rejected: output path %s", target)
+	}
+	if existingInfo.Mode()&os.ModeSymlink != 0 {
+		// The ancestor resolves outside the repository, but publishing through
+		// a symlink is still refused: the export path is owned by the harness.
+		return fmt.Errorf("runtime-oracle: symlink component rejected: %s", existing)
+	}
+	if len(missing) == 0 {
+		if existingInfo.IsDir() {
+			return fmt.Errorf("runtime-oracle: output path %s is a directory", target)
+		}
+		return fmt.Errorf("runtime-oracle: output path %s already exists", target)
+	}
+
+	// Create the missing directories one component at a time, re-checking each
+	// component as it is reached so a component that appeared meanwhile is
+	// validated instead of trusted.
+	current := resolvedExisting
+	for _, component := range missing[:len(missing)-1] {
+		current = filepath.Join(current, component)
+		info, statErr := os.Lstat(current)
+		if statErr == nil {
+			if info.Mode()&os.ModeSymlink != 0 {
+				return fmt.Errorf("runtime-oracle: symlink component rejected: %s", current)
+			}
+			if !info.IsDir() {
+				return fmt.Errorf("runtime-oracle: output path component %s is not a directory", current)
+			}
+			continue
+		}
+		if !os.IsNotExist(statErr) {
+			return fmt.Errorf("runtime-oracle: stat output path %s: %w", current, statErr)
+		}
+		if mkErr := os.Mkdir(current, 0o755); mkErr != nil {
+			return fmt.Errorf("runtime-oracle: create output dir %s: %w", current, mkErr)
 		}
 	}
 
-	return trace, nil
+	encoded, err := json.MarshalIndent(trace, "", "  ")
+	if err != nil {
+		return fmt.Errorf("runtime-oracle: encode trace: %w", err)
+	}
+	payload := append(encoded, '\n')
+
+	// Stage the report beside its destination, flush it, then publish it with a
+	// link. A link cannot replace an existing name, so publication is atomic
+	// and no-replace; a link failure is a hard I/O failure and never falls back
+	// to an overwrite or a rename.
+	staged, err := os.CreateTemp(current, traceStagePrefix)
+	if err != nil {
+		return fmt.Errorf("runtime-oracle: stage trace report: %w", err)
+	}
+	stagedName := staged.Name()
+	committed := false
+	defer func() {
+		if !committed {
+			_ = os.Remove(stagedName)
+		}
+	}()
+	if _, err := staged.Write(payload); err != nil {
+		_ = staged.Close()
+		return fmt.Errorf("runtime-oracle: write staged trace report: %w", err)
+	}
+	if err := staged.Sync(); err != nil {
+		_ = staged.Close()
+		return fmt.Errorf("runtime-oracle: sync staged trace report: %w", err)
+	}
+	if err := staged.Close(); err != nil {
+		return fmt.Errorf("runtime-oracle: close staged trace report: %w", err)
+	}
+	if err := os.Link(stagedName, resolvedTarget); err != nil {
+		return fmt.Errorf("runtime-oracle: publish trace report %s: %w", resolvedTarget, err)
+	}
+	committed = true
+	// The staged name and the published name are two links to the same bytes;
+	// dropping the staged one leaves only the report in the parent directory.
+	if err := os.Remove(stagedName); err != nil {
+		return fmt.Errorf("runtime-oracle: remove staged trace report: %w", err)
+	}
+	return nil
+}
+
+// selectTraceCases resolves the cases one request consumes. An unknown
+// selection is a caller error rather than a coverage gap, so it fails before
+// any corpus verdict is produced.
+func selectTraceCases(request TraceRequest, inventory Inventory) ([]CaseSpec, error) {
+	if len(request.SelectedCases) == 0 {
+		return inventory.Cases, nil
+	}
+	manifestCaseByID := make(map[string]CaseSpec, len(inventory.Cases))
+	for _, c := range inventory.Cases {
+		manifestCaseByID[c.ID] = c
+	}
+	selected := make([]CaseSpec, 0, len(request.SelectedCases))
+	for _, id := range request.SelectedCases {
+		c, ok := manifestCaseByID[id]
+		if !ok {
+			return nil, fmt.Errorf("runtime-oracle: unknown selected case: %s", id)
+		}
+		selected = append(selected, c)
+	}
+	return selected, nil
+}
+
+// verifyCorpusAssets rejects a corpus asset that is not a plain regular file
+// reachable without a symlink component. A symlinked, missing, or non-regular
+// asset would let a run describe bytes it never read.
+func verifyCorpusAssets(root string, cases []CaseSpec) error {
+	for _, c := range cases {
+		if err := verifyCorpusAsset(root, c.Input.Path, corpusAssetBudget(c.InputFormat)); err != nil {
+			return fmt.Errorf("runtime-oracle: case %s input asset %s: %w", c.ID, c.Input.Path, err)
+		}
+		if err := verifyCorpusAsset(root, c.Expected.Path, MaxCaseJSONBytes); err != nil {
+			return fmt.Errorf("runtime-oracle: case %s expected asset %s: %w", c.ID, c.Expected.Path, err)
+		}
+	}
+	return nil
+}
+
+// corpusAssetBudget maps a declared input format onto its byte budget.
+func corpusAssetBudget(format string) int64 {
+	if format == "json" {
+		return MaxCaseJSONBytes
+	}
+	return MaxBinaryBytes
+}
+
+// verifyCorpusAsset walks every component of one repository-relative asset and
+// requires a plain regular file inside the byte budget. Each component is
+// checked before the asset is opened, so a symlink component is rejected
+// instead of being followed.
+func verifyCorpusAsset(root, rel string, maxBytes int64) error {
+	if err := validateCorpusPath(rel); err != nil {
+		return err
+	}
+	current := root
+	var info os.FileInfo
+	for _, part := range strings.Split(rel, "/") {
+		current = filepath.Join(current, part)
+		stat, err := os.Lstat(current)
+		if err != nil {
+			return err
+		}
+		if stat.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("symlink component %s", current)
+		}
+		info = stat
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("%s is not a regular file", current)
+	}
+	if info.Size() > maxBytes {
+		return fmt.Errorf("file size %d exceeds budget %d", info.Size(), maxBytes)
+	}
+	return nil
 }
 
 // LoadTrace reads a trace artifact and validates it against the manifest.
@@ -546,6 +776,11 @@ func identitiesIncomplete(id Identities) bool {
 		id.AgentHTTP == "" || id.AgentMCP == ""
 }
 
+// isLivePath reports whether target resolves inside the repository tree at
+// root. Containment is judged on resolved paths, and a component whose name
+// merely starts with ".." (a sibling such as "..cache") is a child of the
+// repository rather than an escape from it, so only a ".." path element counts
+// as leaving the tree.
 func isLivePath(root, target string) (bool, error) {
 	if strings.TrimSpace(target) == "" {
 		return false, nil
@@ -576,5 +811,8 @@ func isLivePath(root, target string) (bool, error) {
 	if rel == "." {
 		return true, nil
 	}
-	return !strings.HasPrefix(rel, ".."), nil
+	if rel == ".." {
+		return false, nil
+	}
+	return !strings.HasPrefix(rel, ".."+string(filepath.Separator)), nil
 }
