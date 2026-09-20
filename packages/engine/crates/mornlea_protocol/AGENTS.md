@@ -253,6 +253,17 @@ and `domain_does_not_depend_on_protocol`).
   fail before publication (`bone_meal_round_trip_preserves_golden_bytes`,
   `bone_meal_rejects_non_finite_and_malformed_payload`).
 
+## Collect water (`src/collect_water.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 16 payload is a little-endian `u64` sequence followed by
+  two little-endian `f32` look angles, with no slot byte. The server
+  validates that the ray-cast target is a water source the held bucket
+  can collect from and owns the resulting item change. A zero sequence is
+  legal. Non-finite yaw/pitch are `InvalidFloat`; truncated payloads and
+  trailing bytes fail before publication
+  (`collect_water_round_trip_preserves_golden_bytes`,
+  `collect_water_rejects_non_finite_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash
