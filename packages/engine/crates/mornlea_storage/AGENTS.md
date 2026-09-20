@@ -18,9 +18,31 @@ not depend on `mornlea_protocol`, `mornlea_engine`, `mornlea_client`, or
   migrations, and corrupt/partial rejection; this crate must not repair
   invalid records.
 
+## Shared primitives (`src/bytes.rs`, `src/crc32c.rs`, `src/error.rs`)
+
+- `ByteReader`/`ByteWriter` are the single little-endian byte layer for every
+  family; fixed-width integers match the on-disk layout exactly.
+- `crc32c`/`crc32c_join` are the Castagnoli CRC-32C used by every envelope.
+  They hash header slices plus payload without materializing the
+  concatenation, and are public so contract tests can reseal a mutated
+  fixture.
+- `StorageError::Corrupt` and `StorageError::FutureVersion` keep the two Go
+  storage sentinels distinct: both reject, neither repairs.
+
+## Ported families
+
+Each family is one module re-exported from `src/lib.rs`, and each is verified
+against the committed Go binary fixture where one exists (byte-for-byte
+re-encode equality).
+
+| Family | Module | Current schema | Notes |
+| --- | --- | --- | --- |
+| `save.passive` | `src/passive.rs` | v1 | 32-byte header + fixed 72-byte records, 30-byte zero reserved tail, canonical ascending-ID order |
+
 ## Focused Verification
 
 ```bash
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_storage --test runtime_contract --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_storage --test runtime_contract --locked
+rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml -p mornlea_storage -- --check
 ```
