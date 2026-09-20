@@ -1,4 +1,4 @@
 {
-  "category": "noncanonical-uvarint",
-  "kind": "rejected"
+  "category": "invalid-varint",
+  "kind": "error"
 }

@@ -4931,12 +4931,12 @@ fn dispatch_frame(case: &runtime_corpus::FrozenCase) -> serde_json::Value {
             }
             Err(err) => {
                 let category = match err {
-                    mornlea_protocol::ProtocolError::NonCanonicalUvarint => "noncanonical-uvarint",
+                    mornlea_protocol::ProtocolError::NonCanonicalUvarint => "invalid-varint",
                     other => panic!("unclassified framing rejection for {}: {other:?}", case.id),
                 };
                 serde_json::json!({
                     "category": category,
-                    "kind": "rejected"
+                    "kind": "error"
                 })
             }
         },
@@ -4984,7 +4984,7 @@ fn corpus_frame() {
         "input_format": "binary",
         "expected": {
             "path": "testdata/runtime-migration/cases/frame/noncanonical-length.expected.json",
-            "sha256": "sha256:58465d8f3905b3dd1b5b42bfc260c54769ce1416590b5422cb8a1604d4bf6ea1"
+            "sha256": "sha256:322f8e8aa056952c6e2990cc1f0b361ae868fe46c66ed2f644eb2ce120289d14"
         },
         "checkpoints": ["0"],
         "rust_consumer": "corpus_frame"
@@ -4997,7 +4997,7 @@ fn corpus_frame() {
     assert_eq!(noncanonical.operation, "decode");
     let rejected = dispatch_frame(&noncanonical);
     assert_eq!(
-        rejected["kind"], "rejected",
+        rejected["kind"], "error",
         "noncanonical length vector was accepted: {rejected}"
     );
     runtime_corpus::assert_normalized(&noncanonical, rejected);

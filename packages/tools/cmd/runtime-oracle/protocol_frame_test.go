@@ -3,11 +3,14 @@ package main
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -17,6 +20,10 @@ import (
 const (
 	// frameFamily is the only corpus family this package executes today.
 	frameFamily = "protocol.frame"
+	// corpusCasesRelDir is the repository-relative directory holding every
+	// committed corpus case asset, including the ones a later node merges into
+	// the frozen manifest.
+	corpusCasesRelDir = "testdata/runtime-migration/cases"
 	// frameVersion is the protocol version the framing contract is pinned to.
 	frameVersion = "45"
 	// frameValidCaseID is the frozen case committed with the corpus.
@@ -40,13 +47,14 @@ const (
 //
 // The Go reader reports the shared `errInvalidUvarint` sentinel for a
 // non-canonical length prefix, so the category names the wire condition rather
-// than the Go sentinel: the Rust consumer rejects the same vector with its own
-// non-canonical error, and the category is the only signal both sides publish.
-// A failure with no mapping is a hard error, because an unclassified rejection
-// must never be recorded as evidence.
+// than the Go sentinel: `invalid-varint` is exactly that wire condition, the
+// Rust consumer rejects the same vector with its own non-canonical error, and
+// the category is the only signal both sides publish. A failure with no
+// mapping is a hard error, because an unclassified rejection must never be
+// recorded as evidence.
 func frameRejectionCategory(err error) (string, bool) {
 	if strings.Contains(err.Error(), "invalid uvarint") {
-		return "noncanonical-uvarint", true
+		return "invalid-varint", true
 	}
 	return "", false
 }
@@ -66,7 +74,7 @@ func runFrameDecode(c CaseSpec, input []byte) (Outcome, []byte, error) {
 		if !classified {
 			return Outcome{}, nil, fmt.Errorf("runtime-oracle: case %s: unclassified framing rejection: %w", c.ID, err)
 		}
-		return Outcome{Kind: "rejected", Category: category}, nil, nil
+		return Outcome{Kind: "error", Category: category}, nil, nil
 	}
 	return Outcome{
 		Kind:     "ok",
@@ -201,11 +209,11 @@ func TestProtocolOracleFrameIndependentOutcomes(t *testing.T) {
 	}
 
 	noncanonical := frameObservation(t, observations, frameNoncanonicalCaseID)
-	if noncanonical.Outcome.Kind != "rejected" {
-		t.Fatalf("noncanonical length case produced %#v, want a rejection", noncanonical.Outcome)
+	if noncanonical.Outcome.Kind != "error" {
+		t.Fatalf("noncanonical length case produced %#v, want a structural error", noncanonical.Outcome)
 	}
-	if noncanonical.Outcome.Category != "noncanonical-uvarint" {
-		t.Fatalf("noncanonical length case category %q, want noncanonical-uvarint", noncanonical.Outcome.Category)
+	if noncanonical.Outcome.Category != "invalid-varint" {
+		t.Fatalf("noncanonical length case category %q, want invalid-varint", noncanonical.Outcome.Category)
 	}
 	if len(noncanonical.Outcome.Fields) != 0 {
 		t.Fatalf("rejection published fields %#v, want none", noncanonical.Outcome.Fields)
@@ -320,9 +328,9 @@ func TestProtocolOracleFrameRunnerHandsProducerOnlyCaseAndInput(t *testing.T) {
 	root := mustRepoRoot(t)
 	manifest := frameWorkingManifest(t, root)
 	// The recorded expectation for this case is an accepted frame; the spy
-	// returns a rejection. If the runner substituted the expectation, the
-	// observation would come back accepted and this assertion would fail.
-	spy := &recordingOperation{outcome: Outcome{Kind: "rejected", Category: "spy"}}
+	// returns a structural error. If the runner substituted the expectation,
+	// the observation would come back accepted and this assertion would fail.
+	spy := &recordingOperation{outcome: Outcome{Kind: "error", Category: "spy"}}
 
 	observations, err := RunCases(root, manifest,
 		map[string]GoOperation{"decode": spy.run},
@@ -538,6 +546,102 @@ func TestProtocolOracleFrameExportDoesNothingWithoutEnvironmentDirectory(t *test
 		if strings.HasPrefix(entry.Name(), "runtime-oracle-export") {
 			t.Fatalf("an export directory appeared in the repository: %s", entry.Name())
 		}
+	}
+}
+
+// corpusOutcomeKinds is the closed outcome-kind vocabulary the execution
+// contract publishes: a corpus outcome is either accepted or a structural,
+// admission, or storage error, and nothing else.
+var corpusOutcomeKinds = map[string]bool{
+	"ok":    true,
+	"error": true,
+}
+
+// corpusStructuralCategories is the frozen structural-error vocabulary the
+// execution contract names for a corpus rejection.
+var corpusStructuralCategories = map[string]bool{
+	"truncated":           true,
+	"trailing":            true,
+	"invalid-varint":      true,
+	"capacity":            true,
+	"unsupported-version": true,
+	"invalid-enum":        true,
+	"invalid-identity":    true,
+	"invalid-value":       true,
+	"integrity":           true,
+}
+
+// corpusAdmissionCategories is the frozen login admission vocabulary, which is
+// separate from the structural set because an admission decision is a policy
+// result rather than a decoding failure.
+var corpusAdmissionCategories = map[string]bool{
+	"handshake-version-mismatch": true,
+	"login-invalid-identity":     true,
+	"login-protocol-violation":   true,
+}
+
+// corpusStorageCategories is the frozen storage vocabulary: the Go storage
+// sentinels are normalized to these two values instead of their error prose.
+var corpusStorageCategories = map[string]bool{
+	"corrupt":        true,
+	"future-version": true,
+}
+
+// TestCorpusOutcomeVocabularyMatchesExecutionContract pins every committed
+// corpus expectation to the outcome vocabulary the execution contract freezes.
+//
+// A corpus file that publishes a kind or a rejection category outside the
+// contract becomes a frozen artifact later packet nodes inherit, so the check
+// reads the whole cases tree rather than only the cases this package executes
+// today. Accepted outcomes may name their own subject category; a rejection has
+// to be classifiable by both independent implementations.
+func TestCorpusOutcomeVocabularyMatchesExecutionContract(t *testing.T) {
+	root := mustRepoRoot(t)
+	casesDir := filepath.Join(root, filepath.FromSlash(corpusCasesRelDir))
+
+	var files []string
+	if err := filepath.WalkDir(casesDir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || entry.Type()&fs.ModeSymlink != 0 {
+			return nil
+		}
+		if strings.HasSuffix(entry.Name(), ".expected.json") {
+			files = append(files, path)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("walk corpus cases directory: %v", err)
+	}
+	if len(files) == 0 {
+		t.Fatalf("no *.expected.json under %s: the vocabulary check would pass vacuously", corpusCasesRelDir)
+	}
+	sort.Strings(files)
+
+	for _, path := range files {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		var outcome Outcome
+		dec := json.NewDecoder(bytes.NewReader(data))
+		dec.UseNumber()
+		if err := dec.Decode(&outcome); err != nil {
+			t.Fatalf("decode %s: %v", path, err)
+		}
+		if !corpusOutcomeKinds[outcome.Kind] {
+			t.Fatalf("%s publishes kind %q, want one of ok|error", path, outcome.Kind)
+		}
+		if outcome.Kind != "error" {
+			continue
+		}
+		if corpusStructuralCategories[outcome.Category] ||
+			corpusAdmissionCategories[outcome.Category] ||
+			corpusStorageCategories[outcome.Category] {
+			continue
+		}
+		t.Fatalf("%s publishes rejection category %q, which is not in the frozen execution contract vocabulary", path, outcome.Category)
 	}
 }
 
