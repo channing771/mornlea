@@ -66,10 +66,41 @@ or Agent process packages. These boundaries are enforced by `packages/audit`
   regressions in `trace_isolation_test.go` (`TestTraceIsolation*`,
   `TestTracePath*`, `TestTraceOutput*`, `TestTraceIO*`).
 
+## Independent operation runners (`runner_test.go`, `protocol_frame_test.go`)
+
+- `GoOperation` and the `map[string]GoOperation` registry live in test code
+  only. A producer receives the case specification and the case input bytes and
+  returns the normalized outcome, its own encoded bytes, and an error. The
+  recorded expected outcome is never handed to a producer, so an independent
+  execution cannot be shaped by the evidence it is supposed to reproduce.
+- `RunCases` enumerates the manifest selection, resolves each input under the
+  corpus byte budget, proves the input digest matches the manifest, invokes the
+  registered producer once per declared checkpoint, and derives every
+  observation from the returned values. An unknown family, an unregistered
+  operation, an operation that disagrees with its family's binding, a missing
+  checkpoint, or a tampered input digest is a hard error.
+- Protocol producers use the real production codec. The framing producer calls
+  `codec.ReadFrame` and classifies a rejection into a language-neutral category;
+  an unclassified failure is an error rather than an unlabelled rejection.
+- Explicit fixture export is gated by `RUNTIME_ORACLE_EXPORT_DIR`. There is no
+  repository default: an unset variable exports nothing. A named directory must
+  be fresh and directly addressed, and the report is published through
+  `ExportTrace`, so the export inherits the same containment, symlink and
+  no-replace gates. Production `main.go` reconciles and validates existing
+  artifacts and has no trace-generation mode.
+- Enforcement: `TestProtocolOracleFrameIndependentOutcomes`,
+  `TestProtocolOracleFrameOutcomesDistinguishCases`,
+  `TestProtocolOracleFrameRunnerRejects*`,
+  `TestProtocolOracleFrameRunnerHandsProducerOnlyCaseAndInput`,
+  `TestProtocolOracleFrameRunnerInvokesProducerOncePerCheckpoint`,
+  `TestProtocolOracleFrameExport*`.
+
 ## Focused Verification
 
 ```bash
 go test ./packages/tools/cmd/runtime-oracle -run TestContractInventory -count=1
 go test ./packages/tools/cmd/runtime-oracle -list TestContractInventory
+go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolOracleFrame' -count=1
 go test ./packages/tools/cmd/runtime-oracle -race -count=1
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked corpus_frame
 ```

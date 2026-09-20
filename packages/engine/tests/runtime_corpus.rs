@@ -14,6 +14,13 @@ const MAX_CASES: usize = 8192;
 pub struct FrozenCase {
     pub id: String,
     pub family: String,
+    /// The manifest operation this case executes, parsed once so a consumer
+    /// dispatches on a typed value instead of re-reading the manifest text.
+    pub operation: String,
+    /// The typed argument JSON the manifest carries for this case. A family
+    /// that needs no arguments records JSON null, so a consumer never has to
+    /// distinguish "absent" from "present but empty".
+    pub arguments: serde_json::Value,
     pub input: Vec<u8>,
     pub normalized: serde_json::Value,
     pub encoded: Option<Vec<u8>>,
@@ -115,9 +122,42 @@ pub fn load_case(id: &str) -> FrozenCase {
     }
 
     let c = matched_case.unwrap_or_else(|| panic!("case '{id}' not found in contracts.json"));
+    load_case_entry(&root, c, id)
+}
+
+/// Loads one corpus case from an explicit manifest entry resolved against
+/// `root`, instead of from the frozen manifest.
+///
+/// A case that has been executed but whose manifest merge has not landed still
+/// has to be consumed, so the entry point accepts the entry directly. The entry
+/// keeps the manifest shape and the loader applies the same byte budgets,
+/// symlink refusal, hashing and identity checks as `load_case`; the caller
+/// supplies the entry so the loader never invents a case identity.
+pub fn load_case_file(root: &Path, entry: &serde_json::Value, id: &str) -> FrozenCase {
+    assert_eq!(
+        entry["id"].as_str(),
+        Some(id),
+        "case entry id does not match the requested id"
+    );
+    load_case_entry(root, entry, id)
+}
+
+/// Loads one case from a manifest entry, applying every budget, hashing and
+/// shape check the corpus requires. Both the frozen-manifest and the
+/// path-based entry points funnel through here so the two cannot drift.
+fn load_case_entry(root: &Path, c: &serde_json::Value, id: &str) -> FrozenCase {
     let family = c["family"].as_str().expect("family string").to_string();
     let rust_consumer = c["rust_consumer"].as_str().expect("rust_consumer string");
     assert!(!rust_consumer.is_empty(), "rust_consumer cannot be empty");
+    let operation = c["operation"]
+        .as_str()
+        .expect("operation string")
+        .to_string();
+    assert!(!operation.is_empty(), "operation cannot be empty");
+    let arguments = c
+        .get("arguments")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
 
     let input_path_str = c["input"]["path"].as_str().expect("input.path string");
     let input_sha = c["input"]["sha256"].as_str().expect("input.sha256 string");
@@ -180,6 +220,8 @@ pub fn load_case(id: &str) -> FrozenCase {
     FrozenCase {
         id: id.to_string(),
         family,
+        operation,
+        arguments,
         input: input_bytes,
         normalized,
         encoded,

@@ -4882,33 +4882,123 @@ fn chunk_snapshot_rejects_malformed_logical_payload() {
     }
 }
 
+/// Renders bytes as lowercase hexadecimal, matching the Go producer's
+/// `encoding/hex` output so both sides publish the same payload text.
+fn hex_lower(bytes: &[u8]) -> String {
+    let mut rendered = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        rendered.push_str(&format!("{byte:02x}"));
+    }
+    rendered
+}
+
+/// Dispatches one framing case through the real Rust consumer named by the
+/// case's parsed operation.
+///
+/// The dispatch is a match over real consumers rather than a name count: the
+/// accepted branch runs `read_frame` on the case input and the rejected branch
+/// classifies the error the consumer actually returned. A consumer that decodes
+/// a different result, or a mutation of the decoded packet ID, changes the
+/// normalized outcome and fails the assertion instead of merely renaming a
+/// case. An unclassified rejection is a hard failure because the corpus only
+/// records categories both languages can name.
+fn dispatch_frame(case: &runtime_corpus::FrozenCase) -> serde_json::Value {
+    assert_eq!(case.family, "protocol.frame", "unexpected corpus family");
+    assert!(
+        case.arguments.is_null(),
+        "framing carries no typed arguments, got {}",
+        case.arguments
+    );
+    match case.operation.as_str() {
+        "decode" => match mornlea_protocol::read_frame(&case.input) {
+            Ok((packet_id, payload, used)) => {
+                assert_eq!(
+                    used,
+                    case.input.len(),
+                    "frame reader left {} of {} bytes unconsumed",
+                    case.input.len() - used,
+                    case.input.len()
+                );
+                serde_json::json!({
+                    "category": "frame",
+                    "fields": {
+                        "packet_id": packet_id,
+                        "payload": hex_lower(&payload),
+                        "payload_len": payload.len()
+                    },
+                    "kind": "ok"
+                })
+            }
+            Err(err) => {
+                let category = match err {
+                    mornlea_protocol::ProtocolError::NonCanonicalUvarint => "noncanonical-uvarint",
+                    other => panic!("unclassified framing rejection for {}: {other:?}", case.id),
+                };
+                serde_json::json!({
+                    "category": category,
+                    "kind": "rejected"
+                })
+            }
+        },
+        other => panic!("unsupported framing operation for {}: {other}", case.id),
+    }
+}
+
 #[test]
 fn corpus_frame() {
-    let case = runtime_corpus::load_case("protocol.frame/45/valid");
-    assert_eq!(case.family, "protocol.frame");
-    let (packet_id, payload, used) = mornlea_protocol::read_frame(&case.input)
-        .expect("read_frame should succeed on valid framing case");
-    assert_eq!(used, case.input.len());
-    let actual = serde_json::json!({
-        "category": "frame",
-        "fields": {
-            "packet_id": packet_id,
-            "payload": format!("{:02x}", payload[0]),
-            "payload_len": payload.len()
-        },
-        "kind": "ok"
-    });
-    runtime_corpus::assert_normalized(&case, actual);
+    let root = runtime_corpus::find_repo_root();
+
+    let valid = runtime_corpus::load_case("protocol.frame/45/valid");
+    assert_eq!(valid.family, "protocol.frame");
+    assert_eq!(valid.operation, "decode");
+    runtime_corpus::assert_normalized(&valid, dispatch_frame(&valid));
 
     // Negative mutation check: mutating the decoded ID must fail assertion.
+    let (decoded_id, decoded_payload, _) = mornlea_protocol::read_frame(&valid.input)
+        .expect("read_frame should succeed on valid framing case");
     let mutated = serde_json::json!({
         "category": "frame",
         "fields": {
-            "packet_id": packet_id + 1,
-            "payload": format!("{:02x}", payload[0]),
-            "payload_len": payload.len()
+            "packet_id": decoded_id + 1,
+            "payload": hex_lower(&decoded_payload),
+            "payload_len": decoded_payload.len()
         },
         "kind": "ok"
     });
-    assert_ne!(case.normalized, mutated);
+    assert_ne!(valid.normalized, mutated);
+
+    // The noncanonical length vector is executed but its manifest merge is a
+    // separate controller step, so the consumer names the case entry by path
+    // until the frozen manifest carries it. The expected outcome is the one the
+    // independent Go producer recorded; the Rust consumer has to reproduce it
+    // from the same bytes rather than agreeing with a Rust-generated value.
+    let noncanonical_entry = serde_json::json!({
+        "id": "protocol.frame/45/noncanonical-length",
+        "family": "protocol.frame",
+        "version": "45",
+        "operation": "decode",
+        "input": {
+            "path": "testdata/runtime-migration/cases/frame/noncanonical-length.bin",
+            "sha256": "sha256:431c114d525bb04ddd1b7434509fc9360452448041b2921b02b7852b85cc2d6c"
+        },
+        "input_format": "binary",
+        "expected": {
+            "path": "testdata/runtime-migration/cases/frame/noncanonical-length.expected.json",
+            "sha256": "sha256:58465d8f3905b3dd1b5b42bfc260c54769ce1416590b5422cb8a1604d4bf6ea1"
+        },
+        "checkpoints": ["0"],
+        "rust_consumer": "corpus_frame"
+    });
+    let noncanonical = runtime_corpus::load_case_file(
+        &root,
+        &noncanonical_entry,
+        "protocol.frame/45/noncanonical-length",
+    );
+    assert_eq!(noncanonical.operation, "decode");
+    let rejected = dispatch_frame(&noncanonical);
+    assert_eq!(
+        rejected["kind"], "rejected",
+        "noncanonical length vector was accepted: {rejected}"
+    );
+    runtime_corpus::assert_normalized(&noncanonical, rejected);
 }
