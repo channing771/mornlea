@@ -102,3 +102,12 @@
 - Discovered tests (`rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked -- --list`): 15.
 - PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
 - Architecture skill: no change.
+
+## 2026-09-20 — 2.3 protocol.server.HandshakeReject
+
+- Baseline: `b1ce71c2 feat(engine): port server hello codec`.
+- Existing unrelated work: deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded.
+- Ruling: handshake packet ID 1 payload is a canonical uvarint server version, reject code `1`, and a length-prefixed UTF-8 message (max 256 bytes/runes). Server version is informational and may differ from the current protocol. Unknown codes are `InvalidEnum`; invalid UTF-8 and oversized declared lengths are `InvalidString`. Golden bytes match Go `2a01026e6f` and empty-message `080100`. Crate-private `ByteEncoder`/`ByteDecoder` land with this family for later packets. Remaining protocol families stay unchecked in `tasks.md`.
+- Discovered tests (`-- --list`): 18.
+- PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
+- Architecture skill: no change.

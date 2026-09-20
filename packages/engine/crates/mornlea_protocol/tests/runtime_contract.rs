@@ -206,6 +206,60 @@ fn server_hello_rejects_unknown_version_and_malformed_payload() {
     );
 }
 
+#[test]
+fn handshake_reject_round_trip_preserves_golden_bytes() {
+    let reject = mornlea_protocol::HandshakeReject::new(42, 1, "no").expect("reject");
+    let payload = reject.encode();
+    assert_eq!(payload, [0x2a, 0x01, 0x02, b'n', b'o']);
+    assert_eq!(mornlea_protocol::HandshakeReject::PACKET_ID, 1);
+    let decoded = mornlea_protocol::HandshakeReject::decode(&payload).expect("decode");
+    assert_eq!(decoded, reject);
+    assert_eq!(decoded.server_protocol_version, 42);
+    assert_eq!(decoded.code, 1);
+    assert_eq!(decoded.message, "no");
+}
+
+#[test]
+fn handshake_reject_round_trip_preserves_empty_message() {
+    let reject = mornlea_protocol::HandshakeReject::new(8, 1, "").expect("empty message");
+    let payload = reject.encode();
+    assert_eq!(payload, [0x08, 0x01, 0x00]);
+    let decoded = mornlea_protocol::HandshakeReject::decode(&payload).expect("decode");
+    assert_eq!(decoded, reject);
+}
+
+#[test]
+fn handshake_reject_rejects_unknown_code_and_malformed_payload() {
+    assert_eq!(
+        mornlea_protocol::HandshakeReject::new(45, 0, ""),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    assert_eq!(
+        mornlea_protocol::HandshakeReject::new(45, 2, ""),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    assert_eq!(
+        mornlea_protocol::HandshakeReject::decode(&[0x2a, 0x00, 0x00]),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    assert!(mornlea_protocol::HandshakeReject::decode(&[]).is_err());
+    assert_eq!(
+        mornlea_protocol::HandshakeReject::decode(&[0x2a, 0x01, 0x02, b'n', b'o', 0x00]),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    assert_eq!(
+        mornlea_protocol::HandshakeReject::decode(&[0x2a, 0x01, 0x01, 0xff]),
+        Err(mornlea_protocol::ProtocolError::InvalidString)
+    );
+    let mut oversized = vec![0x2a, 0x01];
+    oversized.extend(mornlea_protocol::encode_uvarint(257));
+    oversized.extend(std::iter::repeat_n(b'a', 257));
+    assert_eq!(
+        mornlea_protocol::HandshakeReject::decode(&oversized),
+        Err(mornlea_protocol::ProtocolError::InvalidString)
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

@@ -51,6 +51,21 @@ and `domain_does_not_depend_on_protocol`).
   (`server_hello_round_trip_preserves_current_version_bytes`,
   `server_hello_rejects_unknown_version_and_malformed_payload`).
 
+## Handshake reject (`src/handshake_reject.rs`, `src/bytes.rs`, `tests/runtime_contract.rs`)
+
+- Handshake packet ID 1 payload is a canonical uvarint server protocol
+  version, a one-byte reject code, and a length-prefixed UTF-8 message.
+- Only `HANDSHAKE_VERSION_MISMATCH` (`1`) is a published code. The server
+  version is informational and is not required to match the current
+  protocol. Unknown codes are `InvalidEnum`; invalid UTF-8, oversized
+  declared lengths, and oversized messages are `InvalidString`; trailing
+  bytes fail before publication
+  (`handshake_reject_round_trip_preserves_golden_bytes`,
+  `handshake_reject_round_trip_preserves_empty_message`,
+  `handshake_reject_rejects_unknown_code_and_malformed_payload`).
+- `ByteEncoder` / `ByteDecoder` are crate-private payload primitives shared
+  by later packet families. They are not a public codec surface.
+
 ## Focused Verification
 
 ```bash
