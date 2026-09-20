@@ -1362,6 +1362,111 @@ fn move_container_stack_rejects_invalid_container_and_malformed_payload() {
     );
 }
 
+#[test]
+fn move_stack_partial_round_trip_preserves_golden_bytes() {
+    let container = mornlea_protocol::ContainerRef::new(0, -3, 7, 1, 5, 9).expect("chest");
+    let partial =
+        mornlea_protocol::MoveStackPartial::new(19, container, 2, 10, 34, true).expect("partial");
+    let payload = partial.encode();
+    assert_eq!(
+        payload,
+        [
+            0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfd, 0xff,
+            0xff, 0xff, 0x07, 0x00, 0x00, 0x00, 0x01, 0x05, 0x09, 0x00, 0x00, 0x00, 0x02, 0x0a,
+            0x22, 0x01
+        ]
+    );
+    assert_eq!(mornlea_protocol::MoveStackPartial::PACKET_ID, 19);
+    assert_eq!(payload.len(), 30);
+    let decoded = mornlea_protocol::MoveStackPartial::decode(&payload).expect("decode");
+    assert_eq!(decoded, partial);
+    assert!(decoded.single);
+    assert_eq!(decoded.view, 2);
+    let inventory = mornlea_protocol::MoveStackPartial::new(
+        7,
+        mornlea_protocol::ContainerRef::NONE,
+        mornlea_protocol::STACK_VIEW_INVENTORY,
+        0,
+        35,
+        false,
+    )
+    .expect("inventory split");
+    assert_eq!(
+        mornlea_protocol::MoveStackPartial::decode(&inventory.encode()).expect("decode inventory"),
+        inventory
+    );
+}
+
+#[test]
+fn move_stack_partial_rejects_invalid_view_and_malformed_payload() {
+    let container = mornlea_protocol::ContainerRef::new(0, -3, 7, 1, 5, 9).expect("chest");
+    assert_eq!(
+        mornlea_protocol::MoveStackPartial::new(1, container, 2, 0, 0, true),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::MoveStackPartial::new(1, container, 2, 0, 63, true),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::MoveStackPartial::new(
+            1,
+            mornlea_protocol::ContainerRef::NONE,
+            0,
+            0,
+            36,
+            true
+        ),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::MoveStackPartial::new(1, container, 0, 0, 1, true),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::MoveStackPartial::new(
+            1,
+            mornlea_protocol::ContainerRef::NONE,
+            1,
+            0,
+            45,
+            true
+        ),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::MoveStackPartial::new(
+            1,
+            mornlea_protocol::ContainerRef::NONE,
+            3,
+            0,
+            1,
+            true
+        ),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    let mut bad_single = vec![
+        0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfd, 0xff, 0xff,
+        0xff, 0x07, 0x00, 0x00, 0x00, 0x01, 0x05, 0x09, 0x00, 0x00, 0x00, 0x02, 0x0a, 0x22, 0x02,
+    ];
+    assert_eq!(
+        mornlea_protocol::MoveStackPartial::decode(&bad_single),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    assert!(mornlea_protocol::MoveStackPartial::decode(&[0x13]).is_err());
+    bad_single.truncate(bad_single.len() - 1);
+    assert!(mornlea_protocol::MoveStackPartial::decode(&bad_single).is_err());
+    let mut trailing = vec![
+        0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfd, 0xff, 0xff,
+        0xff, 0x07, 0x00, 0x00, 0x00, 0x01, 0x05, 0x09, 0x00, 0x00, 0x00, 0x02, 0x0a, 0x22, 0x01,
+    ];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::MoveStackPartial::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

@@ -29,6 +29,7 @@ mod login_success;
 mod move_container_stack;
 mod move_crafting_stack;
 mod move_inventory_stack;
+mod move_stack_partial;
 mod open_container;
 mod place_block;
 mod place_block_succeeded;
@@ -77,6 +78,7 @@ pub use move_container_stack::{
 };
 pub use move_crafting_stack::{CRAFTING_GRID_SLOTS, GRID_CRAFTING_VIEW_SLOTS, MoveCraftingStack};
 pub use move_inventory_stack::{INVENTORY_SLOTS, MoveInventoryStack};
+pub use move_stack_partial::{MoveStackPartial, STACK_VIEW_INVENTORY};
 pub use open_container::OpenContainer;
 pub use place_block::PlaceBlock;
 pub use place_block_succeeded::PlaceBlockSucceeded;

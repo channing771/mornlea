@@ -76,6 +76,14 @@ impl MoveContainerStack {
         let from = decoder.u8()?;
         let to = decoder.u8()?;
         decoder.done()?;
+        let container = ContainerRef::new(
+            container.dimension,
+            container.chunk_x,
+            container.chunk_z,
+            container.kind,
+            container.slot,
+            container.generation,
+        )?;
         Self::new(sequence, container, from, to)
     }
 }

@@ -296,6 +296,22 @@ and `domain_does_not_depend_on_protocol`).
   (`move_container_stack_round_trip_preserves_golden_bytes`,
   `move_container_stack_rejects_invalid_container_and_malformed_payload`).
 
+## Move stack partial (`src/move_stack_partial.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 19 payload is a `u64` sequence, an 18-byte container
+  reference, a view byte, source and target bytes, and a single-item
+  flag. The moved amount is derived by the server from the source stack,
+  so the wire carries no count field. The three view domains are
+  `STACK_VIEW_INVENTORY` (`0`), `STACK_VIEW_CRAFTING` (`1`), and
+  `STACK_VIEW_CONTAINER` (`2`); the container view bounds the index by the
+  referenced container kind, while the inventory and crafting views must
+  carry the zero container reference. Same-slot and out-of-range pairs are
+  `InvalidRange`; unknown views and kinds are `InvalidEnum`; a `single`
+  flag outside 0/1 is `InvalidEnum`; truncated payloads and trailing bytes
+  fail before publication
+  (`move_stack_partial_round_trip_preserves_golden_bytes`,
+  `move_stack_partial_rejects_invalid_view_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash

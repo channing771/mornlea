@@ -26,6 +26,17 @@ pub struct ContainerRef {
 }
 
 impl ContainerRef {
+    /// Zero reference carried by the inventory and crafting views, which
+    /// address slots directly and must not point at a container block.
+    pub const NONE: Self = Self {
+        dimension: 0,
+        chunk_x: 0,
+        chunk_z: 0,
+        kind: 0,
+        slot: 0,
+        generation: 0,
+    };
+
     /// Both container kinds live in the overworld's fixed per-chunk arrays.
     /// Unknown kinds are `InvalidEnum`; out-of-range slots, zero
     /// generations, and foreign dimensions are `InvalidRange`.
@@ -79,6 +90,13 @@ impl ContainerRef {
         let kind = decoder.u8()?;
         let slot = decoder.u8()?;
         let generation = decoder.u32()?;
-        Self::new(dimension, chunk_x, chunk_z, kind, slot, generation)
+        Ok(Self {
+            dimension,
+            chunk_x,
+            chunk_z,
+            kind,
+            slot,
+            generation,
+        })
     }
 }
