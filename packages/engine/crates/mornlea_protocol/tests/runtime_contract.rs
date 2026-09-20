@@ -2213,3 +2213,37 @@ fn hostile_despawn_rejects_unsorted_zero_and_malformed_payload() {
     assert!(mornlea_protocol::HostileDespawn::decode(&exact).is_ok());
     assert!(mornlea_protocol::HostileDespawn::decode(&[1, 0, 0, 0, 0, 0, 0, 0, 0]).is_err());
 }
+
+#[test]
+fn projectile_despawn_round_trip_preserves_batch_bytes() {
+    let despawn = mornlea_protocol::ProjectileDespawn::new(0x0102_0304_0506_0708, vec![3, 200])
+        .expect("batch");
+    let payload = despawn.encode();
+    assert_eq!(
+        payload,
+        [
+            0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x02, 0x03, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0xc8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ]
+    );
+    assert_eq!(mornlea_protocol::ProjectileDespawn::PACKET_ID, 31);
+    assert_eq!(payload.len(), 9 + 2 * 8);
+    assert_eq!(
+        mornlea_protocol::ProjectileDespawn::decode(&payload).expect("decode"),
+        despawn
+    );
+}
+
+#[test]
+fn projectile_despawn_rejects_unsorted_zero_and_malformed_payload() {
+    assert!(mornlea_protocol::ProjectileDespawn::new(1, Vec::new()).is_err());
+    assert!(mornlea_protocol::ProjectileDespawn::new(1, vec![0]).is_err());
+    assert!(mornlea_protocol::ProjectileDespawn::new(1, vec![4, 4]).is_err());
+    assert!(mornlea_protocol::ProjectileDespawn::new(1, vec![9, 4]).is_err());
+    let over: Vec<u64> = (1..=(u64::from(mornlea_protocol::MAX_PROJECTILE_RECORDS) + 1)).collect();
+    assert!(mornlea_protocol::ProjectileDespawn::new(1, over).is_err());
+    let short = vec![1, 0, 0, 0, 0, 0, 0, 0, 0x02, 3, 0, 0, 0, 0, 0, 0, 0];
+    assert!(mornlea_protocol::ProjectileDespawn::decode(&short).is_err());
+    assert!(mornlea_protocol::ProjectileDespawn::decode(&[1, 0, 0, 0, 0, 0, 0, 0, 0]).is_err());
+}
+

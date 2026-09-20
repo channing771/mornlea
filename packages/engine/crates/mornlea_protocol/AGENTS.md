@@ -459,9 +459,32 @@ and `domain_does_not_depend_on_protocol`).
   (`hostile_despawn_round_trip_preserves_batch_bytes`,
   `hostile_despawn_rejects_unsorted_zero_and_malformed_payload`).
 
-## Focused Verification
+## Projectile despawn (`src/projectile_despawn.rs`, `tests/runtime_contract.rs`)
 
-```bash
-rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked -- --list
-rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked
-```
+- Play packet ID 31 payload is a `u64` server tick, a one-byte record count,
+  and the fixed 8-byte projectile IDs. The count is bounded by
+  `MAX_PROJECTILE_RECORDS` (`128`), a zero count and zero IDs are
+  `InvalidRange`, records must be strictly ascending, and a remaining length
+  that is not exactly `count` records is `Truncated` before publication
+  (`projectile_despawn_round_trip_preserves_batch_bytes`,
+  `projectile_despawn_rejects_unsorted_zero_and_malformed_payload`).
+
+## Passive despawn (`src/passive_despawn.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 28 payload is a `u64` server tick, a one-byte record count,
+  and the fixed 9-byte records of an ID plus the removal reason. The count is
+  bounded by `MAX_PASSIVE_RECORDS` (`64`); the only published reasons are
+  `PASSIVE_DESPAWN_VANISHED` (`0`) and `PASSIVE_DESPAWN_DIED` (`1`), anything
+  else is `InvalidEnum`; records must be strictly ascending and non-zero
+  (`passive_despawn_round_trip_preserves_batch_bytes`,
+  `passive_despawn_rejects_unsorted_zero_reason_and_malformed_payload`).
+
+## Chest state (`src/chest_state.rs`, `src/batch.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 15 payload is the 18-byte chest container reference plus the
+  fixed `CHEST_SLOTS` (`27`) item stacks. `read_fixed` decodes the fixed-count
+  array, so a truncated payload fails before any slot is published; the chest
+  reference must name a chest with a legal slot and generation
+  (`chest_state_round_trip_preserves_slot_bytes`,
+  `chest_state_rejects_wrong_reference_and_malformed_payload`).
+

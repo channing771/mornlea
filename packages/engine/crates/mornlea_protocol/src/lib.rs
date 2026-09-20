@@ -14,6 +14,7 @@ mod block_changes;
 mod bone_meal;
 mod bytes;
 mod chat_command;
+mod chest_state;
 mod client_hello;
 mod close_container;
 mod collect_water;
@@ -30,6 +31,7 @@ mod forget_chunks;
 mod frame;
 mod handshake_reject;
 mod hostile_despawn;
+mod item_stack;
 mod keep_alive;
 mod keep_alive_reply;
 mod login_reject;
@@ -40,11 +42,13 @@ mod move_crafting_stack;
 mod move_inventory_stack;
 mod move_stack_partial;
 mod open_container;
+mod passive_despawn;
 mod place_block;
 mod place_block_succeeded;
 mod place_water;
 mod player_id;
 mod player_input;
+mod projectile_despawn;
 mod remote_player_despawn;
 mod request_chunk_resync;
 mod select_hotbar;
@@ -57,6 +61,7 @@ pub use block::{BLOCK_ID_MAX, BLOCKS_PER_SECTION, MAX_Y, MIN_Y, SECTION_SIZE, SE
 pub use block_changes::{BlockChange, BlockChanges, MAX_BLOCK_CHANGES};
 pub use bone_meal::BoneMeal;
 pub use chat_command::{CHAT_COMMAND_TEXT_MAX_BYTES, ChatCommand};
+pub use chest_state::{CHEST_SLOTS, ChestState};
 pub use client_hello::ClientHello;
 pub use close_container::CloseContainer;
 pub use collect_water::CollectWater;
@@ -86,6 +91,9 @@ pub use forget_chunks::{ForgetChunks, MAX_FORGET_CHUNKS};
 pub use frame::{MAX_FRAME_BYTES, read_frame, write_frame};
 pub use handshake_reject::{HANDSHAKE_VERSION_MISMATCH, HandshakeReject};
 pub use hostile_despawn::{HOSTILE_DESPAWN_WIRE_BYTES, HostileDespawn, MAX_HOSTILE_RECORDS};
+pub use item_stack::{
+    ITEM_ID_MAX, ITEM_NONE, ItemStack, MAX_STACK_COUNT, smelting_output, valid_furnace_output,
+};
 pub use keep_alive::KeepAlive;
 pub use keep_alive_reply::KeepAliveReply;
 pub use login_reject::{
@@ -104,11 +112,18 @@ pub use move_stack_partial::{
     STACK_VIEW_INVENTORY,
 };
 pub use open_container::OpenContainer;
+pub use passive_despawn::{
+    MAX_PASSIVE_RECORDS, PASSIVE_DESPAWN_DIED, PASSIVE_DESPAWN_VANISHED, PassiveDespawn,
+    PassiveDespawnRecord,
+};
 pub use place_block::PlaceBlock;
 pub use place_block_succeeded::PlaceBlockSucceeded;
 pub use place_water::PlaceWater;
 pub use player_id::PlayerId;
 pub use player_input::PlayerInput;
+pub use projectile_despawn::{
+    MAX_PROJECTILE_RECORDS, PROJECTILE_DESPAWN_WIRE_BYTES, ProjectileDespawn,
+};
 pub use remote_player_despawn::RemotePlayerDespawn;
 pub use request_chunk_resync::RequestChunkResync;
 pub use select_hotbar::SelectHotbar;
