@@ -121,6 +121,13 @@ and `domain_does_not_depend_on_protocol`).
   publication (`keep_alive_reply_round_trip_preserves_golden_bytes`,
   `keep_alive_reply_rejects_zero_token_and_malformed_payload`).
 
+## Place block succeeded (`src/place_block_succeeded.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 20 payload is a little-endian `u64` sequence. Zero
+  sequences are legal. Truncated payloads and trailing bytes fail before
+  publication (`place_block_succeeded_round_trip_preserves_golden_bytes`,
+  `place_block_succeeded_rejects_malformed_payload_and_accepts_zero_sequence`).
+
 ## Focused Verification
 
 ```bash

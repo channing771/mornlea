@@ -547,6 +547,34 @@ fn keep_alive_reply_rejects_zero_token_and_malformed_payload() {
     );
 }
 
+#[test]
+fn place_block_succeeded_round_trip_preserves_golden_bytes() {
+    let ack = mornlea_protocol::PlaceBlockSucceeded::new(0x1122_3344_5566_7788);
+    let payload = ack.encode();
+    assert_eq!(payload, [0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11]);
+    assert_eq!(mornlea_protocol::PlaceBlockSucceeded::PACKET_ID, 20);
+    let decoded = mornlea_protocol::PlaceBlockSucceeded::decode(&payload).expect("decode");
+    assert_eq!(decoded, ack);
+    assert_eq!(decoded.sequence, 0x1122_3344_5566_7788);
+}
+
+#[test]
+fn place_block_succeeded_rejects_malformed_payload_and_accepts_zero_sequence() {
+    assert!(mornlea_protocol::PlaceBlockSucceeded::decode(&[0x88]).is_err());
+    let mut trailing = vec![0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::PlaceBlockSucceeded::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    let zero = mornlea_protocol::PlaceBlockSucceeded::new(0);
+    assert_eq!(zero.sequence, 0);
+    assert_eq!(
+        mornlea_protocol::PlaceBlockSucceeded::decode(&zero.encode()).expect("decode zero"),
+        zero
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }
