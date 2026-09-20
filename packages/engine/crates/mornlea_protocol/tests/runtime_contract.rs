@@ -3180,3 +3180,170 @@ fn companion_spawn_rejects_invalid_identity_name_and_pose() {
     bad_length[16] = 200;
     assert!(mornlea_protocol::CompanionSpawn::decode(&bad_length).is_err());
 }
+
+#[test]
+fn companion_states_round_trip_preserves_batch_bytes() {
+    let first = mornlea_protocol::CompanionId::new([
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+        0xf0,
+    ])
+    .expect("first companion id");
+    let second = mornlea_protocol::CompanionId::new([
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+        0xff,
+    ])
+    .expect("second companion id");
+    let states = mornlea_protocol::CompanionStates::new(
+        0x0102_0304_0506_0708,
+        vec![
+            mornlea_protocol::CompanionState {
+                companion_id: first,
+                dimension: mornlea_domain::Dimension::OVERWORLD,
+                position: [2.5, 1.0, -3.25],
+                yaw: 1.25,
+                pitch: -0.5,
+                reset: true,
+            },
+            mornlea_protocol::CompanionState {
+                companion_id: second,
+                dimension: mornlea_domain::Dimension::OVERWORLD,
+                position: [-8.5, 65.5, 12.75],
+                yaw: -2.5,
+                pitch: 0.0,
+                reset: false,
+            },
+        ],
+    )
+    .expect("states");
+    let payload = states.encode();
+    assert_eq!(mornlea_protocol::CompanionStates::PACKET_ID, 18);
+    assert_eq!(payload.len(), 8 + 1 + 2 * 41);
+    assert_eq!(&payload[..8], &0x0102_0304_0506_0708u64.to_le_bytes());
+    assert_eq!(payload[8], 2);
+    assert_eq!(&payload[9..25], &first.bytes());
+    assert_eq!(&payload[25..29], &[0x00, 0x00, 0x00, 0x00]);
+    assert_eq!(&payload[29..33], &[0x00, 0x00, 0x20, 0x40]);
+    assert_eq!(&payload[41..45], &[0x00, 0x00, 0xa0, 0x3f]);
+    assert_eq!(&payload[45..49], &[0x00, 0x00, 0x00, 0xbf]);
+    assert_eq!(payload[49], 1);
+    // The second record starts one fixed 41-byte stride later.
+    assert_eq!(&payload[50..66], &second.bytes());
+    assert_eq!(payload[90], 0);
+    assert_eq!(
+        mornlea_protocol::CompanionStates::decode(&payload).expect("decode"),
+        states
+    );
+}
+
+#[test]
+fn companion_states_rejects_unsorted_invalid_and_malformed_payload() {
+    let first = mornlea_protocol::CompanionId::new([
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+        0xf0,
+    ])
+    .expect("first companion id");
+    let second = mornlea_protocol::CompanionId::new([
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+        0xff,
+    ])
+    .expect("second companion id");
+    let record = mornlea_protocol::CompanionState {
+        companion_id: first,
+        dimension: mornlea_domain::Dimension::OVERWORLD,
+        position: [1.0, 2.0, 3.0],
+        yaw: 0.5,
+        pitch: 0.0,
+        reset: false,
+    };
+
+    let mut foreign = record;
+    foreign.dimension = mornlea_domain::Dimension::DEPTHS;
+    let mut bad_pitch = record;
+    bad_pitch.pitch = 1.6;
+    let mut bad_position = record;
+    bad_position.position = [f32::INFINITY, 0.0, 0.0];
+    for bad in [foreign, bad_pitch, bad_position] {
+        assert!(
+            mornlea_protocol::CompanionStates::new(1, vec![bad]).is_err(),
+            "accepted invalid companion state record"
+        );
+    }
+    assert!(mornlea_protocol::CompanionStates::new(1, Vec::new()).is_err());
+    assert!(
+        mornlea_protocol::CompanionStates::new(1, vec![record, record]).is_err(),
+        "accepted duplicate companion state records"
+    );
+    assert!(
+        mornlea_protocol::CompanionStates::new(
+            1,
+            vec![
+                mornlea_protocol::CompanionState {
+                    companion_id: second,
+                    ..record
+                },
+                record,
+            ]
+        )
+        .is_err(),
+        "accepted descending companion state records"
+    );
+    // The batch ceiling is the shared companion activity limit.
+    let mut full = Vec::new();
+    for index in 0..mornlea_protocol::MAX_COMPANION_STATES {
+        full.push(mornlea_protocol::CompanionState {
+            companion_id: mornlea_protocol::CompanionId::new([
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0x40 + index as u8,
+                0,
+                0x80 + index as u8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ])
+            .expect("companion id"),
+            ..record
+        });
+    }
+    assert!(
+        mornlea_protocol::CompanionStates::new(1, full).is_ok(),
+        "rejected a full companion state batch"
+    );
+
+    let valid = mornlea_protocol::CompanionStates::new(1, vec![record]).expect("states");
+    let payload = valid.encode();
+    for length in 0..payload.len() {
+        assert!(
+            mornlea_protocol::CompanionStates::decode(&payload[..length]).is_err(),
+            "accepted truncated companion states at {length}"
+        );
+    }
+    let mut padded = payload.clone();
+    padded.push(0x00);
+    assert_eq!(
+        mornlea_protocol::CompanionStates::decode(&padded),
+        Err(mornlea_protocol::ProtocolError::Truncated)
+    );
+    // A count that does not match the remaining record bytes is rejected
+    // before any record is read.
+    let mut mismatched = payload.clone();
+    mismatched[8] = 2;
+    assert_eq!(
+        mornlea_protocol::CompanionStates::decode(&mismatched),
+        Err(mornlea_protocol::ProtocolError::Truncated)
+    );
+    let mut empty = payload.clone();
+    empty[8] = 0;
+    assert!(mornlea_protocol::CompanionStates::decode(&empty).is_err());
+    let mut over = payload.clone();
+    over[8] = (mornlea_protocol::MAX_COMPANION_STATES + 1) as u8;
+    assert!(mornlea_protocol::CompanionStates::decode(&over).is_err());
+}
