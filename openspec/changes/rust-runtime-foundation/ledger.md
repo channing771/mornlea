@@ -120,3 +120,12 @@
 - Discovered tests (`-- --list`): 20.
 - PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
 - Architecture skill: no change.
+
+## 2026-09-20 — 2.3 protocol.server.LoginSuccess
+
+- Baseline: `8845e6b8 feat(engine): port login start codec`.
+- Existing unrelated work: deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded.
+- Ruling: login server packet ID 0 payload is 16-byte UUIDv4 plus little-endian `u64` world seed. Zero seeds are legal. Non-v4 identities fail as `InvalidIdentity`. Golden bytes match Go `00112233445546778899aabbccddeeff8877665544332211`. Remaining protocol families stay unchecked in `tasks.md`.
+- Discovered tests (`-- --list`): 22.
+- PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
+- Architecture skill: no change.
