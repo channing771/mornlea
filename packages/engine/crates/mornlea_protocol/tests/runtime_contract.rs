@@ -2247,3 +2247,67 @@ fn projectile_despawn_rejects_unsorted_zero_and_malformed_payload() {
     assert!(mornlea_protocol::ProjectileDespawn::decode(&[1, 0, 0, 0, 0, 0, 0, 0, 0]).is_err());
 }
 
+#[test]
+fn passive_despawn_round_trip_preserves_batch_bytes() {
+    let despawn = mornlea_protocol::PassiveDespawn::new(
+        0x0102_0304_0506_0708,
+        vec![
+            mornlea_protocol::PassiveDespawnRecord {
+                id: 4,
+                reason: mornlea_protocol::PASSIVE_DESPAWN_VANISHED,
+            },
+            mornlea_protocol::PassiveDespawnRecord {
+                id: 9,
+                reason: mornlea_protocol::PASSIVE_DESPAWN_DIED,
+            },
+        ],
+    )
+    .expect("batch");
+    let payload = despawn.encode();
+    assert_eq!(
+        payload,
+        [
+            0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x02, 0x04, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+        ]
+    );
+    assert_eq!(mornlea_protocol::PassiveDespawn::PACKET_ID, 28);
+    assert_eq!(payload.len(), 9 + 2 * 9);
+    assert_eq!(
+        mornlea_protocol::PassiveDespawn::decode(&payload).expect("decode"),
+        despawn
+    );
+}
+
+#[test]
+fn passive_despawn_rejects_unsorted_zero_reason_and_malformed_payload() {
+    let vanished = mornlea_protocol::PassiveDespawnRecord {
+        id: 4,
+        reason: mornlea_protocol::PASSIVE_DESPAWN_VANISHED,
+    };
+    let died = mornlea_protocol::PassiveDespawnRecord {
+        id: 9,
+        reason: mornlea_protocol::PASSIVE_DESPAWN_DIED,
+    };
+    assert!(mornlea_protocol::PassiveDespawn::new(1, Vec::new()).is_err());
+    assert!(mornlea_protocol::PassiveDespawn::new(1, vec![died, vanished]).is_err());
+    assert!(
+        mornlea_protocol::PassiveDespawn::new(
+            1,
+            vec![mornlea_protocol::PassiveDespawnRecord { id: 0, reason: 1 }],
+        )
+        .is_err()
+    );
+    assert_eq!(
+        mornlea_protocol::PassiveDespawn::new(
+            1,
+            vec![mornlea_protocol::PassiveDespawnRecord { id: 4, reason: 2 }],
+        ),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    // A payload whose length disagrees with the count is rejected whole.
+    let short = vec![1, 0, 0, 0, 0, 0, 0, 0, 0x02, 4, 0, 0, 0, 0, 0, 0, 0, 0];
+    assert!(mornlea_protocol::PassiveDespawn::decode(&short).is_err());
+    assert!(mornlea_protocol::PassiveDespawn::decode(&[1, 0, 0, 0, 0, 0, 0, 0, 0]).is_err());
+}
+
