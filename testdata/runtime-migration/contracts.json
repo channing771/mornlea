@@ -955,7 +955,8 @@
         }
       ],
       "cases": [
-        "protocol.frame/45/valid"
+        "protocol.frame/45/valid",
+        "protocol.frame/45/noncanonical-length"
       ]
     },
     {
@@ -2056,6 +2057,25 @@
       "expected": {
         "path": "testdata/runtime-migration/cases/frame/valid.expected.json",
         "sha256": "sha256:51c203339576355688c5fd8fa1dd3d0b80494da8b8fe5dbe0cb992dca9939b0c"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "corpus_frame"
+    },
+    {
+      "id": "protocol.frame/45/noncanonical-length",
+      "family": "protocol.frame",
+      "version": "45",
+      "operation": "decode",
+      "input": {
+        "path": "testdata/runtime-migration/cases/frame/noncanonical-length.bin",
+        "sha256": "sha256:431c114d525bb04ddd1b7434509fc9360452448041b2921b02b7852b85cc2d6c"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/frame/noncanonical-length.expected.json",
+        "sha256": "sha256:322f8e8aa056952c6e2990cc1f0b361ae868fe46c66ed2f644eb2ce120289d14"
       },
       "checkpoints": [
         "0"
