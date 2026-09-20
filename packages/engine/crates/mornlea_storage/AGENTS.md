@@ -41,7 +41,9 @@ re-encode equality).
 | `save.hostile` | `src/hostile.rs` | v2 | v1 records lack the trailing `kind` byte and migrate to nightcrawler; re-encode keeps each v1 record as the v2 prefix |
 | `save.region` | `src/region.rs` | v1 | fixed 4096-byte superblock plus two 28672-byte banks; newest valid generation wins, ties break to bank A |
 | `save.world-metadata` | `src/world_metadata.rs` | v6 | v1..v6 are pure tail appends; a legacy file keeps its bytes and reads missing tails as documented defaults |
+| `save.companion` | `src/companion.rs` | v5 | v1..v4 stay read-only migration input; v5 adds a 16-byte agent namespace plus per-record lifecycle mirrors and tombstones |
 | `save.player` identity | `src/identity.rs` | — | `PlayerId` UUIDv4 wrapper shared by the entity families |
+| item rules | `src/items.rs` | — | Stable item numbering plus the stack-limit and durability tables the entity bodies validate against |
 
 ## Focused Verification
 

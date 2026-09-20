@@ -40,6 +40,10 @@ impl<'a> ByteReader<'a> {
         Ok(slice)
     }
 
+    pub(crate) fn take_bytes(&mut self, length: usize) -> Result<&'a [u8], String> {
+        self.take(length)
+    }
+
     pub(crate) fn u8(&mut self) -> Result<u8, String> {
         Ok(self.take(1)?[0])
     }

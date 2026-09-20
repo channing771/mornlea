@@ -3,7 +3,7 @@
 //! Mirrors `core.PlayerID`: a stable UUIDv4 stored as sixteen raw bytes.
 
 /// A stable UUIDv4 player identifier.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct PlayerId([u8; 16]);
 
 impl PlayerId {

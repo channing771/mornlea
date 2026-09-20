@@ -3,16 +3,23 @@
 //! has a failing behavioral case of its own.
 
 use mornlea_storage::{
-    BANK_A_START_SECTOR, BANK_B_START_SECTOR, BANK_SIZE, ChunkKey, DATA_START_SECTOR,
-    HOSTILE_CURRENT_SCHEMA, HOSTILE_ENVELOPE_VERSION, HOSTILE_MAX_FILE_LENGTH, HOSTILE_SCHEMA_V1,
-    HostileMob, HostileMobsSave, MAX_COMPRESSED_CHUNK, MAX_HOSTILE_MOBS, MAX_PASSIVE_MOBS,
-    METADATA_CURRENT_VERSION, METADATA_V1, METADATA_V2, METADATA_V3, METADATA_V4, METADATA_V5,
-    Metadata, MetadataChunkPos, PASSIVE_CURRENT_SCHEMA, PASSIVE_ENVELOPE_VERSION,
-    PASSIVE_MAX_FILE_LENGTH, PassiveMob, PassiveMobsSave, PlayerId, REGION_SLOTS, RegionBank,
-    RegionEntry, RegionKey, SECTOR_SIZE, StorageError, crc32c, crc32c_join, decode_hostile_mobs,
-    decode_passive_mobs, decode_region_bank, decode_superblock, decode_world_metadata,
-    encode_hostile_mobs, encode_passive_mobs, encode_region_bank, encode_superblock,
-    encode_world_metadata, region_for, select_region_bank,
+    BANK_A_START_SECTOR, BANK_B_START_SECTOR, BANK_SIZE, COMPANION_CURRENT_SCHEMA,
+    COMPANION_ENVELOPE_VERSION, COMPANION_MAX_FIFO_ENTRIES, COMPANION_MAX_FILE_LENGTH,
+    COMPANION_MAX_PLAN_STEPS, COMPANION_MAX_STORED, COMPANION_MAX_SUMMARY_BYTES,
+    COMPANION_MAX_TASK_COMMAND_BYTES, COMPANION_PLAN_STEP_FOLLOW, COMPANION_PLAN_STEP_GO_TO,
+    COMPANION_PLAN_STEP_MINE, COMPANION_PLAN_STEP_PLACE, COMPANION_SCHEMA_V1, COMPANION_SCHEMA_V2,
+    COMPANION_SCHEMA_V3, COMPANION_SCHEMA_V4, COMPANION_TASK_FAIL_NONE, COMPANION_TASK_RUNNING,
+    ChunkKey, CompanionBody, CompanionSave, DATA_START_SECTOR, HOSTILE_CURRENT_SCHEMA,
+    HOSTILE_ENVELOPE_VERSION, HOSTILE_MAX_FILE_LENGTH, HOSTILE_SCHEMA_V1, HostileMob,
+    HostileMobsSave, Inventory, ItemStack, MAX_COMPRESSED_CHUNK, MAX_HOSTILE_MOBS,
+    MAX_PASSIVE_MOBS, METADATA_CURRENT_VERSION, METADATA_V1, METADATA_V2, METADATA_V3, METADATA_V4,
+    METADATA_V5, Metadata, MetadataChunkPos, PASSIVE_CURRENT_SCHEMA, PASSIVE_ENVELOPE_VERSION,
+    PASSIVE_MAX_FILE_LENGTH, PassiveMob, PassiveMobsSave, PlanStep, PlayerId, REGION_SLOTS,
+    RegionBank, RegionEntry, RegionKey, SECTOR_SIZE, StorageError, StoredCompanionLifecycle,
+    StoredCompanionQueue, StoredCompanionTask, crc32c, crc32c_join, decode_companions,
+    decode_hostile_mobs, decode_passive_mobs, decode_region_bank, decode_superblock,
+    decode_world_metadata, encode_companions, encode_hostile_mobs, encode_passive_mobs,
+    encode_region_bank, encode_superblock, encode_world_metadata, region_for, select_region_bank,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -1471,6 +1478,407 @@ fn append_u32(bytes: &mut Vec<u8>, value: u32) {
 
 fn append_u64(bytes: &mut Vec<u8>, value: u64) {
     bytes.extend_from_slice(&value.to_le_bytes());
+}
+#[test]
+fn companion_v5_golden_fixture_round_trips_byte_for_byte() {
+    let golden = read_go_fixture("server/storage/companion/testdata/companions-v5.bin");
+    assert_eq!(u32_at(&golden, 8), COMPANION_CURRENT_SCHEMA);
+    assert_eq!(COMPANION_MAX_FILE_LENGTH, 393_904);
+
+    let save = companion_golden_save();
+    let encoded = encode_companions(&save).expect("encode golden companion save");
+    assert_eq!(
+        encoded, golden,
+        "the Rust encoder must reproduce the committed Go v5 bytes exactly"
+    );
+    let decoded = decode_companions(&golden).expect("decode golden companion save");
+    assert_eq!(decoded.source_schema, COMPANION_CURRENT_SCHEMA);
+    assert_eq!(decoded.revision, 47);
+    assert_eq!(decoded.agent_namespace_id, agent_identity(0x70));
+    assert_eq!(decoded.records.len(), 3);
+    assert_eq!(decoded.lifecycles.len(), 3);
+    assert_eq!(decoded.queues.len(), 1);
+    assert_eq!(decoded.lifecycles[0].memory_revision, 11);
+    assert_eq!(decoded.lifecycles[0].summary, "阿木记得北边橡树旁的小路。");
+    assert_eq!(decoded.lifecycles[1].memory_revision, 0);
+    assert!(decoded.lifecycles[1].summary.is_empty());
+    assert!(!decoded.lifecycles[2].active);
+    assert_eq!(
+        decoded.lifecycles[2].tombstone_operation_id,
+        agent_identity(0x73)
+    );
+}
+
+#[test]
+fn companion_v1_fixture_migrates_to_v5_with_namespace_and_lifecycles() {
+    let golden = read_go_fixture("server/storage/companion/testdata/companions-v1.bin");
+    assert_eq!(golden.len(), 32 + 2 * 221);
+    assert_eq!(u32_at(&golden, 8), COMPANION_SCHEMA_V1);
+    let before = golden.clone();
+    let decoded = decode_companions(&golden).expect("decode committed companion v1 fixture");
+    assert_eq!(
+        golden, before,
+        "v1 migration must not rewrite the input bytes"
+    );
+    assert_eq!(decoded.source_schema, COMPANION_SCHEMA_V1);
+    assert_eq!(decoded.revision, 19);
+    assert_eq!(decoded.records.len(), 2);
+    assert_eq!(decoded.records[0].id, companion_id(1));
+    assert_eq!(decoded.records[1].id, companion_id(2));
+    assert!(decoded.queues.is_empty());
+    assert!(decoded.lifecycles.is_empty());
+
+    let mut lifecycles: Vec<StoredCompanionLifecycle> = decoded
+        .records
+        .iter()
+        .enumerate()
+        .map(|(index, body)| StoredCompanionLifecycle {
+            id: body.id,
+            active: true,
+            memory_epoch: 1,
+            ..fixture_lifecycle(body.id, index < 4)
+        })
+        .collect();
+    // The canonical-zero mirror keeps an empty string and a zero operation ID.
+    for lifecycle in &mut lifecycles {
+        lifecycle.memory_revision = 0;
+        lifecycle.memory_operation_id = PlayerId::default();
+        lifecycle.summary = String::new();
+    }
+    let reencoded = encode_companions(&CompanionSave {
+        revision: 19,
+        agent_namespace_id: agent_identity(0x70),
+        records: decoded.records.clone(),
+        lifecycles,
+        queues: Vec::new(),
+    })
+    .expect("rewrite migrated companion aggregate");
+    assert_eq!(reencoded.len(), 560);
+    assert_eq!(u32_at(&reencoded, 8), COMPANION_CURRENT_SCHEMA);
+    let migrated = decode_companions(&reencoded).expect("decode rewritten companion aggregate");
+    assert_eq!(migrated.revision, 19);
+    assert_eq!(migrated.records, decoded.records);
+    assert!(migrated.queues.is_empty());
+}
+
+#[test]
+fn companion_legacy_v2_v3_v4_fixtures_decode_without_repair() {
+    // Each legacy fixture carries a different number of task/FIFO sections and
+    // only v4 adds a summary section.
+    for (name, schema, revision, queues) in [
+        ("companions-v2.bin", COMPANION_SCHEMA_V2, 41, 1),
+        ("companions-v3.bin", COMPANION_SCHEMA_V3, 43, 1),
+        ("companions-v4.bin", COMPANION_SCHEMA_V4, 47, 2),
+    ] {
+        let golden = read_go_fixture(&format!("server/storage/companion/testdata/{name}"));
+        assert_eq!(u32_at(&golden, 8), schema, "{name} schema");
+        let before = golden.clone();
+        let decoded = decode_companions(&golden).unwrap_or_else(|err| panic!("{name}: {err}"));
+        assert_eq!(
+            golden, before,
+            "{name}: decode must not rewrite the input bytes"
+        );
+        assert_eq!(decoded.source_schema, schema, "{name} source schema");
+        assert_eq!(decoded.revision, revision, "{name} revision");
+        assert_eq!(decoded.records.len(), 2, "{name} record count");
+        assert!(decoded.lifecycles.is_empty(), "{name} lifecycles");
+        assert_eq!(decoded.queues.len(), queues, "{name} queue count");
+    }
+}
+
+#[test]
+fn companion_decode_rejects_future_and_unsupported_versions() {
+    let encoded = encode_companions(&companion_golden_save()).expect("encode companion save");
+
+    let mut future_schema = encoded.clone();
+    future_schema[8..12].copy_from_slice(&(COMPANION_CURRENT_SCHEMA + 1).to_le_bytes());
+    assert_eq!(
+        decode_companions(&future_schema).unwrap_err(),
+        StorageError::FutureVersion("companion schema: 6".to_owned()),
+    );
+
+    let mut future_envelope = encoded.clone();
+    future_envelope[4..8].copy_from_slice(&(COMPANION_ENVELOPE_VERSION + 1).to_le_bytes());
+    assert_eq!(
+        decode_companions(&future_envelope).unwrap_err(),
+        StorageError::FutureVersion("companion envelope version: 2".to_owned()),
+    );
+
+    let mut unsupported_schema = encoded.clone();
+    unsupported_schema[8..12].copy_from_slice(&6u32.to_le_bytes());
+    unsupported_schema[8..12].copy_from_slice(&7u32.to_le_bytes());
+    assert!(matches!(
+        decode_companions(&unsupported_schema).unwrap_err(),
+        StorageError::FutureVersion(_)
+    ));
+}
+
+#[test]
+fn companion_decode_rejects_corrupt_and_partial_bytes() {
+    let encoded = encode_companions(&companion_golden_save()).expect("encode companion save");
+
+    for length in [0, 4, 31, 32, 33, 48, encoded.len() - 1] {
+        assert!(
+            decode_companions(&encoded[..length]).is_err(),
+            "truncated companion file of {length} bytes must be rejected"
+        );
+    }
+
+    let mut oversized = encoded.clone();
+    oversized.extend_from_slice(&[0u8; 8]);
+    assert!(decode_companions(&oversized).is_err());
+
+    let mut broken_crc = encoded.clone();
+    broken_crc[60] ^= 0xff;
+    assert!(decode_companions(&broken_crc).is_err());
+
+    // A count that the payload cannot back is rejected before any allocation.
+    let mut oversized_count = encoded.clone();
+    oversized_count[20..24].copy_from_slice(&(COMPANION_MAX_STORED as u32 + 1).to_le_bytes());
+    assert!(decode_companions(&oversized_count).is_err());
+
+    // Resealing after the mutation proves the rejection comes from the record
+    // validator rather than the CRC gate.
+    let mut unsorted = encoded.clone();
+    unsorted[32 + 16..32 + 32].copy_from_slice(&companion_id(9).to_bytes());
+    reseal_companion(&mut unsorted);
+    assert!(decode_companions(&unsorted).is_err());
+}
+
+#[test]
+fn companion_encode_rejects_invalid_couplings() {
+    let bodies = companion_bodies();
+    let mut duplicate = CompanionSave {
+        revision: 1,
+        agent_namespace_id: agent_identity(0x70),
+        records: vec![bodies[1].clone(), bodies[1].clone()],
+        lifecycles: Vec::new(),
+        queues: Vec::new(),
+    };
+    duplicate.lifecycles = vec![
+        fixture_lifecycle(bodies[1].id, true),
+        fixture_lifecycle(bodies[1].id, true),
+    ];
+    assert!(encode_companions(&duplicate).is_err());
+
+    // A lifecycle set that does not line up with the record set is rejected.
+    let mut mismatched = CompanionSave {
+        revision: 1,
+        agent_namespace_id: agent_identity(0x70),
+        records: vec![bodies[1].clone()],
+        lifecycles: vec![fixture_lifecycle(bodies[1].id, true)],
+        queues: Vec::new(),
+    };
+    mismatched
+        .lifecycles
+        .push(fixture_lifecycle(companion_id(3), false));
+    assert!(encode_companions(&mismatched).is_err());
+
+    // An inactive companion may not carry a task or FIFO payload.
+    let mut inactive_with_queue = CompanionSave {
+        revision: 1,
+        agent_namespace_id: agent_identity(0x70),
+        records: vec![bodies[1].clone()],
+        lifecycles: vec![fixture_lifecycle(bodies[1].id, false)],
+        queues: vec![StoredCompanionQueue {
+            id: bodies[1].id,
+            pending: vec!["跟我来".to_owned()],
+            ..StoredCompanionQueue::default()
+        }],
+    };
+    assert!(encode_companions(&inactive_with_queue).is_err());
+
+    // A v5 queue may not carry a legacy summary.
+    inactive_with_queue.lifecycles[0].active = true;
+    inactive_with_queue.queues[0].summary = "legacy summary".to_owned();
+    assert!(encode_companions(&inactive_with_queue).is_err());
+
+    // Zero revision and an invalid namespace are rejected up front.
+    let mut zero_revision = CompanionSave {
+        revision: 0,
+        agent_namespace_id: agent_identity(0x70),
+        records: Vec::new(),
+        lifecycles: Vec::new(),
+        queues: Vec::new(),
+    };
+    assert!(encode_companions(&zero_revision).is_err());
+    zero_revision.revision = 1;
+    zero_revision.agent_namespace_id = PlayerId::default();
+    assert!(encode_companions(&zero_revision).is_err());
+}
+
+/// Recomputes the companion envelope checksum in place so a semantic mutation
+/// is rejected by the record validator rather than the CRC gate.
+fn reseal_companion(bytes: &mut [u8]) {
+    let checksum = crc32c_join(&[&bytes[8..28], &bytes[32..]]);
+    bytes[28..32].copy_from_slice(&checksum.to_le_bytes());
+}
+
+fn agent_identity(last: u8) -> PlayerId {
+    PlayerId::from_bytes([
+        0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x46, 0x17, 0x88, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e,
+        last,
+    ])
+}
+
+fn fixture_lifecycle(id: PlayerId, active: bool) -> StoredCompanionLifecycle {
+    let mut lifecycle = if active {
+        StoredCompanionLifecycle {
+            id,
+            active,
+            memory_epoch: 1,
+            memory_revision: 0,
+            memory_operation_id: PlayerId::default(),
+            summary: String::new(),
+            tombstone_operation_id: PlayerId::default(),
+        }
+    } else {
+        StoredCompanionLifecycle {
+            id,
+            active,
+            memory_epoch: 1,
+            memory_revision: 0,
+            memory_operation_id: PlayerId::default(),
+            summary: String::new(),
+            tombstone_operation_id: agent_identity(id.to_bytes()[15] + 0x40),
+        }
+    };
+    lifecycle.active = active;
+    lifecycle
+}
+
+fn companion_id(last: u8) -> PlayerId {
+    PlayerId::from_bytes([
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+        last,
+    ])
+}
+
+fn companion_stack(item: u16, count: u8, durability: u16) -> ItemStack {
+    ItemStack {
+        item,
+        count,
+        durability,
+    }
+}
+
+/// The committed fixture's "high" companion body.
+fn companion_high() -> CompanionBody {
+    let mut body = CompanionBody {
+        id: companion_id(2),
+        dimension: 0,
+        position: [-12.5, 70.0, 3.25],
+        yaw: 1.25,
+        pitch: -0.5,
+        inventory: Inventory::default(),
+    };
+    body.inventory.hotbar.selected = 4;
+    body.inventory.hotbar.slots[0] = companion_stack(1, 64, 0);
+    body.inventory.hotbar.slots[4] = companion_stack(10, 1, 131);
+    body.inventory.backpack[0] = companion_stack(20, 7, 0);
+    body
+}
+
+/// The committed fixture's "low" companion body.
+fn companion_low() -> CompanionBody {
+    let mut body = CompanionBody {
+        id: companion_id(1),
+        dimension: 0,
+        position: [8.5, 65.0, -9.75],
+        yaw: -2.5,
+        pitch: 0.75,
+        inventory: Inventory::default(),
+    };
+    body.inventory.hotbar.selected = 2;
+    body.inventory.hotbar.slots[2] = companion_stack(23, 12, 0);
+    body.inventory.backpack[7] = companion_stack(11, 1, 250);
+    body.inventory.backpack[26] = companion_stack(2, 5, 0);
+    body
+}
+
+fn companion_bodies() -> Vec<CompanionBody> {
+    vec![companion_high(), companion_low()]
+}
+
+fn companion_v3_queues() -> Vec<StoredCompanionQueue> {
+    let pending: Vec<String> = (1..=COMPANION_MAX_FIFO_ENTRIES)
+        .map(|index| format!("v3排队第{index}条"))
+        .collect();
+    vec![StoredCompanionQueue {
+        id: companion_id(1),
+        has_current: true,
+        current: StoredCompanionTask {
+            command: "去橡树旁挖一格垫一块再跟着我".to_owned(),
+            plan_steps: vec![
+                PlanStep {
+                    kind: COMPANION_PLAN_STEP_GO_TO,
+                    x: -8,
+                    y: 70,
+                    z: 6,
+                    ..PlanStep::default()
+                },
+                PlanStep {
+                    kind: COMPANION_PLAN_STEP_MINE,
+                    x: -7,
+                    y: 69,
+                    z: 6,
+                    ..PlanStep::default()
+                },
+                PlanStep {
+                    kind: COMPANION_PLAN_STEP_PLACE,
+                    x: -6,
+                    y: 69,
+                    z: 6,
+                    block: 18,
+                    ..PlanStep::default()
+                },
+                PlanStep {
+                    kind: COMPANION_PLAN_STEP_FOLLOW,
+                    player_id: PlayerId::from_bytes([
+                        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb,
+                        0xcc, 0xdd, 0xee, 0x05,
+                    ]),
+                    ..PlanStep::default()
+                },
+            ],
+            step_index: 2,
+            state: COMPANION_TASK_RUNNING,
+            start_tick: 2400,
+            deadline_ticks: 0,
+            fail_reason: COMPANION_TASK_FAIL_NONE,
+        },
+        pending,
+        summary: String::new(),
+    }]
+}
+
+/// The committed v5 golden save, with a nonzero mirror, a canonical-zero
+/// mirror, an inactive tombstone, and one task-bearing queue.
+fn companion_golden_save() -> CompanionSave {
+    let bodies = companion_bodies();
+    let mut inactive_body = bodies[0].clone();
+    inactive_body.id = companion_id(3);
+    inactive_body.position = [24.5, 68.0, -17.5];
+    let records = vec![bodies[1].clone(), bodies[0].clone(), inactive_body];
+
+    let mut nonzero = fixture_lifecycle(records[0].id, true);
+    nonzero.memory_epoch = 7;
+    nonzero.memory_revision = 11;
+    nonzero.memory_operation_id = agent_identity(0x71);
+    nonzero.summary = "阿木记得北边橡树旁的小路。".to_owned();
+    let mut zero = fixture_lifecycle(records[1].id, true);
+    zero.memory_epoch = 3;
+    let mut inactive = fixture_lifecycle(records[2].id, false);
+    inactive.memory_epoch = 9;
+    inactive.tombstone_operation_id = agent_identity(0x73);
+
+    CompanionSave {
+        revision: 47,
+        agent_namespace_id: agent_identity(0x70),
+        records,
+        lifecycles: vec![nonzero, zero, inactive],
+        queues: companion_v3_queues(),
+    }
 }
 fn read_go_fixture(relative: &str) -> Vec<u8> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
