@@ -1,0 +1,9 @@
+{
+  "kind": "ok",
+  "category": "item-stack",
+  "fields": {
+    "count": 1,
+    "durability": 0,
+    "item": 12
+  }
+}

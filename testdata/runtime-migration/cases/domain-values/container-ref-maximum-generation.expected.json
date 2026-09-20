@@ -1,0 +1,12 @@
+{
+  "kind": "ok",
+  "category": "container-ref",
+  "fields": {
+    "chunk_x": 0,
+    "chunk_z": 0,
+    "dimension": 0,
+    "generation": 4294967295,
+    "kind": "chest",
+    "slot": 0
+  }
+}

@@ -28,6 +28,7 @@ type GoOperation func(CaseSpec, []byte) (Outcome, []byte, error)
 // instead of silently dropping that coverage.
 var goOperations = map[string]GoOperation{
 	"decode": runFrameDecode,
+	"admit":  runDomainValues,
 }
 
 // goFamilyOperations binds every family this package can execute to the
@@ -35,6 +36,7 @@ var goOperations = map[string]GoOperation{
 // error, so a newly added corpus case cannot pass by being ignored.
 var goFamilyOperations = map[string]string{
 	"protocol.frame": "decode",
+	"domain.values":  "admit",
 }
 
 // producedCheckpoint pairs one produced outcome with the checkpoint that

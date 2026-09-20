@@ -1,0 +1,11 @@
+{
+  "kind": "ok",
+  "category": "item-table",
+  "fields": {
+    "durability_max": 120,
+    "item": 62,
+    "registered": true,
+    "smelting_product": false,
+    "stack_limit": 1
+  }
+}

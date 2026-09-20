@@ -1,0 +1,7 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "item-stack",
+  "item": 10,
+  "count": 1,
+  "durability": 132
+}

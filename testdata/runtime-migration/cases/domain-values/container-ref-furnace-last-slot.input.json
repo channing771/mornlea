@@ -1,0 +1,9 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "container-ref",
+  "chunk_x": -2,
+  "chunk_z": 5,
+  "slot": 31,
+  "generation": 1,
+  "kind": "furnace"
+}

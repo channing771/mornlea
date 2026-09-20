@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-enum",
+  "fields": {
+    "count": 1,
+    "durability": 0,
+    "item": 66,
+    "rule": "item_stack.registered_item"
+  }
+}
