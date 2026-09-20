@@ -2542,3 +2542,80 @@ fn furnace_state_rejects_invalid_slots_timers_and_malformed_payload() {
     );
 }
 
+#[test]
+fn crafting_state_round_trip_preserves_golden_bytes() {
+    let mut slots = [mornlea_protocol::ItemStack::EMPTY; 9];
+    slots[0] = mornlea_protocol::ItemStack::new(1, 2, 0).expect("stone");
+    slots[4] = mornlea_protocol::ItemStack::new(37, 1, 0).expect("stick");
+    let state = mornlea_protocol::CraftingState::new(
+        3,
+        slots,
+        mornlea_protocol::ItemStack::new(4, 4, 0).expect("stone brick"),
+    )
+    .expect("state");
+    let payload = state.encode();
+    assert_eq!(mornlea_protocol::CraftingState::PACKET_ID, 21);
+    assert_eq!(payload.len(), 1 + 9 * 5 + 5);
+    assert_eq!(payload[0], 3);
+    // Grid slot 0 carries the stone stack, slot 4 the stick, the rest empty.
+    assert_eq!(&payload[1..6], &[0x01, 0x00, 0x02, 0x00, 0x00]);
+    assert_eq!(&payload[6..21], &[0x00; 15]);
+    assert_eq!(&payload[21..26], &[0x25, 0x00, 0x01, 0x00, 0x00]);
+    assert_eq!(&payload[26..46], &[0x00; 20]);
+    // The derived output slot is always present.
+    assert_eq!(&payload[46..51], &[0x04, 0x00, 0x04, 0x00, 0x00]);
+    assert_eq!(mornlea_protocol::CraftingState::PACKET_ID, 21);
+    assert_eq!(payload.len(), 1 + 9 * 5 + 5);
+    assert_eq!(
+        mornlea_protocol::CraftingState::decode(&payload).expect("decode"),
+        state
+    );
+}
+
+#[test]
+fn crafting_state_rejects_unknown_size_residue_and_malformed_payload() {
+    let empty = [mornlea_protocol::ItemStack::EMPTY; 9];
+    for size in [0u8, 1, 4, 255] {
+        assert!(
+            mornlea_protocol::CraftingState::new(size, empty, mornlea_protocol::ItemStack::EMPTY)
+                .is_err()
+        );
+    }
+    let mut personal = empty;
+    personal[0] = mornlea_protocol::ItemStack::new(1, 1, 0).expect("stone");
+    assert!(
+        mornlea_protocol::CraftingState::new(
+            mornlea_protocol::CRAFTING_GRID_SIZE_PERSONAL,
+            personal,
+            mornlea_protocol::ItemStack::EMPTY
+        )
+        .is_ok()
+    );
+    personal[4] = mornlea_protocol::ItemStack::new(1, 1, 0).expect("stone");
+    // A personal grid may not carry residue beyond its own size.
+    assert!(
+        mornlea_protocol::CraftingState::new(
+            mornlea_protocol::CRAFTING_GRID_SIZE_PERSONAL,
+            personal,
+            mornlea_protocol::ItemStack::EMPTY
+        )
+        .is_err()
+    );
+    let mut slots = personal;
+    slots[4] = mornlea_protocol::ItemStack::EMPTY;
+    let state = mornlea_protocol::CraftingState::new(
+        mornlea_protocol::CRAFTING_GRID_SIZE_WORKBENCH,
+        slots,
+        mornlea_protocol::ItemStack::EMPTY,
+    )
+    .expect("state");
+    let payload = state.encode();
+    assert!(mornlea_protocol::CraftingState::decode(&payload[..payload.len() - 1]).is_err());
+    let mut trailing = payload.clone();
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::CraftingState::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}
+

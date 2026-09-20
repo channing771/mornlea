@@ -500,3 +500,12 @@ and `domain_does_not_depend_on_protocol`).
   (`furnace_state_round_trip_preserves_golden_bytes`,
   `furnace_state_rejects_invalid_slots_timers_and_malformed_payload`).
 
+## Crafting state (`src/crafting_state.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 21 payload is the grid size, the fixed nine grid slots, and
+  the derived output slot, so the encoding never takes a variable-length
+  branch. The only published sizes are `CRAFTING_GRID_SIZE_PERSONAL` (`2`) and
+  `CRAFTING_GRID_SIZE_WORKBENCH` (`3`); a personal grid may not carry residue
+  beyond its own size (`crafting_state_round_trip_preserves_golden_bytes`,
+  `crafting_state_rejects_unknown_size_residue_and_malformed_payload`).
+

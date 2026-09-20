@@ -22,6 +22,7 @@ mod combat_hit;
 mod command_rejected;
 mod companion_despawn;
 mod container_ref;
+mod crafting_state;
 mod disconnect;
 mod drop_selected_item;
 mod entity_id;
@@ -80,6 +81,7 @@ pub use container_ref::{
     CHESTS_PER_CHUNK, CONTAINER_KIND_CHEST, CONTAINER_KIND_FURNACE, ContainerRef,
     FURNACES_PER_CHUNK,
 };
+pub use crafting_state::{
     CRAFTING_GRID_SIZE_PERSONAL, CRAFTING_GRID_SIZE_WORKBENCH, CraftingState,
 };
 pub use disconnect::{
