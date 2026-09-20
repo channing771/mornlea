@@ -125,26 +125,10 @@ pub fn load_case(id: &str) -> FrozenCase {
     load_case_entry(&root, c, id)
 }
 
-/// Loads one corpus case from an explicit manifest entry resolved against
-/// `root`, instead of from the frozen manifest.
-///
-/// A case that has been executed but whose manifest merge has not landed still
-/// has to be consumed, so the entry point accepts the entry directly. The entry
-/// keeps the manifest shape and the loader applies the same byte budgets,
-/// symlink refusal, hashing and identity checks as `load_case`; the caller
-/// supplies the entry so the loader never invents a case identity.
-pub fn load_case_file(root: &Path, entry: &serde_json::Value, id: &str) -> FrozenCase {
-    assert_eq!(
-        entry["id"].as_str(),
-        Some(id),
-        "case entry id does not match the requested id"
-    );
-    load_case_entry(root, entry, id)
-}
-
-/// Loads one case from a manifest entry, applying every budget, hashing and
-/// shape check the corpus requires. Both the frozen-manifest and the
-/// path-based entry points funnel through here so the two cannot drift.
+/// Loads one case from the frozen manifest entry, applying every budget,
+/// hashing and shape check the corpus requires. The frozen manifest is the only
+/// source of case identity, so a consumer can never load a case the corpus has
+/// not registered.
 fn load_case_entry(root: &Path, c: &serde_json::Value, id: &str) -> FrozenCase {
     let family = c["family"].as_str().expect("family string").to_string();
     let rust_consumer = c["rust_consumer"].as_str().expect("rust_consumer string");

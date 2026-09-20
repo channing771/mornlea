@@ -354,22 +354,10 @@ func validTraceForManifest(manifest Inventory) Trace {
 				Tick:        tick,
 				InputDigest: c.Input.SHA256,
 			})
-			var outcome Outcome
-			if c.ID == "protocol.frame/45/valid" {
-				outcome = Outcome{
-					Kind:     "ok",
-					Category: "frame",
-					Fields: map[string]any{
-						"packet_id":   json.Number("0"),
-						"payload":     "2d",
-						"payload_len": json.Number("1"),
-					},
-				}
-			}
 			observations = append(observations, Observation{
 				Tick:           tick,
 				CaseID:         c.ID,
-				Outcome:        outcome,
+				Outcome:        frozenOutcomeForCase(c),
 				ExpectedDigest: c.Expected.SHA256,
 			})
 			idx++
@@ -385,6 +373,25 @@ func validTraceForManifest(manifest Inventory) Trace {
 		Inputs:         inputs,
 		Observations:   observations,
 	}
+}
+
+// frozenOutcomeForCase derives the observation outcome for one manifest case
+// from the expectation the frozen corpus records for that case.
+//
+// The fixture has no *testing.T to fail through, so an unreadable or
+// unparseable expectation panics: a fixture that cannot read its own corpus is
+// a broken fixture, and a zero-valued outcome would only make validation fail
+// with a message that points at the trace rather than at the fixture.
+func frozenOutcomeForCase(c CaseSpec) Outcome {
+	root, err := RepositoryRoot()
+	if err != nil {
+		panic(fmt.Sprintf("runtime-oracle: resolve repository root for case %s: %v", c.ID, err))
+	}
+	outcome, err := decodeExpectedOutcome(root, c)
+	if err != nil {
+		panic(fmt.Sprintf("runtime-oracle: case %s: %v", c.ID, err))
+	}
+	return outcome
 }
 
 func manifestWithTwoCases(manifest Inventory) Inventory {
@@ -464,4 +471,3 @@ func validTraceForManifestAt1And2(manifest Inventory) Trace {
 }
 
 var _ = reflect.DeepEqual
-var _ = fmt.Sprintf

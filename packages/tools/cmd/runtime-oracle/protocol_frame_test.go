@@ -21,20 +21,16 @@ const (
 	// frameFamily is the only corpus family this package executes today.
 	frameFamily = "protocol.frame"
 	// corpusCasesRelDir is the repository-relative directory holding every
-	// committed corpus case asset, including the ones a later node merges into
-	// the frozen manifest.
+	// committed corpus case asset.
 	corpusCasesRelDir = "testdata/runtime-migration/cases"
 	// frameVersion is the protocol version the framing contract is pinned to.
 	frameVersion = "45"
 	// frameValidCaseID is the frozen case committed with the corpus.
 	frameValidCaseID = frameFamily + "/" + frameVersion + "/valid"
-	// frameNoncanonicalCaseID is the case this node executes; the controller
-	// merges its manifest entry separately, so the runner builds the entry
-	// itself instead of reading it from the frozen manifest.
+	// frameNoncanonicalCaseID is the second frozen framing case: its manifest
+	// entry landed with the corpus merge, so the runner reads it from the frozen
+	// manifest like every other case instead of building an entry itself.
 	frameNoncanonicalCaseID = frameFamily + "/" + frameVersion + "/noncanonical-length"
-	// frameRustConsumer names the Rust integration target that replays these
-	// cases, which is how the manifest binds a Go execution to its consumer.
-	frameRustConsumer = "corpus_frame"
 	// runtimeOracleExportDirEnv names the harness-owned directory explicit
 	// fixture export writes into. There is no repository default: an unset
 	// variable means nothing is exported, so executed evidence never lands in
@@ -87,32 +83,22 @@ func runFrameDecode(c CaseSpec, input []byte) (Outcome, []byte, error) {
 	}, nil, nil
 }
 
-// frameWorkingManifest assembles the manifest this node executes inside a
+// frameWorkingManifest loads the manifest this node executes inside a
 // harness-owned temporary directory.
 //
-// It reads the frozen manifest and appends the newly executed case, so the run
-// does not depend on the manifest merge that registers the case landing first,
-// and it rewrites the family case list so the working manifest still reconciles
-// against the live registries.
+// Both framing cases are registered in the frozen manifest, so the working
+// manifest is the frozen one: the helper asserts the framing family's case list
+// and the case index agree on exactly the two framing identities, then
+// round-trips the manifest through a temporary file so the run still proves the
+// working manifest loads through the production loader. Appending a locally
+// built entry instead would register the frozen case twice and fail
+// reconciliation as a duplicate.
 func frameWorkingManifest(t *testing.T, root string) Inventory {
 	t.Helper()
 	frozen := loadRealManifest(t, root)
-	noncanonical := frameCaseSpec(t, root, frameNoncanonicalCaseID, "noncanonical-length")
+	assertFrameCasesAreFrozen(t, frozen)
 
-	working := frozen
-	working.Cases = append(append([]CaseSpec(nil), frozen.Cases...), noncanonical)
-	// The families slice is cloned before it is edited: the working manifest is
-	// derived from the frozen one, and an in-place edit would alias the frozen
-	// manifest's family records for the rest of the test.
-	working.Families = append([]Family(nil), frozen.Families...)
-	for i := range working.Families {
-		if working.Families[i].ID != frameFamily {
-			continue
-		}
-		working.Families[i].Cases = []string{frameValidCaseID, frameNoncanonicalCaseID}
-	}
-
-	encoded, err := encodeInventory(working)
+	encoded, err := encodeInventory(frozen)
 	if err != nil {
 		t.Fatalf("encode working manifest: %v", err)
 	}
@@ -127,30 +113,47 @@ func frameWorkingManifest(t *testing.T, root string) Inventory {
 	return loaded
 }
 
-// frameCaseSpec builds the manifest entry for one framing case directory,
-// hashing both assets from disk so the entry is bound to the committed bytes.
-func frameCaseSpec(t *testing.T, root, id, label string) CaseSpec {
+// assertFrameCasesAreFrozen pins that the frozen corpus registers exactly the
+// framing cases this package executes.
+//
+// The family case list and the case index are two separate views of the same
+// registration, so both are checked: a case executed without a family entry, or
+// listed in a family without a case record, is a registration break that would
+// otherwise surface as a confusing coverage failure instead of a precise one.
+func assertFrameCasesAreFrozen(t *testing.T, manifest Inventory) {
 	t.Helper()
-	inputPath := "testdata/runtime-migration/cases/frame/" + label + ".bin"
-	expectedPath := "testdata/runtime-migration/cases/frame/" + label + ".expected.json"
-	inputHash, err := hashFile(filepath.Join(root, filepath.FromSlash(inputPath)))
-	if err != nil {
-		t.Fatalf("hash %s: %v", inputPath, err)
+	want := []string{frameValidCaseID, frameNoncanonicalCaseID}
+
+	var family *Family
+	for i := range manifest.Families {
+		if manifest.Families[i].ID == frameFamily {
+			family = &manifest.Families[i]
+			break
+		}
 	}
-	expectedHash, err := hashFile(filepath.Join(root, filepath.FromSlash(expectedPath)))
-	if err != nil {
-		t.Fatalf("hash %s: %v", expectedPath, err)
+	if family == nil {
+		t.Fatalf("frozen manifest has no %s family", frameFamily)
 	}
-	return CaseSpec{
-		ID:           id,
-		Family:       frameFamily,
-		Version:      frameVersion,
-		Operation:    "decode",
-		Input:        AssetRef{Path: inputPath, SHA256: inputHash},
-		InputFormat:  "binary",
-		Expected:     AssetRef{Path: expectedPath, SHA256: expectedHash},
-		Checkpoints:  []string{"0"},
-		RustConsumer: frameRustConsumer,
+	if len(family.Cases) != len(want) {
+		t.Fatalf("%s family lists %v, want %v", frameFamily, family.Cases, want)
+	}
+	for i, id := range want {
+		if family.Cases[i] != id {
+			t.Fatalf("%s family lists %v, want %v", frameFamily, family.Cases, want)
+		}
+	}
+
+	for _, id := range want {
+		found := false
+		for _, c := range manifest.Cases {
+			if c.ID == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("case %s is missing from the frozen manifest case index", id)
+		}
 	}
 }
 

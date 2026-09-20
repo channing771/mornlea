@@ -157,18 +157,29 @@ func readCaseInput(root string, c CaseSpec) ([]byte, error) {
 // the expectation an independent execution has to reproduce.
 func readExpectedOutcome(t *testing.T, root string, c CaseSpec) Outcome {
 	t.Helper()
+	outcome, err := decodeExpectedOutcome(root, c)
+	if err != nil {
+		t.Fatalf("read expected outcome for %s: %v", c.ID, err)
+	}
+	return outcome
+}
+
+// decodeExpectedOutcome reads and normalizes the expectation one case records
+// without a test handle, so a fixture that has no *testing.T to fail through
+// derives its observation from the corpus instead of restating an outcome.
+func decodeExpectedOutcome(root string, c CaseSpec) (Outcome, error) {
 	full := filepath.Join(root, filepath.FromSlash(c.Expected.Path))
 	data, err := os.ReadFile(full)
 	if err != nil {
-		t.Fatalf("read expected outcome for %s: %v", c.ID, err)
+		return Outcome{}, fmt.Errorf("read %s: %w", full, err)
 	}
 	var outcome Outcome
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
 	if err := dec.Decode(&outcome); err != nil {
-		t.Fatalf("decode expected outcome for %s: %v", c.ID, err)
+		return Outcome{}, fmt.Errorf("decode %s: %w", full, err)
 	}
-	return outcome
+	return outcome, nil
 }
 
 // traceFromObservations assembles executed observations into a trace identity

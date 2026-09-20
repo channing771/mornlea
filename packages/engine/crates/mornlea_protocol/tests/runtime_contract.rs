@@ -4946,8 +4946,6 @@ fn dispatch_frame(case: &runtime_corpus::FrozenCase) -> serde_json::Value {
 
 #[test]
 fn corpus_frame() {
-    let root = runtime_corpus::find_repo_root();
-
     let valid = runtime_corpus::load_case("protocol.frame/45/valid");
     assert_eq!(valid.family, "protocol.frame");
     assert_eq!(valid.operation, "decode");
@@ -4967,33 +4965,12 @@ fn corpus_frame() {
     });
     assert_ne!(valid.normalized, mutated);
 
-    // The noncanonical length vector is executed but its manifest merge is a
-    // separate controller step, so the consumer names the case entry by path
-    // until the frozen manifest carries it. The expected outcome is the one the
-    // independent Go producer recorded; the Rust consumer has to reproduce it
-    // from the same bytes rather than agreeing with a Rust-generated value.
-    let noncanonical_entry = serde_json::json!({
-        "id": "protocol.frame/45/noncanonical-length",
-        "family": "protocol.frame",
-        "version": "45",
-        "operation": "decode",
-        "input": {
-            "path": "testdata/runtime-migration/cases/frame/noncanonical-length.bin",
-            "sha256": "sha256:431c114d525bb04ddd1b7434509fc9360452448041b2921b02b7852b85cc2d6c"
-        },
-        "input_format": "binary",
-        "expected": {
-            "path": "testdata/runtime-migration/cases/frame/noncanonical-length.expected.json",
-            "sha256": "sha256:322f8e8aa056952c6e2990cc1f0b361ae868fe46c66ed2f644eb2ce120289d14"
-        },
-        "checkpoints": ["0"],
-        "rust_consumer": "corpus_frame"
-    });
-    let noncanonical = runtime_corpus::load_case_file(
-        &root,
-        &noncanonical_entry,
-        "protocol.frame/45/noncanonical-length",
-    );
+    // The noncanonical length vector is a frozen case, so it is loaded from the
+    // frozen manifest exactly like the accepted one. The expected outcome is the
+    // one the independent Go producer recorded; the Rust consumer has to
+    // reproduce it from the same bytes rather than agreeing with a
+    // Rust-generated value.
+    let noncanonical = runtime_corpus::load_case("protocol.frame/45/noncanonical-length");
     assert_eq!(noncanonical.operation, "decode");
     let rejected = dispatch_frame(&noncanonical);
     assert_eq!(
