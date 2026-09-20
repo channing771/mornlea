@@ -19,9 +19,11 @@ mod close_container;
 mod collect_water;
 mod combat_hit;
 mod command_rejected;
+mod companion_despawn;
 mod container_ref;
 mod disconnect;
 mod drop_selected_item;
+mod entity_id;
 mod equip_armor;
 mod error;
 mod forget_chunks;
@@ -66,6 +68,7 @@ pub use command_rejected::{
     REJECT_INVALID_RAY, REJECT_INVALID_SLOT, REJECT_NO_TARGET, REJECT_NOT_ARMOR,
     REJECT_NOT_FLUID_SOURCE, REJECT_OCCUPIED, REJECT_PLAYER_NOT_READY, REJECT_PROTECTED_BLOCK,
 };
+pub use companion_despawn::CompanionDespawn;
 pub use container_ref::{
     CHESTS_PER_CHUNK, CONTAINER_KIND_CHEST, CONTAINER_KIND_FURNACE, ContainerRef,
     FURNACES_PER_CHUNK,
@@ -75,6 +78,7 @@ pub use disconnect::{
     DISCONNECT_SLOW_CLIENT, DISCONNECT_TIMEOUT, Disconnect,
 };
 pub use drop_selected_item::DropSelectedItem;
+pub use entity_id::{CompanionId, valid_companion_name};
 pub use equip_armor::EquipArmor;
 pub use error::ProtocolError;
 pub use forget_chunks::{ForgetChunks, MAX_FORGET_CHUNKS};

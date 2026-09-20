@@ -2117,3 +2117,50 @@ fn forget_chunks_rejects_empty_duplicate_and_malformed_payload() {
     );
 }
 
+#[test]
+fn companion_despawn_round_trip_preserves_identity_bytes() {
+    let companion = mornlea_protocol::CompanionId::new([
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x67, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+        0xff,
+    ])
+    .expect("companion");
+    let despawn = mornlea_protocol::CompanionDespawn::new(companion);
+    let payload = despawn.encode();
+    assert_eq!(
+        payload,
+        [
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x67, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xff
+        ]
+    );
+    assert_eq!(mornlea_protocol::CompanionDespawn::PACKET_ID, 19);
+    assert_eq!(payload.len(), 16);
+    assert_eq!(
+        mornlea_protocol::CompanionDespawn::decode(&payload).expect("decode"),
+        despawn
+    );
+}
+
+#[test]
+fn companion_despawn_rejects_invalid_identity_and_malformed_payload() {
+    let mut not_v4 = [
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x67, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+        0xff,
+    ];
+    not_v4[6] = 0x06;
+    assert_eq!(
+        mornlea_protocol::CompanionDespawn::decode(&not_v4),
+        Err(mornlea_protocol::ProtocolError::InvalidIdentity)
+    );
+    assert!(mornlea_protocol::CompanionDespawn::decode(&[0u8; 16]).is_err());
+    assert!(mornlea_protocol::CompanionDespawn::decode(&[0u8; 15]).is_err());
+    let mut trailing = vec![
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x67, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+        0xff,
+    ];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::CompanionDespawn::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}

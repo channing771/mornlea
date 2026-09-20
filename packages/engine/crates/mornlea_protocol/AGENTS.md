@@ -432,6 +432,22 @@ and `domain_does_not_depend_on_protocol`).
   (`forget_chunks_round_trip_preserves_golden_bytes`,
   `forget_chunks_rejects_empty_duplicate_and_malformed_payload`).
 
+## Companion identity (`src/entity_id.rs`)
+
+- `CompanionId` is the 16-byte UUIDv4 companion identity the companion
+  families share; zero and non-v4 values are `InvalidIdentity`.
+  `valid_companion_name` is the companion name rule: the canonical display
+  name rule plus a rejection of Unicode whitespace, so a publishable companion
+  name never contains an embedded space.
+
+## Companion despawn (`src/companion_despawn.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 19 payload is the 16-byte UUIDv4 companion identity the
+  authoritative world removed. `InvalidIdentity` rejects zero and non-v4
+  values; truncated payloads and trailing bytes fail before publication
+  (`companion_despawn_round_trip_preserves_identity_bytes`,
+  `companion_despawn_rejects_invalid_identity_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash
