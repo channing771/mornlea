@@ -183,3 +183,12 @@
 - Discovered tests (`-- --list`): 37.
 - PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
 - Architecture skill: no change.
+
+## 2026-09-20 — 2.3 protocol.client.SelectHotbar
+
+- Baseline: `00aae881 feat(engine): port command rejected codec`.
+- Existing unrelated work: deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded.
+- Ruling: play packet ID 5 payload is little-endian `u64` sequence plus hotbar slot u8. Slot validation reuses domain `HotbarSlot` (`0..=8`); out-of-range is `InvalidRange`. Golden bytes match Go `090000000000000008`. Remaining protocol families stay unchecked in `tasks.md`.
+- Discovered tests (`-- --list`): 39.
+- PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
+- Architecture skill: no change.

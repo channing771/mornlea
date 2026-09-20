@@ -626,6 +626,48 @@ fn command_rejected_rejects_unknown_reason_and_malformed_payload() {
     assert!(mornlea_protocol::CommandRejected::decode(&[0x01]).is_err());
 }
 
+#[test]
+fn select_hotbar_round_trip_preserves_golden_bytes() {
+    let select = mornlea_protocol::SelectHotbar::new(9, 8).expect("select");
+    let payload = select.encode();
+    assert_eq!(
+        payload,
+        [0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08]
+    );
+    assert_eq!(mornlea_protocol::SelectHotbar::PACKET_ID, 5);
+    let decoded = mornlea_protocol::SelectHotbar::decode(&payload).expect("decode");
+    assert_eq!(decoded, select);
+    assert_eq!(decoded.sequence, 9);
+    assert_eq!(decoded.slot, 8);
+}
+
+#[test]
+fn select_hotbar_rejects_invalid_slot_and_malformed_payload() {
+    assert_eq!(
+        mornlea_protocol::SelectHotbar::new(1, 9),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::SelectHotbar::decode(&[
+            0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09
+        ]),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert!(mornlea_protocol::SelectHotbar::decode(&[0x09]).is_err());
+    let mut trailing = vec![0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::SelectHotbar::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    let first = mornlea_protocol::SelectHotbar::new(0, 0).expect("slot zero");
+    assert_eq!(first.slot, 0);
+    assert_eq!(
+        mornlea_protocol::SelectHotbar::decode(&first.encode()).expect("decode slot zero"),
+        first
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

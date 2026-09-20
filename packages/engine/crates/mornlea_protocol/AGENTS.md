@@ -138,6 +138,14 @@ and `domain_does_not_depend_on_protocol`).
   `command_rejected_round_trip_preserves_frozen_reason_ids`,
   `command_rejected_rejects_unknown_reason_and_malformed_payload`).
 
+## Select hotbar (`src/select_hotbar.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 5 payload is a little-endian `u64` sequence followed by a
+  hotbar slot u8. Slot must be inside domain `HotbarSlot` (`0..=8`).
+  Out-of-range slots are `InvalidRange`; trailing bytes fail before
+  publication (`select_hotbar_round_trip_preserves_golden_bytes`,
+  `select_hotbar_rejects_invalid_slot_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash
