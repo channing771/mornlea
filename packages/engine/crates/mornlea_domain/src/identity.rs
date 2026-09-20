@@ -4,8 +4,124 @@ pub enum DomainError {
     IncompleteIdentity,
     InvalidDimension,
     InvalidHotbarSlot,
+    InvalidIdentity,
+    InvalidText,
     NonFiniteRotation,
     UnknownId,
+}
+
+/// Reports whether the 16 bytes are a non-zero UUIDv4 in wire order.
+///
+/// The rule is the Go `core.PlayerID.Valid` gate: a zero value, a version
+/// nibble other than `4`, or a variant outside RFC-4122 is rejected. Every
+/// identity newtype in this crate funnels through it so the player and
+/// companion rules cannot drift apart.
+fn is_uuid_v4(bytes: [u8; 16]) -> bool {
+    bytes != [0; 16] && bytes[6] >> 4 == 4 && bytes[8] & 0xc0 == 0x80
+}
+
+/// Stable UUIDv4 player identity.
+///
+/// The wire layout is the standard big-endian UUID byte order, and the
+/// identity is a value type: cloning copies the bytes and the type stays
+/// distinct from a companion identity so a record cannot name the wrong
+/// subject.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PlayerId([u8; 16]);
+
+impl PlayerId {
+    /// Wraps wire bytes, rejecting a zero, non-v4, or non-RFC-4122 variant.
+    pub fn try_from_bytes(bytes: [u8; 16]) -> Result<Self, DomainError> {
+        if !is_uuid_v4(bytes) {
+            return Err(DomainError::InvalidIdentity);
+        }
+        Ok(Self(bytes))
+    }
+
+    pub fn bytes(self) -> [u8; 16] {
+        self.0
+    }
+}
+
+/// Stable UUIDv4 companion identity.
+///
+/// The byte rule is identical to `PlayerId`, but the type is separate because
+/// a companion names a different subject with its own ordering space. This
+/// crate publishes no absent identity: a wire-level "no companion" form is a
+/// protocol concern and stays out of the domain value set.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct CompanionId([u8; 16]);
+
+impl CompanionId {
+    /// Wraps wire bytes, rejecting a zero, non-v4, or non-RFC-4122 variant.
+    pub fn try_from_bytes(bytes: [u8; 16]) -> Result<Self, DomainError> {
+        if !is_uuid_v4(bytes) {
+            return Err(DomainError::InvalidIdentity);
+        }
+        Ok(Self(bytes))
+    }
+
+    pub fn bytes(self) -> [u8; 16] {
+        self.0
+    }
+}
+
+/// Reports whether a scalar entity identifier is publishable: zero is the
+/// absent form in every entity family, so it is rejected here instead of
+/// being interpreted downstream.
+fn is_nonzero_entity_id(id: u64) -> bool {
+    id != 0
+}
+
+/// Nonzero authoritative night-walker identity.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct HostileId(u64);
+
+impl HostileId {
+    pub fn try_new(id: u64) -> Result<Self, DomainError> {
+        if !is_nonzero_entity_id(id) {
+            return Err(DomainError::InvalidIdentity);
+        }
+        Ok(Self(id))
+    }
+
+    pub fn get(self) -> u64 {
+        self.0
+    }
+}
+
+/// Nonzero authoritative passive-mob identity.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PassiveId(u64);
+
+impl PassiveId {
+    pub fn try_new(id: u64) -> Result<Self, DomainError> {
+        if !is_nonzero_entity_id(id) {
+            return Err(DomainError::InvalidIdentity);
+        }
+        Ok(Self(id))
+    }
+
+    pub fn get(self) -> u64 {
+        self.0
+    }
+}
+
+/// Nonzero authoritative projectile identity.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct ProjectileId(u64);
+
+impl ProjectileId {
+    pub fn try_new(id: u64) -> Result<Self, DomainError> {
+        if !is_nonzero_entity_id(id) {
+            return Err(DomainError::InvalidIdentity);
+        }
+        Ok(Self(id))
+    }
+
+    pub fn get(self) -> u64 {
+        self.0
+    }
 }
 
 /// Current supported contract versions shared by replay and inventory identity.

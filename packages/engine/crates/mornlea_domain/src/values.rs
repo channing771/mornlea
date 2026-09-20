@@ -39,3 +39,55 @@ impl HotbarSlot {
         self.0
     }
 }
+
+/// Finite three-component vector used by authoritative positions and
+/// velocities.
+///
+/// Finiteness is the only rule: the components are stored exactly as
+/// received, so a caller that needs a canonical direction normalizes before
+/// construction and a replay keeps the recorded bit patterns.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FiniteVec3([f32; 3]);
+
+impl FiniteVec3 {
+    pub fn try_new(components: [f32; 3]) -> Result<Self, DomainError> {
+        if !components.iter().all(|component| component.is_finite()) {
+            return Err(DomainError::NonFiniteRotation);
+        }
+        Ok(Self(components))
+    }
+
+    /// Returns the components as received, including negative zero.
+    pub fn get(self) -> [f32; 3] {
+        self.0
+    }
+}
+
+/// Finite look angles shared by the semantic input and event records.
+///
+/// The angles are stored as received with no clamping, wrapping, or
+/// reduction, so a replay preserves the exact IEEE-754 bits, including
+/// negative zero. Normalizing here would make a Rust observation disagree
+/// with a Go observation for the same input.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LookAngles {
+    yaw: f32,
+    pitch: f32,
+}
+
+impl LookAngles {
+    pub fn try_new(yaw: f32, pitch: f32) -> Result<Self, DomainError> {
+        if !yaw.is_finite() || !pitch.is_finite() {
+            return Err(DomainError::NonFiniteRotation);
+        }
+        Ok(Self { yaw, pitch })
+    }
+
+    pub fn yaw(self) -> f32 {
+        self.yaw
+    }
+
+    pub fn pitch(self) -> f32 {
+        self.pitch
+    }
+}

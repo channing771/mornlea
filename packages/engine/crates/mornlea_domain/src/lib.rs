@@ -10,12 +10,17 @@
 mod event;
 mod identity;
 mod input;
+mod text;
 mod values;
 
 pub use event::{FAMILY_EVENT, FAMILY_INPUT, Observation, order_observations};
-pub use identity::{DomainError, Identities, ReplayIdentity};
+pub use identity::{
+    CompanionId, DomainError, HostileId, Identities, PassiveId, PlayerId, ProjectileId,
+    ReplayIdentity,
+};
 pub use input::{PlaceBlock, PlayerInput, SelectHotbar, SemanticInput, order_inputs};
-pub use values::{Dimension, HotbarSlot};
+pub use text::{CommandText, CompanionName, DisplayName, SpeechText};
+pub use values::{Dimension, FiniteVec3, HotbarSlot, LookAngles};
 
 /// Workspace crate identity consumed by the foundation registration tests.
 pub const CRATE_NAME: &str = "mornlea_domain";
