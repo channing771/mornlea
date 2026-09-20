@@ -2681,3 +2681,93 @@ fn inventory_state_rejects_unknown_selected_and_malformed_payload() {
     corrupt[slot + 1] = 0xff;
     assert!(mornlea_protocol::InventoryState::decode(&corrupt).is_err());
 }
+
+#[test]
+fn hostile_spawn_round_trip_preserves_batch_bytes() {
+    let spawn = mornlea_protocol::HostileSpawn::new(
+        0x0102_0304_0506_0708,
+        vec![
+            mornlea_protocol::HostileSpawnRecord {
+                id: 7,
+                dimension: mornlea_domain::Dimension::OVERWORLD,
+                position: [2.5, 1.0, -3.25],
+                yaw: 1.25,
+                health: 14,
+                kind: mornlea_protocol::HOSTILE_KIND_BONE_THROWER,
+            },
+            mornlea_protocol::HostileSpawnRecord {
+                id: 9,
+                dimension: mornlea_domain::Dimension::OVERWORLD,
+                position: [-8.5, 65.5, 12.75],
+                yaw: -2.5,
+                health: 20,
+                kind: mornlea_protocol::HOSTILE_KIND_NIGHTWALKER,
+            },
+        ],
+    )
+    .expect("spawn");
+    let payload = spawn.encode();
+    assert_eq!(mornlea_protocol::HostileSpawn::PACKET_ID, 22);
+    assert_eq!(payload.len(), 9 + 2 * 30);
+    assert_eq!(
+        &payload[..9],
+        &[0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x02]
+    );
+    assert_eq!(&payload[9..17], &[0x07, 0, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(&payload[17..21], &[0x00, 0x00, 0x00, 0x00]);
+    assert_eq!(&payload[21..25], &[0x00, 0x00, 0x20, 0x40]);
+    assert_eq!(&payload[25..29], &[0x00, 0x00, 0x80, 0x3f]);
+    assert_eq!(&payload[29..33], &[0x00, 0x00, 0x50, 0xc0]);
+    assert_eq!(&payload[33..37], &[0x00, 0x00, 0xa0, 0x3f]);
+    assert_eq!(payload[37], 14);
+    assert_eq!(payload[38], 1);
+    // The second record starts at the fixed 30-byte stride after the first.
+    assert_eq!(&payload[39..43], &[0x09, 0, 0, 0]);
+    assert_eq!(payload.len(), 9 + 2 * 30);
+    assert_eq!(
+        mornlea_protocol::HostileSpawn::decode(&payload).expect("decode"),
+        spawn
+    );
+}
+
+#[test]
+fn hostile_spawn_rejects_invalid_records_and_malformed_payload() {
+    let record = mornlea_protocol::HostileSpawnRecord {
+        id: 7,
+        dimension: mornlea_domain::Dimension::OVERWORLD,
+        position: [1.0, 2.0, 3.0],
+        yaw: 0.5,
+        health: 10,
+        kind: mornlea_protocol::HOSTILE_KIND_NIGHTWALKER,
+    };
+    let base = |record: mornlea_protocol::HostileSpawnRecord| {
+        mornlea_protocol::HostileSpawnRecord { ..record }
+    };
+    let mut zero_id = base(record);
+    zero_id.id = 0;
+    let mut foreign = base(record);
+    foreign.dimension = mornlea_domain::Dimension::DEPTHS;
+    let mut bad_health = base(record);
+    bad_health.health = 0;
+    let mut over_health = base(record);
+    over_health.health = 21;
+    let mut bad_kind = base(record);
+    bad_kind.kind = 2;
+    let mut bad_yaw = base(record);
+    bad_yaw.yaw = f32::NAN;
+    for bad in [zero_id, foreign, bad_health, over_health, bad_kind, bad_yaw] {
+        assert!(mornlea_protocol::HostileSpawn::new(1, vec![bad]).is_err());
+    }
+    assert!(mornlea_protocol::HostileSpawn::new(1, vec![base(record), base(record)]).is_err());
+    assert!(mornlea_protocol::HostileSpawn::new(1, Vec::new()).is_err());
+    let valid = mornlea_protocol::HostileSpawn::new(1, vec![record]).expect("spawn");
+    let payload = valid.encode();
+    assert!(mornlea_protocol::HostileSpawn::decode(&payload[..payload.len() - 1]).is_err());
+    let mut padded = payload.clone();
+    padded.push(0x00);
+    assert_eq!(
+        mornlea_protocol::HostileSpawn::decode(&padded),
+        Err(mornlea_protocol::ProtocolError::Truncated)
+    );
+}
+

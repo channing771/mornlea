@@ -33,6 +33,7 @@ mod frame;
 mod furnace_state;
 mod handshake_reject;
 mod hostile_despawn;
+mod hostile_spawn;
 mod inventory_state;
 mod item_stack;
 mod keep_alive;
@@ -100,6 +101,12 @@ pub use furnace_state::{
 };
 pub use handshake_reject::{HANDSHAKE_VERSION_MISMATCH, HandshakeReject};
 pub use hostile_despawn::{HOSTILE_DESPAWN_WIRE_BYTES, HostileDespawn, MAX_HOSTILE_RECORDS};
+pub use hostile_spawn::{
+    HOSTILE_KIND_BONE_THROWER, HOSTILE_KIND_NIGHTWALKER, HOSTILE_SPAWN_MAX_RECORDS,
+    HOSTILE_SPAWN_WIRE_BYTES, HostileSpawn, HostileSpawnRecord,
+};
+    HOSTILE_STATE_MAX_RECORDS, HOSTILE_STATE_WIRE_BYTES, HostileState, HostileStateRecord,
+};
 pub use inventory_state::{
     BACKPACK_SLOTS, HOTBAR_SLOTS, INVENTORY_STATE_WIRE_BYTES, InventoryState,
 };

@@ -518,3 +518,14 @@ and `domain_does_not_depend_on_protocol`).
   (`inventory_state_round_trip_preserves_golden_bytes`,
   `inventory_state_rejects_unknown_selected_and_malformed_payload`).
 
+## Hostile spawn (`src/hostile_spawn.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 22 payload is a `u64` server tick, a one-byte record count,
+  and the fixed 30-byte spawn records: ID, dimension, position, yaw, health,
+  and kind. The count is bounded by `HOSTILE_SPAWN_MAX_RECORDS` (`64`); IDs
+  must be non-zero and strictly ascending; only the overworld dimension is
+  published; health is `1..=MAX_HEALTH`; and the kind is
+  `HOSTILE_KIND_NIGHTWALKER` or `HOSTILE_KIND_BONE_THROWER`
+  (`hostile_spawn_round_trip_preserves_batch_bytes`,
+  `hostile_spawn_rejects_invalid_records_and_malformed_payload`).
+
