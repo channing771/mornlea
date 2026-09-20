@@ -261,6 +261,149 @@
       "cases": null
     },
     {
+      "id": "domain.values",
+      "kind": "domain",
+      "role": "input",
+      "current_version": "current",
+      "supported_versions": [
+        "current"
+      ],
+      "source": "packages/shared/core/item.go",
+      "eventual_owner": "mornlea_domain",
+      "numeric_semantics": "registered item numbering; fixed per-chunk slot counts; nonzero generation; reject unregistered items and out-of-range values",
+      "sources": [
+        {
+          "path": "packages/shared/core/item.go",
+          "sha256": "sha256:5ca451788a1c14bc4be1dfc8793784e3bbff0a08f08ea14cfc86e0a2658497af"
+        },
+        {
+          "path": "packages/shared/core/smelting.go",
+          "sha256": "sha256:5b8ee8878ae518273212e85296963ffed9136c8d7addaa5c60ebe6741bb772a0"
+        },
+        {
+          "path": "packages/shared/core/drop.go",
+          "sha256": "sha256:53be4374c38365674fa9ffe2bef542cf6497270b0dbfa18bf7a1b4e071759b38"
+        },
+        {
+          "path": "packages/shared/core/container.go",
+          "sha256": "sha256:b5c4d2e12ce20fd73f593e62d1ee95726747c0d8834ae5e675f69957445ec040"
+        },
+        {
+          "path": "packages/shared/core/furnace.go",
+          "sha256": "sha256:799d4808eee0bab4548fa78e80147772d9929af1b0b8af1fd197d171f535133d"
+        },
+        {
+          "path": "packages/shared/core/chest.go",
+          "sha256": "sha256:776e738bf659fbfd47a38521522a1b18f6197037a0c249b5eb678ffd234b090d"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_container.go",
+          "sha256": "sha256:b12db722f43c2ff6877fe33445ad3b204a56e1d946a592da7764591e0a650ad2"
+        }
+      ],
+      "cases": [
+        "domain.values/current/container-ref-chest-furnace-slot",
+        "domain.values/current/container-ref-chest-last-slot",
+        "domain.values/current/container-ref-chest-slot-above-array",
+        "domain.values/current/container-ref-furnace-last-slot",
+        "domain.values/current/container-ref-furnace-slot-above-array",
+        "domain.values/current/container-ref-maximum-generation",
+        "domain.values/current/container-ref-zero-generation",
+        "domain.values/current/drop-id-last-slot",
+        "domain.values/current/drop-id-maximum-dimension",
+        "domain.values/current/drop-id-maximum-generation",
+        "domain.values/current/drop-id-minimum-dimension",
+        "domain.values/current/drop-id-negative-dimension",
+        "domain.values/current/drop-id-slot-above-array",
+        "domain.values/current/drop-id-zero-generation",
+        "domain.values/current/item-stack-broken-tool-form",
+        "domain.values/current/item-stack-count-above-limit",
+        "domain.values/current/item-stack-count-limit",
+        "domain.values/current/item-stack-count-zero",
+        "domain.values/current/item-stack-durability-above-max-tool",
+        "domain.values/current/item-stack-durability-max-armor",
+        "domain.values/current/item-stack-durability-max-tool",
+        "domain.values/current/item-stack-durability-on-nondurable",
+        "domain.values/current/item-stack-durability-one-tool",
+        "domain.values/current/item-stack-durability-zero-armor",
+        "domain.values/current/item-stack-durability-zero-tool",
+        "domain.values/current/item-stack-empty",
+        "domain.values/current/item-stack-empty-count",
+        "domain.values/current/item-stack-empty-durability",
+        "domain.values/current/item-stack-single-count-above-limit",
+        "domain.values/current/item-stack-single-count-limit",
+        "domain.values/current/item-stack-unregistered-above-sentinel",
+        "domain.values/current/item-stack-unregistered-sentinel",
+        "domain.values/current/item-table-000",
+        "domain.values/current/item-table-001",
+        "domain.values/current/item-table-002",
+        "domain.values/current/item-table-003",
+        "domain.values/current/item-table-004",
+        "domain.values/current/item-table-005",
+        "domain.values/current/item-table-006",
+        "domain.values/current/item-table-007",
+        "domain.values/current/item-table-008",
+        "domain.values/current/item-table-009",
+        "domain.values/current/item-table-010",
+        "domain.values/current/item-table-011",
+        "domain.values/current/item-table-012",
+        "domain.values/current/item-table-013",
+        "domain.values/current/item-table-014",
+        "domain.values/current/item-table-015",
+        "domain.values/current/item-table-016",
+        "domain.values/current/item-table-017",
+        "domain.values/current/item-table-018",
+        "domain.values/current/item-table-019",
+        "domain.values/current/item-table-020",
+        "domain.values/current/item-table-021",
+        "domain.values/current/item-table-022",
+        "domain.values/current/item-table-023",
+        "domain.values/current/item-table-024",
+        "domain.values/current/item-table-025",
+        "domain.values/current/item-table-026",
+        "domain.values/current/item-table-027",
+        "domain.values/current/item-table-028",
+        "domain.values/current/item-table-029",
+        "domain.values/current/item-table-030",
+        "domain.values/current/item-table-031",
+        "domain.values/current/item-table-032",
+        "domain.values/current/item-table-033",
+        "domain.values/current/item-table-034",
+        "domain.values/current/item-table-035",
+        "domain.values/current/item-table-036",
+        "domain.values/current/item-table-037",
+        "domain.values/current/item-table-038",
+        "domain.values/current/item-table-039",
+        "domain.values/current/item-table-040",
+        "domain.values/current/item-table-041",
+        "domain.values/current/item-table-042",
+        "domain.values/current/item-table-043",
+        "domain.values/current/item-table-044",
+        "domain.values/current/item-table-045",
+        "domain.values/current/item-table-046",
+        "domain.values/current/item-table-047",
+        "domain.values/current/item-table-048",
+        "domain.values/current/item-table-049",
+        "domain.values/current/item-table-050",
+        "domain.values/current/item-table-051",
+        "domain.values/current/item-table-052",
+        "domain.values/current/item-table-053",
+        "domain.values/current/item-table-054",
+        "domain.values/current/item-table-055",
+        "domain.values/current/item-table-056",
+        "domain.values/current/item-table-057",
+        "domain.values/current/item-table-058",
+        "domain.values/current/item-table-059",
+        "domain.values/current/item-table-060",
+        "domain.values/current/item-table-061",
+        "domain.values/current/item-table-062",
+        "domain.values/current/item-table-063",
+        "domain.values/current/item-table-064",
+        "domain.values/current/item-table-065",
+        "domain.values/current/item-table-066"
+      ]
+    },
+    {
       "id": "domain.input",
       "kind": "domain",
       "role": "input",
@@ -5179,6 +5322,1887 @@
         "0"
       ],
       "rust_consumer": "external:agent-contract"
+    },
+    {
+      "id": "domain.values/current/container-ref-chest-furnace-slot",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/container-ref-chest-furnace-slot.input.json",
+        "sha256": "sha256:125db2de4ec6849a404d22be8437181f1527f823ac687373e0b5cdd51dfd22c2"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/container-ref-chest-furnace-slot.expected.json",
+        "sha256": "sha256:0b0f4740520bb5b0324604524453ac6fbe5f3d61b2b0bd9e2683116b72518d30"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/container-ref-chest-last-slot",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/container-ref-chest-last-slot.input.json",
+        "sha256": "sha256:3bceb47e580714cd6c81f3cea089e1d96a534f551d6ecf17b97d1e717d197656"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/container-ref-chest-last-slot.expected.json",
+        "sha256": "sha256:fab169871a7bf98d707f13fff2970293d69fb2b6caff5157bd23d368f5f03156"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/container-ref-chest-slot-above-array",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/container-ref-chest-slot-above-array.input.json",
+        "sha256": "sha256:a186825053021bc11b26f2d0119f1017dc91fd077a7a428a9140a48317f10561"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/container-ref-chest-slot-above-array.expected.json",
+        "sha256": "sha256:77ac5db088f75262980b46dc21aec29e9988e375f44c2c75ba53da4cd70d81e3"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/container-ref-furnace-last-slot",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/container-ref-furnace-last-slot.input.json",
+        "sha256": "sha256:5743c99f440e9d3c37f0087b738be3ab47ee73f505a8c8a0ae5df74ec451e1b4"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/container-ref-furnace-last-slot.expected.json",
+        "sha256": "sha256:459a35ca1bcf7c19ccf7f0c926e2d120100ed7d45f65150d04bd5dcc5676f71d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/container-ref-furnace-slot-above-array",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/container-ref-furnace-slot-above-array.input.json",
+        "sha256": "sha256:06ab8eea2c19a135f9eab72867a828d17db165038b1883ff92975daf9e7826bd"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/container-ref-furnace-slot-above-array.expected.json",
+        "sha256": "sha256:d407839bbff12c7d51d8ec1e660cadcfb0819a43801ae3b6cb09d76ea64256bb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/container-ref-maximum-generation",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/container-ref-maximum-generation.input.json",
+        "sha256": "sha256:588ef124ff2e19ef2f34466538204fd0d27cc8b698e3cb334dbe6fa2b4d8495c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/container-ref-maximum-generation.expected.json",
+        "sha256": "sha256:f20285b320a8522b7979b995b7223856c5e88fa0470c04ffa3e300425c48855a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/container-ref-zero-generation",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/container-ref-zero-generation.input.json",
+        "sha256": "sha256:4b66f1e1daf749c724b935986c9adeb783cf1c837619f4137e62ec95bb9716e7"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/container-ref-zero-generation.expected.json",
+        "sha256": "sha256:868bb21096a2ca1b427ce21c397dded6d137aacb400a6bbd6eedb3772a107974"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/drop-id-last-slot",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/drop-id-last-slot.input.json",
+        "sha256": "sha256:d25257e997e5aaee5c23152c04ee2d37faee5bf05c052ed02c3e682f308b3de5"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/drop-id-last-slot.expected.json",
+        "sha256": "sha256:d87975250b1bf4da88f45ee80a3b5d2ea3a3cb9cf2792ebb874cfaa220b1fe76"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/drop-id-maximum-dimension",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/drop-id-maximum-dimension.input.json",
+        "sha256": "sha256:d1099ac9b33d0939fd4456c1ed37d2d84aa7b792445c05101bd3b851a4fc1e2f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/drop-id-maximum-dimension.expected.json",
+        "sha256": "sha256:3dcdf99174f7a628b9fd428b49d3855c71a4c2e1996f9e64e6b39e78f5866ef2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/drop-id-maximum-generation",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/drop-id-maximum-generation.input.json",
+        "sha256": "sha256:9f25b3b0266c89351341f140c0c255e29ab8090f1902bdd923db9e65ffce08ba"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/drop-id-maximum-generation.expected.json",
+        "sha256": "sha256:6d429017ab62d2926de04cab1c910dca469a0fec6604dfbf68ea6a9f55f97d7e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/drop-id-minimum-dimension",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/drop-id-minimum-dimension.input.json",
+        "sha256": "sha256:89d90735d9ed8cd1a36fe26daf223febb2ea3db4035f92dc76c31303d5fe05f6"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/drop-id-minimum-dimension.expected.json",
+        "sha256": "sha256:a3fa552b60d43738c627d3f45a6ec19e535356347c3e81a460f467566a33e5ec"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/drop-id-negative-dimension",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/drop-id-negative-dimension.input.json",
+        "sha256": "sha256:2ac633029ac6758bd579bb10d6614aa4a16e984ec305d07c7b2d0966863f12af"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/drop-id-negative-dimension.expected.json",
+        "sha256": "sha256:b6ca18c0bda39632e9d51dadddc83ca3d4dad77bd352a64fa2c824320451615a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/drop-id-slot-above-array",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/drop-id-slot-above-array.input.json",
+        "sha256": "sha256:3e571dca090ebab264dae89843433f1c1b5afe63a31a6d357d4010ea9cdc2e92"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/drop-id-slot-above-array.expected.json",
+        "sha256": "sha256:990b22ba0b9fbe87a45ddee56431ad304121b7d238a110a5c783e3223b972d88"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/drop-id-zero-generation",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/drop-id-zero-generation.input.json",
+        "sha256": "sha256:3276d2f316d50d93ec5e3c3176d4b772e5c44e98de350e8e3ace912053bb1bbd"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/drop-id-zero-generation.expected.json",
+        "sha256": "sha256:ae350835eba3344442a86dc14cbf0b13e3010835d61379e1f170a51f432baef5"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-stack-broken-tool-form",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-broken-tool-form.input.json",
+        "sha256": "sha256:71fae4aa26ed8c2eae2a286273054faf0c03109ddc0101c9f99b81ee4341c2be"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-broken-tool-form.expected.json",
+        "sha256": "sha256:dc66be7a06f1538d85f7bc50bdec731b8bad8fc9dd8a9c1d54b1fd0e108100d2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-stack-count-above-limit",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-count-above-limit.input.json",
+        "sha256": "sha256:4cd9af4548b03fb915f5549e50df3b82f7c25b2c71df31f025adbb78c28c74d2"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-count-above-limit.expected.json",
+        "sha256": "sha256:f36c8b006c1930084065a03124316ef16f8576eb058fc23f6cb6fd4168992bf9"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-stack-count-limit",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-count-limit.input.json",
+        "sha256": "sha256:2ce711fea1c4f587c4bbe04494b220b4d1ccf2ca9cf7b87e0c6918bda6fc03c5"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-count-limit.expected.json",
+        "sha256": "sha256:f4c23a3e1f421e6cc8beaa7006b2cbdcbc98af7a2ee3c55c773de39cbc95daa9"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-stack-count-zero",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-count-zero.input.json",
+        "sha256": "sha256:4e73e6d939c46feb54c2ecf6fd2bb6d43cedb0a771e3c8eecf8fabd00f37940b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-count-zero.expected.json",
+        "sha256": "sha256:88a1f3416f0bfac96ed4615c87e6e359638226fc3bab41981219c4e5e3f144d3"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-stack-durability-above-max-tool",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-durability-above-max-tool.input.json",
+        "sha256": "sha256:e57c34c336221bdf0c7a8c61e624b4aa8dc12a2b4108b23e5295e3bc42d7fb96"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-durability-above-max-tool.expected.json",
+        "sha256": "sha256:5f27a0f8ab7117514c5e43f3444b6b3d9c2a398b0255b09c3549c5c6349b561d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-stack-durability-max-armor",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-durability-max-armor.input.json",
+        "sha256": "sha256:544bf4d754493dc275c8b2fc5b0755cc1408a17f9683b3fdcc75280d56844998"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-durability-max-armor.expected.json",
+        "sha256": "sha256:f09978ae69decf6ee7749d9d5b46f18e4738baf3d1a2ebcb2f6e3af1b4d9a641"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-stack-durability-max-tool",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-durability-max-tool.input.json",
+        "sha256": "sha256:ec9922ed752b959b459a3fd5659f8f5e89e2f7f93ed173b0d9cb1a6ab6784563"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-durability-max-tool.expected.json",
+        "sha256": "sha256:fbefb522da20299718e4cce08f41516abfff092378597346598d744c2f727724"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-stack-durability-on-nondurable",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-durability-on-nondurable.input.json",
+        "sha256": "sha256:3834026529017c0a30e5354117b5d2cadf2fb4a8d3e8bacbd3c9cc645d773b88"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-durability-on-nondurable.expected.json",
+        "sha256": "sha256:1397663aa4f441eb3a1385fbc4e29d23b96cbd3eebae300e73c50fa3025df078"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-stack-durability-one-tool",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-durability-one-tool.input.json",
+        "sha256": "sha256:6368af394c9223e74ad54b5b96649fcf6e665bdce339d0e86a57d9daef7581d7"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-durability-one-tool.expected.json",
+        "sha256": "sha256:5c49e80238e417d283f6b86b3af89b13f07df87433ebbbad4b4c8b67c4b34fca"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-stack-durability-zero-armor",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-durability-zero-armor.input.json",
+        "sha256": "sha256:cdceb71bce6a2716cf62224698767caab85e1ff6b0a2d3ec067c2fc0a5c7951d"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-durability-zero-armor.expected.json",
+        "sha256": "sha256:90f00c23e4d1df053168422c33fe1ea9906681aa65dd6b1fc87a3453f9de544f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-stack-durability-zero-tool",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-durability-zero-tool.input.json",
+        "sha256": "sha256:f17c97dab81ddd803bf5a78e90f1b31443165fe2c5e893f3e12c3f5df27ee1ed"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-durability-zero-tool.expected.json",
+        "sha256": "sha256:ddea27f8b77baf35b9a48a7750f8767e8c5acc12213a2fec21f62bd04bb914bd"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-stack-empty",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-empty.input.json",
+        "sha256": "sha256:5f86a3eebe5ef2cb06d319681f0884591584f9902c62ec8044fce5afaaeb90d2"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-empty.expected.json",
+        "sha256": "sha256:6069c90296567723acf7094a763291963e06d5fc365482fdfa7b8bc0a58399da"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-stack-empty-count",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-empty-count.input.json",
+        "sha256": "sha256:619ba8c76f1bfbb10ea74caa4daaa274a3a005d1b5c1835cbb6c8cac859d6599"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-empty-count.expected.json",
+        "sha256": "sha256:e4db4564a401ac27a8f3b92c74e8b9bc02cceedc3b6d5d01c21fcf8a02df4e8f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-stack-empty-durability",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-empty-durability.input.json",
+        "sha256": "sha256:5b0deaaa13fac3503123dedc4490df75796d42df24cdede369599226bf958aef"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-empty-durability.expected.json",
+        "sha256": "sha256:676a7ab5e05f46d098ff9cc3371fd2c38ae6c9a1420f053d1239142f952e17ee"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-stack-single-count-above-limit",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-single-count-above-limit.input.json",
+        "sha256": "sha256:674a95482ff88e84edd8d7fd71c918249acd61a7bfd674be33c88405cd81a1c6"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-single-count-above-limit.expected.json",
+        "sha256": "sha256:5b2fbe25cb5604d6fbb149b6830685fabb4f9a7052228c019832222b5a98edc5"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-stack-single-count-limit",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-single-count-limit.input.json",
+        "sha256": "sha256:ec9922ed752b959b459a3fd5659f8f5e89e2f7f93ed173b0d9cb1a6ab6784563"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-single-count-limit.expected.json",
+        "sha256": "sha256:fbefb522da20299718e4cce08f41516abfff092378597346598d744c2f727724"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-stack-unregistered-above-sentinel",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-unregistered-above-sentinel.input.json",
+        "sha256": "sha256:5811f80c8ab70d041626cfb3ea6c0b8d96f79353916fcaf1d6afd4cfca417ba8"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-unregistered-above-sentinel.expected.json",
+        "sha256": "sha256:d5a47923f5289a6f6c2a8e74b2a71e1b9c237c58f5f3acd4233b4d1c5a166ad4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-stack-unregistered-sentinel",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-unregistered-sentinel.input.json",
+        "sha256": "sha256:25f888d213fa56a599d47f7f5046bdbeeb992aec473ad55845573aabe7cf6fa9"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-stack-unregistered-sentinel.expected.json",
+        "sha256": "sha256:27b30c22a27d9270e6b7586aeb80f294d16905a0cb8b0d380c68719438213a82"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-000",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-000.input.json",
+        "sha256": "sha256:ef4378804e42e70c3dfe733e100a4dfc745a1a4d55771789200b23fc2325d6bb"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-000.expected.json",
+        "sha256": "sha256:7a34f869fa7183b28d32db36069af4c821f2aa5ea72c0f351ed622cd57288eb1"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-001",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-001.input.json",
+        "sha256": "sha256:6181db2fcac9c0a160cd6687974491c37999af5e7c58a16446c9ea30f77455b2"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-001.expected.json",
+        "sha256": "sha256:dc9cdc5d838ec55417e72e556f39fe06341988698dcf34c95766939edd4daf38"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-002",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-002.input.json",
+        "sha256": "sha256:84d3d612bb398d1adbab86a6803fdf76ed7c18e558cb5e656ccbb7b0c2534857"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-002.expected.json",
+        "sha256": "sha256:d1491388d23416f297b1c7d528a06e64a1c36affa1d6fa863555f016b19b0e8b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-003",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-003.input.json",
+        "sha256": "sha256:135df97f1f70490ee3d6d86db7720364a0c7751468f607851fa637575b4971bc"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-003.expected.json",
+        "sha256": "sha256:a66b190635d0225fc89af24b353075ea02bd892c13fb061f808b8889baa85a4a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-004",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-004.input.json",
+        "sha256": "sha256:1acba9b49ee6ebbe1d928364573c3752242e258457f4240bb4d3bcb3cf3611b9"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-004.expected.json",
+        "sha256": "sha256:89a262fa018ba32e0ec3deb4ac2f0d1b93ca389a9b481a451f25d4e5819481c6"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-005",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-005.input.json",
+        "sha256": "sha256:a89f492fd7ac9faf76a4657a8e0bd58a3b5dbcc272d405262e6face303f4cbe8"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-005.expected.json",
+        "sha256": "sha256:b529dcd302b7adf380c9d13e61d575f8b74b0622cd3a3339c43c26d29878f7be"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-006",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-006.input.json",
+        "sha256": "sha256:d983419dadfd7132d29b2b274782494f2150e31f7533079d448223997201c376"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-006.expected.json",
+        "sha256": "sha256:96787ebd4ed295f2bb3ea90e08d410b23a958dda3c24f249c0936cd925721d52"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-007",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-007.input.json",
+        "sha256": "sha256:80b56f7d0d90989a7b5af9f8816ce357dbc14ae64574a2ceb61d4a9b40f42f7b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-007.expected.json",
+        "sha256": "sha256:7ec5e135107597d749fc649ac9ce97d55e6d8c000581e269b11d6cc52a73a502"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-008",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-008.input.json",
+        "sha256": "sha256:cd0c5facc0c0fc430eab992a6b5d3191ac1e84421699c2ca3d1b27ee6b2e5c76"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-008.expected.json",
+        "sha256": "sha256:b016529e6d583cb873bd02eab79f9885a97449a7c5715e0cc8d56964a4402509"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-009",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-009.input.json",
+        "sha256": "sha256:7755355c810025d765a36e4d10ca4d40562e8870226126cd20ce74592a803ff0"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-009.expected.json",
+        "sha256": "sha256:7d3f266ae6df9177004778b94b80c51ba33738996ff73a960ce1ccf5f74fb146"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-010",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-010.input.json",
+        "sha256": "sha256:2ccd77c233dd9126b1259a465d0068f53a4b5a60c2de7d690b6cadb9ff08338e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-010.expected.json",
+        "sha256": "sha256:098e5c985a0c48cc3ef7809ce41937687ed6fc072dae7549a540a4df53f19eb3"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-011",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-011.input.json",
+        "sha256": "sha256:a250c3a562622acfc02dbae949df50ec5af643efceaa6ddd8f66d5748465afb3"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-011.expected.json",
+        "sha256": "sha256:c11980a190f7c24eeb9f485d8a73a665ad480130b0d958b1ec9caad746b9a032"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-012",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-012.input.json",
+        "sha256": "sha256:cf6de0520ac819d38a880b96bffb161c451a65e68645a6095d63d937b1fcb1ca"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-012.expected.json",
+        "sha256": "sha256:c36cebc6691d2c7986ed681b5b85fa130f8cc9397902e4cf6cb7348f457f7972"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-013",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-013.input.json",
+        "sha256": "sha256:ef57180e289407dc7a361abde82a6e0715a20cf807674a9f0f17e7e8e4b14cb1"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-013.expected.json",
+        "sha256": "sha256:9bc1f2055b2777ec56ae02ed5db46c6be47199992bab749679ca418fca47dcf7"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-014",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-014.input.json",
+        "sha256": "sha256:24732af8880e647887b7fbd39360d6e4bc9e9daf1d430707e71b2bdd05912ffb"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-014.expected.json",
+        "sha256": "sha256:082ae63a773b0f95b8d1d8c2a0876dee351c01fe70ca2bd1be2e511618cd4750"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-015",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-015.input.json",
+        "sha256": "sha256:241d189c370010682ff16bec3b111ec80c100f7d49680e2353670803f36b164b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-015.expected.json",
+        "sha256": "sha256:f38ec69f68c36d5329f75bb5eeffd0fcf35b15c9965f92e83b72fef78d0c39f1"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-016",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-016.input.json",
+        "sha256": "sha256:6041b83393e0e41ca86530e5c2d01d067f9bec94344dc6fd6316949a99b24d20"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-016.expected.json",
+        "sha256": "sha256:c07066150546d43c6a5397f5c5f71ff3919beb8f8b93c059b875be3110068f20"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-017",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-017.input.json",
+        "sha256": "sha256:c04f5461d65b8d2989bec31a471e1cac8ffd7c5f679317be188d589114506d27"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-017.expected.json",
+        "sha256": "sha256:c904ebde3fa0f76665d6b481895723245ba028dd1a7961d912b52823b9bfd1fe"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-018",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-018.input.json",
+        "sha256": "sha256:0030bf09ffbdc07193ae711bb78cc8543fddad960783747e4477c8248ae0d30f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-018.expected.json",
+        "sha256": "sha256:35bc098f63471a7b7c3b86d4fbc426c84a3728da17d336f11082d1d84f6d6003"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-019",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-019.input.json",
+        "sha256": "sha256:4bcdc91a0e7b65690982321debcbe575dfbe379471fc1035881e22fb0a6ad2d8"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-019.expected.json",
+        "sha256": "sha256:e3db2533394bc5c3b44cedd991fb55709db9dfce61b535b1de8a959214d98b33"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-020",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-020.input.json",
+        "sha256": "sha256:37ed06b163e66856b5e50767f08ac444def494d769ebd309414b1e20c15bc1b1"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-020.expected.json",
+        "sha256": "sha256:748ca72ed84153e8b64b00217893d7aa03a522a961890a651ccd0b632371603f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-021",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-021.input.json",
+        "sha256": "sha256:c02b3ecf8d96e6b9d89260ba99d3254a0c3add88ea75d65502a45eb2414a0f98"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-021.expected.json",
+        "sha256": "sha256:e02527182a0d17b31de3e4f0a4b437bd7fb74d8f587ba17c7822907ea1ff4f1e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-022",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-022.input.json",
+        "sha256": "sha256:61e3f1d8652066644174860764b2724553c1c495440e0d48c345027bef46c307"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-022.expected.json",
+        "sha256": "sha256:951da50c2d7c7083f5d540813ad1d7af87c492f8ed1b9072c3fad04d23b6efce"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-023",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-023.input.json",
+        "sha256": "sha256:f23277d000e49f10af7eaa3176a3349c715cd8c15d121c696e9d85789875b376"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-023.expected.json",
+        "sha256": "sha256:342b2c311eefa6ee47bd82002614cb9bd5398f2fcc66cab168608f78c002b83e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-024",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-024.input.json",
+        "sha256": "sha256:69ed46bc7f2bd2804533bf4a157b0e2b6e99aeb737f48f5b3de5d715c7aead7b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-024.expected.json",
+        "sha256": "sha256:f8f55f576f74a5646d9e83887dc628d4701536b9cdb8163ca7daad16bfa11b02"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-025",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-025.input.json",
+        "sha256": "sha256:eb9b082cc18085ea401ae6dd0f7def082a28e33758cc04e8bb81e143fabefcc7"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-025.expected.json",
+        "sha256": "sha256:f7c9a66da0291b60970f5b353c7d3d29a7f14a12f9609e904803dc38da2671bc"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-026",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-026.input.json",
+        "sha256": "sha256:0bd01718b8bca242d6931a93cc2e6ad8f59b5079266fb78fcbb9954f5ba6051e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-026.expected.json",
+        "sha256": "sha256:53bf438cec9591772fd10a504a5cc2884f9c9d536a84d0ad862ac0ba1adce19d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-027",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-027.input.json",
+        "sha256": "sha256:12e81e6865fba628fa27021705af9a5adcc148c82f0b7aa73e50871e9d3d8777"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-027.expected.json",
+        "sha256": "sha256:9d10b84ec9653cd2408e9694a32c2e0bee3dfc38237d6e4a3832129ed8761305"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-028",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-028.input.json",
+        "sha256": "sha256:73b34a4b96952ff16711f3fc2352202f7d529be4d00cb18c31d58578ebee5f3b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-028.expected.json",
+        "sha256": "sha256:7a6ba7789756944cf48c2feabddfbcd2df0bdb603230bc3225ca6fe4a9a4e7a3"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-029",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-029.input.json",
+        "sha256": "sha256:3e579a11358a6339ec5dd82f2519fefd4e073dfb3a454627c263dc563bd4bef6"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-029.expected.json",
+        "sha256": "sha256:ce00302b806764361a5909979dafa7f85bfebdeb046f287cdf229020a5a05e2d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-030",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-030.input.json",
+        "sha256": "sha256:fc45769cca09a24369bce2bb4aa8fb428d5328dda032290d6a814a8cf2c7a565"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-030.expected.json",
+        "sha256": "sha256:24e5a51c5be564fbab32ab9003b54242507eb458b24485538439eae8e72ae1ac"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-031",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-031.input.json",
+        "sha256": "sha256:ecce4c0f50a347564a6cf986c2b507b7a755a3154b898a0169367704ed2be11c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-031.expected.json",
+        "sha256": "sha256:f66b3b8d10c3bd9d9822b3f6e9361a46356acdf1d2d2137696c36e90aa74fc6f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-032",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-032.input.json",
+        "sha256": "sha256:0fe3912630d59bb165a55bc4eacbc076dc09d5fc97d9fb265d11d0ac0e549a01"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-032.expected.json",
+        "sha256": "sha256:f8d96b1765c340f4b3ad7d99e015d4a7d0df142537e72834ab72ed597419d7d4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-033",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-033.input.json",
+        "sha256": "sha256:92e0c6f07bfae6db9823645b208531f84420070fb502d9f8a9f57c8e803d8674"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-033.expected.json",
+        "sha256": "sha256:e01023cde19f65939873694f6d930c439e60355dbe0fc0bb5e76e017e1a6212b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-034",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-034.input.json",
+        "sha256": "sha256:74799d9feeb1a999749f746ada021d9db450fcb69bd62d24c5402cbf9aa52dad"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-034.expected.json",
+        "sha256": "sha256:047d6225b876faa63c7a353b443eb7106e3e143b807611d6670ce115967bb818"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-035",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-035.input.json",
+        "sha256": "sha256:3befcb384ba48158f9f797c2ae7aa872648d5132442bb2ce191acb9d3e778d32"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-035.expected.json",
+        "sha256": "sha256:a5879f0c1eb4862353de1f2829a2f0b56a90d14cfcd420f5be161d3a6a9f22d4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-036",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-036.input.json",
+        "sha256": "sha256:27d1f780084742eccb677e31ef5440db29b68ff01fbf147055f7ed3bd3c276ba"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-036.expected.json",
+        "sha256": "sha256:6db6461262d1a3ad96e1ba14ae0f8d11040946b75c4bf252f91a9b195c9b3c37"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-037",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-037.input.json",
+        "sha256": "sha256:dd53aaf638f5dbd84bf0a8488c6a4a89206c78a903622c668773ea6dba0e52da"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-037.expected.json",
+        "sha256": "sha256:88abc8f1fcd8870a211bdb252ef6a54fb5a01d1e6df91791b34827695ec0950d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-038",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-038.input.json",
+        "sha256": "sha256:dd83188ebca67e1060ae1dfbeb4a60aa90c55a22ba2a0c039203c9af6557fb88"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-038.expected.json",
+        "sha256": "sha256:855c78993b3d424b6bbd907196153a5259d93ccb1a7f17a2660daac25c85410a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-039",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-039.input.json",
+        "sha256": "sha256:8ee4125fa984e44dfeef8ae9751598e275025af7dc6fd57e1a1dea3bba309633"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-039.expected.json",
+        "sha256": "sha256:2238288e73c34a3e7459c3d31b2547b46085c00961d14e142254dce96cde92a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-040",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-040.input.json",
+        "sha256": "sha256:28be1c5446295a20ad58ba204c003698e19c5bb525e8563c7370dc1860e32acb"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-040.expected.json",
+        "sha256": "sha256:7400106572c072735f7e65f4f0d9874a03ff50b8644ac7d06f73a61ff81622ca"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-041",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-041.input.json",
+        "sha256": "sha256:51689394ccf8275329a053b67f1741ed79f23bea3a506416bf33e78fa8276a97"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-041.expected.json",
+        "sha256": "sha256:3df102a5b5d0eda2b3a68e8b36c77968c03a8e134fa2522819d096e0435c691b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-042",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-042.input.json",
+        "sha256": "sha256:a0f4e6f3d6a9ee95b9c806ead1c4ea6e0d0b7dff760e8c6534d0d84ff1c2ce96"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-042.expected.json",
+        "sha256": "sha256:630f9e2597c991b80f38327c64994a47cbf48cfbb24e8014e8314f0e6f1bd241"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-043",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-043.input.json",
+        "sha256": "sha256:a838e72124106e756b0b06c1a799e94bb81d9800c53001625681074329454136"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-043.expected.json",
+        "sha256": "sha256:79b5d019b6477ad1d63646a3dcc85989ce9166b806bc7a154f784a9b1634862e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-044",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-044.input.json",
+        "sha256": "sha256:cc3cfd484df2812d0d79bb4b34782799d2fdc32746a3694bb687fd8770d64335"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-044.expected.json",
+        "sha256": "sha256:8ecc2deba4156912ef2313306d8d5d3b70635e98553eb7479ed61b5b1be94190"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-045",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-045.input.json",
+        "sha256": "sha256:16afc5d122a47ea31a565ba817b29d754765573e784c5967b5cb942a795404a6"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-045.expected.json",
+        "sha256": "sha256:63b528f798ebb331b306c1c080535ec7908fb898e5e99fe14200b10cb826a951"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-046",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-046.input.json",
+        "sha256": "sha256:7e3009edacc42b67a734a0faebb8a217c9b6cd2e03eb11f2afe0106a8f9a8624"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-046.expected.json",
+        "sha256": "sha256:ef725822b6ec42b9500902cd4fa6be5189e497439a083c6ac9d8cd2d8be24551"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-047",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-047.input.json",
+        "sha256": "sha256:9f32a2bae6840e66c110c087fd785290d47e172b86eec947ccd5849d0b2dbe84"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-047.expected.json",
+        "sha256": "sha256:b3b3650793596ed7e5b8f93864c77cc1b578df0d2bd7f217980c5d26edf67be0"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-048",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-048.input.json",
+        "sha256": "sha256:a7fdf838ac5b5941f9892004056521c492246f129cc187ce4505dde54cc3e543"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-048.expected.json",
+        "sha256": "sha256:a7e1bfaf13d31fa83558e5923a347275ddfd0b88a48376d0eb96aaec4b6c35df"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-049",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-049.input.json",
+        "sha256": "sha256:a3440adccf6c6cb07daac91178657785267abb0d6cbf25bf5b33da8bdb3903d4"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-049.expected.json",
+        "sha256": "sha256:1b8af72463e4283e16cf78a6818de6e59ec1bee61259eed8358c411b6b330d8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-050",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-050.input.json",
+        "sha256": "sha256:fe6c764b5df65181049bcc1a5b66ce9322adaf4d6469f6b7c7066651d468fdc2"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-050.expected.json",
+        "sha256": "sha256:c76c4b0bf17ecdeeb38d190cf39d791753672354a802d7226010cda487e7eb9b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-051",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-051.input.json",
+        "sha256": "sha256:b579026a6d173307a90811397c2f22607c0753e50c3baefc0e15f33fb44afb8c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-051.expected.json",
+        "sha256": "sha256:1e69bb0ca58feed2bc82ad1ae17ded06b5234241b3ef8fea41bb262296dee42d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-052",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-052.input.json",
+        "sha256": "sha256:9ec747a2c920372b3514cfc1ac729c4a60db8e25d085469a5b0009cf0f569279"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-052.expected.json",
+        "sha256": "sha256:07cf6a80f2feac247cb84faefaff56735aca675b7eafe7c37cc2085bd3a36442"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-053",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-053.input.json",
+        "sha256": "sha256:2ce9205d6fee73a754bf858bcb99dd323e92bbc85cb0e660e60f19092c072413"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-053.expected.json",
+        "sha256": "sha256:80742bce8262ae761838bfcf0c0e2d93c1e338fbd173a7b192db4fedc0e2c92a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-054",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-054.input.json",
+        "sha256": "sha256:bdaa1cdb1bf8779bfbab1a1f1277576f78fea34e09254bcc89e02bdf7994c690"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-054.expected.json",
+        "sha256": "sha256:5a6b0fa1d16287527700694b718e2ccb90306765f21311f148861d7d66c070d6"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-055",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-055.input.json",
+        "sha256": "sha256:88d65ba74b7d0911115bd04ee8bd5fa26274b394a0b1bce33b19487fb54f24f9"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-055.expected.json",
+        "sha256": "sha256:63fa258813165fce907dbcabfcab47fb0c6b47d66b3e2d4c0f0a1bd858dde917"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-056",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-056.input.json",
+        "sha256": "sha256:9509d26acb987fbf0f5448c041f954ccd46716bd53c84476498b5ef48c3600b3"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-056.expected.json",
+        "sha256": "sha256:3569948857240b825d3e84d31edbe385b914b3aefc88130dbaf27175458d1fbd"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-057",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-057.input.json",
+        "sha256": "sha256:1ae18146509e341390a29dc06ffd852479b30fe9f2938d8d13c72f127ef65487"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-057.expected.json",
+        "sha256": "sha256:923b09cddeefa054cddaa730b8892c082278a942f5838c864470affefd5b239a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-058",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-058.input.json",
+        "sha256": "sha256:9f697d1ee95b9fe1b35260e7c2e9835744e59023ddcdf5dc09c6be48ccb6ecc1"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-058.expected.json",
+        "sha256": "sha256:c7730358df397d9051bcaa872a636662ec22710d7d37232774f35c4f74c8a527"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-059",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-059.input.json",
+        "sha256": "sha256:6d5ca52ee15f7665e1d5a5c7de837912343533f9ba9574e4ea4cc742fd86c3ab"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-059.expected.json",
+        "sha256": "sha256:6e38015d1f7a29ec2f709c69e07f784d72ecbba85939a61db0a339b85a29f68e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-060",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-060.input.json",
+        "sha256": "sha256:355580c22e71e084b21bf5cef8401389ae9b51369b3381ec06d7ab257172b80a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-060.expected.json",
+        "sha256": "sha256:e1d442903be7d9314e3ee9cbb849faff6420e90980dcb0687b9c5638c5bad948"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-061",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-061.input.json",
+        "sha256": "sha256:00752a0cc3bdb6064a87753f76ce83d34f8083edac9ef3f3384a02f5655a9d56"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-061.expected.json",
+        "sha256": "sha256:8cec1c14c1e259c896a512c8c83f1fa1acb5dd3532b19008d9b05ce4063efe19"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-062",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-062.input.json",
+        "sha256": "sha256:68215135ee4f5d78ecf3af2d6180ae9ee6cbd26261139c82b2ed1637cef44e90"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-062.expected.json",
+        "sha256": "sha256:ab5ebf14c5dad59266f641b6ef76e20a4df45c0c3d3196536f71cc40a22a5d8d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-063",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-063.input.json",
+        "sha256": "sha256:9536ee27dc0823e6fb78bf8f686e0421d988e1258d2581b33431a8009e3137bd"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-063.expected.json",
+        "sha256": "sha256:01cfa8be21e8585a9a0772d78d5a9fcee070937171b5c330c453c383fa554b34"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-064",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-064.input.json",
+        "sha256": "sha256:9d08c63bb102a1724f00b57fe3887b8b02f231ed70f4f4fe9ed98619a199df59"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-064.expected.json",
+        "sha256": "sha256:7c7b7d4ab6cdd96066f7f8727830a8a22e745bee36ce4451ba252df87d7f7e0d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-065",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-065.input.json",
+        "sha256": "sha256:dc2a92a0916e77ad5e7a7a704cd7274461ba94f0e94cc7b427f32e494be5221c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-065.expected.json",
+        "sha256": "sha256:ac4e9bbfbb1d059fe8f1900b4bf1118b9de90a77d925a72fbe3550b794f8e62e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.values/current/item-table-066",
+      "family": "domain.values",
+      "version": "current",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-066.input.json",
+        "sha256": "sha256:8488f8945950902f09514af456f655756b1ea60342eeaca1720960bfe5b7a8d4"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain-values/item-table-066.expected.json",
+        "sha256": "sha256:0a4e03df8704c3f8b94cd4dcc2ee14623b8a26bf0c76c11a901b8493135f4070"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
     }
   ]
 }

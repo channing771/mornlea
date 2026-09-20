@@ -20,6 +20,7 @@ const (
 	protocolLE     = "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs"
 	saveLE         = "little-endian integers; CRC integrity; exact byte round-trip; no implicit repair"
 	replayIdentity = "source revision, contract versions, fixture digest, seed, ordered input, tick schedule, normalized observations"
+	domainValues   = "registered item numbering; fixed per-chunk slot counts; nonzero generation; reject unregistered items and out-of-range values"
 )
 
 var (
@@ -171,6 +172,21 @@ func Discover(root string) ([]Family, Identities, error) {
 			Source: "packages/client/presentation/transcript_corpus_test.go", EventualOwner: ownerDomain,
 			NumericSemantics: replayIdentity,
 			Sources:          makeSourceSpecs(root, []string{"packages/client/presentation/transcript_corpus_test.go"}),
+		},
+		{
+			ID: "domain.values", Kind: "domain", Role: "input",
+			CurrentVersion: "current", SupportedVersions: []string{"current"},
+			Source: "packages/shared/core/item.go", EventualOwner: ownerDomain,
+			NumericSemantics: domainValues,
+			Sources: makeSourceSpecs(root, []string{
+				"packages/shared/core/item.go",
+				"packages/shared/core/smelting.go",
+				"packages/shared/core/drop.go",
+				"packages/shared/core/container.go",
+				"packages/shared/core/furnace.go",
+				"packages/shared/core/chest.go",
+				"packages/shared/network/protocol/message_container.go",
+			}),
 		},
 	}
 	for _, name := range clientPackets {
