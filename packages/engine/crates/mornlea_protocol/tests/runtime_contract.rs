@@ -4264,3 +4264,248 @@ fn projectile_state_rejects_invalid_records_and_malformed_payload() {
     over[8] = mornlea_protocol::MAX_PROJECTILE_RECORDS + 1;
     assert!(mornlea_protocol::ProjectileState::decode(&over).is_err());
 }
+
+#[test]
+fn chat_event_round_trip_preserves_golden_bytes() {
+    let accepted = mornlea_protocol::ChatEvent::new(mornlea_protocol::ChatEvent {
+        event_id: 0x0102_0304_0506_0708,
+        player_id: mornlea_protocol::PlayerId::new([
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xff,
+        ])
+        .expect("player id"),
+        player_name: "陈".to_owned(),
+        companion_id: mornlea_protocol::CompanionId::new([
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xfe,
+        ])
+        .expect("companion id"),
+        companion_name: "Mira".to_owned(),
+        kind: mornlea_protocol::CHAT_EVENT_ACCEPTED,
+        reject_reason: mornlea_protocol::CHAT_REJECT_NONE,
+        command: "follow me".to_owned(),
+        speech: String::new(),
+    })
+    .expect("accepted chat event");
+    let payload = accepted.encode();
+    assert_eq!(mornlea_protocol::ChatEvent::PACKET_ID, 16);
+    // 8 event ID + 16 player ID + (1 + 3 name) + 16 companion ID
+    // + (1 + 4 name) + 1 kind + 1 reason + (1 + 9 command).
+    assert_eq!(payload.len(), 61);
+    assert_eq!(&payload[..8], &0x0102_0304_0506_0708u64.to_le_bytes());
+    assert_eq!(&payload[8..24], &accepted.player_id.bytes());
+    assert_eq!(payload[24], 3);
+    assert_eq!(&payload[25..28], &[0xe9, 0x99, 0x88]);
+    assert_eq!(&payload[28..44], &accepted.companion_id.bytes());
+    assert_eq!(payload[44], 4);
+    assert_eq!(&payload[45..49], b"Mira");
+    assert_eq!(payload[49], mornlea_protocol::CHAT_EVENT_ACCEPTED);
+    assert_eq!(payload[50], mornlea_protocol::CHAT_REJECT_NONE);
+    assert_eq!(payload[51], 9);
+    assert_eq!(&payload[52..61], b"follow me");
+    assert_eq!(
+        mornlea_protocol::ChatEvent::decode(&payload).expect("decode"),
+        accepted
+    );
+
+    // A companion speech event reuses the same text slot with a tighter bound,
+    // and must not restate the player command.
+    let speech = mornlea_protocol::ChatEvent::new(mornlea_protocol::ChatEvent {
+        kind: mornlea_protocol::CHAT_EVENT_COMPANION_SPEECH,
+        command: String::new(),
+        speech: "hello there".to_owned(),
+        ..accepted.clone()
+    })
+    .expect("speech chat event");
+    let payload = speech.encode();
+    assert_eq!(payload.len(), 63);
+    assert_eq!(payload[49], mornlea_protocol::CHAT_EVENT_COMPANION_SPEECH);
+    assert_eq!(payload[51], 11);
+    assert_eq!(&payload[52..63], b"hello there");
+    assert_eq!(
+        mornlea_protocol::ChatEvent::decode(&payload).expect("decode"),
+        speech
+    );
+
+    // A rejection that never addressed a companion carries the absent identity
+    // and no text at all, which is why the identity needs an absent form.
+    let unaddressed = mornlea_protocol::ChatEvent::new(mornlea_protocol::ChatEvent {
+        companion_id: mornlea_protocol::CompanionId::NONE,
+        companion_name: String::new(),
+        kind: mornlea_protocol::CHAT_EVENT_REJECTED,
+        reject_reason: mornlea_protocol::CHAT_REJECT_INVALID_FORMAT,
+        command: String::new(),
+        speech: String::new(),
+        ..accepted.clone()
+    })
+    .expect("unaddressed chat event");
+    let payload = unaddressed.encode();
+    assert_eq!(payload.len(), 48);
+    assert_eq!(&payload[28..44], &[0u8; 16]);
+    assert_eq!(payload[44], 0);
+    assert_eq!(payload[45], mornlea_protocol::CHAT_EVENT_REJECTED);
+    assert_eq!(payload[46], mornlea_protocol::CHAT_REJECT_INVALID_FORMAT);
+    assert_eq!(payload[47], 0);
+    assert_eq!(
+        mornlea_protocol::ChatEvent::decode(&payload).expect("decode"),
+        unaddressed
+    );
+}
+
+#[test]
+fn chat_event_rejects_invalid_kind_combinations_and_malformed_payload() {
+    let base = mornlea_protocol::ChatEvent {
+        event_id: 0x0102_0304_0506_0708,
+        player_id: mornlea_protocol::PlayerId::new([
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xff,
+        ])
+        .expect("player id"),
+        player_name: "陈".to_owned(),
+        companion_id: mornlea_protocol::CompanionId::new([
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xfe,
+        ])
+        .expect("companion id"),
+        companion_name: "Mira".to_owned(),
+        kind: mornlea_protocol::CHAT_EVENT_ACCEPTED,
+        reject_reason: mornlea_protocol::CHAT_REJECT_NONE,
+        command: "follow me".to_owned(),
+        speech: String::new(),
+    };
+
+    let mut zero_event_id = base.clone();
+    zero_event_id.event_id = 0;
+    let mut padded_player_name = base.clone();
+    padded_player_name.player_name = " 陈".to_owned();
+    let mut unknown_kind = base.clone();
+    unknown_kind.kind = 10;
+    let mut zero_kind = base.clone();
+    zero_kind.kind = 0;
+    let mut accepted_with_reason = base.clone();
+    accepted_with_reason.reject_reason = mornlea_protocol::CHAT_REJECT_QUEUE_FULL;
+    let mut accepted_with_speech = base.clone();
+    accepted_with_speech.speech = "hello".to_owned();
+    let mut spaced_companion_name = base.clone();
+    spaced_companion_name.companion_name = "has space".to_owned();
+    let mut blank_command = base.clone();
+    blank_command.command = String::new();
+    let mut padded_command = base.clone();
+    padded_command.command = " follow me".to_owned();
+    let mut control_command = base.clone();
+    control_command.command = "follow\u{0} me".to_owned();
+    for bad in [
+        zero_event_id,
+        padded_player_name,
+        unknown_kind,
+        zero_kind,
+        accepted_with_reason,
+        accepted_with_speech,
+        spaced_companion_name,
+        blank_command,
+        padded_command,
+        control_command,
+    ] {
+        assert!(
+            bad.validate().is_err(),
+            "accepted invalid accepted chat event"
+        );
+    }
+
+    // A format rejection must not leak a companion identity or the command.
+    let mut leaking_format = base.clone();
+    leaking_format.kind = mornlea_protocol::CHAT_EVENT_REJECTED;
+    leaking_format.reject_reason = mornlea_protocol::CHAT_REJECT_INVALID_FORMAT;
+    leaking_format.companion_name = String::new();
+    leaking_format.command = String::new();
+    assert!(
+        leaking_format.validate().is_err(),
+        "accepted a format rejection that keeps a companion identity"
+    );
+    let clean_format = mornlea_protocol::ChatEvent {
+        companion_id: mornlea_protocol::CompanionId::NONE,
+        kind: mornlea_protocol::CHAT_EVENT_REJECTED,
+        reject_reason: mornlea_protocol::CHAT_REJECT_INVALID_FORMAT,
+        companion_name: String::new(),
+        command: String::new(),
+        ..base.clone()
+    };
+    assert!(clean_format.validate().is_ok());
+    // Reason 3 is reserved and unassigned.
+    let mut reserved_reason = clean_format.clone();
+    reserved_reason.reject_reason = 3;
+    assert!(reserved_reason.validate().is_err());
+
+    // A queue-full rejection must carry the full companion identity.
+    let mut anonymous_queue_full = base.clone();
+    anonymous_queue_full.kind = mornlea_protocol::CHAT_EVENT_REJECTED;
+    anonymous_queue_full.reject_reason = mornlea_protocol::CHAT_REJECT_QUEUE_FULL;
+    anonymous_queue_full.companion_id = mornlea_protocol::CompanionId::NONE;
+    assert!(anonymous_queue_full.validate().is_err());
+
+    // Task events restate the command and keep the reason slot empty.
+    let mut task_with_reason = base.clone();
+    task_with_reason.kind = mornlea_protocol::CHAT_EVENT_TASK_STARTED;
+    task_with_reason.reject_reason = mornlea_protocol::CHAT_REJECT_QUEUE_FULL;
+    assert!(task_with_reason.validate().is_err());
+    let task = mornlea_protocol::ChatEvent {
+        kind: mornlea_protocol::CHAT_EVENT_TASK_STARTED,
+        ..base.clone()
+    };
+    assert!(task.validate().is_ok());
+
+    // A failed task carries a task failure reason, not a chat rejection reason.
+    let mut failed_with_chat_reason = base.clone();
+    failed_with_chat_reason.kind = mornlea_protocol::CHAT_EVENT_TASK_FAILED;
+    failed_with_chat_reason.reject_reason = mornlea_protocol::CHAT_REJECT_QUEUE_FULL;
+    assert!(failed_with_chat_reason.validate().is_err());
+    let failed = mornlea_protocol::ChatEvent {
+        kind: mornlea_protocol::CHAT_EVENT_TASK_FAILED,
+        reject_reason: mornlea_protocol::TASK_FAIL_WORLD_CHANGED,
+        ..base.clone()
+    };
+    assert!(failed.validate().is_ok());
+
+    // A speech event must not restate the command and must carry bounded text.
+    let mut speech_with_command = base.clone();
+    speech_with_command.kind = mornlea_protocol::CHAT_EVENT_COMPANION_SPEECH;
+    speech_with_command.speech = "hello".to_owned();
+    assert!(speech_with_command.validate().is_err());
+    let mut empty_speech = base.clone();
+    empty_speech.kind = mornlea_protocol::CHAT_EVENT_COMPANION_SPEECH;
+    assert!(empty_speech.validate().is_err());
+    let mut over_long_speech = base.clone();
+    over_long_speech.kind = mornlea_protocol::CHAT_EVENT_COMPANION_SPEECH;
+    over_long_speech.speech = "x".repeat(257);
+    assert!(over_long_speech.validate().is_err());
+    let mut padded_speech = base.clone();
+    padded_speech.kind = mornlea_protocol::CHAT_EVENT_COMPANION_SPEECH;
+    padded_speech.speech = " hello".to_owned();
+    assert!(padded_speech.validate().is_err());
+    let speech = mornlea_protocol::ChatEvent {
+        kind: mornlea_protocol::CHAT_EVENT_COMPANION_SPEECH,
+        command: String::new(),
+        speech: "hello".to_owned(),
+        ..base.clone()
+    };
+    assert!(speech.validate().is_ok());
+
+    let payload = base.encode();
+    for length in 0..payload.len() {
+        assert!(
+            mornlea_protocol::ChatEvent::decode(&payload[..length]).is_err(),
+            "accepted truncated chat event at {length}"
+        );
+    }
+    let mut padded = payload.clone();
+    padded.push(0x00);
+    assert_eq!(
+        mornlea_protocol::ChatEvent::decode(&padded),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    // An unknown kind is rejected by the same validation the Go decoder
+    // applies after the last field, before the text slot is interpreted.
+    let mut bad_kind = payload.clone();
+    bad_kind[49] = 10;
+    assert!(mornlea_protocol::ChatEvent::decode(&bad_kind).is_err());
+}

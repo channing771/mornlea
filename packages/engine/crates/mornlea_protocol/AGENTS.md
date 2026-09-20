@@ -403,8 +403,17 @@ and `domain_does_not_depend_on_protocol`).
   record count. A zero count and a count above the family's fixed maximum are
   `InvalidRange`; a remaining length that is not exactly `count` records of
   the family stride is `Truncated` before any record is published.
+- `require_minimum_records` is the budget check for the families whose Go
+  decoder rejects a short payload but accepts a long one, leaving the
+  remainder to the end-of-payload check. Using the exact-length rule there
+  would report a padded batch as truncated rather than as trailing bytes,
+  which is a different failure than the Go side publishes. The item drop and
+  remote player state batches use it; the mob and companion batches use
+  `require_records`.
 - `src/block.rs` owns registered block numbering, the world vertical span,
-  and the chunk-ordered block index that sorted block-change batches compare.
+  the chunk-ordered block index that sorted block-change batches compare, and
+  `MAX_CHUNK_BLOCK_INDEX`, the exclusive upper bound an item drop's block
+  index must stay below.
 
 ## Block changes (`src/block_changes.rs`, `tests/runtime_contract.rs`)
 
@@ -439,6 +448,12 @@ and `domain_does_not_depend_on_protocol`).
   `valid_companion_name` is the companion name rule: the canonical display
   name rule plus a rejection of Unicode whitespace, so a publishable companion
   name never contains an embedded space.
+- `valid_display_name` is the plain canonical display-name rule, shared by
+  the chat event and the remote player spawn. It is a different rule from the
+  login start's, which trims before validating, because the Go side applies
+  `NormalizeDisplayName` differently in those two places.
+- `CompanionId::NONE` is the absent identity and `from_bytes` the
+  unvalidated reader; see "Shared value rules".
 
 ## Companion despawn (`src/companion_despawn.rs`, `tests/runtime_contract.rs`)
 
@@ -538,6 +553,195 @@ and `domain_does_not_depend_on_protocol`).
   and kind bounds as the spawn batch apply
   (`hostile_state_round_trip_preserves_batch_bytes`,
   `hostile_state_rejects_invalid_records_and_malformed_payload`).
+
+## Player state (`src/player_state.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 3 payload is the fixed 93-byte body, survival, and
+  world-time record. It is the only family that carries health, oxygen,
+  hunger, the day phase offset, weather, season, in-season progress,
+  temperature, and armor points, so those value ranges live in this module
+  rather than in a shared value module no other family consumes.
+- Out-of-range weather, season, and armor values are rejected outright
+  instead of being clamped: a wire value outside the authoritative domain is
+  a protocol violation. Season progress and temperature have no sub-range
+  because they are a whole `u8` and an `i8`.
+- The mining block is validated as one unit. An inactive block must be
+  entirely empty so a client never has to guess whether a stale target still
+  applies; an active block must report progress strictly below the
+  requirement, so a completed swing is published as inactive
+  (`player_state_round_trip_preserves_golden_bytes`,
+  `player_state_rejects_out_of_range_fields_and_malformed_payload`).
+
+## Companion spawn (`src/companion_spawn.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 17 payload is the 16-byte companion identity, the
+  length-prefixed name, the `u64` tick, the dimension, the position, and the
+  yaw and pitch. Only the overworld dimension is published, and the pitch
+  stays inside the vertical look range so a wrapped angle is rejected instead
+  of being normalized on the client. `COMPANION_SPAWN_MAX_WIRE_BYTES` is the
+  fixed payload ceiling
+  (`companion_spawn_round_trip_preserves_golden_bytes`,
+  `companion_spawn_rejects_invalid_identity_name_and_pose`).
+
+## Companion states (`src/companion_states.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 18 payload is a `u64` tick, a canonical uvarint count, and
+  the fixed 41-byte records of identity, dimension, position, yaw, pitch, and
+  reset. The count is bounded by `MAX_COMPANION_STATES` (`4`), which is the
+  companion activity limit; identities are ordered by unsigned byte order
+  through `strictly_increasing_ids`, and the name rule does not apply because
+  this family carries no name
+  (`companion_states_round_trip_preserves_batch_bytes`,
+  `companion_states_rejects_unsorted_invalid_and_malformed_payload`).
+
+## Drop identity (`src/drop_id.rs`, `src/item_drop_upserts.rs`, `src/item_drop_removes.rs`, `tests/runtime_contract.rs`)
+
+- `DropId` is the stable identity of one authoritative drop: an `i32`
+  dimension, two `i32` chunk coordinates, a `u8` slot, and a `u32`
+  generation, in the 17-byte wire order. The slot must fit
+  `DROPS_PER_CHUNK` (`32`) and the generation must be non-zero.
+- The dimension is deliberately not validated. The Go `DropID.Valid` rule
+  checks only the slot range and the generation, so a drop naming an unusual
+  dimension is still a publishable identity and must not be rejected by a
+  stricter Rust rule.
+- `DropId` is a validated newtype, so an out-of-range slot or a zero
+  generation cannot be constructed at all. The batch families therefore only
+  assert the batch bounds and the identity order, and the identity rejections
+  are asserted at `DropId::new`.
+- `MAX_ITEM_DROP_BATCH` (`32`) lives with the identity because both drop
+  halves describe the same bounded drop set.
+
+## Item drop upserts (`src/item_drop_upserts.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 11 payload is a `u64` server tick, a canonical uvarint
+  count, and the fixed 26-byte records of identity, `u32` block index, and
+  the five-byte item stack. The block index must stay below
+  `MAX_CHUNK_BLOCK_INDEX` and every stack goes through the shared `ItemStack`
+  rule, so a drop cannot publish a slot value the inventory families reject
+  (`item_drop_upserts_round_trip_preserves_batch_bytes`,
+  `item_drop_upserts_rejects_invalid_records_and_malformed_payload`).
+
+## Item drop removes (`src/item_drop_removes.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 12 payload is a `u64` server tick, a canonical uvarint
+  count, and the fixed 17-byte drop identities. The two drop halves are
+  separate modules because each has its own wire entry point and packet ID,
+  and they share the identity space, the batch ceiling, and the count header
+  (`item_drop_removes_round_trip_preserves_batch_bytes`,
+  `item_drop_removes_rejects_invalid_ids_and_malformed_payload`).
+
+## Remote player spawn (`src/remote_player_spawn.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 7 payload is the 16-byte player identity, the
+  length-prefixed display name, the `u64` server tick, the dimension, the
+  position, and the yaw and pitch. Unlike a companion or a mob, a remote
+  player may appear in either playable dimension because it mirrors a peer
+  session. Its name rule is the plain canonical display name, not the
+  companion rule that also rejects embedded whitespace, because a player
+  display name may legitimately contain spaces
+  (`remote_player_spawn_round_trip_preserves_golden_bytes`,
+  `remote_player_spawn_rejects_invalid_identity_name_and_pose`).
+
+## Remote player states (`src/remote_player_states.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 9 payload is a `u64` server tick, a canonical uvarint
+  count, and the fixed 41-byte records of identity, dimension, position,
+  yaw, pitch, and reset. The count is bounded by
+  `MAX_REMOTE_PLAYER_STATES` (`7`), the peer-session budget, which is a
+  different ceiling from the companion activity limit even though the record
+  stride is the same.
+- This is the only uvarint-count family that also carries a fixed wire
+  ceiling, `REMOTE_PLAYER_STATES_MAX_WIRE_BYTES` (`296`), which the Go
+  decoder applies before it allocates
+  (`remote_player_states_round_trip_preserves_golden_bytes`,
+  `remote_player_states_rejects_unsorted_invalid_and_malformed_payload`).
+
+## Passive spawn (`src/passive_spawn.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 26 payload is a `u64` server tick, a one-byte record count,
+  and the fixed 29-byte spawn records of ID, dimension, position, yaw, and
+  health. The record has the same field face as a hostile spawn record minus
+  the kind byte, because a passive mob has no category to publish. The count
+  is bounded by `MAX_PASSIVE_SPAWN_RECORDS` (`64`), which is the protocol
+  budget the decoder accepts, not the smaller live capacity the authority
+  converges on
+  (`passive_spawn_round_trip_preserves_batch_bytes`,
+  `passive_spawn_rejects_invalid_records_and_malformed_payload`).
+
+## Passive state (`src/passive_state.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 27 payload is a `u64` server tick, a one-byte record count,
+  and the fixed 38-byte state records of ID, position, velocity, yaw, health,
+  and the grazing bit. The dimension is not on the wire for the same reason
+  as the hostile state batch. Grazing is a transient presentation observation
+  that is never persisted, so it is validated as a 0/1 value rather than
+  reinterpreted
+  (`passive_state_round_trip_preserves_batch_bytes`,
+  `passive_state_rejects_invalid_records_and_malformed_payload`).
+
+## Projectile spawn (`src/projectile_spawn.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 29 payload is a `u64` server tick, a one-byte record count,
+  and the fixed 37-byte spawn records of ID, kind, dimension, position, and
+  velocity. The record carries a kind byte because a projectile's behaviour
+  differs by what fired it, but no yaw or health: a projectile is a
+  point-like transient whose orientation the client derives from its
+  velocity. Both playable dimensions are legal because a player's bow works
+  in either one, while the kind-by-dimension policy is an authority concern
+  this codec does not enforce
+  (`projectile_spawn_round_trip_preserves_batch_bytes`,
+  `projectile_spawn_rejects_invalid_records_and_malformed_payload`).
+
+## Projectile state (`src/projectile_state.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 30 payload is a `u64` server tick, a one-byte record count,
+  and the fixed 20-byte state records of ID and position. This is the
+  narrowest record in the crate: a projectile's kind, dimension, and velocity
+  are fixed for its whole life, so the mirror records them at spawn and the
+  state batch only moves the body
+  (`projectile_state_round_trip_preserves_batch_bytes`,
+  `projectile_state_rejects_invalid_records_and_malformed_payload`).
+
+## Chat event (`src/chat_event.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 16 payload is the event ID, the player identity and name,
+  the companion identity and name, the kind, the reason, and one text slot.
+- The text slot is reused by kind. A companion speech event carries a
+  model-generated line bounded by `CHAT_SPEECH_TEXT_MAX_BYTES` (`256`), and
+  every other kind restates the player's original command bounded by
+  `CHAT_COMMAND_TEXT_MAX_BYTES` (`1024`). The decoder therefore reads the
+  kind first and then decides which text to read, and the two fields are
+  mutually exclusive on the wire as well as in validation.
+- The combination rules are atomic. A speech field on any other kind, a
+  command on a speech event, an empty or non-canonical name, an out-of-range
+  kind, a reserved rejection reason, or a chat rejection reason on a failed
+  task rejects the whole event before any field is applied.
+- A format rejection must not leak a companion identity or the command,
+  because a malformed command never addressed a companion; a queue-full or
+  not-following rejection keeps the same identity and command requirements as
+  an acceptance so the player can match the rejection to its command. The
+  absent companion identity for those cases is `CompanionId::NONE`
+  (`chat_event_round_trip_preserves_golden_bytes`,
+  `chat_event_rejects_invalid_kind_combinations_and_malformed_payload`).
+
+## Shared value rules
+
+- `src/entity_id.rs` owns both the companion identity and the display-name
+  rule. `valid_display_name` is the plain canonical rule shared by the chat
+  event and the remote player spawn; `valid_companion_name` adds the
+  Unicode-whitespace rejection for companion names.
+- `CompanionId::NONE` is the absent identity a never-addressed chat event
+  carries. It is deliberately unreachable through `CompanionId::new`, which
+  rejects the zero value, and `CompanionId::from_bytes` is the unvalidated
+  reader decoding needs so the kind-specific validation can decide whether
+  the absent form is acceptable.
+- `src/chat_command.rs` owns the bounded text rule. `valid_bounded_text`
+  takes the bound from the caller so the command and speech slots cannot
+  drift apart, and `valid_command_text` binds it to the command bound.
+- A family whose Go `Validate` checks fewer fields than the Rust newtype
+  enforces is a parity break. Where the Go rule is narrower, as with
+  `DropID.Valid` and the dimension, the Rust rule is narrowed to match rather
+  than the Go rule being treated as incomplete.
 
 ## Focused Verification
 

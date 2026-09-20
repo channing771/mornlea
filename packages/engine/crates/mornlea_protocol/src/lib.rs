@@ -14,6 +14,7 @@ mod block_changes;
 mod bone_meal;
 mod bytes;
 mod chat_command;
+mod chat_event;
 mod chest_state;
 mod client_hello;
 mod close_container;
@@ -81,6 +82,15 @@ pub use block::{
 pub use block_changes::{BlockChange, BlockChanges, MAX_BLOCK_CHANGES};
 pub use bone_meal::BoneMeal;
 pub use chat_command::{CHAT_COMMAND_TEXT_MAX_BYTES, ChatCommand};
+pub use chat_event::{
+    CHAT_EVENT_ACCEPTED, CHAT_EVENT_COMPANION_SPEECH, CHAT_EVENT_MAX_WIRE_BYTES,
+    CHAT_EVENT_REJECTED, CHAT_EVENT_TASK_COMPLETED, CHAT_EVENT_TASK_FAILED,
+    CHAT_EVENT_TASK_PROGRESS, CHAT_EVENT_TASK_STARTED, CHAT_EVENT_TASK_STOPPED,
+    CHAT_EVENT_TASK_TIMED_OUT, CHAT_REJECT_INVALID_FORMAT, CHAT_REJECT_NONE,
+    CHAT_REJECT_NOT_FOLLOWING, CHAT_REJECT_QUEUE_FULL, CHAT_REJECT_UNKNOWN_COMPANION,
+    CHAT_SPEECH_TEXT_MAX_BYTES, ChatEvent, TASK_FAIL_INVALID_PLAN, TASK_FAIL_INVENTORY_FULL,
+    TASK_FAIL_PATH_UNREACHABLE, TASK_FAIL_PLANNER_UNAVAILABLE, TASK_FAIL_WORLD_CHANGED,
+};
 pub use chest_state::{CHEST_SLOTS, ChestState};
 pub use client_hello::ClientHello;
 pub use close_container::CloseContainer;

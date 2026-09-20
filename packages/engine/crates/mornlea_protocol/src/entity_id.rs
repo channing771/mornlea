@@ -22,6 +22,25 @@ impl CompanionId {
         Ok(Self(bytes))
     }
 
+    /// The absent companion identity, carried by chat events that never
+    /// addressed a companion. It is deliberately not reachable through `new`,
+    /// which rejects the zero value, so an event that claims to name a
+    /// companion cannot accidentally hold this form.
+    pub const NONE: Self = Self([0; 16]);
+
+    pub fn is_none(self) -> bool {
+        self.0 == [0; 16]
+    }
+
+    /// Wraps wire bytes without validating them.
+    ///
+    /// Decoding a chat event needs this because a rejection that never
+    /// addressed a companion legitimately carries the zero form, and the
+    /// kind-specific validation decides whether that form is acceptable.
+    pub(crate) fn from_bytes(bytes: [u8; 16]) -> Self {
+        Self(bytes)
+    }
+
     pub fn bytes(self) -> [u8; 16] {
         self.0
     }
