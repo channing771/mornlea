@@ -5,5 +5,6 @@
   "source_index": 3,
   "fixture": "validator hint rejects invalid UTF-8 bytes",
   "document": "mcp-v1/schema.json",
-  "schema": "validator_hint"
+  "schema": "validator_hint",
+  "value_utf8_hex": "ff"
 }

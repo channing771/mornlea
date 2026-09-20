@@ -106,7 +106,10 @@ var agentContractSources = []agentContractSource{
 // agentContractInput is the frozen, self-describing corpus input for one case.
 // It deliberately carries no expected outcome: a producer that could read the
 // expectation from its own input would be able to agree with the recorded
-// evidence instead of with the contract.
+// evidence instead of with the contract. The value a schema case was validated
+// against travels either as inline JSON or, when the fixture encodes an
+// invalid-UTF-8 payload as hex, as the hex form the golden fixture itself uses,
+// so a replaying consumer can reconstruct the exact bytes from the input alone.
 type agentContractInput struct {
 	CaseKind      string          `json:"case_kind"`
 	Consumer      string          `json:"consumer"`
@@ -116,6 +119,7 @@ type agentContractInput struct {
 	Document      string          `json:"document"`
 	Schema        string          `json:"schema,omitempty"`
 	Value         json.RawMessage `json:"value,omitempty"`
+	ValueUTF8Hex  string          `json:"value_utf8_hex,omitempty"`
 	Context       json.RawMessage `json:"context,omitempty"`
 	BlockSymbol   string          `json:"block_symbol,omitempty"`
 	BlockID       int             `json:"block_id,omitempty"`
@@ -180,6 +184,68 @@ func TestRuntimeAgentContractOracle(t *testing.T) {
 	agentContractSyncCorpus(t, records)
 	if accepted == 0 || rejected == 0 {
 		t.Fatalf("agent contract producer recorded %d accepted and %d rejected cases, want both non-zero", accepted, rejected)
+	}
+}
+
+// agentContractCommittedInput mirrors the on-disk shape of one frozen corpus
+// input for the self-containment check. It is deliberately independent of
+// agentContractInput so the check reads what is actually committed rather than
+// what the producer's struct happens to describe.
+type agentContractCommittedInput struct {
+	CaseKind     string          `json:"case_kind"`
+	Value        json.RawMessage `json:"value"`
+	ValueUTF8Hex string          `json:"value_utf8_hex"`
+}
+
+// TestRuntimeAgentContractCorpusInputsAreSelfContaining walks every committed
+// corpus input and pins that a schema case carries the value it validates. A
+// golden fixture may encode an invalid-UTF-8 payload as hex, so the input has to
+// record that form as well: a consumer that replays the corpus cannot re-derive
+// those bytes from the golden alone, and an input without either member cannot
+// be re-executed at all.
+func TestRuntimeAgentContractCorpusInputsAreSelfContaining(t *testing.T) {
+	t.Parallel()
+
+	root := contractFixturePath(t, agentContractCorpusRelDir)
+	var inputs []string
+	if err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || entry.Type()&fs.ModeSymlink != 0 {
+			return nil
+		}
+		if !strings.HasSuffix(entry.Name(), ".input.json") {
+			return nil
+		}
+		relative, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
+		inputs = append(inputs, filepath.ToSlash(relative))
+		return nil
+	}); err != nil {
+		t.Fatalf("walk agent contract corpus: %v", err)
+	}
+	if len(inputs) == 0 {
+		t.Fatal("agent contract corpus holds no committed input")
+	}
+	sort.Strings(inputs)
+	for _, relative := range inputs {
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(relative)))
+		if err != nil {
+			t.Fatalf("read corpus input %s: %v", relative, err)
+		}
+		var input agentContractCommittedInput
+		if err := json.Unmarshal(data, &input); err != nil {
+			t.Fatalf("decode corpus input %s: %v", relative, err)
+		}
+		if input.CaseKind != "schema" {
+			continue
+		}
+		if len(input.Value) == 0 && input.ValueUTF8Hex == "" {
+			t.Errorf("corpus input %s carries neither value nor value_utf8_hex", relative)
+		}
 	}
 }
 
@@ -714,15 +780,16 @@ func agentContractExecute(t *testing.T, schemas contractSchemaSet) []agentContra
 				fixture:     testCase.Name,
 				label:       label,
 				input: agentContractInput{
-					CaseKind:    "schema",
-					Consumer:    agentContractConsumer,
-					Source:      source.relative,
-					SourceIndex: index,
-					Fixture:     testCase.Name,
-					Document:    source.document,
-					Schema:      testCase.Schema,
-					Value:       testCase.Value,
-					Context:     testCase.Context,
+					CaseKind:     "schema",
+					Consumer:     agentContractConsumer,
+					Source:       source.relative,
+					SourceIndex:  index,
+					Fixture:      testCase.Name,
+					Document:     source.document,
+					Schema:       testCase.Schema,
+					Value:        testCase.Value,
+					ValueUTF8Hex: testCase.ValueUTF8Hex,
+					Context:      testCase.Context,
 				},
 				outcome: outcome,
 			})
