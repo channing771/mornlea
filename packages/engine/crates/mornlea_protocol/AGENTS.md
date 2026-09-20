@@ -17,6 +17,21 @@ and `domain_does_not_depend_on_protocol`).
   and malformed-input cases; this crate must not infer parity from a covered
   subset.
 
+## Framing (`src/frame.rs`, `src/varint.rs`, `tests/runtime_contract.rs`)
+
+- `write_frame` / `read_frame` are the length-prefixed packet boundary.
+  The length is a canonical uvarint and does not include itself.
+- Empty, oversized, truncated, overlong, and non-canonical length prefixes
+  fail before a payload is published
+  (`frame_read_rejects_invalid_lengths_before_payload`,
+  `frame_read_rejects_truncated_and_noncanonical_packet_id`,
+  `frame_write_enforces_maximum_payload`).
+- Capacity is `MAX_FRAME_BYTES`; do not copy that number here.
+- Canonical uvarint vectors are pinned by
+  `canonical_uvarint_round_trips_and_rejects_malformed`.
+- Coalesced frames consume only one record
+  (`frame_round_trip_preserves_packet_id_and_payload`).
+
 ## Focused Verification
 
 ```bash
