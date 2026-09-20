@@ -192,3 +192,12 @@
 - Discovered tests (`-- --list`): 39.
 - PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
 - Architecture skill: no change.
+
+## 2026-09-20 — 2.3 protocol.client.DropSelectedItem
+
+- Baseline: `58b65534 feat(engine): port select hotbar codec`.
+- Existing unrelated work: deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded.
+- Ruling: play packet ID 11 payload is little-endian `u64` sequence. Zero sequences are legal. Golden bytes match Go `8877665544332211`. Selected slot and drop position stay server-owned. Remaining protocol families stay unchecked in `tasks.md`.
+- Discovered tests (`-- --list`): 41.
+- PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
+- Architecture skill: no change.

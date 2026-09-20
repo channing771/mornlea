@@ -668,6 +668,34 @@ fn select_hotbar_rejects_invalid_slot_and_malformed_payload() {
     );
 }
 
+#[test]
+fn drop_selected_item_round_trip_preserves_golden_bytes() {
+    let drop = mornlea_protocol::DropSelectedItem::new(0x1122_3344_5566_7788);
+    let payload = drop.encode();
+    assert_eq!(payload, [0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11]);
+    assert_eq!(mornlea_protocol::DropSelectedItem::PACKET_ID, 11);
+    let decoded = mornlea_protocol::DropSelectedItem::decode(&payload).expect("decode");
+    assert_eq!(decoded, drop);
+    assert_eq!(decoded.sequence, 0x1122_3344_5566_7788);
+}
+
+#[test]
+fn drop_selected_item_rejects_malformed_payload_and_accepts_zero_sequence() {
+    assert!(mornlea_protocol::DropSelectedItem::decode(&[0x88]).is_err());
+    let mut trailing = vec![0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::DropSelectedItem::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    let zero = mornlea_protocol::DropSelectedItem::new(0);
+    assert_eq!(zero.sequence, 0);
+    assert_eq!(
+        mornlea_protocol::DropSelectedItem::decode(&zero.encode()).expect("decode zero"),
+        zero
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

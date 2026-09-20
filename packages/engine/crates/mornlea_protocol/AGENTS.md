@@ -146,6 +146,14 @@ and `domain_does_not_depend_on_protocol`).
   publication (`select_hotbar_round_trip_preserves_golden_bytes`,
   `select_hotbar_rejects_invalid_slot_and_malformed_payload`).
 
+## Drop selected item (`src/drop_selected_item.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 11 payload is a little-endian `u64` sequence. Zero
+  sequences are legal. The selected slot and drop position stay
+  server-owned. Truncated payloads and trailing bytes fail before
+  publication (`drop_selected_item_round_trip_preserves_golden_bytes`,
+  `drop_selected_item_rejects_malformed_payload_and_accepts_zero_sequence`).
+
 ## Focused Verification
 
 ```bash
