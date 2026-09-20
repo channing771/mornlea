@@ -37,6 +37,13 @@ impl ByteEncoder {
         self.data.push(value);
     }
 
+    pub(crate) fn bytes(&mut self, value: &[u8]) {
+        if self.err.is_some() {
+            return;
+        }
+        self.data.extend_from_slice(value);
+    }
+
     pub(crate) fn string(&mut self, value: &str, max_bytes: usize) {
         if self.err.is_some() {
             return;
@@ -94,6 +101,13 @@ impl<'a> ByteDecoder<'a> {
 
     pub(crate) fn u8(&mut self) -> Result<u8, ProtocolError> {
         Ok(self.take(1)?[0])
+    }
+
+    pub(crate) fn bytes<const N: usize>(&mut self) -> Result<[u8; N], ProtocolError> {
+        let slice = self.take(N)?;
+        let mut value = [0u8; N];
+        value.copy_from_slice(slice);
+        Ok(value)
     }
 
     pub(crate) fn string(

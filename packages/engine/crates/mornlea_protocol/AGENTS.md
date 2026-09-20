@@ -66,6 +66,17 @@ and `domain_does_not_depend_on_protocol`).
 - `ByteEncoder` / `ByteDecoder` are crate-private payload primitives shared
   by later packet families. They are not a public codec surface.
 
+## Login start (`src/login_start.rs`, `src/player_id.rs`, `tests/runtime_contract.rs`)
+
+- Login packet ID 0 payload is a 16-byte UUIDv4, a length-prefixed display
+  name, and a trailing view-distance byte.
+- `PlayerId::new` accepts only non-zero UUIDv4 values. Display names must
+  remain valid after trimming (`1..=32` runes, `<=128` bytes, no control
+  characters). View distance is the closed interval `2..=64`. Failures are
+  `InvalidIdentity`, `InvalidString`, or `InvalidRange` before publication
+  (`login_start_round_trip_preserves_golden_bytes`,
+  `login_start_rejects_invalid_identity_name_range_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash

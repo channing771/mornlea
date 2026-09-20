@@ -13,6 +13,8 @@ mod client_hello;
 mod error;
 mod frame;
 mod handshake_reject;
+mod login_start;
+mod player_id;
 mod server_hello;
 mod varint;
 
@@ -20,6 +22,8 @@ pub use client_hello::ClientHello;
 pub use error::ProtocolError;
 pub use frame::{MAX_FRAME_BYTES, read_frame, write_frame};
 pub use handshake_reject::{HANDSHAKE_VERSION_MISMATCH, HandshakeReject};
+pub use login_start::{LOGIN_VIEW_DISTANCE_MAX, LOGIN_VIEW_DISTANCE_MIN, LoginStart};
+pub use player_id::PlayerId;
 pub use server_hello::ServerHello;
 pub use varint::{decode_uvarint, encode_uvarint};
 

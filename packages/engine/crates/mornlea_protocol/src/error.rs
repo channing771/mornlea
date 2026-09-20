@@ -10,4 +10,6 @@ pub enum ProtocolError {
     TrailingBytes,
     InvalidEnum,
     InvalidString,
+    InvalidIdentity,
+    InvalidRange,
 }

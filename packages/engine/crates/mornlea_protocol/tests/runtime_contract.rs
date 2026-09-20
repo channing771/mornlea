@@ -260,6 +260,66 @@ fn handshake_reject_rejects_unknown_code_and_malformed_payload() {
     );
 }
 
+const GOLDEN_PLAYER_ID: [u8; 16] = [
+    0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+];
+
+#[test]
+fn login_start_round_trip_preserves_golden_bytes() {
+    let id = mornlea_protocol::PlayerId::new(GOLDEN_PLAYER_ID).expect("uuid v4");
+    let login = mornlea_protocol::LoginStart::new(id, "Chen", 32).expect("login");
+    let payload = login.encode();
+    assert_eq!(
+        payload,
+        [
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xff, 0x04, b'C', b'h', b'e', b'n', 0x20,
+        ]
+    );
+    assert_eq!(mornlea_protocol::LoginStart::PACKET_ID, 0);
+    let decoded = mornlea_protocol::LoginStart::decode(&payload).expect("decode");
+    assert_eq!(decoded, login);
+    assert_eq!(decoded.player_id, id);
+    assert_eq!(decoded.display_name, "Chen");
+    assert_eq!(decoded.view_distance, 32);
+}
+
+#[test]
+fn login_start_rejects_invalid_identity_name_range_and_malformed_payload() {
+    assert_eq!(
+        mornlea_protocol::PlayerId::new([0; 16]),
+        Err(mornlea_protocol::ProtocolError::InvalidIdentity)
+    );
+    let mut not_v4 = GOLDEN_PLAYER_ID;
+    not_v4[6] = 0x55;
+    assert_eq!(
+        mornlea_protocol::PlayerId::new(not_v4),
+        Err(mornlea_protocol::ProtocolError::InvalidIdentity)
+    );
+    let id = mornlea_protocol::PlayerId::new(GOLDEN_PLAYER_ID).expect("uuid v4");
+    assert_eq!(
+        mornlea_protocol::LoginStart::new(id, "Chen\nName", 32),
+        Err(mornlea_protocol::ProtocolError::InvalidString)
+    );
+    assert_eq!(
+        mornlea_protocol::LoginStart::new(id, "Chen", 1),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::LoginStart::new(id, "Chen", 65),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    let mut truncated = GOLDEN_PLAYER_ID.to_vec();
+    truncated.extend_from_slice(&[0x04, b'C', b'h', b'e', b'n']);
+    assert!(mornlea_protocol::LoginStart::decode(&truncated).is_err());
+    let mut trailing = GOLDEN_PLAYER_ID.to_vec();
+    trailing.extend_from_slice(&[0x04, b'C', b'h', b'e', b'n', 0x20, 0x00]);
+    assert_eq!(
+        mornlea_protocol::LoginStart::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }
