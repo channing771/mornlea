@@ -487,6 +487,36 @@ fn disconnect_rejects_unknown_code_and_malformed_payload() {
     );
 }
 
+#[test]
+fn keep_alive_round_trip_preserves_golden_bytes() {
+    let keep_alive = mornlea_protocol::KeepAlive::new(8).expect("keep alive");
+    let payload = keep_alive.encode();
+    assert_eq!(payload, [0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    assert_eq!(mornlea_protocol::KeepAlive::PACKET_ID, 5);
+    let decoded = mornlea_protocol::KeepAlive::decode(&payload).expect("decode");
+    assert_eq!(decoded, keep_alive);
+    assert_eq!(decoded.token, 8);
+}
+
+#[test]
+fn keep_alive_rejects_zero_token_and_malformed_payload() {
+    assert_eq!(
+        mornlea_protocol::KeepAlive::new(0),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::KeepAlive::decode(&[0; 8]),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert!(mornlea_protocol::KeepAlive::decode(&[0x08]).is_err());
+    let mut trailing = vec![0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::KeepAlive::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

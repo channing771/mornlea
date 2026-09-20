@@ -107,6 +107,13 @@ and `domain_does_not_depend_on_protocol`).
   `disconnect_round_trip_preserves_empty_message_codes`,
   `disconnect_rejects_unknown_code_and_malformed_payload`).
 
+## Keep alive (`src/keep_alive.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 5 payload is a little-endian `u64` token. Zero tokens are
+  `InvalidRange`; truncated payloads and trailing bytes fail before
+  publication (`keep_alive_round_trip_preserves_golden_bytes`,
+  `keep_alive_rejects_zero_token_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash
