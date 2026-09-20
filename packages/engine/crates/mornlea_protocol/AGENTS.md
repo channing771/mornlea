@@ -274,6 +274,28 @@ and `domain_does_not_depend_on_protocol`).
   publication (`place_water_round_trip_preserves_golden_bytes`,
   `place_water_rejects_non_finite_and_malformed_payload`).
 
+## Container reference (`src/container_ref.rs`, `tests/runtime_contract.rs`)
+
+- `ContainerRef` is the shared 18-byte wire value that fleet and chest
+  commands carry: a little-endian `i32` dimension, two chunk coordinates,
+  a one-byte kind, a slot byte, and a little-endian `u32` generation.
+  Both container kinds live in the overworld's fixed per-chunk arrays, so
+  a foreign dimension, out-of-range slot, or zero generation is
+  `InvalidRange`, and an unknown kind is `InvalidEnum`. `write`/`read`
+  keep furnaces and chests on one encoding.
+
+## Move container stack (`src/move_container_stack.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 9 payload is a `u64` sequence, an 18-byte container
+  reference, and unified source and target slot bytes. Furnace unified
+  slots are `0..FURNACE_VIEW_SLOTS-1` with `FURNACE_OUTPUT_SLOT` legal
+  only as a source; chest unified slots are `0..CHEST_VIEW_SLOTS-1`.
+  Same-slot and out-of-range pairs are `InvalidRange`; unknown kinds and
+  malformed references are `InvalidEnum`; truncated payloads and trailing
+  bytes fail before publication
+  (`move_container_stack_round_trip_preserves_golden_bytes`,
+  `move_container_stack_rejects_invalid_container_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash

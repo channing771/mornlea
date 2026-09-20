@@ -1282,6 +1282,86 @@ fn place_water_rejects_non_finite_and_malformed_payload() {
     );
 }
 
+#[test]
+fn move_container_stack_round_trip_preserves_golden_bytes() {
+    let container = mornlea_protocol::ContainerRef::new(0, -3, 7, 0, 5, 9).expect("container");
+    let move_stack = mornlea_protocol::MoveContainerStack::new(4, container, 0, 36).expect("move");
+    let payload = move_stack.encode();
+    assert_eq!(
+        payload,
+        [
+            0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfd, 0xff,
+            0xff, 0xff, 0x07, 0x00, 0x00, 0x00, 0x00, 0x05, 0x09, 0x00, 0x00, 0x00, 0x00, 0x24
+        ]
+    );
+    assert_eq!(mornlea_protocol::MoveContainerStack::PACKET_ID, 9);
+    assert_eq!(payload.len(), 28);
+    let decoded = mornlea_protocol::MoveContainerStack::decode(&payload).expect("decode");
+    assert_eq!(decoded, move_stack);
+    assert_eq!(decoded.container, container);
+    assert_eq!(decoded.from, 0);
+    assert_eq!(decoded.to, 36);
+    let chest = mornlea_protocol::ContainerRef::new(0, 1, -2, 1, 3, 4).expect("chest");
+    let chest_move =
+        mornlea_protocol::MoveContainerStack::new(5, chest, 62, 3).expect("chest move");
+    assert_eq!(
+        mornlea_protocol::MoveContainerStack::decode(&chest_move.encode()).expect("decode chest"),
+        chest_move
+    );
+}
+
+#[test]
+fn move_container_stack_rejects_invalid_container_and_malformed_payload() {
+    let container = mornlea_protocol::ContainerRef::new(0, -3, 7, 0, 5, 9).expect("container");
+    assert_eq!(
+        mornlea_protocol::MoveContainerStack::new(1, container, 0, 0),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::MoveContainerStack::new(1, container, 0, 38),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::MoveContainerStack::new(1, container, 39, 0),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    let chest = mornlea_protocol::ContainerRef::new(0, 1, -2, 1, 3, 4).expect("chest");
+    assert_eq!(
+        mornlea_protocol::MoveContainerStack::new(1, chest, 0, 63),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::ContainerRef::new(0, 1, 2, 2, 0, 1),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    assert_eq!(
+        mornlea_protocol::ContainerRef::new(0, 1, 2, 0, 32, 1),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::ContainerRef::new(0, 1, 2, 1, 16, 1),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::ContainerRef::new(0, 1, 2, 0, 0, 0),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::ContainerRef::new(1, 1, 2, 0, 0, 1),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert!(mornlea_protocol::MoveContainerStack::decode(&[0x04]).is_err());
+    let mut trailing = vec![
+        0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfd, 0xff, 0xff,
+        0xff, 0x07, 0x00, 0x00, 0x00, 0x00, 0x05, 0x09, 0x00, 0x00, 0x00, 0x00, 0x24,
+    ];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::MoveContainerStack::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

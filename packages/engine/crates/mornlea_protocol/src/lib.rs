@@ -14,6 +14,7 @@ mod client_hello;
 mod close_container;
 mod collect_water;
 mod command_rejected;
+mod container_ref;
 mod disconnect;
 mod drop_selected_item;
 mod equip_armor;
@@ -25,6 +26,7 @@ mod keep_alive_reply;
 mod login_reject;
 mod login_start;
 mod login_success;
+mod move_container_stack;
 mod move_crafting_stack;
 mod move_inventory_stack;
 mod open_container;
@@ -49,6 +51,10 @@ pub use command_rejected::{
     REJECT_INVALID_RAY, REJECT_INVALID_SLOT, REJECT_NO_TARGET, REJECT_NOT_ARMOR,
     REJECT_NOT_FLUID_SOURCE, REJECT_OCCUPIED, REJECT_PLAYER_NOT_READY, REJECT_PROTECTED_BLOCK,
 };
+pub use container_ref::{
+    CHESTS_PER_CHUNK, CONTAINER_KIND_CHEST, CONTAINER_KIND_FURNACE, ContainerRef,
+    FURNACES_PER_CHUNK,
+};
 pub use disconnect::{
     DISCONNECT_INTERNAL_ERROR, DISCONNECT_PROTOCOL_VIOLATION, DISCONNECT_SERVER_SHUTDOWN,
     DISCONNECT_SLOW_CLIENT, DISCONNECT_TIMEOUT, Disconnect,
@@ -66,6 +72,9 @@ pub use login_reject::{
 };
 pub use login_start::{LOGIN_VIEW_DISTANCE_MAX, LOGIN_VIEW_DISTANCE_MIN, LoginStart};
 pub use login_success::LoginSuccess;
+pub use move_container_stack::{
+    CHEST_VIEW_SLOTS, FURNACE_OUTPUT_SLOT, FURNACE_VIEW_SLOTS, MoveContainerStack,
+};
 pub use move_crafting_stack::{CRAFTING_GRID_SLOTS, GRID_CRAFTING_VIEW_SLOTS, MoveCraftingStack};
 pub use move_inventory_stack::{INVENTORY_SLOTS, MoveInventoryStack};
 pub use open_container::OpenContainer;
