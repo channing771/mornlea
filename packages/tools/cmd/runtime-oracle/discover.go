@@ -12,15 +12,17 @@ import (
 )
 
 const (
-	ownerDomain    = "mornlea_domain"
-	ownerProtocol  = "mornlea_protocol"
-	ownerStorage   = "mornlea_storage"
-	ownerEngine    = "mornlea_engine"
-	ownerAgent     = "companion-agent-service"
-	protocolLE     = "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs"
-	saveLE         = "little-endian integers; CRC integrity; exact byte round-trip; no implicit repair"
-	replayIdentity = "source revision, contract versions, fixture digest, seed, ordered input, tick schedule, normalized observations"
-	domainValues   = "registered item numbering; fixed per-chunk slot counts; nonzero generation; reject unregistered items and out-of-range values"
+	ownerDomain          = "mornlea_domain"
+	ownerProtocol        = "mornlea_protocol"
+	ownerStorage         = "mornlea_storage"
+	ownerEngine          = "mornlea_engine"
+	ownerAgent           = "companion-agent-service"
+	protocolLE           = "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs"
+	saveLE               = "little-endian integers; CRC integrity; exact byte round-trip; no implicit repair"
+	replayIdentity       = "source revision, contract versions, fixture digest, seed, ordered input, tick schedule, normalized observations"
+	domainValues         = "registered item numbering; fixed per-chunk slot counts; nonzero generation; reject unregistered items and out-of-range values"
+	domainIdentityValues = "UUIDv4 identity; canonical display and companion names; bounded command and speech text; reject zero, wrong version, wrong variant, out-of-range and untrimmed values"
+	domainCommandControl = "finite look angles only; full i8 movement axes; hotbar slot 0..8; resync dimension 0/1; independent held flags; reject non-finite rotation and out-of-range slots"
 )
 
 var (
@@ -186,6 +188,31 @@ func Discover(root string) ([]Family, Identities, error) {
 				"packages/shared/core/furnace.go",
 				"packages/shared/core/chest.go",
 				"packages/shared/network/protocol/message_container.go",
+			}),
+		},
+		{
+			ID: "domain.identity_values", Kind: "domain", Role: "input",
+			CurrentVersion: "current", SupportedVersions: []string{"current"},
+			Source: "packages/shared/core/player_id.go", EventualOwner: ownerDomain,
+			NumericSemantics: domainIdentityValues,
+			Sources: makeSourceSpecs(root, []string{
+				"packages/shared/core/player_id.go",
+				"packages/shared/companion/identity.go",
+				"packages/shared/network/protocol/message_companion.go",
+			}),
+		},
+		{
+			ID: "domain.command_control", Kind: "domain", Role: "input",
+			CurrentVersion: "current", SupportedVersions: []string{"current"},
+			Source: "packages/shared/network/protocol/message_command.go", EventualOwner: ownerDomain,
+			NumericSemantics: domainCommandControl,
+			Sources: makeSourceSpecs(root, []string{
+				"packages/shared/network/protocol/message_command.go",
+				"packages/shared/network/protocol/message_container.go",
+				"packages/shared/network/protocol/packet.go",
+				"packages/shared/network/codec/codec_client.go",
+				"packages/shared/core/item.go",
+				"packages/shared/core/block.go",
 			}),
 		},
 	}
