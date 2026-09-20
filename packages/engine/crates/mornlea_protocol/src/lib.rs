@@ -53,6 +53,7 @@ mod move_inventory_stack;
 mod move_stack_partial;
 mod open_container;
 mod passive_despawn;
+mod passive_spawn;
 mod place_block;
 mod place_block_succeeded;
 mod place_water;
@@ -156,6 +157,10 @@ pub use open_container::OpenContainer;
 pub use passive_despawn::{
     MAX_PASSIVE_RECORDS, PASSIVE_DESPAWN_DIED, PASSIVE_DESPAWN_VANISHED, PassiveDespawn,
     PassiveDespawnRecord,
+};
+pub use passive_spawn::{
+    MAX_PASSIVE_SPAWN_RECORDS, PASSIVE_SPAWN_MAX_WIRE_BYTES, PASSIVE_SPAWN_WIRE_BYTES,
+    PassiveSpawn, PassiveSpawnRecord,
 };
 pub use place_block::PlaceBlock;
 pub use place_block_succeeded::PlaceBlockSucceeded;

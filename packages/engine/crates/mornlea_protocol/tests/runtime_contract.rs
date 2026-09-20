@@ -3861,3 +3861,110 @@ fn remote_player_states_rejects_unsorted_invalid_and_malformed_payload() {
         Err(mornlea_protocol::ProtocolError::FrameTooLarge)
     );
 }
+
+#[test]
+fn passive_spawn_round_trip_preserves_batch_bytes() {
+    let spawn = mornlea_protocol::PassiveSpawn::new(
+        0x0102_0304_0506_0708,
+        vec![
+            mornlea_protocol::PassiveSpawnRecord {
+                id: 7,
+                dimension: mornlea_domain::Dimension::OVERWORLD,
+                position: [2.5, 1.0, -3.25],
+                yaw: 1.25,
+                health: 14,
+            },
+            mornlea_protocol::PassiveSpawnRecord {
+                id: 9,
+                dimension: mornlea_domain::Dimension::OVERWORLD,
+                position: [-8.5, 65.5, 12.75],
+                yaw: -2.5,
+                health: 20,
+            },
+        ],
+    )
+    .expect("spawn");
+    let payload = spawn.encode();
+    assert_eq!(mornlea_protocol::PassiveSpawn::PACKET_ID, 26);
+    assert_eq!(payload.len(), 8 + 1 + 2 * 29);
+    assert_eq!(&payload[..8], &0x0102_0304_0506_0708u64.to_le_bytes());
+    assert_eq!(payload[8], 2);
+    assert_eq!(&payload[9..17], &[0x07, 0, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(&payload[17..21], &[0x00, 0x00, 0x00, 0x00]);
+    assert_eq!(&payload[21..25], &[0x00, 0x00, 0x20, 0x40]);
+    assert_eq!(&payload[33..37], &[0x00, 0x00, 0xa0, 0x3f]);
+    assert_eq!(payload[37], 14);
+    // The second record starts one fixed 29-byte stride later.
+    assert_eq!(&payload[38..46], &[0x09, 0, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(payload[66], 20);
+    assert_eq!(
+        mornlea_protocol::PassiveSpawn::decode(&payload).expect("decode"),
+        spawn
+    );
+}
+
+#[test]
+fn passive_spawn_rejects_invalid_records_and_malformed_payload() {
+    let record = mornlea_protocol::PassiveSpawnRecord {
+        id: 7,
+        dimension: mornlea_domain::Dimension::OVERWORLD,
+        position: [1.0, 2.0, 3.0],
+        yaw: 0.5,
+        health: 10,
+    };
+
+    let mut zero_id = record;
+    zero_id.id = 0;
+    let mut foreign = record;
+    foreign.dimension = mornlea_domain::Dimension::DEPTHS;
+    let mut bad_health = record;
+    bad_health.health = 0;
+    let mut over_health = record;
+    over_health.health = 21;
+    let mut bad_yaw = record;
+    bad_yaw.yaw = f32::NAN;
+    for bad in [zero_id, foreign, bad_health, over_health, bad_yaw] {
+        assert!(
+            mornlea_protocol::PassiveSpawn::new(1, vec![bad]).is_err(),
+            "accepted invalid passive spawn record"
+        );
+    }
+    assert!(mornlea_protocol::PassiveSpawn::new(1, vec![record, record]).is_err());
+    assert!(mornlea_protocol::PassiveSpawn::new(1, Vec::new()).is_err());
+    // The protocol ceiling is the record budget, not the smaller live capacity
+    // the authority converges on.
+    let full: Vec<_> = (1..=mornlea_protocol::MAX_PASSIVE_RECORDS as u64)
+        .map(|id| mornlea_protocol::PassiveSpawnRecord { id, ..record })
+        .collect();
+    assert!(
+        mornlea_protocol::PassiveSpawn::new(1, full).is_ok(),
+        "rejected a full passive spawn batch"
+    );
+
+    let valid = mornlea_protocol::PassiveSpawn::new(1, vec![record]).expect("spawn");
+    let payload = valid.encode();
+    for length in 0..payload.len() {
+        assert!(
+            mornlea_protocol::PassiveSpawn::decode(&payload[..length]).is_err(),
+            "accepted truncated passive spawn at {length}"
+        );
+    }
+    let mut padded = payload.clone();
+    padded.push(0x00);
+    assert_eq!(
+        mornlea_protocol::PassiveSpawn::decode(&padded),
+        Err(mornlea_protocol::ProtocolError::Truncated)
+    );
+    let mut mismatched = payload.clone();
+    mismatched[8] = 2;
+    assert_eq!(
+        mornlea_protocol::PassiveSpawn::decode(&mismatched),
+        Err(mornlea_protocol::ProtocolError::Truncated)
+    );
+    let mut empty = payload.clone();
+    empty[8] = 0;
+    assert!(mornlea_protocol::PassiveSpawn::decode(&empty).is_err());
+    let mut over = payload.clone();
+    over[8] = mornlea_protocol::MAX_PASSIVE_RECORDS + 1;
+    assert!(mornlea_protocol::PassiveSpawn::decode(&over).is_err());
+}
