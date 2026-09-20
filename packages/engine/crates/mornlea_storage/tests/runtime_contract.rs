@@ -3,24 +3,27 @@
 //! has a failing behavioral case of its own.
 
 use mornlea_storage::{
-    BANK_A_START_SECTOR, BANK_B_START_SECTOR, BANK_SIZE, COMPANION_CURRENT_SCHEMA,
+    BANK_A_START_SECTOR, BANK_B_START_SECTOR, BANK_SIZE, CHUNK_CURRENT_SCHEMA,
+    CHUNK_ENVELOPE_LENGTH, CHUNK_MAX_DECODED_CHUNK, CHUNK_OLDEST_SCHEMA, COMPANION_CURRENT_SCHEMA,
     COMPANION_ENVELOPE_VERSION, COMPANION_MAX_FIFO_ENTRIES, COMPANION_MAX_FILE_LENGTH,
     COMPANION_MAX_STORED, COMPANION_PLAN_STEP_FOLLOW, COMPANION_PLAN_STEP_GO_TO,
     COMPANION_PLAN_STEP_MINE, COMPANION_PLAN_STEP_PLACE, COMPANION_SCHEMA_V1, COMPANION_SCHEMA_V2,
     COMPANION_SCHEMA_V3, COMPANION_SCHEMA_V4, COMPANION_TASK_FAIL_NONE, COMPANION_TASK_RUNNING,
-    ChunkKey, CompanionBody, CompanionSave, DATA_START_SECTOR, HOSTILE_CURRENT_SCHEMA,
+    ChestSlot, Chunk, ChunkKey, ChunkSave, CompanionBody, CompanionSave, ContainerSnapshot,
+    DATA_START_SECTOR, DecodedChunk, DropSlot, FurnaceSlot, HOSTILE_CURRENT_SCHEMA,
     HOSTILE_ENVELOPE_VERSION, HOSTILE_MAX_FILE_LENGTH, HOSTILE_SCHEMA_V1, HostileMob,
     HostileMobsSave, Inventory, ItemStack, MAX_COMPRESSED_CHUNK, MAX_HOSTILE_MOBS,
     MAX_PASSIVE_MOBS, METADATA_CURRENT_VERSION, METADATA_V1, METADATA_V2, METADATA_V3, METADATA_V4,
     METADATA_V5, Metadata, MetadataChunkPos, PASSIVE_CURRENT_SCHEMA, PASSIVE_ENVELOPE_VERSION,
     PASSIVE_MAX_FILE_LENGTH, PLAYER_CURRENT_SCHEMA, PLAYER_ENVELOPE_LENGTH, PLAYER_MAX_PAYLOAD,
     PassiveMob, PassiveMobsSave, PlanStep, PlayerId, PlayerLocation, PlayerSave, REGION_SLOTS,
-    RegionBank, RegionEntry, RegionKey, SECTOR_SIZE, StorageError, StoredCompanionLifecycle,
-    StoredCompanionQueue, StoredCompanionTask, StoredPlayer, crc32c, crc32c_join,
-    decode_companions, decode_hostile_mobs, decode_passive_mobs, decode_player, decode_region_bank,
-    decode_superblock, decode_world_metadata, encode_companions, encode_hostile_mobs,
-    encode_passive_mobs, encode_player, encode_region_bank, encode_superblock,
-    encode_world_metadata, item_max_durability, region_for, select_region_bank,
+    RegionBank, RegionEntry, RegionKey, SECTOR_SIZE, StorageError, StorageKind,
+    StoredCompanionLifecycle, StoredCompanionQueue, StoredCompanionTask, StoredPlayer, crc32c,
+    crc32c_join, decode_chunk, decode_chunk_envelope, decode_chunk_logical, decode_companions,
+    decode_hostile_mobs, decode_passive_mobs, decode_player, decode_region_bank, decode_superblock,
+    decode_world_metadata, encode_chunk, encode_chunk_at_schema, encode_chunk_logical,
+    encode_companions, encode_hostile_mobs, encode_passive_mobs, encode_player, encode_region_bank,
+    encode_superblock, encode_world_metadata, item_max_durability, region_for, select_region_bank,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -2163,6 +2166,590 @@ fn player_encode_rejects_invalid_saves() {
     zero_revision.current.dimension = 0;
     zero_revision.pitch = 2.0;
     assert!(encode_player(&zero_revision).is_err());
+}
+
+/// Identity every committed `chunk-v*.bin` fixture carries.
+const CHUNK_FIXTURE_KEY: ChunkKey = ChunkKey {
+    dimension: 0,
+    x: -3,
+    z: 7,
+};
+const CHUNK_FIXTURE_REVISION: u64 = 19;
+
+fn chunk_fixture(schema: u32) -> Vec<u8> {
+    read_go_fixture(&format!(
+        "server/storage/chunk/testdata/chunk-v{schema}.bin"
+    ))
+}
+
+fn chunk_fixture_chunk(schema: u32) -> DecodedChunk {
+    decode_chunk(
+        CHUNK_FIXTURE_KEY,
+        CHUNK_FIXTURE_REVISION,
+        &chunk_fixture(schema),
+    )
+    .unwrap_or_else(|err| panic!("decode chunk-v{schema}.bin: {err}"))
+}
+
+/// Packs `values` into the non-crossing word layout the paletted container
+/// uses: `64 / bits` slots per word, the remaining bits unused.
+fn pack_section_words(bits: u8, values: &[u32]) -> Vec<u64> {
+    let per_word = 64 / bits as usize;
+    let mut words = vec![0u64; (4096 + per_word - 1) / per_word];
+    for (index, value) in values.iter().enumerate() {
+        let shift = (index % per_word) * bits as usize;
+        words[index / per_word] |= u64::from(*value) << shift;
+    }
+    words
+}
+
+/// A chunk with one section per storage kind plus every container section
+/// populated, so the encode/decode path covers drops, furnaces and chests.
+fn synthetic_chunk() -> Chunk {
+    let mut sections = Vec::with_capacity(24);
+    sections.push(ContainerSnapshot {
+        kind: StorageKind::Single,
+        bits: 0,
+        single: 2,
+        palette: Vec::new(),
+        packed: Vec::new(),
+    });
+    sections.push(ContainerSnapshot {
+        kind: StorageKind::Indexed,
+        bits: 4,
+        single: 0,
+        palette: (0..16u16).collect(),
+        packed: pack_section_words(4, &[0, 1, 2, 3, 15, 0, 0, 0]),
+    });
+    // Section 2 is direct storage holding a furnace and a chest block so the
+    // container slots decoded from it can point at real furnace/chest blocks.
+    let mut direct_values = vec![0u32; 4096];
+    direct_values[0] = 9;
+    direct_values[1] = 11;
+    sections.push(ContainerSnapshot {
+        kind: StorageKind::Direct,
+        bits: 15,
+        single: 0,
+        palette: Vec::new(),
+        packed: pack_section_words(15, &direct_values),
+    });
+    for _ in 3..24 {
+        sections.push(ContainerSnapshot {
+            kind: StorageKind::Single,
+            bits: 0,
+            single: 0,
+            palette: Vec::new(),
+            packed: Vec::new(),
+        });
+    }
+
+    let mut drops = vec![DropSlot::default(); 32];
+    drops[0] = DropSlot {
+        generation: 4,
+        active: true,
+        stack: ItemStack {
+            item: 1,
+            count: 12,
+            durability: 0,
+        },
+        block_index: 2 * 4096 + 5,
+        age_ticks: 71,
+        pickup_delay_ticks: 3,
+    };
+    drops[1] = DropSlot {
+        generation: 9,
+        active: true,
+        stack: ItemStack {
+            item: 10,
+            count: 1,
+            durability: 131,
+        },
+        block_index: 2 * 4096 + 6,
+        age_ticks: 4,
+        pickup_delay_ticks: 0,
+    };
+
+    let mut furnaces = vec![FurnaceSlot::default(); 32];
+    furnaces[0] = FurnaceSlot {
+        generation: 5,
+        active: true,
+        block_index: 2 * 4096,
+        input: ItemStack {
+            item: 6,
+            count: 3,
+            durability: 0,
+        },
+        fuel: ItemStack {
+            item: 5,
+            count: 2,
+            durability: 0,
+        },
+        output: ItemStack {
+            item: 7,
+            count: 1,
+            durability: 0,
+        },
+        progress_ticks: 120,
+        burn_ticks: 900,
+    };
+    furnaces[1] = FurnaceSlot {
+        generation: 6,
+        ..FurnaceSlot::default()
+    };
+
+    let mut chests = vec![ChestSlot::default(); 16];
+    chests[0] = ChestSlot {
+        generation: 7,
+        active: true,
+        block_index: 2 * 4096 + 1,
+        items: std::array::from_fn(|index| ItemStack {
+            item: if index == 0 { 1 } else { 0 },
+            count: if index == 0 { 5 } else { 0 },
+            durability: 0,
+        }),
+    };
+    chests[1] = ChestSlot {
+        generation: 8,
+        ..ChestSlot::default()
+    };
+
+    Chunk {
+        sections,
+        drops,
+        furnaces,
+        chests,
+    }
+}
+
+/// Decode exactness: every committed fixture must reproduce its exact logical
+/// payload byte for byte. The comparison re-serializes the decoded chunk at the
+/// schema the fixture itself declares, so a field the codec misreads, reorders
+/// or drops fails here even though the zstd frame still decompresses.
+#[test]
+fn chunk_committed_fixtures_decode_to_the_exact_logical_payload() {
+    for schema in CHUNK_OLDEST_SCHEMA..=CHUNK_CURRENT_SCHEMA {
+        let payload = chunk_fixture(schema);
+        let envelope = decode_chunk_envelope(&payload)
+            .unwrap_or_else(|err| panic!("chunk-v{schema} envelope: {err}"));
+        assert_eq!(envelope.schema, schema, "chunk-v{schema} declared schema");
+        assert_eq!(envelope.key, CHUNK_FIXTURE_KEY);
+        assert_eq!(envelope.revision, CHUNK_FIXTURE_REVISION);
+        let logical = decode_chunk_logical(
+            envelope.key,
+            envelope.revision,
+            envelope.schema,
+            &envelope.bytes,
+        )
+        .unwrap_or_else(|err| panic!("chunk-v{schema} logical: {err}"));
+        let reserialized =
+            encode_chunk_logical(envelope.key, envelope.revision, &logical, envelope.schema)
+                .unwrap_or_else(|err| panic!("chunk-v{schema} logical re-encode: {err}"));
+        assert_eq!(
+            reserialized, envelope.bytes,
+            "chunk-v{schema} logical payload is not reproduced byte for byte"
+        );
+    }
+}
+
+/// Encode/decode losslessness plus the fixture round trip: encoding the chunk
+/// a fixture decodes to, then decoding that envelope again, must give back the
+/// same logical chunk.
+#[test]
+fn chunk_encode_decode_round_trip_is_lossless() {
+    for schema in CHUNK_OLDEST_SCHEMA..=CHUNK_CURRENT_SCHEMA {
+        let decoded = chunk_fixture_chunk(schema);
+        let save = ChunkSave {
+            key: decoded.key,
+            revision: decoded.revision,
+            chunk: decoded.chunk.clone(),
+        };
+        let encoded = encode_chunk(&save)
+            .unwrap_or_else(|err| panic!("encode decoded chunk-v{schema}: {err}"));
+        let again = decode_chunk(save.key, save.revision, &encoded)
+            .unwrap_or_else(|err| panic!("decode re-encoded chunk-v{schema}: {err}"));
+        assert_eq!(again.chunk, decoded.chunk, "chunk-v{schema} round trip");
+        assert_eq!(again.key, decoded.key);
+        assert_eq!(again.revision, decoded.revision);
+        assert_eq!(again.schema, CHUNK_CURRENT_SCHEMA);
+        assert!(!again.migrated, "a freshly encoded chunk is not migrated");
+    }
+}
+
+/// A synthetic chunk exercises drops, furnaces and chests together with all
+/// three paletted storage kinds.
+#[test]
+fn chunk_synthetic_chunk_round_trip_preserves_every_section() {
+    let chunk = synthetic_chunk();
+    let save = ChunkSave {
+        key: CHUNK_FIXTURE_KEY,
+        revision: 91,
+        chunk: chunk.clone(),
+    };
+    let encoded = encode_chunk(&save).expect("encode synthetic chunk");
+    let decoded = decode_chunk(save.key, save.revision, &encoded).expect("decode synthetic chunk");
+    assert_eq!(decoded.chunk, chunk);
+    assert_eq!(decoded.key, save.key);
+    assert_eq!(decoded.revision, save.revision);
+    assert_eq!(decoded.schema, CHUNK_CURRENT_SCHEMA);
+    assert!(!decoded.migrated);
+}
+
+/// Migration convergence: one logical chunk encoded at every supported schema
+/// must decode and migrate to the same normalized chunk.
+#[test]
+fn chunk_supported_versions_converge_on_one_normalized_result() {
+    let normalized = chunk_fixture_chunk(CHUNK_CURRENT_SCHEMA).chunk;
+    // Schemas below 2 carry no drops, below 4 no furnaces and below 6 no
+    // chests, so the shared logical chunk leaves those sections empty.
+    let bare = Chunk {
+        drops: vec![DropSlot::default(); normalized.drops.len()],
+        furnaces: vec![FurnaceSlot::default(); normalized.furnaces.len()],
+        chests: vec![ChestSlot::default(); normalized.chests.len()],
+        ..normalized.clone()
+    };
+    for schema in CHUNK_OLDEST_SCHEMA..=CHUNK_CURRENT_SCHEMA {
+        let save = ChunkSave {
+            key: CHUNK_FIXTURE_KEY,
+            revision: CHUNK_FIXTURE_REVISION,
+            chunk: bare.clone(),
+        };
+        let encoded = encode_chunk_at_schema(&save, schema)
+            .unwrap_or_else(|err| panic!("encode chunk at schema {schema}: {err}"));
+        let decoded = decode_chunk(save.key, save.revision, &encoded)
+            .unwrap_or_else(|err| panic!("decode chunk at schema {schema}: {err}"));
+        assert_eq!(decoded.chunk, bare, "schema {schema} did not converge");
+        assert_eq!(decoded.schema, CHUNK_CURRENT_SCHEMA);
+        assert_eq!(
+            decoded.migrated,
+            schema < CHUNK_CURRENT_SCHEMA,
+            "schema {schema} migration flag"
+        );
+    }
+}
+
+/// Every committed fixture decodes, migrates to the current schema, and reports
+/// whether it needs a rewrite.
+#[test]
+fn chunk_committed_fixtures_migrate_to_the_current_schema() {
+    for schema in CHUNK_OLDEST_SCHEMA..=CHUNK_CURRENT_SCHEMA {
+        let decoded = chunk_fixture_chunk(schema);
+        assert_eq!(decoded.schema, CHUNK_CURRENT_SCHEMA);
+        assert_eq!(decoded.migrated, schema < CHUNK_CURRENT_SCHEMA);
+        assert_eq!(decoded.key, CHUNK_FIXTURE_KEY);
+        assert_eq!(decoded.revision, CHUNK_FIXTURE_REVISION);
+    }
+}
+
+#[test]
+fn chunk_decode_rejects_future_and_unsupported_versions() {
+    for schema in CHUNK_OLDEST_SCHEMA..=CHUNK_CURRENT_SCHEMA {
+        let mut payload = chunk_fixture(schema);
+        payload[8..12].copy_from_slice(&(CHUNK_CURRENT_SCHEMA + 1).to_le_bytes());
+        let err = decode_chunk(CHUNK_FIXTURE_KEY, CHUNK_FIXTURE_REVISION, &payload)
+            .expect_err("future chunk schema was accepted");
+        assert!(
+            matches!(err, StorageError::FutureVersion(_)),
+            "future schema error = {err}"
+        );
+
+        payload[8..12].copy_from_slice(&0u32.to_le_bytes());
+        let err = decode_chunk(CHUNK_FIXTURE_KEY, CHUNK_FIXTURE_REVISION, &payload)
+            .expect_err("unsupported chunk schema was accepted");
+        assert!(
+            matches!(err, StorageError::Corrupt(_)),
+            "unsupported schema error = {err}"
+        );
+
+        payload[8..12].copy_from_slice(&schema.to_le_bytes());
+        payload[4..8].copy_from_slice(&2u32.to_le_bytes());
+        let err = decode_chunk(CHUNK_FIXTURE_KEY, CHUNK_FIXTURE_REVISION, &payload)
+            .expect_err("future envelope version was accepted");
+        assert!(
+            matches!(err, StorageError::FutureVersion(_)),
+            "future envelope version error = {err}"
+        );
+        payload[4..8].copy_from_slice(&0u32.to_le_bytes());
+        let err = decode_chunk(CHUNK_FIXTURE_KEY, CHUNK_FIXTURE_REVISION, &payload)
+            .expect_err("unsupported envelope version was accepted");
+        assert!(
+            matches!(err, StorageError::Corrupt(_)),
+            "unsupported envelope version error = {err}"
+        );
+    }
+}
+
+#[test]
+fn chunk_decode_rejects_corrupt_and_partial_payloads() {
+    let encoded = encode_chunk(&ChunkSave {
+        key: CHUNK_FIXTURE_KEY,
+        revision: CHUNK_FIXTURE_REVISION,
+        chunk: chunk_fixture_chunk(CHUNK_CURRENT_SCHEMA).chunk,
+    })
+    .expect("encode chunk");
+    let logical = decode_chunk_envelope(&encoded).expect("envelope").bytes;
+
+    let mut cases: Vec<(&str, Vec<u8>)> = vec![
+        ("empty payload", Vec::new()),
+        (
+            "short header",
+            encoded[..CHUNK_ENVELOPE_LENGTH - 1].to_vec(),
+        ),
+        ("wrong magic", {
+            let mut payload = encoded.clone();
+            payload[0] = b'X';
+            payload
+        }),
+        ("unknown compression ID", {
+            let mut payload = encoded.clone();
+            payload[32..36].copy_from_slice(&99u32.to_le_bytes());
+            payload
+        }),
+        ("compressed length over limit", {
+            let mut payload = encoded.clone();
+            payload[40..44].copy_from_slice(&(MAX_COMPRESSED_CHUNK + 1).to_le_bytes());
+            payload
+        }),
+        ("decoded length over limit", {
+            let mut payload = encoded.clone();
+            payload[36..40].copy_from_slice(&(CHUNK_MAX_DECODED_CHUNK as u32 + 1).to_le_bytes());
+            payload
+        }),
+        (
+            "truncated compressed bytes",
+            encoded[..encoded.len() - 1].to_vec(),
+        ),
+        ("trailing envelope bytes", {
+            let mut payload = encoded.clone();
+            payload.push(0);
+            payload
+        }),
+    ];
+
+    for (name, payload) in cases.drain(..) {
+        let err = decode_chunk(CHUNK_FIXTURE_KEY, CHUNK_FIXTURE_REVISION, &payload)
+            .expect_err("{name}: payload was accepted");
+        assert!(
+            matches!(err, StorageError::Corrupt(_)),
+            "{name}: error = {err:?}"
+        );
+    }
+
+    // The requested identity is part of the envelope contract.
+    let err = decode_chunk(
+        ChunkKey {
+            dimension: 0,
+            x: -2,
+            z: 7,
+        },
+        CHUNK_FIXTURE_REVISION,
+        &encoded,
+    )
+    .expect_err("foreign chunk key was accepted");
+    assert!(matches!(err, StorageError::Corrupt(_)), "error = {err}");
+    let err = decode_chunk(CHUNK_FIXTURE_KEY, 20, &encoded)
+        .expect_err("foreign chunk revision was accepted");
+    assert!(matches!(err, StorageError::Corrupt(_)), "error = {err}");
+    let err = decode_chunk(CHUNK_FIXTURE_KEY, 0, &encoded).expect_err("zero revision was accepted");
+    assert!(matches!(err, StorageError::Corrupt(_)), "error = {err}");
+
+    // Logical-layer corruption: the frame still decompresses, so only the
+    // logical contract can reject it.
+    let logical_cases: Vec<(&str, Vec<u8>)> = vec![
+        ("wrong logical magic", {
+            let mut bytes = logical.clone();
+            bytes[0] = b'X';
+            bytes
+        }),
+        ("section count mismatch", {
+            let mut bytes = logical.clone();
+            bytes[28..32].copy_from_slice(&23u32.to_le_bytes());
+            bytes
+        }),
+        ("section order mismatch", {
+            let mut bytes = logical.clone();
+            bytes[32..36].copy_from_slice(&1u32.to_le_bytes());
+            bytes
+        }),
+        ("trailing logical bytes", {
+            let mut bytes = logical.clone();
+            bytes.push(0);
+            bytes
+        }),
+        (
+            "truncated logical bytes",
+            logical[..logical.len() - 8].to_vec(),
+        ),
+    ];
+    for (name, bytes) in logical_cases {
+        let err = decode_chunk_logical(
+            CHUNK_FIXTURE_KEY,
+            CHUNK_FIXTURE_REVISION,
+            CHUNK_CURRENT_SCHEMA,
+            &bytes,
+        )
+        .expect_err("{name}: logical payload was accepted");
+        assert!(
+            matches!(err, StorageError::Corrupt(_)),
+            "{name}: error = {err:?}"
+        );
+    }
+}
+
+#[test]
+fn chunk_encode_rejects_invalid_saves() {
+    let valid = ChunkSave {
+        key: CHUNK_FIXTURE_KEY,
+        revision: 19,
+        chunk: chunk_fixture_chunk(CHUNK_CURRENT_SCHEMA).chunk,
+    };
+
+    let mut zero_revision = valid.clone();
+    zero_revision.revision = 0;
+    assert!(encode_chunk(&zero_revision).is_err());
+
+    let mut unsupported_dimension = valid.clone();
+    unsupported_dimension.key.dimension = 2;
+    assert!(encode_chunk(&unsupported_dimension).is_err());
+
+    let mut wrong_section_count = valid.clone();
+    wrong_section_count.chunk.sections.pop();
+    assert!(encode_chunk(&wrong_section_count).is_err());
+
+    let mut wrong_drop_count = valid.clone();
+    wrong_drop_count.chunk.drops.pop();
+    assert!(encode_chunk(&wrong_drop_count).is_err());
+
+    let mut wrong_furnace_count = valid.clone();
+    wrong_furnace_count.chunk.furnaces.pop();
+    assert!(encode_chunk(&wrong_furnace_count).is_err());
+
+    let mut wrong_chest_count = valid.clone();
+    wrong_chest_count.chunk.chests.pop();
+    assert!(encode_chunk(&wrong_chest_count).is_err());
+
+    // An indexed palette longer than its bit width cannot be read back.
+    let mut oversized_palette = valid.clone();
+    oversized_palette.chunk.sections[1] = ContainerSnapshot {
+        kind: StorageKind::Indexed,
+        bits: 4,
+        single: 0,
+        palette: (0..17u16).collect(),
+        packed: pack_section_words(4, &[0, 1]),
+    };
+    assert!(encode_chunk(&oversized_palette).is_err());
+
+    // A furnace slot that breaks its own tick ceilings is not a valid save.
+    let mut broken_furnace = valid.clone();
+    broken_furnace.chunk.furnaces[0] = FurnaceSlot {
+        generation: 5,
+        active: true,
+        block_index: 0,
+        input: ItemStack::default(),
+        fuel: ItemStack::default(),
+        output: ItemStack::default(),
+        progress_ticks: 200,
+        burn_ticks: 0,
+    };
+    assert!(encode_chunk(&broken_furnace).is_err());
+}
+
+/// A slot that is itself valid but points at a block that is not its container
+/// block is rejected on the decode side, where the chunk's blocks are known.
+#[test]
+fn chunk_decode_rejects_container_slots_pointing_at_the_wrong_block() {
+    let mut chunk = synthetic_chunk();
+    chunk.furnaces[0].block_index = 2 * 4096 + 200;
+    let save = ChunkSave {
+        key: CHUNK_FIXTURE_KEY,
+        revision: 33,
+        chunk: chunk.clone(),
+    };
+    let encoded = encode_chunk(&save).expect("the slot value itself is valid");
+    let err = decode_chunk(save.key, save.revision, &encoded)
+        .expect_err("a furnace slot pointing at air was accepted");
+    assert!(matches!(err, StorageError::Corrupt(_)), "error = {err}");
+
+    chunk.furnaces[0].block_index = 2 * 4096;
+    chunk.chests[0].block_index = 2 * 4096 + 200;
+    let save = ChunkSave {
+        key: CHUNK_FIXTURE_KEY,
+        revision: 34,
+        chunk: chunk.clone(),
+    };
+    let encoded = encode_chunk(&save).expect("the slot value itself is valid");
+    let err = decode_chunk(save.key, save.revision, &encoded)
+        .expect_err("a chest slot pointing at a furnace block was accepted");
+    assert!(matches!(err, StorageError::Corrupt(_)), "error = {err}");
+
+    // Two active furnaces sharing one block index are rejected too.
+    let mut shared = synthetic_chunk();
+    shared.furnaces[1] = FurnaceSlot {
+        generation: 6,
+        active: true,
+        block_index: 2 * 4096,
+        ..shared.furnaces[1]
+    };
+    let save = ChunkSave {
+        key: CHUNK_FIXTURE_KEY,
+        revision: 35,
+        chunk: shared,
+    };
+    let encoded = encode_chunk(&save).expect("each slot value is valid on its own");
+    let err = decode_chunk(save.key, save.revision, &encoded)
+        .expect_err("two furnaces sharing a block index were accepted");
+    assert!(matches!(err, StorageError::Corrupt(_)), "error = {err}");
+}
+
+/// The frame header and the trailing content checksum are the two parts of the
+/// zstd frame both implementations were verified to write identically. They are
+/// pinned here so a real regression in either is still caught, even though the
+/// compressed block payload between them intentionally differs.
+#[test]
+fn chunk_frame_header_and_content_checksum_match_the_reference_frame() {
+    for schema in CHUNK_OLDEST_SCHEMA..=CHUNK_CURRENT_SCHEMA {
+        let payload = chunk_fixture(schema);
+        let frame = &payload[CHUNK_ENVELOPE_LENGTH..];
+        assert_frame_header(frame, &payload[36..40]);
+        // The checksum occupies the last four bytes of the frame; corrupting it
+        // must be rejected rather than silently ignored.
+        let mut broken = payload.clone();
+        let last = broken.len() - 1;
+        broken[last] ^= 0xff;
+        let err = decode_chunk(CHUNK_FIXTURE_KEY, CHUNK_FIXTURE_REVISION, &broken)
+            .expect_err("corrupted content checksum was accepted");
+        assert!(matches!(err, StorageError::Corrupt(_)), "error = {err}");
+    }
+
+    let encoded = encode_chunk(&ChunkSave {
+        key: CHUNK_FIXTURE_KEY,
+        revision: CHUNK_FIXTURE_REVISION,
+        chunk: chunk_fixture_chunk(CHUNK_CURRENT_SCHEMA).chunk,
+    })
+    .expect("encode chunk");
+    assert_frame_header(&encoded[CHUNK_ENVELOPE_LENGTH..], &encoded[36..40]);
+    let mut broken = encoded.clone();
+    let last = broken.len() - 1;
+    broken[last] ^= 0xff;
+    let err = decode_chunk(CHUNK_FIXTURE_KEY, CHUNK_FIXTURE_REVISION, &broken)
+        .expect_err("corrupted content checksum was accepted");
+    assert!(matches!(err, StorageError::Corrupt(_)), "error = {err}");
+}
+
+/// Asserts the reference zstd frame header: magic, a single-segment descriptor
+/// with the content checksum and a two-byte content size, no dictionary ID, and
+/// a content size equal to the envelope's declared decoded length.
+fn assert_frame_header(frame: &[u8], declared_decoded_length: &[u8]) {
+    assert_eq!(&frame[..4], &[0x28, 0xB5, 0x2F, 0xFD], "zstd frame magic");
+    // Single segment (bit 5), content checksum (bit 2), two-byte content size
+    // (bits 7-6 = 01), no dictionary ID (bits 1-0 = 00).
+    assert_eq!(frame[4], 0x64, "frame header descriptor");
+    let declared = u32::from_le_bytes(declared_decoded_length.try_into().expect("four bytes"));
+    let content = u32::from(u16::from_le_bytes([frame[5], frame[6]])) + 256;
+    assert_eq!(content, declared, "frame content size");
+    assert!(
+        frame.len() >= 8,
+        "frame is shorter than header plus checksum"
+    );
 }
 
 fn payload_prefix_length(encoded: &[u8]) -> usize {
