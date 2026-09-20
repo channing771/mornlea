@@ -1650,6 +1650,103 @@ fn chat_command_rejects_blank_control_and_malformed_payload() {
     );
 }
 
+#[test]
+fn player_input_round_trip_preserves_golden_bytes() {
+    let input =
+        mornlea_protocol::PlayerInput::new(1, -1, 1, true, 1.5, -0.5, true, false, false, false)
+            .expect("input");
+    let payload = input.encode();
+    assert_eq!(
+        payload,
+        [
+            0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x01, 0x01, 0x00, 0x00, 0xc0,
+            0x3f, 0x00, 0x00, 0x00, 0xbf, 0x01, 0x00, 0x00, 0x00
+        ]
+    );
+    assert_eq!(mornlea_protocol::PlayerInput::PACKET_ID, 0);
+    let decoded = mornlea_protocol::PlayerInput::decode(&payload).expect("decode");
+    assert_eq!(decoded, input);
+    assert_eq!(decoded.move_x, -1);
+    assert_eq!(decoded.move_z, 1);
+    assert!(decoded.jump);
+    assert!(decoded.mining);
+    assert!(!decoded.eating);
+    assert!(!decoded.sprinting);
+    assert!(!decoded.sneaking);
+    let eating =
+        mornlea_protocol::PlayerInput::new(2, 0, 0, false, 0.0, 0.0, false, true, false, false)
+            .expect("eating input");
+    assert_eq!(
+        mornlea_protocol::PlayerInput::decode(&eating.encode()).expect("decode eating"),
+        eating
+    );
+}
+
+#[test]
+fn player_input_rejects_non_finite_and_malformed_payload() {
+    assert_eq!(
+        mornlea_protocol::PlayerInput::new(
+            1,
+            0,
+            0,
+            false,
+            f32::NAN,
+            0.0,
+            false,
+            false,
+            false,
+            false
+        ),
+        Err(mornlea_protocol::ProtocolError::InvalidFloat)
+    );
+    assert_eq!(
+        mornlea_protocol::PlayerInput::new(
+            1,
+            0,
+            0,
+            false,
+            0.0,
+            f32::INFINITY,
+            false,
+            false,
+            false,
+            false
+        ),
+        Err(mornlea_protocol::ProtocolError::InvalidFloat)
+    );
+    let mut nan_yaw = vec![0u8; 8];
+    nan_yaw.extend_from_slice(&0i8.to_le_bytes());
+    nan_yaw.extend_from_slice(&0i8.to_le_bytes());
+    nan_yaw.push(0);
+    nan_yaw.extend_from_slice(&0x7fc0_0000u32.to_le_bytes());
+    nan_yaw.extend_from_slice(&0f32.to_le_bytes());
+    nan_yaw.extend_from_slice(&[0, 0, 0, 0]);
+    assert_eq!(
+        mornlea_protocol::PlayerInput::decode(&nan_yaw),
+        Err(mornlea_protocol::ProtocolError::InvalidFloat)
+    );
+    assert!(mornlea_protocol::PlayerInput::decode(&[0x01]).is_err());
+    let mut trailing = vec![
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x01, 0x01, 0x00, 0x00, 0xc0, 0x3f,
+        0x00, 0x00, 0x00, 0xbf, 0x01, 0x00, 0x00, 0x00,
+    ];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::PlayerInput::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    let mut bad_flag = vec![
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ];
+    assert_eq!(
+        mornlea_protocol::PlayerInput::decode(&bad_flag),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    bad_flag.truncate(bad_flag.len() - 1);
+    assert!(mornlea_protocol::PlayerInput::decode(&bad_flag).is_err());
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

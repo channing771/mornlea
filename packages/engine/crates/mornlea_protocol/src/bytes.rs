@@ -59,6 +59,10 @@ impl ByteEncoder {
         self.u8(u8::from(value));
     }
 
+    pub(crate) fn i8(&mut self, value: i8) {
+        self.u8(value as u8);
+    }
+
     pub(crate) fn u64(&mut self, value: u64) {
         if self.err.is_some() {
             return;
@@ -149,6 +153,10 @@ impl<'a> ByteDecoder<'a> {
 
     pub(crate) fn i32(&mut self) -> Result<i32, ProtocolError> {
         Ok(i32::from_le_bytes(self.bytes()?))
+    }
+
+    pub(crate) fn i8(&mut self) -> Result<i8, ProtocolError> {
+        Ok(self.u8()? as i8)
     }
 
     pub(crate) fn boolean(&mut self) -> Result<bool, ProtocolError> {
