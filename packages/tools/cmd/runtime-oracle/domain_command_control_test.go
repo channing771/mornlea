@@ -75,9 +75,13 @@ const (
 
 // domainControlFamilySources is the merged provenance set the family records.
 // Every entry is a file the producer's rules or wire layout are read from, so a
-// change to any of them is a change to the recorded evidence.
+// change to any of them is a change to the recorded evidence. The container
+// message file belongs to the set because the open-container ray intent is
+// declared beside the container messages rather than with the other ray
+// intents, and its validator is the authority that command's row executes.
 var domainControlFamilySources = []string{
 	"packages/shared/network/protocol/message_command.go",
+	"packages/shared/network/protocol/message_container.go",
 	"packages/shared/network/protocol/packet.go",
 	"packages/shared/network/codec/codec_client.go",
 	"packages/shared/core/item.go",
@@ -370,6 +374,16 @@ func domainControlCases() []domainControlCase {
 			input: domainControlInput{Consumer: domainControlConsumer, Rule: "place-water"}.
 				withSequence(11).withYaw("0").withPitch("NaN"),
 		},
+		{
+			label: "open-container-negative-zero",
+			input: domainControlInput{Consumer: domainControlConsumer, Rule: "open-container"}.
+				withSequence(12).withYaw("-0").withPitch("-0"),
+		},
+		{
+			label: "open-container-non-finite-yaw",
+			input: domainControlInput{Consumer: domainControlConsumer, Rule: "open-container"}.
+				withSequence(12).withYaw("NaN").withPitch("0"),
+		},
 	}
 
 	cases := make([]domainControlCase, 0, len(inputs)+len(rays))
@@ -413,6 +427,8 @@ func runDomainControl(c CaseSpec, input []byte) (Outcome, []byte, error) {
 		return domainControlRunCollectWater(c, spec)
 	case "place-water":
 		return domainControlRunPlaceWater(c, spec)
+	case "open-container":
+		return domainControlRunOpenContainer(c, spec)
 	default:
 		return Outcome{}, nil, fmt.Errorf("runtime-oracle: case %s names unknown rule %q", c.ID, spec.Rule)
 	}
@@ -593,10 +609,24 @@ func domainControlRunPlaceWater(c CaseSpec, spec domainControlInput) (Outcome, [
 	return domainControlFinish(c, "place-water", command, domainControlNormalizeRay(sequence, yaw, pitch), category, rule, command.Validate() == nil)
 }
 
+// domainControlRunOpenContainer admits one open-container ray intent. The
+// command is declared beside the container messages rather than with the other
+// ray intents, but `protocol.OpenContainer` publishes the same finite-angle
+// rule, so it executes through the shared ray resolver and rule classifier.
+func domainControlRunOpenContainer(c CaseSpec, spec domainControlInput) (Outcome, []byte, error) {
+	sequence, yaw, pitch, err := domainControlRayFields(c, spec)
+	if err != nil {
+		return Outcome{}, nil, err
+	}
+	command := protocol.OpenContainer{Sequence: sequence, Yaw: yaw, Pitch: pitch}
+	category, rule := domainControlRayRule(yaw, pitch, "open-container")
+	return domainControlFinish(c, "open-container", command, domainControlNormalizeRay(sequence, yaw, pitch), category, rule, command.Validate() == nil)
+}
+
 // domainControlRayFields resolves the payload every ray intent shares: the
 // sequence and the two look angles. Every ray DTO declared beside the movement
 // commands publishes exactly these fields and applies the same finite-angle
-// rule, so one resolver and one rule serve all four intents.
+// rule, so one resolver and one rule serve all five intents.
 func domainControlRayFields(c CaseSpec, spec domainControlInput) (uint64, float32, float32, error) {
 	sequence, err := domainControlSequence(c, spec.Sequence)
 	if err != nil {
@@ -686,6 +716,8 @@ func domainControlNormalizePacket(packet protocol.ClientPacket) (map[string]any,
 	case protocol.CollectWater:
 		return domainControlNormalizeRay(command.Sequence, command.Yaw, command.Pitch), nil
 	case protocol.PlaceWater:
+		return domainControlNormalizeRay(command.Sequence, command.Yaw, command.Pitch), nil
+	case protocol.OpenContainer:
 		return domainControlNormalizeRay(command.Sequence, command.Yaw, command.Pitch), nil
 	default:
 		return nil, fmt.Errorf("decoded packet %T is not a command this family executes", packet)
