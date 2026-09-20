@@ -14,6 +14,11 @@ use crate::error::ProtocolError;
 /// `DropsPerChunk` pin.
 pub const DROPS_PER_CHUNK: u8 = 32;
 
+/// Maximum drop records one payload may carry, copied from the Go
+/// `MaxItemDropBatch` pin. Both the upsert and the remove batch share this
+/// ceiling because they describe the same bounded drop set.
+pub const MAX_ITEM_DROP_BATCH: u32 = 32;
+
 /// Fixed encoded length of one drop identity: an `i32` dimension, two `i32`
 /// chunk coordinates, a `u8` slot, and a `u32` generation.
 pub const DROP_ID_WIRE_BYTES: usize = 4 + 4 + 4 + 1 + 4;

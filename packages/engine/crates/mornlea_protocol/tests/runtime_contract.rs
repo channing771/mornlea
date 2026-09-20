@@ -3487,3 +3487,79 @@ fn item_drop_upserts_rejects_invalid_records_and_malformed_payload() {
     over[8] = (mornlea_protocol::MAX_ITEM_DROP_BATCH + 1) as u8;
     assert!(mornlea_protocol::ItemDropUpserts::decode(&over).is_err());
 }
+
+#[test]
+fn item_drop_removes_round_trip_preserves_batch_bytes() {
+    let removes = mornlea_protocol::ItemDropRemoves::new(
+        0x0102_0304_0506_0708,
+        vec![
+            mornlea_protocol::DropId::new(0, 0, 0, 1, 1).expect("first drop id"),
+            mornlea_protocol::DropId::new(0, 0, 0, 2, 7).expect("second drop id"),
+        ],
+    )
+    .expect("removes");
+    let payload = removes.encode();
+    assert_eq!(mornlea_protocol::ItemDropRemoves::PACKET_ID, 12);
+    assert_eq!(payload.len(), 8 + 1 + 2 * 17);
+    assert_eq!(&payload[..8], &0x0102_0304_0506_0708u64.to_le_bytes());
+    assert_eq!(payload[8], 2);
+    assert_eq!(&payload[9..13], &[0x00, 0x00, 0x00, 0x00]);
+    assert_eq!(payload[21], 1);
+    assert_eq!(&payload[22..26], &1u32.to_le_bytes());
+    // The second identity starts one fixed 17-byte stride later.
+    assert_eq!(payload[38], 2);
+    assert_eq!(&payload[39..43], &7u32.to_le_bytes());
+    assert_eq!(
+        mornlea_protocol::ItemDropRemoves::decode(&payload).expect("decode"),
+        removes
+    );
+}
+
+#[test]
+fn item_drop_removes_rejects_invalid_ids_and_malformed_payload() {
+    let first = mornlea_protocol::DropId::new(0, 0, 0, 1, 1).expect("first drop id");
+    let second = mornlea_protocol::DropId::new(0, 0, 0, 2, 1).expect("second drop id");
+
+    assert!(mornlea_protocol::ItemDropRemoves::new(1, Vec::new()).is_err());
+    assert!(
+        mornlea_protocol::ItemDropRemoves::new(1, vec![first, first]).is_err(),
+        "accepted duplicate drop identities"
+    );
+    assert!(
+        mornlea_protocol::ItemDropRemoves::new(1, vec![second, first]).is_err(),
+        "accepted descending drop identities"
+    );
+    // The same identity space as the upsert batch, so the slot and generation
+    // rules are enforced by `DropId` itself.
+    assert!(
+        mornlea_protocol::DropId::new(0, 0, 0, 32, 1).is_err(),
+        "accepted a drop slot outside the fixed per-chunk array"
+    );
+
+    let valid = mornlea_protocol::ItemDropRemoves::new(1, vec![first]).expect("removes");
+    let payload = valid.encode();
+    for length in 0..payload.len() {
+        assert!(
+            mornlea_protocol::ItemDropRemoves::decode(&payload[..length]).is_err(),
+            "accepted truncated item drop removes at {length}"
+        );
+    }
+    let mut padded = payload.clone();
+    padded.push(0x00);
+    assert_eq!(
+        mornlea_protocol::ItemDropRemoves::decode(&padded),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    let mut mismatched = payload.clone();
+    mismatched[8] = 2;
+    assert_eq!(
+        mornlea_protocol::ItemDropRemoves::decode(&mismatched),
+        Err(mornlea_protocol::ProtocolError::Truncated)
+    );
+    let mut empty = payload.clone();
+    empty[8] = 0;
+    assert!(mornlea_protocol::ItemDropRemoves::decode(&empty).is_err());
+    let mut over = payload.clone();
+    over[8] = (mornlea_protocol::MAX_ITEM_DROP_BATCH + 1) as u8;
+    assert!(mornlea_protocol::ItemDropRemoves::decode(&over).is_err());
+}

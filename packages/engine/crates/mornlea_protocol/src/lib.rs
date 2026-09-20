@@ -39,6 +39,7 @@ mod hostile_despawn;
 mod hostile_spawn;
 mod hostile_state;
 mod inventory_state;
+mod item_drop_removes;
 mod item_drop_upserts;
 mod item_stack;
 mod keep_alive;
@@ -104,7 +105,7 @@ pub use disconnect::{
     DISCONNECT_INTERNAL_ERROR, DISCONNECT_PROTOCOL_VIOLATION, DISCONNECT_SERVER_SHUTDOWN,
     DISCONNECT_SLOW_CLIENT, DISCONNECT_TIMEOUT, Disconnect,
 };
-pub use drop_id::{DROP_ID_WIRE_BYTES, DROPS_PER_CHUNK, DropId};
+pub use drop_id::{DROP_ID_WIRE_BYTES, DROPS_PER_CHUNK, DropId, MAX_ITEM_DROP_BATCH};
 pub use drop_selected_item::DropSelectedItem;
 pub use entity_id::{CompanionId, valid_companion_name};
 pub use equip_armor::EquipArmor;
@@ -126,7 +127,8 @@ pub use hostile_state::{
 pub use inventory_state::{
     BACKPACK_SLOTS, HOTBAR_SLOTS, INVENTORY_STATE_WIRE_BYTES, InventoryState,
 };
-pub use item_drop_upserts::{ITEM_DROP_WIRE_BYTES, ItemDrop, ItemDropUpserts, MAX_ITEM_DROP_BATCH};
+pub use item_drop_removes::ItemDropRemoves;
+pub use item_drop_upserts::{ITEM_DROP_WIRE_BYTES, ItemDrop, ItemDropUpserts};
 pub use item_stack::{
     ITEM_COAL, ITEM_ID_MAX, ITEM_NONE, ITEM_STONE, ITEM_STONE_PICKAXE, ItemStack, MAX_STACK_COUNT,
     smelting_output, valid_furnace_output,

@@ -10,13 +10,9 @@
 use crate::batch::{UvarintCountBatch, strictly_increasing};
 use crate::block::MAX_CHUNK_BLOCK_INDEX;
 use crate::bytes::{ByteDecoder, ByteEncoder};
-use crate::drop_id::{DROP_ID_WIRE_BYTES, DropId};
+use crate::drop_id::{DROP_ID_WIRE_BYTES, DropId, MAX_ITEM_DROP_BATCH};
 use crate::error::ProtocolError;
 use crate::item_stack::ItemStack;
-
-/// Maximum drops one payload may carry, copied from the Go `MaxItemDropBatch`
-/// pin.
-pub const MAX_ITEM_DROP_BATCH: u32 = 32;
 
 /// Fixed encoded length of one drop record: the drop identity, a `u32` block
 /// index, and the fixed 5-byte item stack.
