@@ -12,6 +12,7 @@ mod error;
 mod hostile;
 mod identity;
 mod passive;
+mod region;
 
 pub use crc32c::{crc32c, crc32c_join};
 pub use error::{StorageError, StorageResult};
@@ -26,6 +27,12 @@ pub use passive::{
     CURRENT_SCHEMA as PASSIVE_CURRENT_SCHEMA, ENVELOPE_VERSION as PASSIVE_ENVELOPE_VERSION,
     MAX_FILE_LENGTH as PASSIVE_MAX_FILE_LENGTH, MAX_PASSIVE_MOBS, PassiveMob, PassiveMobs,
     PassiveMobsSave, decode as decode_passive_mobs, encode as encode_passive_mobs,
+};
+pub use region::{
+    BANK_A_START_SECTOR, BANK_B_START_SECTOR, BANK_SIZE, Bank as RegionBank,
+    CURRENT_VERSION as REGION_CURRENT_VERSION, ChunkKey, DATA_START_SECTOR, Entry as RegionEntry,
+    MAX_COMPRESSED_CHUNK, REGION_SLOTS, RegionKey, SECTOR_SIZE, decode_region_bank,
+    decode_superblock, encode_region_bank, encode_superblock, region_for, select_region_bank,
 };
 
 /// Workspace crate identity consumed by the foundation registration tests.
