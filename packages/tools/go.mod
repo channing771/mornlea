@@ -14,12 +14,16 @@ require (
 	golang.org/x/text v0.40.0 // indirect
 )
 
-// tools 是开发工具模块：perfcheck（性能报告比较）、agent-board（AI 工作者执行
-// 状态看板，web/ 为其前端）、gfxspike（Rust renderer 地形渲染验证）与
-// composite_grass_side（材质合成）。合法 require 方向为 shared/server/client/
-// contracts——perfcheck 与 gfxspike 组合消费客户端镜像与渲染侧包（client 模块
-// 对 server 的 require 经其传递），由 packages/audit 的单元边界表强制。各兄弟
-// 经本地相对路径 replace 引用，保证 GOWORK=off 的单模块世界仍可构建。
+// tools is the development-tools module: perfcheck (performance report
+// comparison), agent-board (worker dashboard; web/ is its frontend),
+// gfxspike (Rust renderer terrain spike), composite_grass_side (texture
+// compositing), and runtime-oracle (offline contract inventory and replay).
+// Legal require directions are shared/server/client/contracts. perfcheck and
+// gfxspike compose client mirror and render packages (the client module's
+// server require is transitive); runtime-oracle stays a stdlib-only leaf.
+// packages/audit enforces the unit-boundary table. Sibling modules are
+// referenced by local relative replace so GOWORK=off single-module builds
+// still work.
 replace github.com/channing771/mornlea/packages/contracts => ../contracts
 
 replace github.com/channing771/mornlea/packages/shared => ../shared

@@ -116,12 +116,18 @@ var allowed = map[string][]string{
 	"packages/server/server":             {"packages/contracts/companion-agent/mcp-v1", "packages/shared/companion", "packages/shared/core", "packages/shared/network", "packages/shared/pathfind", "packages/shared/physics", "packages/shared/world", "packages/shared/worldgen", "packages/server/sim/contract", "packages/server/sim/runtime", "packages/server/storage", "packages/server/server/persistence"},
 	"packages/server/server/persistence": {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/server/sim/contract", "packages/server/sim/runtime", "packages/server/storage"},
 	"packages/client/client":             {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/network", "packages/shared/world", "packages/client/mesh", "packages/client/assets", "packages/client/render"},
-	// tools 单元的四个 main 包：perfcheck 与 gfxspike 组合消费客户端镜像与渲染
-	// 侧包（跨单元方向由 unit boundary 的 require 表治理，单元内它们互不依赖）。
+	// The tools unit currently has five main packages. perfcheck and
+	// gfxspike compose client mirror and render packages; cross-unit
+	// direction is governed by the unit-boundary require table, and the
+	// packages do not depend on each other inside the unit.
+	// runtime-oracle is an offline contract inventory and replay tool:
+	// production code may only read repository sources and testdata, and
+	// must not depend on live authority or the native ABI.
 	"packages/tools/agent-board":          {},
 	"packages/tools/composite_grass_side": {},
 	"packages/tools/gfxspike":             {"packages/client/assets", "packages/client/client", "packages/client/mesh", "packages/client/render", "packages/shared/core", "packages/shared/world", "packages/shared/worldgen"},
 	"packages/tools/perfcheck":            {"packages/client/client"},
+	"packages/tools/cmd/runtime-oracle":   {},
 }
 
 func TestInternalDependenciesAreOneWay(t *testing.T) {

@@ -1,0 +1,1384 @@
+{
+  "schema_version": 1,
+  "identities": {
+    "protocol": 45,
+    "chunk_schema": 9,
+    "player_schema": 9,
+    "world_metadata": 6,
+    "companions_ai_schema": 5,
+    "hostile_mobs_schema": 2,
+    "passive_mobs_schema": 1,
+    "engine_abi": 11,
+    "region_format": 1,
+    "agent_http": "v1",
+    "agent_mcp": "v1"
+  },
+  "families": [
+    {
+      "id": "agent.http",
+      "kind": "agent",
+      "role": "input",
+      "current_version": "v1",
+      "supported_versions": [
+        "v1"
+      ],
+      "source": "packages/contracts/companion-agent/http-v1/manifest.json",
+      "eventual_owner": "companion-agent-service",
+      "numeric_semantics": "JSON request/response contracts; bounded bodies; loopback-only service",
+      "fixtures": [
+        "packages/contracts/companion-agent/http-v1/manifest.json",
+        "packages/contracts/companion-agent/http-v1/golden/valid.json",
+        "packages/contracts/companion-agent/http-v1/golden/invalid.json"
+      ]
+    },
+    {
+      "id": "agent.mcp",
+      "kind": "agent",
+      "role": "event",
+      "current_version": "v1",
+      "supported_versions": [
+        "v1"
+      ],
+      "source": "packages/contracts/companion-agent/mcp-v1/manifest.json",
+      "eventual_owner": "companion-agent-service",
+      "numeric_semantics": "JSON tool contracts; deterministic array order; bounded result bytes",
+      "fixtures": [
+        "packages/contracts/companion-agent/mcp-v1/manifest.json",
+        "packages/contracts/companion-agent/mcp-v1/golden/valid.json",
+        "packages/contracts/companion-agent/mcp-v1/golden/invalid.json"
+      ]
+    },
+    {
+      "id": "domain.event",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "1",
+      "supported_versions": [
+        "1"
+      ],
+      "source": "packages/client/presentation/transcript_corpus_test.go",
+      "eventual_owner": "mornlea_domain",
+      "numeric_semantics": "source revision, contract versions, fixture digest, seed, ordered input, tick schedule, normalized observations",
+      "fixtures": [
+        "packages/client/presentation/transcript_corpus_test.go"
+      ]
+    },
+    {
+      "id": "domain.input",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/message_command.go",
+      "eventual_owner": "mornlea_domain",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/protocol/message_command.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "kernel.mornlea_collision_resolve",
+      "kind": "kernel",
+      "role": "event",
+      "current_version": "11",
+      "supported_versions": [
+        "11"
+      ],
+      "source": "packages/engine/include/mornlea_engine.h",
+      "eventual_owner": "mornlea_engine",
+      "numeric_semantics": "IEEE-754 binary32 little-endian; swept AABB; fail closed on invalid layout",
+      "fixtures": [
+        "packages/engine/include/mornlea_engine.h",
+        "packages/shared/nativeabi/native_test.go",
+        "packages/engine/crates/mornlea_engine/src/collision.rs"
+      ]
+    },
+    {
+      "id": "kernel.mornlea_fluid_eval_batch",
+      "kind": "kernel",
+      "role": "event",
+      "current_version": "11",
+      "supported_versions": [
+        "11"
+      ],
+      "source": "packages/engine/include/mornlea_engine.h",
+      "eventual_owner": "mornlea_engine",
+      "numeric_semantics": "deterministic integer fluid ranks; little-endian packed records; fail closed on overflow",
+      "fixtures": [
+        "packages/engine/include/mornlea_engine.h",
+        "packages/shared/nativeabi/native_test.go",
+        "packages/engine/crates/mornlea_engine/src/fluid_eval.rs"
+      ]
+    },
+    {
+      "id": "kernel.mornlea_fluid_rescan",
+      "kind": "kernel",
+      "role": "event",
+      "current_version": "11",
+      "supported_versions": [
+        "11"
+      ],
+      "source": "packages/engine/include/mornlea_engine.h",
+      "eventual_owner": "mornlea_engine",
+      "numeric_semantics": "deterministic integer fluid ranks; little-endian packed records; fail closed on overflow",
+      "fixtures": [
+        "packages/engine/include/mornlea_engine.h",
+        "packages/shared/nativeabi/native_test.go",
+        "packages/engine/crates/mornlea_engine/src/fluid_rescan.rs"
+      ]
+    },
+    {
+      "id": "kernel.mornlea_lod_shell",
+      "kind": "kernel",
+      "role": "event",
+      "current_version": "11",
+      "supported_versions": [
+        "11"
+      ],
+      "source": "packages/engine/include/mornlea_engine.h",
+      "eventual_owner": "mornlea_engine",
+      "numeric_semantics": "deterministic integer worldgen; little-endian packed voxels; layout-versioned MGW1/MTB1",
+      "fixtures": [
+        "packages/engine/include/mornlea_engine.h",
+        "packages/shared/nativeabi/native_test.go",
+        "packages/engine/crates/mornlea_engine/src/lod.rs"
+      ]
+    },
+    {
+      "id": "kernel.mornlea_mesh_section",
+      "kind": "kernel",
+      "role": "event",
+      "current_version": "11",
+      "supported_versions": [
+        "11"
+      ],
+      "source": "packages/engine/include/mornlea_engine.h",
+      "eventual_owner": "mornlea_engine",
+      "numeric_semantics": "little-endian packed records; fail closed on invalid layout, aliasing, or overflow",
+      "fixtures": [
+        "packages/engine/include/mornlea_engine.h",
+        "packages/shared/nativeabi/native_test.go",
+        "packages/engine/crates/mornlea_engine/src/greedy/mod.rs"
+      ]
+    },
+    {
+      "id": "kernel.mornlea_physics_step",
+      "kind": "kernel",
+      "role": "event",
+      "current_version": "11",
+      "supported_versions": [
+        "11"
+      ],
+      "source": "packages/engine/include/mornlea_engine.h",
+      "eventual_owner": "mornlea_engine",
+      "numeric_semantics": "IEEE-754 binary32 little-endian; layout-versioned MGP1 header; reject non-finite used inputs",
+      "fixtures": [
+        "packages/engine/include/mornlea_engine.h",
+        "packages/shared/nativeabi/native_test.go",
+        "packages/engine/crates/mornlea_engine/src/step.rs"
+      ]
+    },
+    {
+      "id": "kernel.mornlea_raycast_batch",
+      "kind": "kernel",
+      "role": "event",
+      "current_version": "11",
+      "supported_versions": [
+        "11"
+      ],
+      "source": "packages/engine/include/mornlea_engine.h",
+      "eventual_owner": "mornlea_engine",
+      "numeric_semantics": "IEEE-754 binary32 little-endian; bounded batch; fail closed on invalid layout",
+      "fixtures": [
+        "packages/engine/include/mornlea_engine.h",
+        "packages/shared/nativeabi/native_test.go",
+        "packages/engine/crates/mornlea_engine/src/raycast.rs"
+      ]
+    },
+    {
+      "id": "kernel.mornlea_tree_blocks",
+      "kind": "kernel",
+      "role": "event",
+      "current_version": "11",
+      "supported_versions": [
+        "11"
+      ],
+      "source": "packages/engine/include/mornlea_engine.h",
+      "eventual_owner": "mornlea_engine",
+      "numeric_semantics": "deterministic integer worldgen; little-endian packed voxels; layout-versioned MGW1/MTB1",
+      "fixtures": [
+        "packages/engine/include/mornlea_engine.h",
+        "packages/shared/nativeabi/native_test.go",
+        "packages/engine/crates/mornlea_engine/src/worldgen.rs"
+      ]
+    },
+    {
+      "id": "kernel.mornlea_worldgen_chunk",
+      "kind": "kernel",
+      "role": "event",
+      "current_version": "11",
+      "supported_versions": [
+        "11"
+      ],
+      "source": "packages/engine/include/mornlea_engine.h",
+      "eventual_owner": "mornlea_engine",
+      "numeric_semantics": "deterministic integer worldgen; little-endian packed voxels; layout-versioned MGW1/MTB1",
+      "fixtures": [
+        "packages/engine/include/mornlea_engine.h",
+        "packages/shared/nativeabi/native_test.go",
+        "packages/engine/crates/mornlea_engine/src/worldgen.rs"
+      ]
+    },
+    {
+      "id": "kernel.mornlea_worldgen_probe",
+      "kind": "kernel",
+      "role": "event",
+      "current_version": "11",
+      "supported_versions": [
+        "11"
+      ],
+      "source": "packages/engine/include/mornlea_engine.h",
+      "eventual_owner": "mornlea_engine",
+      "numeric_semantics": "deterministic integer worldgen; little-endian packed voxels; layout-versioned MGW1/MTB1",
+      "fixtures": [
+        "packages/engine/include/mornlea_engine.h",
+        "packages/shared/nativeabi/native_test.go",
+        "packages/engine/crates/mornlea_engine/src/worldgen.rs"
+      ]
+    },
+    {
+      "id": "kernel.pathfind",
+      "kind": "kernel",
+      "role": "event",
+      "current_version": "1",
+      "supported_versions": [
+        "1"
+      ],
+      "source": "packages/shared/pathfind/pathfind.go",
+      "eventual_owner": "mornlea_engine",
+      "numeric_semantics": "integer path costs; fixed neighbor expansion order; bounded node budget; distinct unreachable and budget failures",
+      "fixtures": [
+        "packages/shared/pathfind/pathfind.go",
+        "packages/shared/pathfind/pathfind_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.BoneMeal",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.ChatCommand",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.ClientHello",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.CloseContainer",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.CollectWater",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.DropSelectedItem",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.DropStack",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.EquipArmor",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.KeepAliveReply",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.LoginStart",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.MoveContainerStack",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.MoveCraftingStack",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.MoveInventoryStack",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.MoveStackPartial",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.OpenContainer",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.PlaceBlock",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.PlaceWater",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.PlayerInput",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.QuickMoveStack",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.RequestChunkResync",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.SelectHotbar",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.TakeCraftingOutput",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.client.TillSoil",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.frame",
+      "kind": "protocol",
+      "role": "input",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/codec/frame.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/frame.go",
+        "packages/shared/network/codec/frame_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.BlockChanges",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.ChatEvent",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.ChestState",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.ChunkSnapshot",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/testdata/chunk-snapshot-v1.bin",
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.CombatHit",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.CommandRejected",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.CompanionDespawn",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.CompanionSpawn",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.CompanionStates",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.ContainerClosed",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.CraftingState",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.Disconnect",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.ForgetChunks",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.FurnaceState",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.HandshakeReject",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.HostileDespawn",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.HostileSpawn",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.HostileState",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.InventoryState",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.ItemDropRemoves",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.ItemDropUpserts",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.KeepAlive",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.LoginReject",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.LoginSuccess",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.PassiveDespawn",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.PassiveSpawn",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.PassiveState",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.PlaceBlockSucceeded",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.PlayerState",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.ProjectileDespawn",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.ProjectileSpawn",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.ProjectileState",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.RemotePlayerDespawn",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.RemotePlayerSpawn",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.RemotePlayerStates",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "protocol.server.ServerHello",
+      "kind": "protocol",
+      "role": "event",
+      "current_version": "45",
+      "supported_versions": [
+        "45"
+      ],
+      "source": "packages/shared/network/protocol/registry.go",
+      "eventual_owner": "mornlea_protocol",
+      "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
+      "fixtures": [
+        "packages/shared/network/codec/codec_golden_test.go",
+        "packages/shared/network/protocol/packet_test.go"
+      ]
+    },
+    {
+      "id": "save.chunk",
+      "kind": "save",
+      "role": "event",
+      "current_version": "9",
+      "supported_versions": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ],
+      "source": "packages/server/storage/chunk/chunk_codec.go",
+      "eventual_owner": "mornlea_storage",
+      "numeric_semantics": "little-endian integers; CRC integrity; exact byte round-trip; no implicit repair",
+      "fixtures": [
+        "packages/server/storage/chunk/testdata/chunk-v1.bin",
+        "packages/server/storage/chunk/testdata/chunk-v2.bin",
+        "packages/server/storage/chunk/testdata/chunk-v3.bin",
+        "packages/server/storage/chunk/testdata/chunk-v4.bin",
+        "packages/server/storage/chunk/testdata/chunk-v5.bin",
+        "packages/server/storage/chunk/testdata/chunk-v6.bin",
+        "packages/server/storage/chunk/testdata/chunk-v7.bin",
+        "packages/server/storage/chunk/testdata/chunk-v8.bin",
+        "packages/server/storage/chunk/testdata/chunk-v9.bin"
+      ]
+    },
+    {
+      "id": "save.companion",
+      "kind": "save",
+      "role": "event",
+      "current_version": "5",
+      "supported_versions": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "source": "packages/server/storage/companion/companion_codec.go",
+      "eventual_owner": "mornlea_storage",
+      "numeric_semantics": "little-endian integers; CRC integrity; exact byte round-trip; no implicit repair",
+      "fixtures": [
+        "packages/server/storage/companion/testdata/companions-v1.bin",
+        "packages/server/storage/companion/testdata/companions-v2.bin",
+        "packages/server/storage/companion/testdata/companions-v3.bin",
+        "packages/server/storage/companion/testdata/companions-v4.bin",
+        "packages/server/storage/companion/testdata/companions-v5.bin"
+      ]
+    },
+    {
+      "id": "save.hostile",
+      "kind": "save",
+      "role": "event",
+      "current_version": "2",
+      "supported_versions": [
+        "1",
+        "2"
+      ],
+      "source": "packages/server/storage/hostile/hostile_codec.go",
+      "eventual_owner": "mornlea_storage",
+      "numeric_semantics": "little-endian integers; CRC integrity; exact byte round-trip; no implicit repair",
+      "fixtures": [
+        "packages/server/storage/hostile/testdata/hostile-mobs-v1.bin",
+        "packages/server/storage/hostile/testdata/hostile-mobs-v2.bin"
+      ]
+    },
+    {
+      "id": "save.passive",
+      "kind": "save",
+      "role": "event",
+      "current_version": "1",
+      "supported_versions": [
+        "1"
+      ],
+      "source": "packages/server/storage/passive/passive_codec.go",
+      "eventual_owner": "mornlea_storage",
+      "numeric_semantics": "little-endian integers; CRC integrity; exact byte round-trip; no implicit repair",
+      "fixtures": [
+        "packages/server/storage/passive/testdata/passive-mobs-v1.bin"
+      ]
+    },
+    {
+      "id": "save.player",
+      "kind": "save",
+      "role": "event",
+      "current_version": "9",
+      "supported_versions": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ],
+      "source": "packages/server/storage/player/player_codec.go",
+      "eventual_owner": "mornlea_storage",
+      "numeric_semantics": "little-endian integers; CRC integrity; exact byte round-trip; no implicit repair",
+      "fixtures": [
+        "packages/server/storage/player/testdata/player-v1.bin",
+        "packages/server/storage/player/testdata/player-v2.bin",
+        "packages/server/storage/player/testdata/player-v3.bin",
+        "packages/server/storage/player/testdata/player-v4.bin",
+        "packages/server/storage/player/testdata/player-v5.bin",
+        "packages/server/storage/player/testdata/player-v6.bin",
+        "packages/server/storage/player/testdata/player-v7.bin",
+        "packages/server/storage/player/testdata/player-v8.bin",
+        "packages/server/storage/player/testdata/player-v9.bin"
+      ]
+    },
+    {
+      "id": "save.region",
+      "kind": "save",
+      "role": "event",
+      "current_version": "1",
+      "supported_versions": [
+        "1"
+      ],
+      "source": "packages/server/storage/region/region_format.go",
+      "eventual_owner": "mornlea_storage",
+      "numeric_semantics": "little-endian integers; CRC integrity; exact byte round-trip; no implicit repair",
+      "fixtures": [
+        "packages/server/storage/region/region_format.go",
+        "packages/server/storage/region/region_format_test.go"
+      ]
+    },
+    {
+      "id": "save.world-metadata",
+      "kind": "save",
+      "role": "event",
+      "current_version": "6",
+      "supported_versions": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "source": "packages/server/storage/metadata.go",
+      "eventual_owner": "mornlea_storage",
+      "numeric_semantics": "little-endian integers; CRC integrity; exact byte round-trip; no implicit repair",
+      "fixtures": [
+        "packages/server/storage/metadata.go",
+        "packages/server/storage/metadata_test.go"
+      ]
+    }
+  ]
+}

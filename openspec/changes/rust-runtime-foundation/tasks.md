@@ -2,7 +2,7 @@ These are implementation tasks, all still pending. Direct Cargo commands run fro
 
 ## 1. Inventory and replay identity
 
-- [ ] 1.1 Reconcile current registries/code with `testdata/runtime-migration/contracts.json`; add failing coverage, version and missing-family tests in `packages/tools/cmd/runtime-oracle/`, then implement the inventory reader. Include all protocol/save/input/event/kernel families and provenance. Validate with `go test ./packages/tools/cmd/runtime-oracle -run TestContractInventory -count=1` and `go test ./packages/tools/cmd/runtime-oracle -list TestContractInventory`; verify tests are discovered.
+- [x] 1.1 Reconcile current registries/code with `testdata/runtime-migration/contracts.json`; add failing coverage, version and missing-family tests in `packages/tools/cmd/runtime-oracle/`, then implement the inventory reader. Include all protocol/save/input/event/kernel families and provenance. Validate with `go test ./packages/tools/cmd/runtime-oracle -run TestContractInventory -count=1` and `go test ./packages/tools/cmd/runtime-oracle -list TestContractInventory`; verify tests are discovered.
 - [ ] 1.2 Add deterministic oracle traces and isolated temp-save execution in `packages/tools/cmd/runtime-oracle/`, with rejection tests for incomplete identity, live-path writes, malformed input and incomplete traces. Validate with `go test ./packages/tools/cmd/runtime-oracle -race -count=1`; record corpus digests in this change's ledger.
 
 ## 2. Rust shared contracts

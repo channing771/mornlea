@@ -23,3 +23,17 @@
 - PASS: skill-creator `quick_validate.py` for both visual skills, using an isolated `uv run --no-project --with pyyaml` environment because system Python lacks PyYAML; both skill/reference copies and architecture copies are byte-identical. Local Markdown link targets resolve; `git diff --check` passes.
 - Existing baseline failures: `go test ./packages/audit -count=1` fails only `TestCurrentDocumentationVersions` (README/pilot report protocol v44 versus current v45) and `TestEnglishCommentMigration` (existing source comment debt exceeds its inventory). Both failures reproduce on untouched baseline `8d9cc122486097fb7d7788abdb523ecd13f5a75a` in a detached checkout with `go test ./packages/audit -run 'TestCurrentDocumentationVersions|TestEnglishCommentMigration' -count=1`. No exemptions, baseline weakening or unrelated source edits were made.
 - This round changes planning, skills and explanatory documentation only. Runtime implementation checkboxes remain open; prospective Rust crates/commands, production visual registry/updater and cutover gates were not executed or claimed implemented. No tracked PNG/GIF, runtime, current canonical spec, protocol/save version or default entry changed. Full runtime Rust/race/GPU gates belong to the implementation tasks and were not run for this documentation-only round.
+
+## 2026-09-20 — 1.1 contract inventory freeze
+
+- Adopted in-flight untracked `packages/tools/cmd/runtime-oracle` sources from a prior session; they were incomplete (no tests, no `contracts.json`) and were not committed in Phase 1.
+- Existing unrelated work: deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded.
+- Ruling: the oracle is a stdlib-only tools leaf. It discovers registries by reading files and must not import protocol, storage, native ABI, or live authority packages. `packages/audit` `allowed` registers `packages/tools/cmd/runtime-oracle` with an empty import set.
+- Coverage: 82 families (62 protocol including every ClientPacketForID/ServerPacketForID type plus framing and domain input/event, 7 save families with supported schema ranges, 11 kernels including 10 engine ABI exports plus Go-only pathfind, 2 agent contracts). Identities match the current matrix: protocol 45, chunk/player 9, metadata 6, companions.ai 5, hostile_mobs 2, passive_mobs 1, engine ABI 11, region 1, agent HTTP/MCP v1.
+- Corpus digest: `sha256:1d87c666fc6612edaa78688f36fe8eda22598c1f04b486d9aca65582e10df022` for `testdata/runtime-migration/contracts.json`.
+- Discovered tests (`go test ./packages/tools/cmd/runtime-oracle -list TestContractInventory`): `TestContractInventoryReconcilesFrozenCorpus`, `TestContractInventoryRejectsMissingFamily`, `TestContractInventoryRejectsVersionMismatch`, `TestContractInventoryRejectsMissingCoverageFixture`, `TestContractInventoryRejectsIncompleteIdentity` (5).
+- PASS: `go test ./packages/tools/cmd/runtime-oracle -run TestContractInventory -count=1`
+- PASS: `go test ./packages/tools/cmd/runtime-oracle -race -count=1`
+- PASS: `go test ./packages/audit -run 'TestInternalDependenciesAreOneWay|TestCommentBacktickIdentifiersExist' -count=1`
+- Directory guidance: added `packages/tools/cmd/runtime-oracle/AGENTS.md` for the offline-leaf invariant. `packages/tools/` remains without a module overview; it has no independent new boundary beyond this command.
+- Architecture skill: no change. The empty-import oracle leaf is a change-local tooling rule, not a new cross-task ownership convention.
