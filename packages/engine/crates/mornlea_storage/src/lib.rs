@@ -9,10 +9,19 @@
 mod bytes;
 mod crc32c;
 mod error;
+mod hostile;
+mod identity;
 mod passive;
 
 pub use crc32c::{crc32c, crc32c_join};
 pub use error::{StorageError, StorageResult};
+pub use hostile::{
+    CURRENT_SCHEMA as HOSTILE_CURRENT_SCHEMA, ENVELOPE_VERSION as HOSTILE_ENVELOPE_VERSION,
+    HostileMob, HostileMobs, HostileMobsSave, MAX_FILE_LENGTH as HOSTILE_MAX_FILE_LENGTH,
+    MAX_HOSTILE_MOBS, SCHEMA_V1 as HOSTILE_SCHEMA_V1, decode as decode_hostile_mobs,
+    encode as encode_hostile_mobs,
+};
+pub use identity::PlayerId;
 pub use passive::{
     CURRENT_SCHEMA as PASSIVE_CURRENT_SCHEMA, ENVELOPE_VERSION as PASSIVE_ENVELOPE_VERSION,
     MAX_FILE_LENGTH as PASSIVE_MAX_FILE_LENGTH, MAX_PASSIVE_MOBS, PassiveMob, PassiveMobs,

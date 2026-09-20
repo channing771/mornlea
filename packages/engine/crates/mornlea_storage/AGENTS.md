@@ -38,6 +38,8 @@ re-encode equality).
 | Family | Module | Current schema | Notes |
 | --- | --- | --- | --- |
 | `save.passive` | `src/passive.rs` | v1 | 32-byte header + fixed 72-byte records, 30-byte zero reserved tail, canonical ascending-ID order |
+| `save.hostile` | `src/hostile.rs` | v2 | v1 records lack the trailing `kind` byte and migrate to nightcrawler; re-encode keeps each v1 record as the v2 prefix |
+| `save.player` identity | `src/identity.rs` | — | `PlayerId` UUIDv4 wrapper shared by the entity families |
 
 ## Focused Verification
 
