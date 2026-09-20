@@ -369,6 +369,15 @@ and `domain_does_not_depend_on_protocol`).
   payloads and trailing bytes fail before publication
   (`combat_hit_round_trip_preserves_golden_bytes`,
   `combat_hit_rejects_invalid_range_and_malformed_payload`).
+
+## Remote player despawn (`src/remote_player_despawn.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 8 payload is the 16-byte UUIDv4 identity of a remote
+  player the authoritative world removed. `PlayerId` stays the single
+  identity gate: zero and non-v4 values are `InvalidIdentity`. Truncated
+  payloads and trailing bytes fail before publication
+  (`remote_player_despawn_round_trip_preserves_golden_bytes`,
+  `remote_player_despawn_rejects_invalid_identity_and_malformed_payload`).
 - `ByteEncoder` / `ByteDecoder` `i8` helpers use two's-complement
   little-endian encoding, matching the Go primitive.
 - `ByteEncoder` / `ByteDecoder` `boolean` helpers copy the Go primitive:

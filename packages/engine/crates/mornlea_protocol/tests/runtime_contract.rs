@@ -1810,6 +1810,61 @@ fn combat_hit_rejects_invalid_range_and_malformed_payload() {
     );
 }
 
+#[test]
+fn remote_player_despawn_round_trip_preserves_golden_bytes() {
+    let player = mornlea_protocol::PlayerId::new([
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x67, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+        0xff,
+    ])
+    .expect("player");
+    let despawn = mornlea_protocol::RemotePlayerDespawn::new(player);
+    let payload = despawn.encode();
+    assert_eq!(
+        payload,
+        [
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x67, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xff
+        ]
+    );
+    assert_eq!(mornlea_protocol::RemotePlayerDespawn::PACKET_ID, 8);
+    assert_eq!(payload.len(), 16);
+    let decoded = mornlea_protocol::RemotePlayerDespawn::decode(&payload).expect("decode");
+    assert_eq!(decoded, despawn);
+}
+
+#[test]
+fn remote_player_despawn_rejects_invalid_identity_and_malformed_payload() {
+    let mut not_v4 = [
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x67, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+        0xff,
+    ];
+    not_v4[6] = 0x06;
+    assert_eq!(
+        mornlea_protocol::RemotePlayerDespawn::decode(&not_v4),
+        Err(mornlea_protocol::ProtocolError::InvalidIdentity)
+    );
+    assert_eq!(
+        mornlea_protocol::RemotePlayerDespawn::decode(&[0u8; 16]),
+        Err(mornlea_protocol::ProtocolError::InvalidIdentity)
+    );
+    assert!(
+        mornlea_protocol::RemotePlayerDespawn::decode(&[
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x67, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee
+        ])
+        .is_err()
+    );
+    let mut trailing = vec![
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x67, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+        0xff,
+    ];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::RemotePlayerDespawn::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }
