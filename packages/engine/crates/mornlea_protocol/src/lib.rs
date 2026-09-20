@@ -21,6 +21,7 @@ mod collect_water;
 mod combat_hit;
 mod command_rejected;
 mod companion_despawn;
+mod companion_spawn;
 mod container_ref;
 mod crafting_state;
 mod disconnect;
@@ -81,6 +82,7 @@ pub use command_rejected::{
     REJECT_NOT_FLUID_SOURCE, REJECT_OCCUPIED, REJECT_PLAYER_NOT_READY, REJECT_PROTECTED_BLOCK,
 };
 pub use companion_despawn::CompanionDespawn;
+pub use companion_spawn::{COMPANION_SPAWN_MAX_WIRE_BYTES, CompanionSpawn};
 pub use container_ref::{
     CHESTS_PER_CHUNK, CONTAINER_KIND_CHEST, CONTAINER_KIND_FURNACE, ContainerRef,
     FURNACES_PER_CHUNK,

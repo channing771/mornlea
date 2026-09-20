@@ -3076,3 +3076,107 @@ fn player_state_rejects_out_of_range_fields_and_malformed_payload() {
     bad_weather_payload[88] = 3;
     assert!(mornlea_protocol::PlayerState::decode(&bad_weather_payload).is_err());
 }
+
+#[test]
+fn companion_spawn_round_trip_preserves_golden_bytes() {
+    let spawn = mornlea_protocol::CompanionSpawn::new(
+        mornlea_protocol::CompanionId::new([
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xff,
+        ])
+        .expect("companion id"),
+        "Mira".to_owned(),
+        0x0102_0304_0506_0708,
+        mornlea_domain::Dimension::OVERWORLD,
+        [2.5, 1.0, -3.25],
+        1.25,
+        -0.5,
+    )
+    .expect("spawn");
+    let payload = spawn.encode();
+    assert_eq!(mornlea_protocol::CompanionSpawn::PACKET_ID, 17);
+    // 16 ID + (1 length prefix + 4 name) + 8 tick + 4 dimension + 12 position
+    // + 4 yaw + 4 pitch.
+    assert_eq!(payload.len(), 53);
+    assert_eq!(&payload[..16], &spawn.companion_id().bytes());
+    assert_eq!(payload[16], 4);
+    assert_eq!(&payload[17..21], b"Mira");
+    assert_eq!(&payload[21..29], &0x0102_0304_0506_0708u64.to_le_bytes());
+    assert_eq!(&payload[29..33], &[0x00, 0x00, 0x00, 0x00]);
+    assert_eq!(&payload[33..37], &[0x00, 0x00, 0x20, 0x40]);
+    assert_eq!(&payload[37..41], &[0x00, 0x00, 0x80, 0x3f]);
+    assert_eq!(&payload[41..45], &[0x00, 0x00, 0x50, 0xc0]);
+    assert_eq!(&payload[45..49], &[0x00, 0x00, 0xa0, 0x3f]);
+    assert_eq!(&payload[49..53], &[0x00, 0x00, 0x00, 0xbf]);
+    assert_eq!(
+        mornlea_protocol::CompanionSpawn::decode(&payload).expect("decode"),
+        spawn
+    );
+}
+
+#[test]
+fn companion_spawn_rejects_invalid_identity_name_and_pose() {
+    let spawn = mornlea_protocol::CompanionSpawn::new(
+        mornlea_protocol::CompanionId::new([
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xff,
+        ])
+        .expect("companion id"),
+        "Mira".to_owned(),
+        1,
+        mornlea_domain::Dimension::OVERWORLD,
+        [1.0, 2.0, 3.0],
+        0.0,
+        0.0,
+    )
+    .expect("spawn");
+
+    let mut foreign = spawn.clone();
+    foreign.dimension = mornlea_domain::Dimension::DEPTHS;
+    let mut bad_name = spawn.clone();
+    bad_name.name = "has space".to_owned();
+    let mut padded_name = spawn.clone();
+    padded_name.name = " padded".to_owned();
+    let mut long_name = spawn.clone();
+    long_name.name = "x".repeat(33);
+    let mut bad_pose = spawn.clone();
+    bad_pose.position = [f32::NAN, 0.0, 0.0];
+    let mut bad_pitch = spawn.clone();
+    bad_pitch.pitch = 1.6;
+    for bad in [
+        foreign,
+        bad_name,
+        padded_name,
+        long_name,
+        bad_pose,
+        bad_pitch,
+    ] {
+        assert!(
+            bad.validate().is_err(),
+            "accepted invalid companion spawn field"
+        );
+    }
+    assert!(
+        mornlea_protocol::CompanionId::new([0xff; 16]).is_err(),
+        "accepted non-UUIDv4 companion identity"
+    );
+
+    let payload = spawn.encode();
+    for length in 0..payload.len() {
+        assert!(
+            mornlea_protocol::CompanionSpawn::decode(&payload[..length]).is_err(),
+            "accepted truncated companion spawn at {length}"
+        );
+    }
+    let mut padded = payload.clone();
+    padded.push(0x00);
+    assert_eq!(
+        mornlea_protocol::CompanionSpawn::decode(&padded),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    // A name length prefix that overruns the remaining payload is rejected
+    // before any bytes are copied.
+    let mut bad_length = payload.clone();
+    bad_length[16] = 200;
+    assert!(mornlea_protocol::CompanionSpawn::decode(&bad_length).is_err());
+}
