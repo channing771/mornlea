@@ -3347,3 +3347,143 @@ fn companion_states_rejects_unsorted_invalid_and_malformed_payload() {
     over[8] = (mornlea_protocol::MAX_COMPANION_STATES + 1) as u8;
     assert!(mornlea_protocol::CompanionStates::decode(&over).is_err());
 }
+
+#[test]
+fn item_drop_upserts_round_trip_preserves_batch_bytes() {
+    let upserts = mornlea_protocol::ItemDropUpserts::new(
+        0x0102_0304_0506_0708,
+        vec![
+            mornlea_protocol::ItemDrop {
+                id: mornlea_protocol::DropId::new(0, 0, 0, 1, 1).expect("first drop id"),
+                block_index: 100,
+                item: mornlea_protocol::ITEM_STONE,
+                count: 5,
+                durability: 0,
+            },
+            mornlea_protocol::ItemDrop {
+                id: mornlea_protocol::DropId::new(0, 0, 0, 2, 1).expect("second drop id"),
+                block_index: 200,
+                item: mornlea_protocol::ITEM_COAL,
+                count: 10,
+                durability: 0,
+            },
+        ],
+    )
+    .expect("upserts");
+    let payload = upserts.encode();
+    assert_eq!(mornlea_protocol::ItemDropUpserts::PACKET_ID, 11);
+    assert_eq!(payload.len(), 8 + 1 + 2 * 26);
+    assert_eq!(&payload[..8], &0x0102_0304_0506_0708u64.to_le_bytes());
+    assert_eq!(payload[8], 2);
+    // One drop is a 17-byte identity, a u32 block index, and a 5-byte stack.
+    assert_eq!(&payload[9..13], &[0x00, 0x00, 0x00, 0x00]);
+    assert_eq!(payload[21], 1);
+    assert_eq!(&payload[22..26], &1u32.to_le_bytes());
+    assert_eq!(&payload[26..30], &100u32.to_le_bytes());
+    assert_eq!(
+        &payload[30..32],
+        &mornlea_protocol::ITEM_STONE.to_le_bytes()
+    );
+    assert_eq!(payload[32], 5);
+    assert_eq!(&payload[33..35], &[0x00, 0x00]);
+    // The second record starts one fixed 26-byte stride later.
+    assert_eq!(payload[47], 2);
+    assert_eq!(&payload[56..58], &mornlea_protocol::ITEM_COAL.to_le_bytes());
+    assert_eq!(payload[58], 10);
+    assert_eq!(
+        mornlea_protocol::ItemDropUpserts::decode(&payload).expect("decode"),
+        upserts
+    );
+}
+
+#[test]
+fn item_drop_upserts_rejects_invalid_records_and_malformed_payload() {
+    let drop = mornlea_protocol::ItemDrop {
+        id: mornlea_protocol::DropId::new(0, 0, 0, 1, 1).expect("drop id"),
+        block_index: 100,
+        item: mornlea_protocol::ITEM_STONE,
+        count: 5,
+        durability: 0,
+    };
+
+    assert!(
+        mornlea_protocol::DropId::new(0, 0, 0, 32, 1).is_err(),
+        "accepted a drop slot outside the fixed per-chunk array"
+    );
+    assert!(
+        mornlea_protocol::DropId::new(0, 0, 0, 1, 0).is_err(),
+        "accepted a drop identity with a zero generation"
+    );
+    let bad_block_index = mornlea_protocol::ItemDrop {
+        block_index: 98304,
+        ..drop
+    };
+    let unregistered_item = mornlea_protocol::ItemDrop {
+        item: mornlea_protocol::ITEM_ID_MAX,
+        ..drop
+    };
+    let zero_count = mornlea_protocol::ItemDrop { count: 0, ..drop };
+    let over_count = mornlea_protocol::ItemDrop { count: 65, ..drop };
+    let bad_durability = mornlea_protocol::ItemDrop {
+        item: mornlea_protocol::ITEM_STONE_PICKAXE,
+        durability: 200,
+        ..drop
+    };
+    // A `DropId` is a validated newtype, so an out-of-range slot or a zero
+    // generation cannot be built at all; the two rejections are asserted at
+    // the identity constructor above instead of through the batch.
+    for bad in [
+        bad_block_index,
+        unregistered_item,
+        zero_count,
+        over_count,
+        bad_durability,
+    ] {
+        assert!(
+            mornlea_protocol::ItemDropUpserts::new(1, vec![bad]).is_err(),
+            "accepted invalid item drop"
+        );
+    }
+    assert!(mornlea_protocol::ItemDropUpserts::new(1, Vec::new()).is_err());
+    assert!(
+        mornlea_protocol::ItemDropUpserts::new(1, vec![drop, drop]).is_err(),
+        "accepted duplicate item drop identities"
+    );
+    let later = mornlea_protocol::ItemDrop {
+        id: mornlea_protocol::DropId::new(0, 0, 0, 2, 1).expect("drop id"),
+        ..drop
+    };
+    assert!(
+        mornlea_protocol::ItemDropUpserts::new(1, vec![later, drop]).is_err(),
+        "accepted descending item drop identities"
+    );
+
+    let valid = mornlea_protocol::ItemDropUpserts::new(1, vec![drop]).expect("upserts");
+    let payload = valid.encode();
+    for length in 0..payload.len() {
+        assert!(
+            mornlea_protocol::ItemDropUpserts::decode(&payload[..length]).is_err(),
+            "accepted truncated item drop upserts at {length}"
+        );
+    }
+    let mut padded = payload.clone();
+    padded.push(0x00);
+    assert_eq!(
+        mornlea_protocol::ItemDropUpserts::decode(&padded),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    // A count that does not match the remaining record bytes is rejected
+    // before any record is read.
+    let mut mismatched = payload.clone();
+    mismatched[8] = 2;
+    assert_eq!(
+        mornlea_protocol::ItemDropUpserts::decode(&mismatched),
+        Err(mornlea_protocol::ProtocolError::Truncated)
+    );
+    let mut empty = payload.clone();
+    empty[8] = 0;
+    assert!(mornlea_protocol::ItemDropUpserts::decode(&empty).is_err());
+    let mut over = payload.clone();
+    over[8] = (mornlea_protocol::MAX_ITEM_DROP_BATCH + 1) as u8;
+    assert!(mornlea_protocol::ItemDropUpserts::decode(&over).is_err());
+}

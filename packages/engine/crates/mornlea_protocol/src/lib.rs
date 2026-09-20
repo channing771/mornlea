@@ -26,6 +26,7 @@ mod companion_states;
 mod container_ref;
 mod crafting_state;
 mod disconnect;
+mod drop_id;
 mod drop_selected_item;
 mod entity_id;
 mod equip_armor;
@@ -38,6 +39,7 @@ mod hostile_despawn;
 mod hostile_spawn;
 mod hostile_state;
 mod inventory_state;
+mod item_drop_upserts;
 mod item_stack;
 mod keep_alive;
 mod keep_alive_reply;
@@ -65,7 +67,10 @@ mod take_crafting_output;
 mod till_soil;
 mod varint;
 
-pub use block::{BLOCK_ID_MAX, BLOCKS_PER_SECTION, MAX_Y, MIN_Y, SECTION_SIZE, SECTIONS_PER_CHUNK};
+pub use block::{
+    BLOCK_ID_MAX, BLOCKS_PER_SECTION, MAX_CHUNK_BLOCK_INDEX, MAX_Y, MIN_Y, SECTION_SIZE,
+    SECTIONS_PER_CHUNK,
+};
 pub use block_changes::{BlockChange, BlockChanges, MAX_BLOCK_CHANGES};
 pub use bone_meal::BoneMeal;
 pub use chat_command::{CHAT_COMMAND_TEXT_MAX_BYTES, ChatCommand};
@@ -99,6 +104,7 @@ pub use disconnect::{
     DISCONNECT_INTERNAL_ERROR, DISCONNECT_PROTOCOL_VIOLATION, DISCONNECT_SERVER_SHUTDOWN,
     DISCONNECT_SLOW_CLIENT, DISCONNECT_TIMEOUT, Disconnect,
 };
+pub use drop_id::{DROP_ID_WIRE_BYTES, DROPS_PER_CHUNK, DropId};
 pub use drop_selected_item::DropSelectedItem;
 pub use entity_id::{CompanionId, valid_companion_name};
 pub use equip_armor::EquipArmor;
@@ -120,8 +126,10 @@ pub use hostile_state::{
 pub use inventory_state::{
     BACKPACK_SLOTS, HOTBAR_SLOTS, INVENTORY_STATE_WIRE_BYTES, InventoryState,
 };
+pub use item_drop_upserts::{ITEM_DROP_WIRE_BYTES, ItemDrop, ItemDropUpserts, MAX_ITEM_DROP_BATCH};
 pub use item_stack::{
-    ITEM_ID_MAX, ITEM_NONE, ItemStack, MAX_STACK_COUNT, smelting_output, valid_furnace_output,
+    ITEM_COAL, ITEM_ID_MAX, ITEM_NONE, ITEM_STONE, ITEM_STONE_PICKAXE, ItemStack, MAX_STACK_COUNT,
+    smelting_output, valid_furnace_output,
 };
 pub use keep_alive::KeepAlive;
 pub use keep_alive_reply::KeepAliveReply;

@@ -64,3 +64,7 @@ pub fn chunk_block_index(x: i32, y: i32, z: i32) -> u32 {
         + local_z as usize * 16
         + local_x as usize) as u32
 }
+
+/// Exclusive upper bound of the chunk-ordered block index, the value an
+/// item drop's block index must stay below.
+pub const MAX_CHUNK_BLOCK_INDEX: u32 = (SECTIONS_PER_CHUNK * BLOCKS_PER_SECTION) as u32;

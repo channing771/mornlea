@@ -114,6 +114,27 @@ impl UvarintCountBatch {
         }
         Ok(())
     }
+
+    /// Rejects a payload that is too short to hold `count` records of
+    /// `stride` bytes.
+    ///
+    /// This is the budget check the Go item-drop decoder applies before it
+    /// allocates: it rejects a short payload but deliberately accepts a long
+    /// one, leaving the trailing bytes to the end-of-payload check. Using the
+    /// exact-length rule here would report a padded batch as truncated rather
+    /// than as trailing bytes, which is a different failure than the Go side
+    /// publishes.
+    pub fn require_minimum_records(
+        &self,
+        decoder: &ByteDecoder<'_>,
+        stride: usize,
+    ) -> Result<(), ProtocolError> {
+        let want = (self.count as usize).saturating_mul(stride);
+        if decoder.remaining() < want {
+            return Err(ProtocolError::Truncated);
+        }
+        Ok(())
+    }
 }
 
 /// Reports whether the values are strictly increasing. Duplicate and
