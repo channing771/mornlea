@@ -1,0 +1,12 @@
+{
+  "kind": "ok",
+  "category": "list_affordances_result",
+  "fields": {
+    "keys": [
+      "online_players",
+      "step_kinds",
+      "visible_blocks"
+    ],
+    "schema": "list_affordances_result"
+  }
+}

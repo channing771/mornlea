@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-enum",
+  "fields": {
+    "keyword": "enum",
+    "path": "$.code",
+    "schema": "validate_plan_failure_result"
+  }
+}

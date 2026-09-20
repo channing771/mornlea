@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "additionalProperties",
+    "path": "$.memory_proposal",
+    "schema": "dialogue_nonterminal_response"
+  }
+}

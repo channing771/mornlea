@@ -1,0 +1,8 @@
+{
+  "kind": "ok",
+  "category": "get_planning_context_input",
+  "fields": {
+    "keys": [],
+    "schema": "get_planning_context_input"
+  }
+}

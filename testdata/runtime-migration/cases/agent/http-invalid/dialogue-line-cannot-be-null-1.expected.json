@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "type",
+    "path": "$.line",
+    "rule": "string",
+    "schema": "dialogue_nonterminal_response"
+  }
+}

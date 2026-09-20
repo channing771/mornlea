@@ -1,0 +1,13 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/valid.json",
+  "source_index": 2,
+  "fixture": "unknown visible block is a normal domain failure",
+  "document": "mcp-v1/schema.json",
+  "schema": "find_visible_blocks_result",
+  "value": {
+    "code": "unknown_block",
+    "hint": "unknown canonical block name"
+  }
+}

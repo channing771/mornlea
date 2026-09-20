@@ -1,0 +1,20 @@
+{
+  "kind": "ok",
+  "category": "plan_response",
+  "fields": {
+    "keys": [
+      "client_instance_id",
+      "companion_id",
+      "contract_version",
+      "generation",
+      "lease_id",
+      "namespace_id",
+      "plan",
+      "request_id",
+      "run_id",
+      "snapshot_digest",
+      "snapshot_id"
+    ],
+    "schema": "plan_response"
+  }
+}

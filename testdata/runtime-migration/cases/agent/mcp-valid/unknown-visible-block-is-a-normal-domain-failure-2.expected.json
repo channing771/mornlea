@@ -1,0 +1,11 @@
+{
+  "kind": "ok",
+  "category": "find_visible_blocks_result",
+  "fields": {
+    "keys": [
+      "code",
+      "hint"
+    ],
+    "schema": "find_visible_blocks_result"
+  }
+}

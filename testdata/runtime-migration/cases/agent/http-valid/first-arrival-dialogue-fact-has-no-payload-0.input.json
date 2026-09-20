@@ -1,0 +1,12 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/http-v1/golden/valid.json",
+  "source_index": 0,
+  "fixture": "first arrival dialogue fact has no payload",
+  "document": "http-v1/schema.json",
+  "schema": "dialogue_nonterminal_fact_node",
+  "value": {
+    "kind": "first_arrival"
+  }
+}

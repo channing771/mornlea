@@ -1,0 +1,14 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/valid.json",
+  "source_index": 2,
+  "fixture": "validator rejected result contains one stable code and bounded hint",
+  "document": "mcp-v1/schema.json",
+  "schema": "validate_plan_result",
+  "value": {
+    "accepted": false,
+    "code": "unmineable_target",
+    "hint": "目标不属于当前快照可采掘语义"
+  }
+}

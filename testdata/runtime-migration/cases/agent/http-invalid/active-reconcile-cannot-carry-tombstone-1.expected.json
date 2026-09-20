@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "type",
+    "path": "$.tombstone_operation_id",
+    "rule": "null",
+    "schema": "memory_reconcile_active_request"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/valid.json",
+  "source_index": 2,
+  "fixture": "inventory query is paged",
+  "document": "mcp-v1/schema.json",
+  "schema": "inspect_inventory_input",
+  "value": {
+    "offset": 0,
+    "limit": 36
+  }
+}

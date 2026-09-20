@@ -1,0 +1,18 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/invalid.json",
+  "source_index": 3,
+  "fixture": "inventory count follows authoritative stack limit",
+  "document": "mcp-v1/schema.json",
+  "schema": "inspect_inventory_result",
+  "value": {
+    "slots": [
+      {
+        "slot": 0,
+        "item": "stone",
+        "count": 65
+      }
+    ]
+  }
+}

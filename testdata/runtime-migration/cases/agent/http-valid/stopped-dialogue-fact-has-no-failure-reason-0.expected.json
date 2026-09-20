@@ -1,0 +1,12 @@
+{
+  "kind": "ok",
+  "category": "dialogue_terminal_fact_node",
+  "fields": {
+    "keys": [
+      "kind",
+      "reason",
+      "state"
+    ],
+    "schema": "dialogue_terminal_fact_node"
+  }
+}

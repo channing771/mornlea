@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "uniqueItems",
+    "path": "$.block_names[1]",
+    "schema": "find_visible_blocks_input"
+  }
+}

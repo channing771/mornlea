@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "required",
+    "path": "$.memory_epoch",
+    "rule": "memory_epoch",
+    "schema": "dialogue_nonterminal_request"
+  }
+}

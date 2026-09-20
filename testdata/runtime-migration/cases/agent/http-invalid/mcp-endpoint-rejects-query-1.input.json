@@ -1,0 +1,10 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/http-v1/golden/invalid.json",
+  "source_index": 1,
+  "fixture": "MCP endpoint rejects query",
+  "document": "http-v1/schema.json",
+  "schema": "mcp_endpoint",
+  "value": "http://127.0.0.1:45831/mcp?debug=1"
+}

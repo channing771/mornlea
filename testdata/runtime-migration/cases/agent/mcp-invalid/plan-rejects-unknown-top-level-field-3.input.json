@@ -1,0 +1,23 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/invalid.json",
+  "source_index": 3,
+  "fixture": "plan rejects unknown top-level field",
+  "document": "mcp-v1/schema.json",
+  "schema": "validate_plan_input",
+  "value": {
+    "plan": {
+      "summary": "向前走",
+      "steps": [
+        {
+          "kind": "go_to",
+          "x": 1,
+          "y": 64,
+          "z": 0
+        }
+      ],
+      "tool": "move"
+    }
+  }
+}

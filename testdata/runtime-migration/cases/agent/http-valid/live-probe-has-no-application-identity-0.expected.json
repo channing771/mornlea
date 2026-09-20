@@ -1,0 +1,10 @@
+{
+  "kind": "ok",
+  "category": "live_response",
+  "fields": {
+    "keys": [
+      "status"
+    ],
+    "schema": "live_response"
+  }
+}

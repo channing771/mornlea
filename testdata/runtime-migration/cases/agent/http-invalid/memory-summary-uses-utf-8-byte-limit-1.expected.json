@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "x-mornlea-rules",
+    "path": "$",
+    "rule": "text.max_utf8_bytes",
+    "schema": "memory_summary"
+  }
+}

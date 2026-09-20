@@ -1,0 +1,10 @@
+{
+  "kind": "ok",
+  "category": "inspect_inventory_result",
+  "fields": {
+    "keys": [
+      "slots"
+    ],
+    "schema": "inspect_inventory_result"
+  }
+}

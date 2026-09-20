@@ -1,0 +1,14 @@
+{
+  "kind": "ok",
+  "category": "lease_request",
+  "fields": {
+    "keys": [
+      "client_instance_id",
+      "contract_version",
+      "lease_id",
+      "namespace_id",
+      "request_id"
+    ],
+    "schema": "lease_request"
+  }
+}

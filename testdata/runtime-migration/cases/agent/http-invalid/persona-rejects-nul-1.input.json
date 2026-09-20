@@ -1,0 +1,10 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/http-v1/golden/invalid.json",
+  "source_index": 1,
+  "fixture": "persona rejects NUL",
+  "document": "http-v1/schema.json",
+  "schema": "persona_text",
+  "value": "quiet\u0000persona"
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "ok",
+  "category": "get_planning_context_result",
+  "fields": {
+    "keys": [
+      "chunk_revisions",
+      "companion",
+      "instruction",
+      "issuer",
+      "snapshot_digest",
+      "world_time_ticks"
+    ],
+    "schema": "get_planning_context_result"
+  }
+}

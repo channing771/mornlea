@@ -1,0 +1,11 @@
+{
+  "kind": "ok",
+  "category": "inspect_inventory_input",
+  "fields": {
+    "keys": [
+      "limit",
+      "offset"
+    ],
+    "schema": "inspect_inventory_input"
+  }
+}

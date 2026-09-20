@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "maximum",
+    "path": "$.slots[0].count",
+    "schema": "inspect_inventory_result"
+  }
+}

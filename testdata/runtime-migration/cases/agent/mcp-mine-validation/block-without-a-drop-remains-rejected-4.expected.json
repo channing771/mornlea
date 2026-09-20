@@ -1,0 +1,12 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "block_id": 5,
+    "block_symbol": "BedrockID",
+    "code": "unmineable_target",
+    "has_block_drop": false,
+    "mine_semantics": "no_drop",
+    "mineable": false
+  }
+}

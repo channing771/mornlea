@@ -1,0 +1,10 @@
+{
+  "kind": "ok",
+  "category": "dialogue_nonterminal_fact_node",
+  "fields": {
+    "keys": [
+      "kind"
+    ],
+    "schema": "dialogue_nonterminal_fact_node"
+  }
+}

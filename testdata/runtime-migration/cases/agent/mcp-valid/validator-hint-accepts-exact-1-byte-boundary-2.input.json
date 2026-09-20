@@ -1,0 +1,10 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/valid.json",
+  "source_index": 2,
+  "fixture": "validator hint accepts exact 1-byte boundary",
+  "document": "mcp-v1/schema.json",
+  "schema": "validator_hint",
+  "value": "a"
+}

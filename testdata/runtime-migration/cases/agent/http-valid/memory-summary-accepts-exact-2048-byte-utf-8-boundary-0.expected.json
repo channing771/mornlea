@@ -1,0 +1,8 @@
+{
+  "kind": "ok",
+  "category": "memory_summary",
+  "fields": {
+    "keys": [],
+    "schema": "memory_summary"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-identity",
+  "fields": {
+    "keyword": "pattern",
+    "path": "$.namespace_id",
+    "schema": "acquire_request"
+  }
+}

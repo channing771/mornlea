@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "required",
+    "path": "$.memory_proposal",
+    "rule": "memory_proposal",
+    "schema": "dialogue_terminal_response"
+  }
+}

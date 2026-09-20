@@ -1,0 +1,23 @@
+{
+  "kind": "ok",
+  "category": "dialogue_request",
+  "fields": {
+    "keys": [
+      "client_instance_id",
+      "companion_id",
+      "contract_version",
+      "deadline_unix_ms",
+      "environment",
+      "fact_node",
+      "generation",
+      "lease_id",
+      "memory_epoch",
+      "namespace_id",
+      "persona",
+      "request_id",
+      "run_id",
+      "terminal"
+    ],
+    "schema": "dialogue_request"
+  }
+}

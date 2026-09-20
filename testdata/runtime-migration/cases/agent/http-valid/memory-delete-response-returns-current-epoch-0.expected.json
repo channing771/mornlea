@@ -1,0 +1,17 @@
+{
+  "kind": "ok",
+  "category": "memory_delete_response",
+  "fields": {
+    "keys": [
+      "client_instance_id",
+      "companion_id",
+      "contract_version",
+      "lease_id",
+      "memory_epoch",
+      "namespace_id",
+      "request_id",
+      "tombstone_operation_id"
+    ],
+    "schema": "memory_delete_response"
+  }
+}

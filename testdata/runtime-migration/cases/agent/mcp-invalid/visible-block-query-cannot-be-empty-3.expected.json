@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "minItems",
+    "path": "$.block_names",
+    "schema": "find_visible_blocks_input"
+  }
+}

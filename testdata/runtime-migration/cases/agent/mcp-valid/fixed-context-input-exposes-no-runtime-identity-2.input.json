@@ -1,0 +1,10 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/valid.json",
+  "source_index": 2,
+  "fixture": "fixed context input exposes no runtime identity",
+  "document": "mcp-v1/schema.json",
+  "schema": "get_planning_context_input",
+  "value": {}
+}

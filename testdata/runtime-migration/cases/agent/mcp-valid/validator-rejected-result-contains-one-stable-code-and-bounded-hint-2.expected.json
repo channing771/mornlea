@@ -1,0 +1,12 @@
+{
+  "kind": "ok",
+  "category": "validate_plan_result",
+  "fields": {
+    "keys": [
+      "accepted",
+      "code",
+      "hint"
+    ],
+    "schema": "validate_plan_result"
+  }
+}

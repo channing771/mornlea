@@ -1,0 +1,12 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "block_id": 35,
+    "block_symbol": "FarmlandDryID",
+    "code": "unmineable_target",
+    "has_block_drop": true,
+    "mine_semantics": "forbidden_farming",
+    "mineable": false
+  }
+}

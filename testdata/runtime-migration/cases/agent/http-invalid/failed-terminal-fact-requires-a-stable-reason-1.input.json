@@ -1,0 +1,14 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/http-v1/golden/invalid.json",
+  "source_index": 1,
+  "fixture": "failed terminal fact requires a stable reason",
+  "document": "http-v1/schema.json",
+  "schema": "dialogue_terminal_failed_fact_node",
+  "value": {
+    "kind": "terminal",
+    "state": "failed",
+    "reason": "none"
+  }
+}

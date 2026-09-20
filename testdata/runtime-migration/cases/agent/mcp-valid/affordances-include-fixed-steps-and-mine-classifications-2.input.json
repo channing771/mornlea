@@ -1,0 +1,51 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/valid.json",
+  "source_index": 2,
+  "fixture": "affordances include fixed steps and mine classifications",
+  "document": "mcp-v1/schema.json",
+  "schema": "list_affordances_result",
+  "value": {
+    "step_kinds": [
+      "go_to",
+      "follow",
+      "mine",
+      "place"
+    ],
+    "online_players": [
+      {
+        "player_id": "99999999-9999-4999-8999-999999999999",
+        "position": [
+          4.5,
+          64,
+          -1.5
+        ]
+      }
+    ],
+    "visible_blocks": [
+      {
+        "position": {
+          "x": 8,
+          "y": 63,
+          "z": -2
+        },
+        "block_id": 2,
+        "block_name": "stone",
+        "drop_item": "stone",
+        "mine_semantics": "single_drop"
+      },
+      {
+        "position": {
+          "x": 9,
+          "y": 63,
+          "z": -2
+        },
+        "block_id": 11,
+        "block_name": "chest",
+        "drop_item": "chest",
+        "mine_semantics": "container_batch"
+      }
+    ]
+  }
+}

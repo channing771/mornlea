@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "oneOf",
+    "path": "$",
+    "schema": "find_visible_blocks_result"
+  }
+}

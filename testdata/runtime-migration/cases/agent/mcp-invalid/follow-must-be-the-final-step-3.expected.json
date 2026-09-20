@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "x-mornlea-rules",
+    "path": "$.plan.steps[0]",
+    "rule": "follow_must_be_last",
+    "schema": "validate_plan_input"
+  }
+}

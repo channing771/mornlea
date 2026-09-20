@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "x-mornlea-rules",
+    "path": "$",
+    "rule": "loopback_mcp_url.fragment",
+    "schema": "mcp_endpoint"
+  }
+}

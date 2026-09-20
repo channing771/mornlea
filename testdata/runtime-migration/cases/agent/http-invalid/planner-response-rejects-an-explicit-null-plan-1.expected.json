@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "type",
+    "path": "$.plan",
+    "rule": "object",
+    "schema": "plan_response"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "required",
+    "path": "$.lease_id",
+    "rule": "lease_id",
+    "schema": "lease_request"
+  }
+}

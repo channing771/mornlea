@@ -1,0 +1,12 @@
+{
+  "kind": "ok",
+  "category": "validate_plan_result",
+  "fields": {
+    "keys": [
+      "accepted",
+      "plan",
+      "snapshot_digest"
+    ],
+    "schema": "validate_plan_result"
+  }
+}

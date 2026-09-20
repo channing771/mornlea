@@ -1,0 +1,11 @@
+{
+  "case_kind": "mine",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/mine-validation.json",
+  "source_index": 4,
+  "fixture": "immature crop remains rejected despite a registered drop",
+  "document": "mcp-v1/schema.json",
+  "block_symbol": "WheatStage0ID",
+  "block_id": 37,
+  "mine_semantics": "forbidden_farming"
+}

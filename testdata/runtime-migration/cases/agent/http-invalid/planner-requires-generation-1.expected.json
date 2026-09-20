@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "required",
+    "path": "$.generation",
+    "rule": "generation",
+    "schema": "plan_request"
+  }
+}

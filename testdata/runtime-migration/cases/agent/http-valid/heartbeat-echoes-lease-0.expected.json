@@ -1,0 +1,15 @@
+{
+  "kind": "ok",
+  "category": "heartbeat_response",
+  "fields": {
+    "keys": [
+      "client_instance_id",
+      "contract_version",
+      "lease_expires_in_ms",
+      "lease_id",
+      "namespace_id",
+      "request_id"
+    ],
+    "schema": "heartbeat_response"
+  }
+}

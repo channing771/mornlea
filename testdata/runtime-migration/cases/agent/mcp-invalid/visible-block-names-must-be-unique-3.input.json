@@ -1,0 +1,16 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/invalid.json",
+  "source_index": 3,
+  "fixture": "visible block names must be unique",
+  "document": "mcp-v1/schema.json",
+  "schema": "find_visible_blocks_input",
+  "value": {
+    "block_names": [
+      "chest",
+      "chest"
+    ],
+    "limit": 2
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "const",
+    "path": "$.kind",
+    "schema": "go_to_step"
+  }
+}

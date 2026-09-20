@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "maxLength",
+    "path": "$.line",
+    "schema": "dialogue_nonterminal_response"
+  }
+}

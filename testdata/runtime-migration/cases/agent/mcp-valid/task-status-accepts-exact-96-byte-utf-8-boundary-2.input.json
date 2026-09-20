@@ -1,0 +1,10 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/valid.json",
+  "source_index": 2,
+  "fixture": "task status accepts exact 96-byte UTF-8 boundary",
+  "document": "mcp-v1/schema.json",
+  "schema": "task_status_text",
+  "value": "界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界"
+}
