@@ -354,7 +354,7 @@ rather than checking that it omits a few names.
   sequence, two `i8` move axes, four action flags around two `f32` look
   angles, in field order sequence, move X, move Z, jump, yaw, pitch,
   mining, eating, sprinting, sneaking. Rotation must be finite; the
-  domain type `mornlea_domain::PlayerInput` is the single owner of that
+  domain type `mornlea_domain::LookAngles` is the single owner of that
   rule, so a non-finite yaw or pitch is `InvalidFloat`. A non-0/1 flag
   byte is `InvalidEnum`; truncated payloads and trailing bytes fail
   before publication (`player_input_round_trip_preserves_golden_bytes`,

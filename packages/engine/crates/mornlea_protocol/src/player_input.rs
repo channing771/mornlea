@@ -1,6 +1,6 @@
 use crate::bytes::{ByteDecoder, ByteEncoder};
 use crate::error::ProtocolError;
-use mornlea_domain::PlayerInput as DomainPlayerInput;
+use mornlea_domain::LookAngles;
 
 /// Play PlayerInput payload, and the highest-frequency packet on the wire:
 /// a `u64` sequence, two `i8` move axes, four action flags, and two `f32`
@@ -35,10 +35,11 @@ impl PlayerInput {
         sprinting: bool,
         sneaking: bool,
     ) -> Result<Self, ProtocolError> {
-        DomainPlayerInput::new(
-            sequence, move_x, move_z, jump, yaw, pitch, mining, eating, sprinting, sneaking,
-        )
-        .map_err(|_| ProtocolError::InvalidFloat)?;
+        // The domain `LookAngles` rule is the single owner of the finite
+        // rotation contract, so this DTO validates through it instead of
+        // keeping a second copy of the check that could drift from the
+        // semantic record.
+        LookAngles::try_new(yaw, pitch).map_err(|_| ProtocolError::InvalidFloat)?;
         Ok(Self {
             sequence,
             move_x,
