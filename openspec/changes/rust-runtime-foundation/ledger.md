@@ -48,3 +48,19 @@
 - PASS: `go test ./packages/tools/cmd/runtime-oracle -race -count=1`
 - Directory guidance: `packages/tools/cmd/runtime-oracle/AGENTS.md` now documents isolated replay alongside inventory freeze.
 - Architecture skill: no change. Isolated temp-dir replay is the existing foundation tooling rule, not a new cross-task ownership convention.
+
+## 2026-09-20 — 2.1 contract crate registration
+
+- Baseline: `2994828d feat(tools): add isolated runtime oracle traces`.
+- Existing unrelated work: deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded.
+- Ruling: workspace members are `mornlea_engine`, `mornlea_client`, `mornlea_godot`, `mornlea_domain`, `mornlea_protocol`, and `mornlea_storage`. Production edges are protocol→domain and storage→domain only. Domain has no production crate dependencies. None of the three foundation crates depend on `mornlea_engine`, `mornlea_client`, `mornlea_godot`, or each other except through domain. `TestNativeEngineLibraryIdentity` now pins the six-member workspace list.
+- Directory guidance: added crate `AGENTS.md` files beside `mornlea_domain`, `mornlea_protocol`, and `mornlea_storage`; updated `packages/engine/AGENTS.md` for the workspace boundary.
+- Discovered tests (`rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain -p mornlea_protocol -p mornlea_storage --test runtime_contract --locked -- --list`): domain 3, protocol 4, storage 4 (11). Zero-test discovery would have been rejected.
+- PASS: `rustup run 1.97.1 cargo metadata --manifest-path packages/engine/Cargo.toml --no-deps --format-version 1` (six `mornlea_*` workspace packages).
+- PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain -p mornlea_protocol -p mornlea_storage --test runtime_contract --locked`
+- PASS: `go test ./packages/audit -run 'TestNativeEngineLibraryIdentity|TestInternalDependenciesAreOneWay|TestProjectArchitectureSkillsMatch' -count=1`
+- Intended red cases before family ports (not implemented in this node):
+  - Domain (`mornlea_domain`, families `domain.input` and `domain.event`): reject incomplete identity; reject NaN/Inf, unknown IDs, and out-of-range values; preserve deterministic ordering of semantic inputs and event observations.
+  - Protocol (`mornlea_protocol`, 60 families): `protocol.frame` plus every `protocol.client.*` and `protocol.server.*` inventory row. Each family needs byte-preserving round-trip and malformed-input rejection (truncated, oversized, invalid enum, unsupported version) before publication. Port one family per tested commit.
+  - Storage (`mornlea_storage`, 7 families): `save.chunk`, `save.player`, `save.companion`, `save.hostile`, `save.passive`, `save.world-metadata`, `save.region`. Each needs current-schema round-trip, supported-version migration to the same normalized result, and corrupt/partial/future-version rejection without implicit repair.
+- Architecture skill: promoted the foundation crate split and production dependency direction into both project-owned copies. Verified by the new `runtime_contract` targets and `packages/engine/AGENTS.md`.

@@ -39,6 +39,7 @@ Use this skill as a compact decision aid, not as a replacement for repository tr
 - The final Godot feature language is Python. Production GDScript is not a target feature language; the current pure-GDScript Bootstrap is a migration-only openability and diagnostics exception and must not receive gameplay behavior.
 - Python in Godot consumes typed semantic values and submits typed intent. It must not parse protocol bytes, own authoritative mirrors, implement prediction, read saves, call raw ABIs, or perform unbounded numerical work. The independent Agent Python service has separate process, dependencies, and contracts.
 - Rust migration work uses offline replay/differential comparison against Go; Go and Rust must never be concurrent online authorities.
+- Foundation contract crates split as `mornlea_domain` (identifiers, values, semantic input/event records), `mornlea_protocol` (framing and packet codecs), and `mornlea_storage` (save records and migrations). Protocol and storage may depend on domain. None of the three may depend on `mornlea_engine`, `mornlea_client`, `mornlea_godot`, or an online authority in production; each crate's `runtime_contract` target enforces that direction.
 
 ## Godot client direction during migration
 

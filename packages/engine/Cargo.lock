@@ -907,6 +907,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "mornlea_domain"
+version = "0.1.0"
+
+[[package]]
 name = "mornlea_engine"
 version = "0.1.0"
 
@@ -915,6 +919,20 @@ name = "mornlea_godot"
 version = "0.1.0"
 dependencies = [
  "godot",
+]
+
+[[package]]
+name = "mornlea_protocol"
+version = "0.1.0"
+dependencies = [
+ "mornlea_domain",
+]
+
+[[package]]
+name = "mornlea_storage"
+version = "0.1.0"
+dependencies = [
+ "mornlea_domain",
 ]
 
 [[package]]
