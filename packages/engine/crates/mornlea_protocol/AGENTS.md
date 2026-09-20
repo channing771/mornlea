@@ -209,6 +209,17 @@ and `domain_does_not_depend_on_protocol`).
 - `ByteEncoder` / `ByteDecoder` `f32` helpers copy the Go primitive: NaN
   and Inf fail before a payload is published.
 
+## Open container (`src/open_container.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 8 payload is a little-endian `u64` sequence followed by
+  two little-endian `f32` look angles. The server ray-casts the
+  authoritative world and decides whether the hit block is a furnace or a
+  chest, so the client never declares a container kind. A zero sequence is
+  legal. Non-finite yaw/pitch are `InvalidFloat`; truncated payloads and
+  trailing bytes fail before publication
+  (`open_container_round_trip_preserves_golden_bytes`,
+  `open_container_rejects_non_finite_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash

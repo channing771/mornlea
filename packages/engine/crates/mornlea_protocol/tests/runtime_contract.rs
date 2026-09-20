@@ -964,6 +964,60 @@ fn place_block_rejects_invalid_slot_non_finite_and_malformed_payload() {
     );
 }
 
+#[test]
+fn open_container_round_trip_preserves_golden_bytes() {
+    let open = mornlea_protocol::OpenContainer::new(3, 1.5, -0.5).expect("open");
+    let payload = open.encode();
+    assert_eq!(
+        payload,
+        [
+            0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0x3f, 0x00, 0x00,
+            0x00, 0xbf
+        ]
+    );
+    assert_eq!(mornlea_protocol::OpenContainer::PACKET_ID, 8);
+    let decoded = mornlea_protocol::OpenContainer::decode(&payload).expect("decode");
+    assert_eq!(decoded, open);
+    assert_eq!(decoded.sequence, 3);
+    assert_eq!(decoded.yaw, 1.5);
+    assert_eq!(decoded.pitch, -0.5);
+}
+
+#[test]
+fn open_container_rejects_non_finite_and_malformed_payload() {
+    assert_eq!(
+        mornlea_protocol::OpenContainer::new(1, f32::NAN, 0.0),
+        Err(mornlea_protocol::ProtocolError::InvalidFloat)
+    );
+    assert_eq!(
+        mornlea_protocol::OpenContainer::new(1, 0.0, f32::NEG_INFINITY),
+        Err(mornlea_protocol::ProtocolError::InvalidFloat)
+    );
+    let mut inf_pitch = vec![0u8; 8];
+    inf_pitch.extend_from_slice(&0f32.to_le_bytes());
+    inf_pitch.extend_from_slice(&0x7f80_0000u32.to_le_bytes());
+    assert_eq!(
+        mornlea_protocol::OpenContainer::decode(&inf_pitch),
+        Err(mornlea_protocol::ProtocolError::InvalidFloat)
+    );
+    assert!(mornlea_protocol::OpenContainer::decode(&[0x03]).is_err());
+    let mut trailing = vec![
+        0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0x3f, 0x00, 0x00, 0x00,
+        0xbf,
+    ];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::OpenContainer::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    let zero = mornlea_protocol::OpenContainer::new(0, 0.0, 0.0).expect("zero");
+    assert_eq!(zero.sequence, 0);
+    assert_eq!(
+        mornlea_protocol::OpenContainer::decode(&zero.encode()).expect("decode zero"),
+        zero
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }
