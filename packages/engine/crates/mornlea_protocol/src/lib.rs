@@ -29,8 +29,10 @@ mod equip_armor;
 mod error;
 mod forget_chunks;
 mod frame;
+mod furnace_state;
 mod handshake_reject;
 mod hostile_despawn;
+mod item_stack;
 mod keep_alive;
 mod keep_alive_reply;
 mod login_reject;
@@ -78,6 +80,8 @@ pub use container_ref::{
     CHESTS_PER_CHUNK, CONTAINER_KIND_CHEST, CONTAINER_KIND_FURNACE, ContainerRef,
     FURNACES_PER_CHUNK,
 };
+    CRAFTING_GRID_SIZE_PERSONAL, CRAFTING_GRID_SIZE_WORKBENCH, CraftingState,
+};
 pub use disconnect::{
     DISCONNECT_INTERNAL_ERROR, DISCONNECT_PROTOCOL_VIOLATION, DISCONNECT_SERVER_SHUTDOWN,
     DISCONNECT_SLOW_CLIENT, DISCONNECT_TIMEOUT, Disconnect,
@@ -88,8 +92,13 @@ pub use equip_armor::EquipArmor;
 pub use error::ProtocolError;
 pub use forget_chunks::{ForgetChunks, MAX_FORGET_CHUNKS};
 pub use frame::{MAX_FRAME_BYTES, read_frame, write_frame};
+pub use furnace_state::{
+    FURNACE_BURN_TICKS, FURNACE_SMELT_TICKS, FurnaceState, is_smelting_product,
+};
 pub use handshake_reject::{HANDSHAKE_VERSION_MISMATCH, HandshakeReject};
 pub use hostile_despawn::{HOSTILE_DESPAWN_WIRE_BYTES, HostileDespawn, MAX_HOSTILE_RECORDS};
+    BACKPACK_SLOTS, HOTBAR_SLOTS, INVENTORY_STATE_WIRE_BYTES, InventoryState,
+};
 pub use item_stack::{
     ITEM_ID_MAX, ITEM_NONE, ItemStack, MAX_STACK_COUNT, smelting_output, valid_furnace_output,
 };

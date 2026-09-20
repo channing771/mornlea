@@ -2380,3 +2380,165 @@ fn chest_state_rejects_wrong_reference_and_malformed_payload() {
         Err(mornlea_protocol::ProtocolError::TrailingBytes)
     );
 }
+
+#[test]
+fn furnace_state_round_trip_preserves_golden_bytes() {
+    let furnace = mornlea_protocol::ContainerRef::new(
+        0,
+        1,
+        -1,
+        mornlea_protocol::CONTAINER_KIND_FURNACE,
+        5,
+        7,
+    )
+    .expect("furnace");
+    let state = mornlea_protocol::FurnaceState::new(
+        furnace,
+        mornlea_protocol::ItemStack::new(6, 3, 0).expect("raw iron"),
+        mornlea_protocol::ItemStack::EMPTY,
+        mornlea_protocol::ItemStack::new(7, 1, 0).expect("iron ingot"),
+        120,
+        1600,
+    )
+    .expect("state");
+    let payload = state.encode();
+    assert_eq!(mornlea_protocol::FurnaceState::PACKET_ID, 13);
+    assert_eq!(payload.len(), 18 + 3 * 5 + 3);
+    // The furnace reference stays the shared 18-byte layout.
+    assert_eq!(
+        &payload[..18],
+        &[
+            0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0x00, 0x05,
+            0x07, 0x00, 0x00, 0x00,
+        ]
+    );
+    // Input, fuel, and output follow in that fixed order.
+    assert_eq!(&payload[18..23], &[0x06, 0x00, 0x03, 0x00, 0x00]);
+    assert_eq!(&payload[23..28], &[0x00, 0x00, 0x00, 0x00, 0x00]);
+    assert_eq!(&payload[28..33], &[0x07, 0x00, 0x01, 0x00, 0x00]);
+    // Progress is a single byte and burn time a little-endian u16.
+    assert_eq!(payload[33], 120);
+    assert_eq!(&payload[34..36], &[0x40, 0x06]);
+    assert_eq!(mornlea_protocol::FurnaceState::PACKET_ID, 13);
+    assert_eq!(payload.len(), 18 + 3 * 5 + 3);
+    assert_eq!(
+        mornlea_protocol::FurnaceState::decode(&payload).expect("decode"),
+        state
+    );
+}
+
+#[test]
+fn furnace_state_rejects_invalid_slots_timers_and_malformed_payload() {
+    let furnace = mornlea_protocol::ContainerRef::new(
+        0,
+        1,
+        -1,
+        mornlea_protocol::CONTAINER_KIND_FURNACE,
+        5,
+        7,
+    )
+    .expect("furnace");
+    let chest =
+        mornlea_protocol::ContainerRef::new(0, 1, -1, mornlea_protocol::CONTAINER_KIND_CHEST, 5, 7)
+            .expect("chest");
+    let base = mornlea_protocol::FurnaceState::new(
+        furnace,
+        mornlea_protocol::ItemStack::new(6, 3, 0).expect("raw iron"),
+        mornlea_protocol::ItemStack::EMPTY,
+        mornlea_protocol::ItemStack::new(7, 1, 0).expect("iron ingot"),
+        120,
+        1600,
+    )
+    .expect("state");
+    // A furnace state must name a furnace.
+    assert!(
+        mornlea_protocol::FurnaceState::new(
+            chest,
+            mornlea_protocol::ItemStack::EMPTY,
+            mornlea_protocol::ItemStack::EMPTY,
+            mornlea_protocol::ItemStack::EMPTY,
+            0,
+            0,
+        )
+        .is_err()
+    );
+    // Timer bounds come from the authoritative furnace contract.
+    assert_eq!(
+        mornlea_protocol::FurnaceState::new(
+            furnace,
+            mornlea_protocol::ItemStack::EMPTY,
+            mornlea_protocol::ItemStack::EMPTY,
+            mornlea_protocol::ItemStack::EMPTY,
+            mornlea_protocol::FURNACE_SMELT_TICKS,
+            0,
+        ),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::FurnaceState::new(
+            furnace,
+            mornlea_protocol::ItemStack::EMPTY,
+            mornlea_protocol::ItemStack::EMPTY,
+            mornlea_protocol::ItemStack::EMPTY,
+            0,
+            mornlea_protocol::FURNACE_BURN_TICKS + 1,
+        ),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    // The input slot only accepts a registered smelting input, the fuel slot
+    // only empty or coal, and the output slot only a fixed smelting product.
+    assert!(
+        mornlea_protocol::FurnaceState::new(
+            furnace,
+            mornlea_protocol::ItemStack::new(1, 1, 0).expect("stone"),
+            mornlea_protocol::ItemStack::EMPTY,
+            mornlea_protocol::ItemStack::EMPTY,
+            0,
+            0,
+        )
+        .is_err()
+    );
+    assert!(
+        mornlea_protocol::FurnaceState::new(
+            furnace,
+            mornlea_protocol::ItemStack::EMPTY,
+            mornlea_protocol::ItemStack::new(1, 1, 0).expect("stone"),
+            mornlea_protocol::ItemStack::EMPTY,
+            0,
+            0,
+        )
+        .is_err()
+    );
+    assert!(
+        mornlea_protocol::FurnaceState::new(
+            furnace,
+            mornlea_protocol::ItemStack::EMPTY,
+            mornlea_protocol::ItemStack::EMPTY,
+            mornlea_protocol::ItemStack::new(1, 1, 0).expect("stone"),
+            0,
+            0,
+        )
+        .is_err()
+    );
+    // Coal is a legal fuel.
+    assert!(
+        mornlea_protocol::FurnaceState::new(
+            furnace,
+            mornlea_protocol::ItemStack::EMPTY,
+            mornlea_protocol::ItemStack::new(5, 1, 0).expect("coal"),
+            mornlea_protocol::ItemStack::EMPTY,
+            0,
+            0,
+        )
+        .is_ok()
+    );
+    let payload = base.encode();
+    assert!(mornlea_protocol::FurnaceState::decode(&payload[..payload.len() - 1]).is_err());
+    let mut trailing = payload.clone();
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::FurnaceState::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}
+

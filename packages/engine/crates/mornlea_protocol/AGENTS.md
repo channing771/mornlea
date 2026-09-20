@@ -488,9 +488,15 @@ and `domain_does_not_depend_on_protocol`).
   (`chest_state_round_trip_preserves_slot_bytes`,
   `chest_state_rejects_wrong_reference_and_malformed_payload`).
 
-## Focused Verification
+## Furnace state (`src/furnace_state.rs`, `tests/runtime_contract.rs`)
 
-```bash
-rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked -- --list
-rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked
-```
+- Play packet ID 13 payload is the 18-byte furnace reference, the fixed
+  input, fuel, and output stacks, a single progress byte, and a
+  little-endian `u16` burn time. The reference must name a furnace
+  (`validate_furnace`); the timers are bounded by `FURNACE_SMELT_TICKS` and
+  `FURNACE_BURN_TICKS`; the input slot only accepts an empty stack or a
+  registered smelting input, the fuel slot only an empty stack or coal, and
+  the output slot only a fixed smelting product
+  (`furnace_state_round_trip_preserves_golden_bytes`,
+  `furnace_state_rejects_invalid_slots_timers_and_malformed_payload`).
+
