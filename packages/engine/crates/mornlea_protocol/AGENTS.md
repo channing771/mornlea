@@ -154,6 +154,15 @@ and `domain_does_not_depend_on_protocol`).
   publication (`drop_selected_item_round_trip_preserves_golden_bytes`,
   `drop_selected_item_rejects_malformed_payload_and_accepts_zero_sequence`).
 
+## Equip armor (`src/equip_armor.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 18 payload is a little-endian `u64` sequence, the same
+  shape as DropSelectedItem. Zero sequences are legal. The selected item
+  and destination armor slot stay server-owned. Truncated payloads and
+  trailing bytes fail before publication
+  (`equip_armor_round_trip_preserves_golden_bytes`,
+  `equip_armor_rejects_malformed_payload_and_accepts_zero_sequence`).
+
 ## Focused Verification
 
 ```bash

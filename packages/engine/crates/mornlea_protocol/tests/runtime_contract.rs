@@ -696,6 +696,34 @@ fn drop_selected_item_rejects_malformed_payload_and_accepts_zero_sequence() {
     );
 }
 
+#[test]
+fn equip_armor_round_trip_preserves_golden_bytes() {
+    let equip = mornlea_protocol::EquipArmor::new(18);
+    let payload = equip.encode();
+    assert_eq!(payload, [0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    assert_eq!(mornlea_protocol::EquipArmor::PACKET_ID, 18);
+    let decoded = mornlea_protocol::EquipArmor::decode(&payload).expect("decode");
+    assert_eq!(decoded, equip);
+    assert_eq!(decoded.sequence, 18);
+}
+
+#[test]
+fn equip_armor_rejects_malformed_payload_and_accepts_zero_sequence() {
+    assert!(mornlea_protocol::EquipArmor::decode(&[0x12]).is_err());
+    let mut trailing = vec![0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::EquipArmor::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+    let zero = mornlea_protocol::EquipArmor::new(0);
+    assert_eq!(zero.sequence, 0);
+    assert_eq!(
+        mornlea_protocol::EquipArmor::decode(&zero.encode()).expect("decode zero"),
+        zero
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

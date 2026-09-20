@@ -201,3 +201,12 @@
 - Discovered tests (`-- --list`): 41.
 - PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
 - Architecture skill: no change.
+
+## 2026-09-20 — 2.3 protocol.client.EquipArmor
+
+- Baseline: `36360462 feat(engine): port drop selected item codec`.
+- Existing unrelated work: deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded.
+- Ruling: play packet ID 18 payload is little-endian `u64` sequence, the same shape as DropSelectedItem. Zero sequences are legal. Golden bytes match Go `1200000000000000`. Selected item and destination armor slot stay server-owned. Remaining protocol families stay unchecked in `tasks.md`.
+- Discovered tests (`-- --list`): 43.
+- PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
+- Architecture skill: no change.

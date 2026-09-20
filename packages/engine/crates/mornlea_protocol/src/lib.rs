@@ -13,6 +13,7 @@ mod client_hello;
 mod command_rejected;
 mod disconnect;
 mod drop_selected_item;
+mod equip_armor;
 mod error;
 mod frame;
 mod handshake_reject;
@@ -39,6 +40,7 @@ pub use disconnect::{
     DISCONNECT_SLOW_CLIENT, DISCONNECT_TIMEOUT, Disconnect,
 };
 pub use drop_selected_item::DropSelectedItem;
+pub use equip_armor::EquipArmor;
 pub use error::ProtocolError;
 pub use frame::{MAX_FRAME_BYTES, read_frame, write_frame};
 pub use handshake_reject::{HANDSHAKE_VERSION_MISMATCH, HandshakeReject};
