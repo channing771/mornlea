@@ -444,11 +444,12 @@ func setChestViewSlot(
 }
 
 // applyContainerMove 处理跨容器移动命令（整堆 `CommandMoveFurnaceStack`、
-// 容器视图半组/单件 `CommandMoveStackPartial` 与容器视图快捷搬运
-// `CommandQuickMoveStack`），成功时同时提交玩家物品与区块中的容器；按引用
-// 的 Kind 分派到熔炉或箱子各自独立的边界与约束检查。三族命令共享查看关系
-// 校验、区域路由、回收预演与提交路径，只有合并语义（整堆交换 vs 部分拒绝
-// vs 固定目标序整堆转移）不同。
+// 容器视图半组/单件 `CommandMoveStackPartial`、容器视图快捷搬运
+// `CommandQuickMoveStack` 与容器视图整组丢弃 `CommandDropStack`），成功时
+// 同时提交玩家物品与区块中的容器；按引用的 Kind 分派到熔炉或箱子各自独立
+// 的边界与约束检查。四族命令共享查看关系校验、区域路由、回收预演与提交
+// 路径，只有合并语义（整堆交换 vs 部分拒绝 vs 固定目标序整堆转移 vs 整组
+// 取出脚下投放）不同。
 func (engine *engineContext) applyContainerMove(
 	id SessionID,
 	command Command,
@@ -465,6 +466,7 @@ func (engine *engineContext) applyContainerMove(
 	key := core.ChunkKey{Dimension: ref.Dimension, Pos: ref.Chunk}
 	partial := command.Kind == CommandMoveStackPartial
 	quick := command.Kind == CommandQuickMoveStack
+	drop := command.Kind == CommandDropStack
 
 	switch ref.Kind {
 	case core.ContainerKindChest:
@@ -475,6 +477,30 @@ func (engine *engineContext) applyContainerMove(
 		var nextInventory core.Inventory
 		var nextChest world.ChestSlot
 		switch {
+		case drop:
+			// 面板拖出丢弃：来源格整组取出经共享出口脚下投放，来源清空；
+			// 槽位值域（箱子域 0..62）由协议校验层保证。
+			if command.Slot >= core.ChestViewSlots {
+				return RejectInvalidSlot, true
+			}
+			source, sourceOk := chestViewSlot(session.player.inventory, chest, command.Slot)
+			if !sourceOk || source.Item == core.ItemNone {
+				return RejectInvalidSlot, true
+			}
+			nextInventory, nextChest, ok = setChestViewSlot(
+				session.player.inventory, chest, command.Slot, core.ItemStack{},
+			)
+			if !ok || !nextChest.Valid() || !nextInventory.Valid() {
+				return RejectInvalidInput, true
+			}
+			if reason, rejected := engine.dropStackAtFeet(session, source, pending); rejected {
+				return reason, true
+			}
+			chunk.SetChest(int(ref.Slot), nextChest)
+			engine.touchChunk(key, pending)
+			session.player.inventory = nextInventory
+			session.player.inventoryDirty = true
+			return 0, false
 		case quick:
 			nextInventory, nextChest, ok = quickMoveChestStack(
 				session.player.inventory, chest, command.Slot,
@@ -511,6 +537,31 @@ func (engine *engineContext) applyContainerMove(
 		var nextInventory core.Inventory
 		var nextFurnace world.FurnaceSlot
 		switch {
+		case drop:
+			// 与箱子分支同形：来源格整组取出脚下投放、来源清空。输出格作为
+			// 丢弃来源是允许的——清空写回经 `setFurnaceViewSlot` 的输出
+			// 白名单（空值恒可写），取出本身不做产物类型限制。
+			if command.Slot >= core.FurnaceViewSlots {
+				return RejectInvalidSlot, true
+			}
+			source, sourceOk := furnaceViewSlot(session.player.inventory, furnace, command.Slot)
+			if !sourceOk || source.Item == core.ItemNone {
+				return RejectInvalidSlot, true
+			}
+			nextInventory, nextFurnace, ok = setFurnaceViewSlot(
+				session.player.inventory, furnace, command.Slot, core.ItemStack{},
+			)
+			if !ok || !nextFurnace.Valid() || !nextInventory.Valid() {
+				return RejectInvalidInput, true
+			}
+			if reason, rejected := engine.dropStackAtFeet(session, source, pending); rejected {
+				return reason, true
+			}
+			chunk.SetFurnace(int(ref.Slot), nextFurnace)
+			engine.touchChunk(key, pending)
+			session.player.inventory = nextInventory
+			session.player.inventoryDirty = true
+			return 0, false
 		case quick:
 			nextInventory, nextFurnace, ok = quickMoveFurnaceStack(
 				session.player.inventory, furnace, command.Slot,

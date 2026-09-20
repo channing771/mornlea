@@ -360,7 +360,7 @@ func TestMesherSkySnapshotSharesChunkStampGeneration(t *testing.T) {
 
 	key := core.SectionKey{Dimension: core.Overworld, Pos: core.SectionPos{}}
 	mesher.MarkDirty(key)
-	mesher.Schedule(mirror, 1)
+	mesher.Schedule(mirror, client.ViewCenter{}, 1)
 	results := waitForMesherResults(t, mesher, mirror, 1, 5*time.Second)
 	if len(results) != 1 {
 		t.Fatalf("网格结果数量 = %d，想要 1", len(results))
@@ -382,7 +382,7 @@ func TestMesherDiscardsStaleSkyLightAfterRoofChange(t *testing.T) {
 	key := core.SectionKey{Dimension: core.Overworld, Pos: core.SectionPos{}}
 	release := mesher.BlockForTest(key)
 	mesher.MarkDirty(key)
-	mesher.Schedule(mirror, 1)
+	mesher.Schedule(mirror, client.ViewCenter{}, 1)
 	waitForMesherStats(t, mesher, 5*time.Second, func(stats client.MesherStats) bool {
 		return stats.InFlightJobs == 1
 	})
@@ -402,7 +402,7 @@ func TestMesherDiscardsStaleSkyLightAfterRoofChange(t *testing.T) {
 		t.Fatalf("接受了屋顶变化前的过期光照结果：%+v", got)
 	}
 
-	mesher.Schedule(mirror, 1)
+	mesher.Schedule(mirror, client.ViewCenter{}, 1)
 	fresh := waitForMesherResults(t, mesher, mirror, 1, 5*time.Second)
 	if lights := meshedSkyLight(fresh); !lights[0xE0] {
 		t.Fatalf("屋顶下顶面天空光集合 = %v，想要含相邻露天传播的 0xE0", lights)
@@ -423,7 +423,7 @@ func TestMesherDiscardsStaleBlockLightAfterRemoval(t *testing.T) {
 	key := core.SectionKey{Dimension: core.Overworld, Pos: core.SectionPos{}}
 	release := mesher.BlockForTest(key)
 	mesher.MarkDirty(key)
-	mesher.Schedule(mirror, 1)
+	mesher.Schedule(mirror, client.ViewCenter{}, 1)
 	waitForMesherStats(t, mesher, 5*time.Second, func(stats client.MesherStats) bool {
 		return stats.InFlightJobs == 1
 	})
@@ -449,7 +449,7 @@ func TestMesherDiscardsStaleBlockLightAfterRemoval(t *testing.T) {
 		t.Fatalf("发布了移除光源前的过期结果：%d 个区段", len(stale))
 	}
 
-	mesher.Schedule(mirror, 1)
+	mesher.Schedule(mirror, client.ViewCenter{}, 1)
 	fresh := waitForMesherResults(t, mesher, mirror, 1, 5*time.Second)
 	for _, result := range fresh {
 		for _, quad := range result.Quads {
@@ -506,7 +506,7 @@ func BenchmarkMesherSkySnapshot(b *testing.B) {
 	for b.Loop() {
 		// 重复标脏同一区段：dirty map 合并后每轮只产生一份九区高度快照。
 		mesher.MarkDirty(key, key, key)
-		mesher.Schedule(mirror, 1)
+		mesher.Schedule(mirror, client.ViewCenter{}, 1)
 		for len(mesher.Drain(mirror, 8)) == 0 {
 		}
 	}

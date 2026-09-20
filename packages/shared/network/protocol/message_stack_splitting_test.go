@@ -19,9 +19,9 @@ func stackSplittingFurnaceRef() core.ContainerRef {
 }
 
 // TestStackSplittingPacketIDsAreFrozen 钉死分堆双命令的最终编号：C→S
-// `MoveStackPartial=19`、`QuickMoveStack=20`，由协议 v44 承载；「下一个仍未
-// 分配」上界随之推进到 21。上界断言写成「末项 +1」而不是裸字面量，下次追加
-// packet 时它会跟着末项走，不会静默退化成「测一个已合法的 ID」。
+// `MoveStackPartial=19`、`QuickMoveStack=20`，由协议 v44 承载；后续版本的
+// 「下一个仍未分配」上界与当前版本号由整组丢弃命令（v45）与版本钉值测试
+// 各自维护，本测试只锁两条分堆命令的编号不再漂移。
 func TestStackSplittingPacketIDsAreFrozen(t *testing.T) {
 	assertClientRegistry(t, []struct {
 		state  State
@@ -31,12 +31,6 @@ func TestStackSplittingPacketIDsAreFrozen(t *testing.T) {
 		{StatePlay, MoveStackPartial{}, 19},
 		{StatePlay, QuickMoveStack{}, 20},
 	})
-	if _, ok := ClientPacketForID(StatePlay, 20+1); ok {
-		t.Fatal("Play client packet ID 21 必须保持未分配")
-	}
-	if ProtocolVersion != 44 {
-		t.Fatalf("协议版本 = %d，想要 44——分堆双命令由 v44 承载", ProtocolVersion)
-	}
 }
 
 // TestStackSplittingValidateAcceptsAllViewDomains 覆盖三个视图域的合法边界：

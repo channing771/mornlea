@@ -10,6 +10,8 @@ func TestGameActionBridgeStrictValidation(t *testing.T) {
 		`{"type":"game-action","token":1,"op":"slot","area":"furnace","index":2,"button":"right","shift":true}`,
 		`{"type":"game-action","token":1,"op":"close"}`,
 		`{"type":"game-action","token":1,"op":"hotbar","index":8}`,
+		`{"type":"game-action","token":1,"op":"drop","area":"chest","index":26}`,
+		`{"type":"game-action","token":1,"op":"dragMove","fromArea":"inventory","fromIndex":35,"toArea":"crafting","toIndex":8}`,
 	} {
 		if _, err := DecodeUIEventBatch([]byte(`{"v":1,"events":[` + event + `]}`)); err != nil {
 			t.Errorf("合法语义事件被拒绝: %v", err)
@@ -30,6 +32,18 @@ func TestGameActionBridgeStrictValidation(t *testing.T) {
 		`{"type":"game-action","token":1,"op":"slot","area":"inventory","index":0,"button":"middle","shift":false}`,
 		`{"type":"game-action","token":1,"op":"slot","area":"inventory","index":0,"button":"left","shift":"false"}`,
 		`{"type":"game-action","token":1,"op":"slot","area":"inventory","index":0,"button":"left","shift":null}`,
+		// 拖出丢弃：区域/索引缺失、越界与未知区域都整事件拒绝。
+		`{"type":"game-action","token":1,"op":"drop"}`,
+		`{"type":"game-action","token":1,"op":"drop","area":"inventory"}`,
+		`{"type":"game-action","token":1,"op":"drop","area":"inventory","index":36}`,
+		`{"type":"game-action","token":1,"op":"drop","area":"output","index":0}`,
+		`{"type":"game-action","token":1,"op":"drop","area":"inventory","index":0,"button":"left"}`,
+		// 拖拽落槽：任一端缺失、越界或携带多余字段都整事件拒绝。
+		`{"type":"game-action","token":1,"op":"dragMove","fromArea":"inventory","fromIndex":0,"toArea":"inventory"}`,
+		`{"type":"game-action","token":1,"op":"dragMove","fromArea":"inventory","fromIndex":36,"toArea":"inventory","toIndex":0}`,
+		`{"type":"game-action","token":1,"op":"dragMove","fromArea":"inventory","fromIndex":0,"toArea":"chest","toIndex":27}`,
+		`{"type":"game-action","token":1,"op":"dragMove","fromArea":"output","fromIndex":0,"toArea":"inventory","toIndex":0}`,
+		`{"type":"game-action","token":1,"op":"dragMove","fromArea":"inventory","fromIndex":0,"toArea":"inventory","toIndex":1,"shift":false}`,
 	} {
 		if _, err := DecodeUIEventBatch([]byte(`{"v":1,"events":[` + event + `]}`)); err == nil {
 			t.Errorf("非法事件被接受: %s", event)
@@ -50,5 +64,29 @@ func TestGameActionSlotPointerFieldsLandOnStruct(t *testing.T) {
 	action := events[0].GameAction
 	if action.Button != "right" || !action.Shift {
 		t.Fatalf("按键语义字段落位: %#v", action)
+	}
+}
+
+// TestGameActionDragAndDropFieldsLandOnStruct 钉住拖拽两操作的解码落位：
+// dragMove 的源/目标双端与 drop 的单端寻址各自落位，供 handleGameAction 的
+// 拖拽分支消费。
+func TestGameActionDragAndDropFieldsLandOnStruct(t *testing.T) {
+	events, err := DecodeUIEventBatch([]byte(`{"v":1,"events":[` +
+		`{"type":"game-action","token":9,"op":"dragMove","fromArea":"chest","fromIndex":3,"toArea":"inventory","toIndex":10},` +
+		`{"type":"game-action","token":9,"op":"drop","area":"crafting","index":4}]}`))
+	if err != nil {
+		t.Fatalf("解码拖拽事件: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("事件数量: %#v", events)
+	}
+	drag := events[0].GameAction
+	if drag.Op != "dragMove" || drag.FromArea != "chest" || drag.FromIndex != 3 ||
+		drag.ToArea != "inventory" || drag.ToIndex != 10 {
+		t.Fatalf("拖拽落槽字段落位: %#v", drag)
+	}
+	drop := events[1].GameAction
+	if drop.Op != "drop" || drop.Area != "crafting" || drop.Index != 4 {
+		t.Fatalf("拖出丢弃字段落位: %#v", drop)
 	}
 }

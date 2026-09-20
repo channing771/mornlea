@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/channing771/mornlea/packages/client/assets"
 	"github.com/channing771/mornlea/packages/client/client"
@@ -229,7 +230,16 @@ func (runtime *Runtime) AdvanceMeshes(budget int) error {
 		return nil
 	}
 	work := min(budget, free)
-	runtime.mesher.Schedule(runtime.mirrors.world, work)
+	center := client.ViewCenter{Dimension: core.Overworld}
+	if runtime.predictor != nil {
+		if feet, ready := runtime.predictor.PresentationPosition(0); ready {
+			center.Chunk = core.BlockPos{
+				X: int32(math.Floor(float64(feet.X()))),
+				Z: int32(math.Floor(float64(feet.Z()))),
+			}.Chunk()
+		}
+	}
+	runtime.mesher.Schedule(runtime.mirrors.world, center, work)
 	results := runtime.mesher.Drain(runtime.mirrors.world, work)
 	operations := make([]meshReadyOperation, 0, len(results))
 	for _, result := range results {

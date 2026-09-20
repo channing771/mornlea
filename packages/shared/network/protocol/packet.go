@@ -7,7 +7,13 @@ import (
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-// ProtocolVersion 是当前唯一支持的协议版本；v44 在 Play C→S 尾部追加
+// ProtocolVersion 是当前唯一支持的协议版本；v45 在 Play C→S 尾部追加
+// ID 21 的整组丢弃命令 `DropStack`（u64 序号 + 18 字节容器引用 + u8 视图域 +
+// u8 统一索引，固定 28 字节；寻址面与 `MoveStackPartial` 完全一致——视图域
+// {0,1,2} 越界整包拒绝、容器视图必须携带合法容器引用、非容器视图引用必须为
+// 零值、索引上界按视图分派 35/44/62|38。投放位置与整组数量都由服务端从权威
+// 状态推导：位置取玩家脚下，数量取来源槽整组，wire 上不携带坐标与数量；
+// 空槽、非法引用由 sim 按既有拒绝语义处理，客户端不预测）；v44 在 Play C→S 尾部追加
 // ID 19/20 的分堆双命令 `MoveStackPartial`/`QuickMoveStack`（u64 序号 +
 // 18 字节容器引用 + u8 视图域 + u8 来源统一索引；部分移动再追加 u8 目标
 // 与 u8 单件标志，共固定 30 字节，快捷搬运固定 28 字节。视图域 {0,1,2} =
@@ -66,6 +72,9 @@ import (
 // despawn 只携带 ID），并维护旧客户端握手拒绝语义；v29 在 `PlayerState` 尾部追加
 // `SaturationZero` 饱和度归零提示位（紧跟 `Hunger` 之后、`WorldTimeTicks` 之前）；v28 在 `PlayerInput` 尾部追加 `Sprinting` 疾跑位（紧跟 `Eating` 之后），v41 在 `PlayerInput` 尾部追加 `Sneaking` 潜行位（紧跟 `Sprinting` 之后）；v27 新增 Play C→S ID 14 `BoneMeal`，v26 新增 Play S→C ID 20 `PlaceBlockSucceeded`，v25 只扩展既有 `Mining` 位语义不新增字段，v24 上线权威饥饿 Eating/Hunger 并拒绝 v23 及更早登录。
 //
+// v45 是纯追加：只在 Play C→S 尾部新增 ID 21 的整组丢弃命令 `DropStack`，
+// 不改动既有 packet 的 wire 形状与全部长度上限、不新增 `RejectReason`（空槽、
+// 容量与非法引用的拒绝复用既有拒绝原因枚举）；旧版握手拒绝是既有语义。
 // v44 是纯追加：只在 Play C→S 尾部新增 ID 19/20 的分堆双命令，不改动
 // 既有 packet 的 wire 形状与全部长度上限、不新增 `RejectReason`（分堆拒绝
 // 复用既有拒绝原因枚举）；旧版握手拒绝是既有语义。
@@ -119,7 +128,7 @@ import (
 // v21 在 `PlayerState` 末尾追加 2 字节权威氧气（只发给玩家本人的权威
 // 值）；v20 追加 8 个流体方块编号（只扩方块 ID 集合，wire 形状不变），流体
 // 变更走既有区块变更通道（design.md D8）。
-const ProtocolVersion uint32 = 44
+const ProtocolVersion uint32 = 45
 
 // State 标识连接当前允许交换的 packet 集合。
 type State uint8
@@ -316,6 +325,8 @@ func ValidateClientPacket(state State, packet ClientPacket) error {
 		case MoveStackPartial:
 			return clientPacket.Validate()
 		case QuickMoveStack:
+			return clientPacket.Validate()
+		case DropStack:
 			return clientPacket.Validate()
 		case MoveCraftingStack:
 			return clientPacket.Validate()

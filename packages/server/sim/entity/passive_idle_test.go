@@ -38,7 +38,7 @@ func TestPassiveIdleLookTurnsInPlaceWithoutApproaching(t *testing.T) {
 		t.Fatalf("闲时朝向=%v，想要收敛面向玩家的 %v", got.yaw, want)
 	}
 	// 输入层同样不给位移分量：闲时看人只贡献朝向。
-	if input := engine.passiveStepInput(&engine.passives.entries[0]); input.MoveZ != 0 {
+	if input := engine.passiveStepInput(&engine.passives.entries[0], false); input.MoveZ != 0 {
 		t.Fatalf("闲时输入=%+v，想要无位移输入", input)
 	}
 }
@@ -70,9 +70,9 @@ func TestPassiveIdleLookReleasesBeyondSix(t *testing.T) {
 	// 目标上（冻结单 tick 只能看到未收敛的中间态）。
 	for tick := uint64(2) * wanderSegmentTicks; tick < uint64(3)*wanderSegmentTicks; tick++ {
 		engine.tick.Store(tick)
-		engine.passiveStepInput(entry)
+		engine.passiveStepInput(entry, false)
 	}
-	input := engine.passiveStepInput(entry)
+	input := engine.passiveStepInput(entry, false)
 	wantYaw := wanderSegmentWantYaw(engine.seed, 2, entry.id)
 	if input.MoveZ != 1 || input.Yaw != wantYaw {
 		t.Fatalf("超距后输入=%+v，想要漫游派生 (MoveZ=1,Yaw=%v)", input, wantYaw)

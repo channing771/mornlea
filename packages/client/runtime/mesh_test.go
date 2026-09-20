@@ -390,13 +390,28 @@ func TestMeshResetChangesEpochAndRejectsOldWorkerResults(t *testing.T) {
 		t.Fatalf("reset mesh stats = %+v, want epoch 2 with empty publication queue", stats)
 	}
 	applyMeshSnapshot(t, runtime, 1)
-	waitForRuntimeMesh(t, runtime, func(stats MeshStats) bool { return stats.ReadyOperations == 1 })
-	batch := drainRuntimeWorldBatch(t, runtime, 1)
-	if batch.Epoch != 2 {
-		t.Fatalf("post-reset batch epoch = %d, want 2", batch.Epoch)
-	}
-	if upserts := batch.Upserts(); len(upserts) != 1 || upserts[0].Revision != 1 {
-		t.Fatalf("post-reset upserts = %+v, want fresh revision 1", upserts)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if err := runtime.AdvanceMeshes(1); err != nil {
+			t.Fatal(err)
+		}
+		if runtime.MeshStats().ReadyOperations == 0 {
+			if time.Now().After(deadline) {
+				t.Fatal("post-reset mesh condition timed out before a ready operation")
+			}
+			time.Sleep(time.Millisecond)
+			continue
+		}
+		batch := drainRuntimeWorldBatch(t, runtime, 1)
+		if batch.Epoch != 2 {
+			t.Fatalf("post-reset batch epoch = %d, want 2", batch.Epoch)
+		}
+		if upserts := batch.Upserts(); len(upserts) == 1 && upserts[0].Revision == 1 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("post-reset upserts = %+v, want fresh revision 1", batch.Upserts())
+		}
 	}
 }
 

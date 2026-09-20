@@ -74,6 +74,11 @@ const (
 	// ASCII "SAPLGROW" 的位模式，与 entity 侧树叶掉落判定用的 "SAPLINGS"
 	// 刻意不同——同一棵树苗的「生长」与「被采掘后掉落」是两条互不相关的判定。
 	SaplingGrowthRollSalt = 0x5341_504C_4752_4F57
+	// GrassSpreadRollSalt 让草蔓延判定的哈希流与其他判定流互相独立：取 ASCII
+	// "GRSPREAD" 的位模式，与短草种子掉落判定用的 "GRASS_SED" 刻意不同——
+	// 「泥土表面经随机 tick 长成草方块」与「采除短草掉种子」是两条互不相关的
+	// 判定。
+	GrassSpreadRollSalt = 0x4752_5350_5245_4144
 )
 
 // CropGrowthRoll 报告本 tick 是否推进 position 上的作物：判定只依赖世界种子、
@@ -175,6 +180,20 @@ func (s Sampler) SaplingGrowthRoll(seed int64, tick uint64, dimension core.Dimen
 	hash = s.SplitMix64(hash ^ uint64(uint32(position.Y)))
 	hash = s.SplitMix64(hash ^ uint64(uint32(position.Z)))
 	return hash&7 == 0
+}
+
+// GrassSpreadRoll 报告本 tick 是否把 position 上的表面泥土转为草方块：与
+// `SaplingGrowthRoll` 同形的判定（种子、tick、维度、坐标），命中率 1/4，盐值
+// 独立。判定只回答骰子；「上方为空气或雪层、水平四邻有草」等世界侧前置由
+// 调用方把关，本函数不做任何世界读取。
+func (s Sampler) GrassSpreadRoll(seed int64, tick uint64, dimension core.DimensionID, position core.BlockPos) bool {
+	hash := s.SplitMix64(uint64(seed) ^ GrassSpreadRollSalt)
+	hash = s.SplitMix64(hash ^ tick)
+	hash = s.SplitMix64(hash ^ uint64(uint32(dimension)))
+	hash = s.SplitMix64(hash ^ uint64(uint32(position.X)))
+	hash = s.SplitMix64(hash ^ uint64(uint32(position.Y)))
+	hash = s.SplitMix64(hash ^ uint64(uint32(position.Z)))
+	return hash&3 == 0
 }
 
 // 域盐值与抽选分母：entity 家族判定流的身份常量，自 `packages/server/sim/entity`

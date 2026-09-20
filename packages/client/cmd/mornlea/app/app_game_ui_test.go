@@ -370,6 +370,206 @@ func TestGameShiftLeftClickQuickMoveClearsSourceAndMapsView(t *testing.T) {
 	}
 }
 
+// TestGameDragMoveSendsIdenticalMessageAsTwoClickPrimary 钉住拖拽落槽的硬需求：
+// 与两次点击主键路径发出逐字段一致的 Move* 消息（序号按发送顺序递增），
+// 覆盖个人背包、工作台、箱子与熔炉四种面板身份。
+func TestGameDragMoveSendsIdenticalMessageAsTwoClickPrimary(t *testing.T) {
+	newApp := func(t *testing.T) (*Application, network.ServerEndpoint) {
+		t.Helper()
+		a, endpoint := newInteractiveTestApplication(t)
+		a.menu.phase = MenuPhaseGame
+		if err := a.inventory.Apply(network.InventoryState{}); err != nil {
+			t.Fatal(err)
+		}
+		a.setInventoryOpen(true)
+		return a, endpoint
+	}
+
+	t.Run("个人背包面板", func(t *testing.T) {
+		a, endpoint := newApp(t)
+		gameTestAction(a, "slot", "inventory", 0)
+		gameTestAction(a, "slot", "inventory", 10)
+		if got := receiveInteractiveClientMessage(t, endpoint); got != (network.MoveInventoryStack{Sequence: 1, From: 0, To: 10}) {
+			t.Fatalf("两次点击主键: %#v", got)
+		}
+		gameTestDragAction(a, "inventory", 0, "inventory", 10)
+		if got := receiveInteractiveClientMessage(t, endpoint); got != (network.MoveInventoryStack{Sequence: 2, From: 0, To: 10}) {
+			t.Fatalf("拖拽落槽: %#v", got)
+		}
+	})
+	t.Run("工作台面板", func(t *testing.T) {
+		a, endpoint := newApp(t)
+		grid := network.CraftingState{Size: 3}
+		grid.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 4}
+		if err := a.crafting.Apply(grid); err != nil {
+			t.Fatal(err)
+		}
+		gameTestAction(a, "slot", "crafting", 0)
+		gameTestAction(a, "slot", "inventory", 1)
+		if got := receiveInteractiveClientMessage(t, endpoint); got != (network.MoveCraftingStack{Sequence: 1, From: 0, To: 10}) {
+			t.Fatalf("两次点击主键: %#v", got)
+		}
+		gameTestDragAction(a, "crafting", 0, "inventory", 1)
+		if got := receiveInteractiveClientMessage(t, endpoint); got != (network.MoveCraftingStack{Sequence: 2, From: 0, To: 10}) {
+			t.Fatalf("拖拽落槽: %#v", got)
+		}
+	})
+	t.Run("箱子面板", func(t *testing.T) {
+		a, endpoint := newApp(t)
+		chest := network.ChestState{Chest: core.ContainerRef{Kind: core.ContainerKindChest, Generation: 1}}
+		chest.Items[0] = core.ItemStack{Item: core.ItemStone, Count: 4}
+		if err := a.chest.Apply(chest); err != nil {
+			t.Fatal(err)
+		}
+		gameTestAction(a, "slot", "chest", 0)
+		gameTestAction(a, "slot", "inventory", 1)
+		if got := receiveInteractiveClientMessage(t, endpoint); got != (network.MoveContainerStack{Sequence: 1, Container: chest.Chest, From: 36, To: 1}) {
+			t.Fatalf("两次点击主键: %#v", got)
+		}
+		gameTestDragAction(a, "chest", 0, "inventory", 1)
+		if got := receiveInteractiveClientMessage(t, endpoint); got != (network.MoveContainerStack{Sequence: 2, Container: chest.Chest, From: 36, To: 1}) {
+			t.Fatalf("拖拽落槽: %#v", got)
+		}
+	})
+	t.Run("熔炉面板", func(t *testing.T) {
+		a, endpoint := newApp(t)
+		furnace := network.FurnaceState{Furnace: core.FurnaceRef{Generation: 1}}
+		furnace.Input = core.ItemStack{Item: core.ItemRawIron, Count: 4}
+		if err := a.furnace.Apply(furnace); err != nil {
+			t.Fatal(err)
+		}
+		gameTestAction(a, "slot", "furnace", 0)
+		gameTestAction(a, "slot", "inventory", 1)
+		if got := receiveInteractiveClientMessage(t, endpoint); got != (network.MoveContainerStack{Sequence: 1, Container: furnace.Furnace, From: 36, To: 1}) {
+			t.Fatalf("两次点击主键: %#v", got)
+		}
+		gameTestDragAction(a, "furnace", 0, "inventory", 1)
+		if got := receiveInteractiveClientMessage(t, endpoint); got != (network.MoveContainerStack{Sequence: 2, Container: furnace.Furnace, From: 36, To: 1}) {
+			t.Fatalf("拖拽落槽: %#v", got)
+		}
+	})
+}
+
+// TestGameDragMoveCancelsOnSameSlotAndFurnaceOutputTarget 钉住拖拽落槽沿两次
+// 点击的取消语义：同格与熔炉产物目标不发任何消息，且清除既有两击来源。
+func TestGameDragMoveCancelsOnSameSlotAndFurnaceOutputTarget(t *testing.T) {
+	a, endpoint := newInteractiveTestApplication(t)
+	a.menu.phase = MenuPhaseGame
+	if err := a.inventory.Apply(network.InventoryState{}); err != nil {
+		t.Fatal(err)
+	}
+	furnace := network.FurnaceState{Furnace: core.FurnaceRef{Generation: 1}}
+	furnace.Input = core.ItemStack{Item: core.ItemRawIron, Count: 4}
+	if err := a.furnace.Apply(furnace); err != nil {
+		t.Fatal(err)
+	}
+	a.setInventoryOpen(true)
+	// 预置两击来源：非法拖拽目标沿两次点击语义不得破坏来源。
+	gameTestAction(a, "slot", "furnace", 0)
+	if a.gameSource == nil {
+		t.Fatal("夹具：来源未记录")
+	}
+	// 熔炉产物格不得作为拖拽目标（来源方向不受限）。
+	gameTestDragAction(a, "furnace", 0, "furnace", 2)
+	assertNoInteractiveClientMessage(t, endpoint)
+	if a.gameSource == nil || a.gameSource.Area != "furnace" {
+		t.Fatalf("非法拖拽目标破坏了来源: %#v", a.gameSource)
+	}
+	// 同格拖拽是取消语义：清除来源、不发消息。
+	gameTestDragAction(a, "furnace", 0, "furnace", 0)
+	assertNoInteractiveClientMessage(t, endpoint)
+	if a.gameSource != nil {
+		t.Fatal("同格拖拽未清除来源")
+	}
+}
+
+// TestGameDropSendsViewAddressedDropStack 钉住拖出丢弃的视图域映射：个人背包
+// 面板的背包格走背包视图原始索引、网格格走合成视图；工作台背包格走合成
+// 视图 +9 映射；容器面板带权威引用走容器视图统一索引。
+func TestGameDropSendsViewAddressedDropStack(t *testing.T) {
+	a, endpoint := newInteractiveTestApplication(t)
+	a.menu.phase = MenuPhaseGame
+	if err := a.inventory.Apply(network.InventoryState{}); err != nil {
+		t.Fatal(err)
+	}
+	grid := network.CraftingState{Size: 2}
+	grid.Slots[1] = core.ItemStack{Item: core.ItemStone, Count: 4}
+	if err := a.crafting.Apply(grid); err != nil {
+		t.Fatal(err)
+	}
+	a.setInventoryOpen(true)
+	// 个人面板背包格：背包视图域原始索引（与快捷搬运同款换算）。
+	gameTestDropAction(a, "inventory", 12)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.DropStack); !ok ||
+		got.View != network.StackViewInventory || got.Slot != 12 || got.Container != (core.ContainerRef{}) {
+		t.Fatalf("个人面板背包丢弃: %#v", got)
+	}
+	// 个人面板网格格：合成视图统一网格索引。
+	gameTestDropAction(a, "crafting", 1)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.DropStack); !ok ||
+		got.View != network.StackViewCrafting || got.Slot != 1 {
+		t.Fatalf("个人面板网格丢弃: %#v", got)
+	}
+	// 工作台背包格：合成视图 +9 统一映射。
+	workbench := network.CraftingState{Size: 3}
+	if err := a.crafting.Apply(workbench); err != nil {
+		t.Fatal(err)
+	}
+	gameTestDropAction(a, "inventory", 5)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.DropStack); !ok ||
+		got.View != network.StackViewCrafting || got.Slot != 14 {
+		t.Fatalf("工作台背包丢弃: %#v", got)
+	}
+	// 箱子面板：容器视图统一索引（背包区原始 0..35、箱区 36..62）并带权威引用。
+	chest := network.ChestState{Chest: core.ContainerRef{Kind: core.ContainerKindChest, Generation: 1}}
+	if err := a.chest.Apply(chest); err != nil {
+		t.Fatal(err)
+	}
+	gameTestDropAction(a, "inventory", 2)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.DropStack); !ok ||
+		got.Container != chest.Chest || got.View != network.StackViewContainer || got.Slot != 2 {
+		t.Fatalf("箱子面板背包丢弃: %#v", got)
+	}
+	gameTestDropAction(a, "chest", 3)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.DropStack); !ok ||
+		got.Container != chest.Chest || got.View != network.StackViewContainer || got.Slot != 39 {
+		t.Fatalf("箱内丢弃: %#v", got)
+	}
+	// 熔炉面板：燃料格统一索引 37，输出格（合法来源方向）38。
+	if err := a.chest.Close(network.ContainerClosed{Container: chest.Chest}); err != nil {
+		t.Fatal(err)
+	}
+	furnace := network.FurnaceState{Furnace: core.FurnaceRef{Generation: 2}}
+	if err := a.furnace.Apply(furnace); err != nil {
+		t.Fatal(err)
+	}
+	gameTestDropAction(a, "furnace", 1)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.DropStack); !ok ||
+		got.Container != furnace.Furnace || got.View != network.StackViewContainer || got.Slot != 37 {
+		t.Fatalf("熔炉燃料丢弃: %#v", got)
+	}
+	gameTestDropAction(a, "furnace", 2)
+	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.DropStack); !ok ||
+		got.Container != furnace.Furnace || got.Slot != core.FurnaceOutputSlot {
+		t.Fatalf("熔炉产物丢弃: %#v", got)
+	}
+}
+
+// TestGameDragAndDropWaitForAuthority 钉住确认门禁：未确认状态下拖拽落槽与
+// 拖出丢弃都不产生任何协议消息。
+func TestGameDragAndDropWaitForAuthority(t *testing.T) {
+	a, endpoint := newInteractiveTestApplication(t)
+	a.menu.phase = MenuPhaseGame
+	// 不 Apply 权威背包状态：镜像处于未确认。
+	a.setInventoryOpen(true)
+	gameTestDragAction(a, "inventory", 0, "inventory", 10)
+	gameTestDropAction(a, "inventory", 0)
+	assertNoInteractiveClientMessage(t, endpoint)
+	if a.gameSource != nil {
+		t.Fatal("未确认时记录来源")
+	}
+}
+
 // TestGamePersonalPanelQuickMoveRoutesInventoryView 钉住个人背包面板（2×2）
 // 的快捷搬运视图域分派：背包/快捷栏格走背包视图域原始 0..35 索引（服务端
 // 据此走纯背包面板互移），网格格仍走合成视图统一网格索引；工作台背包格

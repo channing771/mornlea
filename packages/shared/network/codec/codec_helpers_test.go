@@ -176,6 +176,9 @@ func sameClientPacket(got, want protocol.ClientPacket) bool {
 	case protocol.QuickMoveStack:
 		other, ok := want.(protocol.QuickMoveStack)
 		return ok && got == other
+	case protocol.DropStack:
+		other, ok := want.(protocol.DropStack)
+		return ok && got == other
 	default:
 		return false
 	}

@@ -181,15 +181,19 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		a.hudPush.Mark()
 	}
 
-	// 菜单全景：主菜单/设置页相位返回惰性构建的全景管线（游戏相位 nil，
-	// 与引入全景前逐字节一致）。全景接管本帧的世界内容与相机；游戏调度器
-	// 与远环带在其间完全冻结，呈现状态互不渗透。
-	vista := a.menuVistaForFrame()
+	// 菜单全景：主菜单/设置页相位返回惰性构建的全景管线并推进一帧装配
+	// （游戏相位 nil，与引入全景前逐字节一致）。装配未收敛（pending>0）
+	// 时揭示门同样返回 nil——本帧走与构建失败降级相同的「仅天空清屏」
+	// 出口，不提交任何全景几何，自转时钟也只在揭示帧推进（见渲染后的
+	// tick 自增）；收敛后的首帧从 tick 0 揭示，收敛段帧序列与既有「全景
+	// 背景确定性」契约逐帧一致（spec webview-menu-ui「全景在装配收敛前
+	// 不揭示」）。全景接管本帧的世界内容与相机；游戏调度器与远环带在其
+	// 间完全冻结，呈现状态互不渗透。
+	vista := a.revealMenuVista(workMax)
 	activeScheduler := a.scheduler
 	a.scheduler.BeginFrame()
 	if vista != nil {
 		activeScheduler = vista.scheduler
-		vista.pump(workMax)
 	} else {
 		// Game-phase meshing advances through the adopted runtime, which owns
 		// the budgets, ready queue, and epochs; the existing scheduler only

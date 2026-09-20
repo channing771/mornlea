@@ -196,6 +196,22 @@ func translateClientMessage(
 			StackView: view,
 			Slot:      message.From,
 		}, true
+	case network.DropStack:
+		// 面板拖出丢弃与分堆命令族共用同一寻址面（视图域 + 统一索引 + 容器
+		// 引用），但语义是「整组取出脚下投放」：投放位置与数量都由 sim 从权威
+		// 状态推导，这里只搬运寻址字段；Memory 与 TCP 共用这一入口。
+		view, ok := translateStackSplitView(message.View)
+		if !ok {
+			return contract.Command{}, false
+		}
+		return contract.Command{
+			Session:   id,
+			Sequence:  message.Sequence,
+			Kind:      contract.CommandDropStack,
+			Furnace:   message.Container,
+			StackView: view,
+			Slot:      message.Slot,
+		}, true
 	case network.TillSoil:
 		// 与 OpenContainer 同形：只搬运序号与朝向，目标与栏位都由 sim 从权威
 		// 状态取得，server 不做第二次校验。

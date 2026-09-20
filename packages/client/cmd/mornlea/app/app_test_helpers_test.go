@@ -169,6 +169,21 @@ func gameTestPointerAction(a *Application, op, area string, index int, button st
 	a.handleGameAction(client.UIGameAction{Token: a.buildGameUIState().Token, Op: op, Area: area, Index: index, Button: button, Shift: shift})
 }
 
+// gameTestDragAction 构造一次拖拽落槽的语义操作（源/目标双端槽位引用）。
+func gameTestDragAction(a *Application, fromArea string, fromIndex int, toArea string, toIndex int) {
+	a.handleGameAction(client.UIGameAction{
+		Token: a.buildGameUIState().Token, Op: "dragMove",
+		FromArea: fromArea, FromIndex: fromIndex, ToArea: toArea, ToIndex: toIndex,
+	})
+}
+
+// gameTestDropAction 构造一次拖出面板整组丢弃的语义操作。
+func gameTestDropAction(a *Application, area string, index int) {
+	a.handleGameAction(client.UIGameAction{
+		Token: a.buildGameUIState().Token, Op: "drop", Area: area, Index: index,
+	})
+}
+
 type gameEventDrainer struct {
 	events []client.UIEvent
 	drains int

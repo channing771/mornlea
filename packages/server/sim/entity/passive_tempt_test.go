@@ -66,7 +66,7 @@ func TestPassiveTemptFollowsWheatHolderAndStops(t *testing.T) {
 		engine.passives.entries[0].state.Position,
 		engine.sessions[session].player.state.Position,
 	)
-	if input := engine.passiveStepInput(&engine.passives.entries[0]); input.MoveZ != 0 {
+	if input := engine.passiveStepInput(&engine.passives.entries[0], false); input.MoveZ != 0 {
 		t.Fatalf("止步后输入=%+v，想要中性输入", input)
 	}
 	for range 10 {
@@ -126,7 +126,7 @@ func TestPassiveTemptStopsExactlyAtTwoAndHalf(t *testing.T) {
 		t.Fatal("水平 2.5 格持麦未命中目标，想要半径内保持引诱态")
 	}
 	yaw := entry.yaw
-	input := engine.passiveStepInput(entry)
+	input := engine.passiveStepInput(entry, false)
 	if input.MoveZ != 0 {
 		t.Fatalf("止步距离内输入=%+v，想要中性输入", input)
 	}
@@ -215,9 +215,9 @@ func TestPassiveTemptSwitchAwayResumesWander(t *testing.T) {
 	// 逐 tick 推进一个完整漫游段：段首有界转向收敛后，输入落在段派生目标上。
 	for tick := uint64(2) * wanderSegmentTicks; tick < uint64(3)*wanderSegmentTicks; tick++ {
 		engine.tick.Store(tick)
-		engine.passiveStepInput(entry)
+		engine.passiveStepInput(entry, false)
 	}
-	input := engine.passiveStepInput(entry)
+	input := engine.passiveStepInput(entry, false)
 	wantYaw := wanderSegmentWantYaw(engine.seed, 2, entry.id)
 	if input.MoveZ != 1 || input.Yaw != wantYaw {
 		t.Fatalf("切走后输入=%+v，想要漫游派生 (MoveZ=1,Yaw=%v)", input, wantYaw)
@@ -298,7 +298,7 @@ func TestPassiveTemptFrozenWhileGrazing(t *testing.T) {
 	// 白盒摆出事件中态：引诱输入不得生效，移动保持冻结。
 	entry.grazeTicks = 20
 	yaw := entry.yaw
-	input := engine.passiveStepInput(entry)
+	input := engine.passiveStepInput(entry, false)
 	if input.MoveZ != 0 || input.Yaw != yaw {
 		t.Fatalf("吃草事件中输入=%+v，想要中性输入（不引诱转向）", input)
 	}

@@ -328,6 +328,28 @@ func (engine *engineContext) dropSelectedItem(
 		return RejectInvalidSlot, true
 	}
 	stack := player.inventory.Hotbar.Slots[selected]
+	dropped := stack
+	dropped.Count = 1
+	if reason, rejected := engine.dropStackAtFeet(session, dropped, pending); rejected {
+		return reason, true
+	}
+	player.inventory.Hotbar = nextHotbar
+	player.inventoryDirty = true
+	return 0, false
+}
+
+// dropStackAtFeet 把一整组物品按既有 `authoritative-item-dropping` 契约投放在
+// 玩家脚底方块：解析脚下区块后经 `PrepareDropBatch`/`CommitDropBatch` 原子
+// 提交（同方块同类堆合并、超单格上限自动分槽），是单件丢弃（Q 键，count=1）
+// 与按视图槽位的整组丢弃（面板拖出）共享的唯一投放出口。全部预检在任何
+// 写入之前完成：任一失败都不改变掉落物、区块 revision 或 persistence 状态；
+// 投放位置由权威玩家状态推导，调用方保证玩家已 Active。
+func (engine *engineContext) dropStackAtFeet(
+	session *sessionState,
+	stack core.ItemStack,
+	pending *pendingChunkChanges,
+) (RejectReason, bool) {
+	player := session.player
 	position := core.BlockPos{
 		X: int32(math.Floor(float64(player.state.Position.X()))),
 		Y: int32(math.Floor(float64(player.state.Position.Y()))),
@@ -346,15 +368,70 @@ func (engine *engineContext) dropSelectedItem(
 	if !ok {
 		return RejectChunkNotReady, true
 	}
-	dropSlot, ok := chunk.PrepareDrop(stack.Item, blockIndex)
+	next, ok := chunk.PrepareDropBatch(
+		[]core.ItemStack{stack}, blockIndex, engine.tunables.PlayerDropPickupDelayTicks,
+	)
 	if !ok {
 		return RejectDropCapacity, true
 	}
-	dropped := stack
-	dropped.Count = 1
-	chunk.CommitDrop(dropSlot, dropped, blockIndex, engine.tunables.PlayerDropPickupDelayTicks)
-	player.inventory.Hotbar = nextHotbar
-	player.inventoryDirty = true
+	chunk.CommitDropBatch(next)
 	engine.touchChunk(key, pending)
+	return 0, false
+}
+
+// dropStackFromView 把背包/合成视图统一索引槽位上的整组物品取出并经
+// `dropStackAtFeet` 投放（面板拖出丢弃的内联结算入口）。两个视图域的槽位
+// 布局不同：背包视图 0..35 直寻物品栏，合成视图 0..44 是「网格 0..8、背包
+// 9..44」的统一映射；值域与网格有效尺寸已由命令阶段校验，这里只处理权威
+// 语义：来源空按 `RejectInvalidSlot` 整单拒绝；任何失败（含脚下区块不可用、
+// 掉落容量已满）都保持背包、网格与掉落状态逐格不变。
+func (engine *engineContext) dropStackFromView(
+	session *sessionState,
+	view uint8,
+	slot uint8,
+	pending *pendingChunkChanges,
+) (RejectReason, bool) {
+	player := session.player
+	var source core.ItemStack
+	var nextInventory core.Inventory
+	nextGrid := player.crafting
+	switch view {
+	case StackViewInventory:
+		var ok bool
+		source, ok = player.inventory.Slot(slot)
+		if !ok {
+			return RejectInvalidSlot, true
+		}
+		nextInventory, ok = player.inventory.SetSlot(slot, core.ItemStack{})
+		if !ok {
+			return RejectInvalidSlot, true
+		}
+	case StackViewCrafting:
+		source = craftingViewSlot(player.inventory, player.crafting, slot)
+		var ok bool
+		nextInventory, nextGrid, ok = setCraftingViewSlot(
+			player.inventory, player.crafting, slot, core.ItemStack{},
+		)
+		if !ok {
+			return RejectInvalidInput, true
+		}
+	default:
+		return RejectInvalidInput, true
+	}
+	if source.Item == core.ItemNone {
+		return RejectInvalidSlot, true
+	}
+	if !nextInventory.Valid() {
+		return RejectInvalidInput, true
+	}
+	if reason, rejected := engine.dropStackAtFeet(session, source, pending); rejected {
+		return reason, true
+	}
+	player.inventory = nextInventory
+	player.inventoryDirty = true
+	if view == StackViewCrafting && slot < core.CraftingGridSlots {
+		player.crafting = nextGrid
+		player.craftingDirty = true
+	}
 	return 0, false
 }

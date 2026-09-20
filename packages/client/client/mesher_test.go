@@ -20,7 +20,7 @@ func TestMesherBuildsInitialChunkAndBoundaryRemeshes(t *testing.T) {
 
 	centerSections := chunkSectionKeys(core.Overworld, core.ChunkPos{})
 	mesher.MarkDirty(centerSections...)
-	mesher.Schedule(mirror, len(centerSections))
+	mesher.Schedule(mirror, client.ViewCenter{}, len(centerSections))
 	initial := waitForMesherResults(t, mesher, mirror, len(centerSections), 5*time.Second)
 	if got := resultKeys(initial); !reflect.DeepEqual(got, sortedKeys(centerSections)) {
 		t.Fatalf("初始网格 section = %+v，想要 %+v", got, sortedKeys(centerSections))
@@ -43,7 +43,7 @@ func TestMesherBuildsInitialChunkAndBoundaryRemeshes(t *testing.T) {
 		t.Fatalf("角落 dirty = %+v，想要 18 个", update.Dirty)
 	}
 	mesher.MarkDirty(update.Dirty...)
-	mesher.Schedule(mirror, len(update.Dirty))
+	mesher.Schedule(mirror, client.ViewCenter{}, len(update.Dirty))
 	remeshed := waitForMesherResults(t, mesher, mirror, len(update.Dirty), 5*time.Second)
 	if got := resultKeys(remeshed); !reflect.DeepEqual(got, sortedKeys(update.Dirty)) {
 		t.Fatalf("边界重网格 = %+v，想要 %+v", got, sortedKeys(update.Dirty))
@@ -62,7 +62,7 @@ func TestMesherDiscardsStaleNeighborRevisionAndRedirties(t *testing.T) {
 	}
 	release := mesher.BlockForTest(key)
 	mesher.MarkDirty(key)
-	mesher.Schedule(mirror, 1)
+	mesher.Schedule(mirror, client.ViewCenter{}, 1)
 	waitForMesherStats(t, mesher, 5*time.Second, func(stats client.MesherStats) bool {
 		return stats.InFlightJobs == 1
 	})
@@ -82,7 +82,7 @@ func TestMesherDiscardsStaleNeighborRevisionAndRedirties(t *testing.T) {
 		t.Fatalf("丢弃过期结果后 dirty = %d，想要 1", stats.DirtySections)
 	}
 
-	mesher.Schedule(mirror, 1)
+	mesher.Schedule(mirror, client.ViewCenter{}, 1)
 	valid := waitForMesherResults(t, mesher, mirror, 1, 5*time.Second)
 	if len(valid) != 1 || valid[0].Pos != key.Pos {
 		t.Fatalf("重调度结果 = %+v", valid)
@@ -102,7 +102,7 @@ func TestMesherSurvivesPanickingJob(t *testing.T) {
 	}
 	mesher.InjectPanicForTest(panics)
 	mesher.MarkDirty(panics, later)
-	mesher.Schedule(mirror, 2)
+	mesher.Schedule(mirror, client.ViewCenter{}, 2)
 	results := waitForMesherResults(t, mesher, mirror, 1, 5*time.Second)
 	if results[0].Pos != later.Pos {
 		t.Fatalf("panic 后首个结果 = %+v，想要 %+v", results[0].Pos, later.Pos)
@@ -111,7 +111,7 @@ func TestMesherSurvivesPanickingJob(t *testing.T) {
 	waitForMesherStats(t, mesher, 5*time.Second, func(stats client.MesherStats) bool {
 		return stats.InFlightJobs == 0 && stats.QueuedJobs == 0
 	})
-	mesher.Schedule(mirror, 1)
+	mesher.Schedule(mirror, client.ViewCenter{}, 1)
 	results = waitForMesherResults(t, mesher, mirror, 1, 5*time.Second)
 	if results[0].Pos != panics.Pos {
 		t.Fatalf("panic 任务未能重试: %+v", results[0].Pos)
@@ -133,7 +133,7 @@ func TestMesherCloseReturnsWithFullResultQueue(t *testing.T) {
 		}
 	}
 	mesher.MarkDirty(keys...)
-	mesher.Schedule(mirror, len(keys))
+	mesher.Schedule(mirror, client.ViewCenter{}, len(keys))
 	waitForMesherStats(t, mesher, 10*time.Second, func(stats client.MesherStats) bool {
 		blockedPublishers := len(keys) - stats.ResultCapacity - workers
 		return stats.ReadyResults == stats.ResultCapacity &&
@@ -170,7 +170,7 @@ func BenchmarkRemeshBoundaryEdit(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		mesher.MarkDirty(key)
-		mesher.Schedule(mirror, 1)
+		mesher.Schedule(mirror, client.ViewCenter{}, 1)
 		for len(mesher.Drain(mirror, 1)) == 0 {
 		}
 	}
@@ -291,7 +291,7 @@ func TestMesherCompletedMeshesCountsAcceptedWorkMonotonically(t *testing.T) {
 	// 初始网格化:中心区块 24 段全部接受,完成计数 = 24。
 	centerSections := chunkSectionKeys(core.Overworld, core.ChunkPos{})
 	mesher.MarkDirty(centerSections...)
-	mesher.Schedule(mirror, len(centerSections))
+	mesher.Schedule(mirror, client.ViewCenter{}, len(centerSections))
 	waitForMesherResults(t, mesher, mirror, len(centerSections), 5*time.Second)
 	if got := mesher.Stats().CompletedMeshes; got != uint64(len(centerSections)) {
 		t.Fatalf("初始完成计数 = %d，想要 %d", got, len(centerSections))
@@ -307,7 +307,7 @@ func TestMesherCompletedMeshesCountsAcceptedWorkMonotonically(t *testing.T) {
 		t.Fatalf("应用角落方块增量: %v", err)
 	}
 	mesher.MarkDirty(update.Dirty...)
-	mesher.Schedule(mirror, len(update.Dirty))
+	mesher.Schedule(mirror, client.ViewCenter{}, len(update.Dirty))
 	waitForMesherResults(t, mesher, mirror, len(update.Dirty), 5*time.Second)
 	want := uint64(len(centerSections) + len(update.Dirty))
 	if got := mesher.Stats().CompletedMeshes; got != want {

@@ -17,7 +17,7 @@ func TestMesherScheduleFullJobQueueDoesNotScanDirtyBacklog(t *testing.T) {
 	before := mesher.Stats()
 	mirror := NewMirror()
 	allocs := testing.AllocsPerRun(5, func() {
-		mesher.Schedule(mirror, len(keys))
+		mesher.Schedule(mirror, ViewCenter{}, len(keys))
 	})
 	if allocs != 0 {
 		t.Fatalf("满 job 队列 Schedule allocations = %.1f，想要 0", allocs)
@@ -35,7 +35,7 @@ func BenchmarkMesherScheduleFullJobQueue90K(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		mesher.Schedule(mirror, 90_000)
+		mesher.Schedule(mirror, ViewCenter{}, 90_000)
 	}
 }
 
@@ -49,7 +49,7 @@ func BenchmarkMesherScheduleOneFreeSlot90K(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		mesher.jobs <- sentinel
-		mesher.Schedule(mirror, 90_000)
+		mesher.Schedule(mirror, ViewCenter{}, 90_000)
 		<-mesher.jobs
 		job := <-mesher.jobs
 		mesher.mu.Lock()
@@ -80,7 +80,7 @@ func TestMesherScheduleUsesOnlyAvailableReadyKeys(t *testing.T) {
 		t.Fatalf("ready = %d，想要 3 个唯一键", readyBefore)
 	}
 
-	mesher.Schedule(mirror, 4096)
+	mesher.Schedule(mirror, ViewCenter{}, 4096)
 	mesher.mu.Lock()
 	readyAfter := mesher.ready.Len()
 	mesher.mu.Unlock()
@@ -133,7 +133,7 @@ func TestMesherRedirtyInFlightQueuesLatestGeneration(t *testing.T) {
 		mesher.Close()
 	}()
 	mesher.MarkDirty(key)
-	mesher.Schedule(mirror, 1)
+	mesher.Schedule(mirror, ViewCenter{}, 1)
 	waitForMesherBackpressureTest(t, func() bool {
 		return mesher.Stats().InFlightJobs == 1
 	})
@@ -153,7 +153,7 @@ func TestMesherRedirtyInFlightQueuesLatestGeneration(t *testing.T) {
 		defer mesher.mu.Unlock()
 		return mesher.ready.Len() == 1 && len(mesher.inFlight) == 0
 	})
-	mesher.Schedule(mirror, 1)
+	mesher.Schedule(mirror, ViewCenter{}, 1)
 	waitForMesherBackpressureTest(t, func() bool {
 		return mesher.Stats().ReadyResults == 1
 	})
@@ -182,7 +182,7 @@ func TestMesherClearsInFlightBeforeBlockedResultPublication(t *testing.T) {
 	}()
 
 	mesher.MarkDirty(key)
-	mesher.Schedule(mirror, 1)
+	mesher.Schedule(mirror, ViewCenter{}, 1)
 	waitForMesherBackpressureTest(t, func() bool {
 		return mesher.Stats().InFlightJobs == 1
 	})
@@ -219,7 +219,7 @@ func TestMesherRedirtyQueuesLatestBeforeBlockedResultPublication(t *testing.T) {
 	}()
 
 	mesher.MarkDirty(key)
-	mesher.Schedule(mirror, 1)
+	mesher.Schedule(mirror, ViewCenter{}, 1)
 	waitForMesherBackpressureTest(t, func() bool {
 		return mesher.Stats().InFlightJobs == 1
 	})

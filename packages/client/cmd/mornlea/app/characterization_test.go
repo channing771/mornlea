@@ -83,7 +83,7 @@ func TestApplicationCharacterizationTranscriptParity(t *testing.T) {
 	firstSection := core.SectionKey{Dimension: core.Overworld, Pos: core.SectionPos{}}
 	release := application.mesher.BlockForTest(firstSection)
 	t.Cleanup(release)
-	application.mesher.Schedule(application.mirror, 1)
+	application.mesher.Schedule(application.mirror, client.ViewCenter{}, 1)
 	meshStats := application.mesher.Stats()
 	transcript = append(transcript, fmt.Sprintf(
 		"mesh drain_budget=1 chunk_loaded=%t dirty=%d schedule_budget=1 scheduled=%d result_capacity=%d",
