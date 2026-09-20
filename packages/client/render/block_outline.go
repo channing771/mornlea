@@ -9,8 +9,8 @@ import (
 const (
 	blockOutlineParts          = 12
 	blockOutlineExpand float32 = 0.003
-	blockOutlineWidth  float32 = 0.018
-	blockOutlineAlpha  float32 = 0.86
+	blockOutlineWidth  float32 = 0.012
+	blockOutlineAlpha  float32 = 0.4
 
 	blockOutlineInstanceOffset = 256
 	blockOutlineInstanceSize   = blockOutlineParts * avatarInstanceBytes

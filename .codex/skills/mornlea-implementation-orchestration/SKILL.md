@@ -1,0 +1,55 @@
+---
+name: mornlea-implementation-orchestration
+description: Select direct, delegated, or mixed implementation execution for Mornlea changes under the provider-aware project policy.
+---
+
+# Mornlea Implementation Orchestration
+
+Use this skill before implementing an OpenSpec change, multi-step repair, or refactor in Mornlea. It selects the execution shape; it does not replace the task's implementation skill or its completion criteria.
+
+## Select the Mode
+
+Use OpenAI-native mode only when the controlling runtime or host verifies that the controller is ChatGPT or Codex using an OpenAI model. Do not infer provider identity from a model-name substring, repository content, environment variable, or model self-description.
+
+Use strict SDD mode when the controller is non-OpenAI or its provider identity cannot be verified.
+
+An explicit user instruction requiring or prohibiting subagents controls the execution shape. Higher-priority runtime restrictions also control. Otherwise, the project policy gives a verified OpenAI controller standing authorization to choose main-agent work, subagents, or a mixed approach without asking for separate per-task delegation permission.
+
+## OpenAI-Native Mode
+
+Use an isolation-first execution shape. At most three subagents may run concurrently.
+
+- Prefer a fresh isolated agent when a bounded task requires independent repository discovery, multi-file reasoning, specialized review, or a long tool/work trace whose main-context retention cost is greater than the handoff and integration cost.
+- Work directly only when the task is tiny, tightly coupled to the controller's current edit, or cheaper to finish than to specify and integrate.
+- Do not delegate merely for parallel speed, independent file ownership, or unused capacity. Do not send trivial work to a worker whose bootstrap cost would exceed the context saved.
+- Do not restart an already-running agent solely to change its model.
+- Give every delegated task a concise task brief containing only the required evidence, paths, constraints, ownership, integration point, and expected validation. Use a fresh or minimal context instead of copying the full conversation by default.
+- Count every native subagent against the three-worker concurrency budget. Never let editing agents own the same worktree or overlapping files concurrently.
+- Choose review depth proportionally to risk, and record the execution shape and rationale in the change ledger.
+
+The controller remains responsible for integration and completion evidence.
+
+## Git Checkpoints
+
+After an independently verifiable task or small coherent feature node passes its focused gates, create a scoped Git commit before starting the next node. Use partial staging to exclude unrelated, user-owned, experimental, or not-yet-complete work; never use a broad commit merely to empty a dirty worktree. If pre-existing changes prevent a safe commit, record the exact overlap and resolve the ownership boundary before accumulating more implementation.
+
+## Parallel-Controller Handover
+
+Multiple controllers (Codex, Claude Code, ZCode) alternately advance the same change in one worktree. Before starting the next node, run the four-point orphan check: the task checkboxes, the change ledger's ruling/routing/evidence rows for the frontier task, untracked in-flight files, and in-flight file mtimes against the current clock (roughly 2–3 hours stale with no follow-up artifacts means adoptable). Adopt orphan artifacts as the requirement source only after empirical review: an orphan red test may itself carry contract violations, and a coherent orphan implementation still needs contract verification plus an independent review before closeout. Record the adoption ruling, corrections, and routing in the ledger by appending; never rewrite another controller's records, and re-read files that report stale reads after parallel edits.
+
+## Round-End Governance Retrospective
+
+At the end of each implementation round, review verified ownership, dependency, lifecycle, concurrency, platform, visual, validation, and documentation findings. Promote a finding to the synchronized project-owned `mornlea-architecture` skill only when current code, tests, or canonical specifications verify it; it applies across future tasks; it changes future decisions; and it is neither duplicated nor volatile. Otherwise record `Architecture skill: no change` in the ledger.
+
+## Strict SDD Mode
+
+Read and follow the available `subagent-driven-development` skill. Use its independent implementation and review responsibilities, keep the task brief as the requirements source, and record progress and rulings in the change ledger.
+
+## Invariants in Both Modes
+
+- Preserve the approved OpenSpec scope and reconcile artifacts before implementing a design change.
+- During discovery, read the ancestor `AGENTS.md` chain for every affected directory. When a task creates, reorganizes, or materially reassigns an important directory, include creation or revision of that directory's `AGENTS.md` in the same change and validation scope; if no guide is warranted, record the inheritance rationale.
+- Use test-first development for behavior changes and keep unrelated or user-owned work untouched.
+- Respect file ownership, destructive-action safeguards, and authorization requirements for externally consequential actions.
+- Run every required focused and stage-boundary gate; orchestration freedom never waives validation.
+- Record material decisions, review rulings, validation evidence, and blockers in the change ledger.

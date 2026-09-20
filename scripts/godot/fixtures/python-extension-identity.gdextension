@@ -1,0 +1,10 @@
+[configuration]
+
+entry_symbol = "initialize_pythonscript"
+compatibility_minimum = "4.7.0"
+version = "4.7-alpha-21"
+
+[libraries]
+
+macos.debug.arm64 = "cpython-3.14.4-darwin64/python/bin/pythonscript.dylib"
+macos.release.arm64 = "cpython-3.14.4-darwin64/python/bin/pythonscript.dylib"

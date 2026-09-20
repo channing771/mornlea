@@ -1,0 +1,16 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://features/ui/hud/hud_feature.py" id="1_script"]
+
+[node name="HUD" type="Control"]
+script = ExtResource("1_script")
+
+[node name="PilotLabel" type="Label" parent="."]
+
+[node name="ConnectionLabel" type="Label" parent="."]
+
+[node name="HealthLabel" type="Label" parent="."]
+
+[node name="HungerLabel" type="Label" parent="."]
+
+[node name="OxygenLabel" type="Label" parent="."]

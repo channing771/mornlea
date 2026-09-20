@@ -1,17 +1,24 @@
-# 文档地图
+---
+doc_id: documentation-map
+doc_revision: 2026-09-15.2
+language: en
+counterpart: README.zh.md
+---
+# Documentation map
 
-本索引只负责导航，不复述各文档内容。
+This index is navigation only; it does not repeat the content of the linked documents.
 
-| 类别 | 入口 | 用途 |
+| Category | Entry points | Purpose |
 | --- | --- | --- |
-| 用户入口 | [`README.md`](../README.md)、[`README.en.md`](../README.en.md) | 项目介绍、运行方式和用户可见能力 |
-| 玩家与运维 | [`docs/notes/gameplay.md`](notes/gameplay.md)、[`docs/notes/configuration.md`](notes/configuration.md)、[`docs/notes/lan-server.md`](notes/lan-server.md)、[`docs/texture-packs.md`](texture-packs.md)、[`docs/notes/limitations.md`](notes/limitations.md)、[`docs/notes/compatibility.md`](notes/compatibility.md)、[`docs/notes/visual-verification.md`](notes/visual-verification.md) | 玩法手册、配置与调试面板、局域网联机、材质包、项目边界与升级纪律 |
-| 当前架构 | [`docs/architecture.md`](architecture.md) | 当前组件所有权、依赖方向和运行边界 |
-| 行为主规格 | [`openspec/specs/`](../openspec/specs/) | 当前可观察行为的主契约 |
-| Active change | [`openspec/changes/`](../openspec/changes/) | 正在提议或实施的变更产物 |
-| OpenSpec 流程 | [`docs/openspec.md`](openspec.md) | 提案、实现、校验与归档规则 |
-| 开发流程 | [`docs/development-process.md`](development-process.md) | 任务角色、执行阶段、评审和门禁 |
-| 测试组织与快检 | [`docs/test-organization.md`](test-organization.md)、[`docs/notes/test-quickstart.md`](notes/test-quickstart.md) | 测试文件组织、分层与定点命令 |
-| 进度与 backlog | [`docs/notes/progress.md`](notes/progress.md)、[`docs/feature-backlog.md`](feature-backlog.md) | 实现编年史、当前规划与待办 |
-| Agent 自动化 | [`docs/agents/README.md`](agents/README.md)、[`docs/notes/dev-capture.md`](notes/dev-capture.md) | 工作者角色、调度入口、本地状态看板与运行中客户端的画面捕获 |
-| 历史背景 | [`docs/superpowers/`](superpowers/)、[`openspec/changes/archive/`](../openspec/changes/archive/) | 历史设计、计划与已归档 change 证据 |
+| User entry points | [`README.md`](../README.md), [`README.zh.md`](../README.zh.md) | Project introduction, how to run it, and user-visible capabilities |
+| Players and operators | [`docs/notes/gameplay.md`](notes/gameplay.md), [`docs/notes/configuration.md`](notes/configuration.md), [`docs/notes/lan-server.md`](notes/lan-server.md), [`docs/texture-packs.md`](texture-packs.md), [`docs/notes/limitations.md`](notes/limitations.md), [`docs/notes/compatibility.md`](notes/compatibility.md), [`docs/notes/visual-verification.md`](notes/visual-verification.md) | Gameplay guide, configuration and debug panel, LAN play, texture packs, project boundaries, and upgrade discipline |
+| Target architecture | [`docs/architecture-target.md`](architecture-target.md) | Final language ownership, runtime topology, migration sequence, and no-go directions for new work |
+| Current architecture | [`docs/architecture.md`](architecture.md) | Current component ownership, dependency direction, and runtime boundaries; this is not the final target |
+| Canonical behavior specifications | [`openspec/specs/`](../openspec/specs/) | The authoritative contracts for current observable behavior |
+| Active changes | [`openspec/changes/`](../openspec/changes/) | Changes being proposed or implemented |
+| OpenSpec workflow | [`docs/openspec.md`](openspec.md) | Proposal, implementation, validation, and archive rules |
+| Development process | [`docs/development-process.md`](development-process.md) | Task roles, execution stages, review, and gates |
+| Test organization and quick checks | [`docs/test-organization.md`](test-organization.md), [`docs/notes/test-quickstart.md`](notes/test-quickstart.md) | Test-file organization, tiers, and focused commands |
+| Progress and backlog | [`docs/notes/progress.md`](notes/progress.md), [`docs/feature-backlog.md`](feature-backlog.md) | Implementation chronology, current plans, and backlog |
+| Agent automation | [`docs/agents/README.md`](agents/README.md), [`docs/notes/dev-capture.md`](notes/dev-capture.md) | Worker roles, scheduling entry points, the local status board, and capture from a running client |
+| Historical context | [`docs/superpowers/`](superpowers/), [`openspec/changes/archive/`](../openspec/changes/archive/) | Historical designs, plans, and archived change evidence |

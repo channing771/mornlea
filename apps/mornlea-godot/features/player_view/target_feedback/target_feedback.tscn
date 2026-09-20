@@ -1,0 +1,32 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://features/player_view/target_feedback/target_feedback.py" id="1_script"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_outline"]
+size = Vector3(1.002, 1.002, 1.002)
+
+[sub_resource type="StandardMaterial3D" id="Material_outline"]
+transparency = 1
+shading_mode = 0
+no_depth_test = false
+depth_draw_mode = 2
+albedo_color = Color(0.95, 0.82, 0.18, 0.9)
+
+[sub_resource type="StandardMaterial3D" id="Material_outline_override"]
+transparency = 1
+shading_mode = 0
+no_depth_test = false
+depth_draw_mode = 2
+
+[node name="TargetFeedback" type="Node"]
+script = ExtResource("1_script")
+
+[node name="Outline" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_outline")
+material_override = SubResource("Material_outline")
+visible = false
+metadata/depth_testing = "enabled"
+metadata/depth_writes = "disabled"
+
+[node name="TargetLabel" type="Label" parent="."]
+visible = false

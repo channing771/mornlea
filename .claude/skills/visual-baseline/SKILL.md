@@ -1,27 +1,32 @@
 ---
 name: visual-baseline
-description: 视觉基线三类路由与更新纪律：窗口型归 ui、单帧稳定态归 world、跨 tick 过程归 GIF（演示/门禁分子类）。新增或更新基线前先用本 skill 确定落点与门禁。
+description: Route Mornlea visual evidence by observable semantics and enforce explicit, reviewed baseline updates across Rust, WebView, and Godot producers. Use before adding, moving, or updating visual baselines.
 ---
 
-视觉基线统一住 `testdata/visual-golden/`，分类依据见该目录 `README.md`“三类边界与选用规则”（权威，不在本文件复制清单与阈值）。
+# Visual Baseline Routing
 
-## 三类路由
+Tracked visual evidence lives under `testdata/visual-golden/`. Read that directory's English canonical `README.md` before changing a baseline; it owns the current registries and routing details. Do not copy scene lists, counts, or comparison thresholds into this skill.
 
-- 窗口/WebView 层 → `ui/`：注册表以 `fixture-names.ts` 的 `fixtureNames` 为准，本机 Chrome 抓取比对，不进 CI。
-- 无头世界单帧稳定态 → `world/`：注册表以 `capture/capture.go` 的 `captureScenes` 为准，无头离屏收敛后抓帧；改动只波及部分场景时优先 `make visual-check SCENES=` 子集验证，全量比对留在推送/提交等阶段边界。
-- 跨 tick 状态迁移 → GIF 全流程（触发前、结算、收敛全覆盖，不得只截片段）：
-  - 供人眼审查 → `motion/` 演示，不进任何比对；
-  - 需门禁钉住 → `passive-death/`（或同类门禁 GIF 目录），不进自动比对，仅生成供人工审查，帧预算有界。
+## Semantic routes
 
-世界帧不得携带窗口 chrome，UI 夹具不得复刻世界像素；同一行为禁 PNG + GIF 双存，例外必须在 README 注明理由（门禁采样点 vs 全流程审查物）。
+- Window or UI component fixtures belong to `ui/`. The current producer is the local Chrome frontend harness and its registry is `fixture-names.ts`.
+- Stable headless world frames belong to `world/`. The current producer is the offscreen client capture path and its registry is `captureScenes` in `capture/capture.go`.
+- Cross-tick state transitions belong to `motion/` as bounded full-process GIFs that include the pre-trigger, outcome, and settled phases. They are human-review evidence and do not participate in automated pixel comparison.
 
-## 入口
+Route by the observable subject, never by renderer identity. Do not create renderer-specific tracked classes such as `testdata/visual-golden/godot/`. World frames must not contain window chrome, UI fixtures must not recreate world pixels, and one behavior must not have both PNG and GIF evidence unless the visual README records distinct responsibilities.
 
-- 世界：`make visual-check` 比对，`make visual-update` 显式覆盖，路径常量以 `capture/capture_image.go` 为准。
-- GIF 时机：纯比对运行缺省不生成 GIF 剧本，人工审查用 `make visual-check GIFS=1` 显式生成；`make visual-update` 恒生成。
-- 部件：`make frontend-visual-check` / `make frontend-visual-update`（或在 `frontend/` 内 `corepack pnpm visual-check` / `visual-update`），目录推导以 `visual/visual.mjs` 为准。
-- 演示 GIF：仓库根运行 `--motion-demo` 独立入口，不碰场景表与 PNG 基线。
+## Pilot and producer handoff
 
-## 更新纪律
+Godot pilot captures are untracked evidence under `build/visual/godot-pilot/<run-id>/`. Pilot commands may compare against current evidence and produce diffs, but must not write tracked goldens or relax thresholds.
 
-先目检后覆盖：预期视觉变化已逐图人工确认后才更新；普通验证只比较不自动接受；漂移先看实拍图与差异图定位，再决定修代码还是更新基线；基线缺失不静默创建，必须显式请求更新。比对口径与阈值以源码比对函数为准，本文档与 skill 不复制数值。
+Moving a scene, fixture, or motion producer to Godot requires an approved feature change that names the semantic class, old and new producers, affected files, expected differences, review evidence, and rollback. Only after that handoff is approved may the existing explicit update path write tracked evidence.
+
+## Current entry points
+
+- World comparison: `make visual-check`; explicit update: `make visual-update`. Use `SCENES=` for a focused edit loop when appropriate, but keep the full comparison for stage boundaries.
+- UI comparison/update: `make frontend-visual-check` and `make frontend-visual-update`, or the corresponding frozen pnpm commands inside the frontend directory.
+- Motion evidence: use the registered `--motion-demo`/`--motion-scene` path or `GIFS=1` where the current capture flow supports it. Motion GIFs are generated for human review, not compared automatically.
+
+## Update discipline
+
+Inspect every expected visual change before an explicit update. Ordinary checks compare only and never accept changes. If comparison fails, inspect actual and diff outputs before deciding whether code or evidence is wrong. Missing baselines must fail rather than being created silently. Comparison behavior and thresholds are owned by the current comparison implementations, not this skill.

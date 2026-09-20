@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://platform/desktop/audio/desktop_audio_feature.py" id="1_script"]
+
+[node name="DesktopAudioFeature" type="Node"]
+script = ExtResource("1_script")

@@ -1,107 +1,68 @@
-# Mornlea 开发流程（唯一说明）
+---
+doc_id: development-process
+doc_revision: 2026-09-19.1
+language: en
+counterpart: development-process.zh.md
+---
+# Mornlea development process
 
-> 本文件是全仓开发流程的**唯一说明文档**：`docs/feature-backlog.md`、工作者角色卡（`docs/agents/`）、GitHub Discussion #71 与各任务 brief 只引用本文件，不再内嵌流程。基线职责见根 `AGENTS.md`、对应作用域的局部 `AGENTS.md` 与 `openspec/config.yaml`；规则只更新对应作用域的 `AGENTS.md`，同级 `CLAUDE.md` 保持薄导入。与代码冲突时以代码、测试与 `openspec/specs/` 主规格为真相。
+This is the single current process document. `docs/feature-backlog.md`, role cards in `docs/agents/`, GitHub Discussion #71, and task briefs reference it. Code, tests, and `openspec/specs/` are authoritative.
 
-## 流程主线：superpowers 技能链
+## Workflow policy
 
-本流程即 superpowers 工作流：接到任务先以 `brainstorming` skill 明确需求并获得显式批准，再以 `subagent-driven-development` skill 执行开发，最后整分支终审、门禁与归档收尾。各阶段与技能的对应关系：
+OpenAI-native orchestration is isolation-first. A verified OpenAI ChatGPT/Codex controller has standing authorization to choose direct, delegated, or mixed execution. Prefer a fresh agent for bounded repository discovery, multi-file reasoning, specialized review, or a long trace whose main-context retention cost exceeds its handoff cost; keep only tiny, tightly coupled, or cheaper-to-finish work in the controller. Parallel speed and unused capacity are not sufficient by themselves, and no more than three subagents may run concurrently. Give each worker a concise task brief and a fresh or minimal context. A non-OpenAI or unknown-provider controller must use strict `subagent-driven-development`, including independent implementation and review. Every mode preserves scope, ownership, test-first work, validation, and authorization boundaries.
 
-| 技能 | 对应阶段 | 作用 |
-|---|---|---|
-| `using-superpowers` | 入口 | 技能调度入口，按需装载下列技能 |
-| `brainstorming` | 阶段 1 内容确认 | 分类 → 澄清 → 短设计 → 显式批准，明确需求 |
-| `using-git-worktrees` | 阶段 2 隔离分支 | 创建/校验隔离工作区 |
-| `openspec-propose` / `openspec-apply-change` / `openspec-sync-specs` / `openspec-archive-change`（仓库技能） | 阶段 2 建 change、阶段 5 归档 | OpenSpec 产物编写与主规格沉淀 |
-| `subagent-driven-development` | 阶段 3 执行 | 一轮开发一轮审查 + ledger（定义以 skill 为准） |
-| `test-driven-development` | 阶段 3 内每任务 | red → green → refactor |
-| `requesting-code-review` | 阶段 3 末整分支终审、阶段 4 门禁复核 | 代码评审载体 |
-| `verification-before-completion` | 阶段 4 门禁 | 完成前以真实命令输出自查 |
-| `finishing-a-development-branch` | 阶段 5 收尾 | 分支合流决策 |
+At the end of each implementation round, promote only stable cross-task architectural conventions into `mornlea-architecture`; otherwise record `Architecture skill: no change`.
 
-复杂任务在进入阶段 3 前先用 `writing-plans` 写实现计划；小型 F 组修复走直接修改豁免，不强制子代理流程。
+## Stages
 
-## 角色
+### Roles and claim discipline
 
-| 角色 | 职责 | 不得做 |
-|---|---|---|
-| 控制会话 | 派发、协调、裁决（Ruling）；不实现 | 绕过子代理直接实现、代评审 |
-| 规划者 | 每日固定时间扩展/校对规划（见 `docs/agents/planner.md`） | 认领任务、修改功能代码、合并他人分支 |
-| 评审者 | 按 skill 做一轮任务评审 | 自己实现与评审同一 Task |
+The controller coordinates and rules on work; it may implement directly under the provider policy, but must not bypass required review. A planner maintains planning material and does not claim tasks or modify feature code. A reviewer independently checks the task’s changed behavior. Claim only one `ready` backlog row, change it to `claimed`, record `<agent> @ <branch>` and the exclusive file set, and do not transfer a claim without controller ruling. `queued` and `design candidate` rows are not claimable.
 
-## 阶段 0：认领
+### 0. Claim
+Read `docs/feature-backlog.md` and `openspec/config.yaml`; claim only a `ready` row. Record the owner and exclusive file set, claim one row at a time, and preserve unrelated dirty worktree changes.
 
-1. 读 `docs/feature-backlog.md` 与 `openspec/config.yaml`；只能选择一行 `就绪` 任务。
-2. `排队` 与 `设计候选` 不得认领；依赖满足也必须先由 planner/控制会话晋升为 `就绪`。
-3. 认领后把状态改为 `已认领`，完成内容确认后才进入 `开发中`。
-4. 认领时把 `认领人` 改为 `<agent 标识> @ <分支名>`，备注写明独占文件集并提交（docs-only，不关联 OpenSpec change）；同一时间只认领一行；已认领行转移须控制会话裁决。
+### 1. Clarify
+Classify the work as `spike`, `bounded`, or `architectural`; inspect source, tests, history, and the task source; clarify purpose, boundaries, success criteria, and constraints one question at a time; and present a short design for explicit approval before implementation. The confirmation channel is device-first (`confirm.sh ask` → Feishu reply → `feishu-listener.js`/`AGENT_RESUME`); if unavailable or timed out, use the structured GitHub Discussion fallback and stop at the confirmation point. If requirements change, update OpenSpec artifacts first.
 
-## 阶段 1：内容确认（brainstorming 硬门禁）
-
-认领后、**任何实现动作之前**（建 change、写代码、派发子代理都算实现动作），实现者**必须**以 `brainstorming` skill 与需求方（用户或控制会话）确认任务内容：
-
-1. **先分类并说明路径**：`spike`（可行性问题）/ `bounded`（仓库既有流程改动，对话内短设计）/ `architectural`（新子系统或重构，须写设计文档）；拿不准走重的那条，中途发现复杂度升级立即停下并重分类（路径只升不降）。
-2. **探索上下文**：读任务来源文档、相关代码/测试、既有主规格，把确认建立在对 repo 现状的核对之上。
-3. **一次一个问题澄清**：目的、边界、成功标准、约束（版本号互斥、资源上限、版权红线）；一次只发一个问题。
-4. **呈现设计并等待显式批准**：bounded 在对话里给短设计；architectural 按节呈现并写 `docs/superpowers/specs/` 设计文档。批准来源 = 用户或控制会话的显式确认，点头/明确同意即可；确认结论决定后续 change 的 proposal/design。
-5. **批准是硬门禁，不随任务规模缩小**：简单任务只是设计更短，不是免批准。确认通道**设备优先**（机制见 `docs/agents/confirmation-channel.md`）：`confirm.sh ask` 推送飞书 → 你在设备回复（approve/edit/reject）→ `feishu-listener.js` 写回复文件并自动续跑（`AGENT_RESUME`）。通道不可用或等待超时 → 降级 GitHub Discussion 评论协议（结构化请求发到对应评论、该行备注标「待确认」、**停在确认点**，不得静默开工）。收到批准后把结论写进 OpenSpec change 的 proposal/design 与 implementer brief，未经确认的内容不得在实现期悄悄变卦。
-
-## 阶段 2：隔离分支与 OpenSpec change
-
-- 从 `main` 创建 isolation worktree/分支。
-- 复杂功能 / 新模块 / 跨包重构 / 存档 / 协议 / 性能契约 **必须**先建 OpenSpec change：`proposal.md` + delta specs + `design.md` + `tasks.md` + `ledger.md`，并 `openspec validate --all --strict --no-interactive`。
-- 小型修复（拼写、格式、一次性实验）可直接修改（见规划表 F 组「直接修改豁免」），仍须相称验证。
-- 先读对应 skill：`openspec-propose`、`openspec-apply-change`、`openspec-archive-change`、`openspec-sync-specs`（仓库内 `.claude/skills` 与 `.codex/skills`）。
-
-## 阶段 3：subagent-driven-development 执行
-
-严格按 `subagent-driven-development` skill 的任务循环推进。「一轮开发一轮审查」是该 skill 的内含模式，不拆为独立阶段，评审定义以 skill 内任务评审为准：
-
-1. **每 Task 派发全新 implementer 子代理**；任务 brief 是唯一需求来源，必须包含：当前 Task、基线 SHA、对应计划、change 产物（proposal/spec/design/tasks）、全局约束、精确验证命令。implementer 不得自我派生子代理或评审者。
-2. **TDD：red → green → refactor**；先写失败测试再实现。
-3. 测试组织纪律：测试与被测代码同目录；一个测试文件只装一个主题/一条被证性质；共享 helper 每包只设一个中心（`*_helpers_test.go`）；命名不叠加前缀后缀；已有混装文件先做零行为变化拆分。
-4. 跨语言（Rust）改动同步：引擎 crate 内 `#[cfg(test)]` 主题子模块 + helper 中心；两侧手工同步的常量（如 registry 上限）必须在同一 Task 内改齐。
-5. 实现发现规格不成立或范围漂移时，**先更新 OpenSpec 产物**再继续编码；绝不只改代码。
-6. 每 Task 完成后做一轮任务评审，评审与修复循环定义以 skill 为准，不在本文件重复。
-7. 一切进度、评审结论与裁决写入该 change 的 `ledger.md`，格式：`Ruling: <决定什么> — <为什么> — <错在哪>`。未决项必须全文誊入 `proposal.md` 的「延期与放弃」节。
-8. **验证证据按 SHA 复用**：每 Task 的验证命令与输出摘要记入 `ledger.md` 并标注基线 SHA；同一 SHA 且工作区未再改动时，后续 implementer 与评审者直接引用 ledger 证据，不重跑同等命令。评审者只对该 Task 新增或修改的行为做 focused 抽查复核，不把全量 race 当评审手段——全量门禁保留在阶段 4 与 CI。
-
-## 阶段 4：整分支终审与门禁
+### 2. Isolate and specify
+Substantial work uses an isolated worktree/branch. Complex features, new modules, cross-package refactors, save/protocol, concurrency, or performance-contract changes require `proposal.md`, delta specs, `design.md`, `tasks.md`, and `ledger.md`, validated with:
 
 ```bash
-make rust                       # 固定 Rust 1.97.1 构建
-make test-race                  # 全量 race（go.work 六模块逐一循环；迭代期可 make test-race-short）
-go vet ./packages/contracts/... ./packages/shared/... ./packages/server/... ./packages/client/... ./packages/tools/... ./packages/audit/...
-test -z "$(gofmt -l .)"          # 无输出
 openspec validate --all --strict --no-interactive
 ```
 
-- 渲染 / tick / 存储 / 协议热路径变化另加：对应 benchmark（**数值只记录，不改变退出状态**）、fuzz/golden 测试、`packages/tools/perfcheck`。预期视觉不变时运行 `make visual-check`；预期视觉变化时先逐图确认，再运行 `make visual-update`，随后重新运行 `make visual-check`。**禁止放宽阈值**（阈值调整须有实测数据依据）。
-- 平台专属或性能变更补充相应门禁；报告完整性、身份、真实 overflow、数据丢失和 I/O 错误是硬门禁。
-- `scripts/agents/gates.sh` 当前依次执行 gofmt、vet、archcheck、OpenSpec、`make rust`，并在未跳过时执行 full race；完整提交前的 Rust 门禁 `make rust-check` 仍须单独运行。
+Spelling, formatting, and disposable experiments may be direct with proportionate validation.
 
-## 阶段 5：归档收尾（实现者自动执行）
+### 3. Implement
+Follow `tasks.md` and red → green → refactor. Keep tests with code, one topic per test file, one shared-helper center per package, and synchronize cross-language constants in one task. For delegation, provide a concise brief containing only the task, necessary evidence and paths, baseline SHA, relevant change artifacts, constraints, ownership, integration point, and exact validation; do not copy the whole controller transcript. An OpenAI ChatGPT/Codex controller decides whether a separate reviewer adds enough context isolation or risk reduction; it is not required to use a one-round implementation/one-round review pattern. Non-OpenAI or unknown-provider controllers retain the strict fresh-implementer and independent-review pattern. Record progress, review when performed, evidence, and `Ruling: <decision> — <reason> — <mistake addressed>` in `ledger.md`; copy unresolved items into proposal.md’s “Deferred and abandoned” section. Reuse evidence by baseline SHA only when unchanged; focused review checks changed behavior, while full race remains a gate.
 
-1. 若拆分过测试文件，确认 `go test -list` 前后集合一致；
-2. `openspec sync` 把 delta 沉淀到主规格 → 逐 change `openspec archive`；
-3. 按作用域更新根 `AGENTS.md` 版本矩阵和相关局部 `AGENTS.md`，并同步 `docs/notes/progress.md` 基线段——只写本行已集成且验证过的事实，不写本行非目标；同级 `CLAUDE.md` 只保留薄导入，由 `packages/audit` 的 `TestClaudeImportsAgentGuidance` focused 门禁兜底；
-4. 回填 `docs/feature-backlog.md`：该行 `状态` → `已完成`（认领人保留履历），并同步 GitHub Discussion #71；
-5. **合并**：含行为变更的提交默认经 PR（`AGENT_MODE=pr`）：推送分支 → `gh pr create`（标题含行 ID，body 附 change 链接与验证摘要）→ `gh pr checks --watch` 监听 CI，失败则读 `gh run view --log-failed` 定位、本地修复并推送、重新监听，**直到全绿**（上限 10 轮，超限停止并报告）→ `gh pr merge --merge` → 本地 `git checkout main && git pull --ff-only`；**纯归档提交**（仅 `openspec sync/archive` 产物与随附文档同步、无代码行为变更）**不走 PR，直接合入 main**（合入前本地全绿：`openspec validate` 与相称定点测试）；仅 `AGENT_MODE=merge` 时连行为变更也跳过 PR 直接本地合并推送（仍需本地全绿）。
-6. 关闭遗留：未决项誊入「延期与放弃」，不静默丢弃。
+### 4. Branch review and gates
 
-## 并行与冲突规则
+```bash
+make rust
+make test-race
+go vet ./packages/contracts/... ./packages/shared/... ./packages/server/... ./packages/client/... ./packages/tools/... ./packages/audit/...
+test -z "$(gofmt -l .)"
+openspec validate --all --strict --no-interactive
+```
 
-- **版本号互斥**：协议 / 存档 schema / engine ABI / client ABI / benchmark scenario 的升版行互斥——同一时间只能一个认领者持有；绝对版本号按实际合入顺序确定。
-- **核心玩法串行、每行自行收尾**：版本化核心玩法串行，每行自行完成版本、golden、基线与归档；只有无版本影响且文件集合确实不交叠的任务可并行。
-- **文件所有权**：认领时声明独占文件集；与其它已认领行重叠则换行或延迟。
-- **范围冻结**：认领后不得扩大范围；实现发现规格不成立时，先改 OpenSpec 产物再继续。
+Add applicable benchmark, fuzz/golden, visual, and platform gates. Benchmarks are informational; overflow, data loss, report identity, and I/O errors are hard failures. Removed automatic Hooks remain removed; maintain only `scripts/agent-hooks/guard.mjs` and its tests.
 
-## 快速参考
+### 5. Closeout
+Confirm `go test -list` sets when splitting files; sync delta specs and archive each change; update scoped guidance and progress only with verified facts. Behavior changes use PR/CI (`gh pr create`, `gh pr checks --watch`, repair and repeat until green, then `gh pr merge --merge`); pure sync/archive documentation may merge directly after local gates. Preserve historical evidence and unresolved items.
 
-| 阶段 | 动作 | 关键产物 |
+## Parallelism and conflicts
+Protocol, save-schema, engine/client ABI, and benchmark-scenario upgrades are mutually exclusive. Versioned core gameplay is serial. Parallel work is allowed only when file ownership and version impact do not overlap. Freeze scope after claiming and reconcile OpenSpec artifacts before changing it.
+
+## Quick reference
+
+| Stage | Action | Key output |
 |---|---|---|
-| 0 认领 | 改 backlog 行 + docs-only 提交 | 状态/认领人 |
-| 1 确认 | `brainstorming` 分类→澄清→短设计→显式批准 | 设计结论（进 proposal/design 与 brief） |
-| 2 契约 | worktree + OpenSpec change + strict validate | proposal/spec/design/tasks/ledger |
-| 3 实现 | SDD 任务循环：一轮开发一轮审查 + TDD（定义以 skill 为准） | 提交 + 测试 + ledger 结论与 Ruling |
-| 4 门禁 | gates.sh / 全量验证 + 视觉/基准 | 通过证据（记录数值） |
-| 5 收尾 | sync → archive → 基线同步 → 合并（行为变更经 PR+CI，纯归档直接合入 main）→ 回填 | 归档 change + 已合入 main + backlog 标记 |
+| 0 | Claim | owner and exclusive file set |
+| 1 | Clarify | approved design decision |
+| 2 | Specify | validated OpenSpec change |
+| 3 | Implement | tested change and ledger |
+| 4 | Gate | review and validation evidence |
+| 5 | Close | synchronized and archived change |

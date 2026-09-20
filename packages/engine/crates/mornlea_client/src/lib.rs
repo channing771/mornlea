@@ -38,3 +38,19 @@ mod window;
 
 #[cfg(target_os = "macos")]
 mod ffi;
+
+#[cfg(test)]
+mod godot_isolation {
+    #[test]
+    fn crate_does_not_depend_on_the_godot_pilot() {
+        let manifest = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
+        assert!(
+            !manifest.contains("mornlea_godot"),
+            "the production client crate must not depend on the Godot pilot"
+        );
+        assert!(
+            !manifest.contains("py4godot"),
+            "the production client crate must not depend on Py4Godot"
+        );
+    }
+}

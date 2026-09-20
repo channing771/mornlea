@@ -1,80 +1,62 @@
-# Mornlea Go / Rust 职责规矩（面向未来编码）
+---
+doc_id: go-rust-ownership
+doc_revision: 2026-09-19.1
+language: en
+counterpart: go-rust-division.zh.md
+---
+# Mornlea language ownership and migration policy
 
-本文档是**未来所有新代码的归属规矩**：新功能、新模块、新算法写在哪一侧，以本文档为裁决依据。它不描述现状；现状与本文档冲突时，属于历史遗留，按第 5 节流程收敛。
+This document is a compact routing guide for new work. The final architecture is defined by [`docs/architecture-target.md`](../architecture-target.md). [`docs/architecture.md`](../architecture.md) describes the current implementation. Go ownership listed below is a transition exception unless the target document explicitly assigns it to Go.
 
-## 0. 一句话总纲
+## 1. Final ownership in one table
 
-**Rust 算数，Go 定规则。** 凡是对大量数据元素（方块、cell、quad、顶点、噪声样本、字节流）做重复数值变换的，归 Rust；凡是决定"游戏是什么、数据长什么样、和谁通信、何时发生"的，归 Go。
+| Concern | Final owner | Notes |
+|---|---|---|
+| Authoritative gameplay rules and tick | Rust server/domain | Rust owns the state transition and the only world write path. |
+| Protocol and network session | Rust protocol/server/client-core | The wire contract and its replay identity are one Rust-owned boundary. |
+| Persistence and schema migration | Rust storage/server | Clients and Godot hosts never write authoritative saves. |
+| Physics, collision, raycast, worldgen, fluids | Rust kernel | One deterministic production implementation; no Go or Python fallback. |
+| Mesh, light, voxel and bulk transforms | Rust kernel/client-core | Prepare bulk data on the Rust side and cross the bridge in batches. |
+| Client mirror, prediction, reconciliation | Rust client-core | Godot receives semantic snapshots rather than protocol records. |
+| Window, scene, UI, input, audio, animation | Godot with embedded Python | Python is the final Godot feature language; work remains bounded and presentation-only. |
+| Companion planning, dialogue, memory, AI tools | Independent Python service | Candidates cross a versioned service contract and are revalidated by Rust server. |
+| Migration oracle and conversion tools | Go temporarily | Go compares recorded transcripts and helps migrate data; it is not a final real-time dependency. |
 
-## 1. Rust 负责的领域（新代码直接写 Rust，不留 Go 版本）
+## 2. Current-to-target transition
 
-### 1.1 mornlea_engine（无窗口计算内核，engine ABI 出口）
+| Area | Current production or pilot | Target direction | Rule for new work |
+|---|---|---|---|
+| Server | Go authoritative server | Rust authoritative server | Do not add new Go authority; add a Rust contract or a time-bounded adapter. |
+| Godot client core | Go runtime behind a Rust/Godot adapter | Rust client-core linked to the typed Godot bridge | Python features may consume semantic views, but must not grow Go wire/data logic. |
+| Godot scripting | Embedded Python pilot plus pure-GDScript bootstrap | Embedded Python feature host | Do not add production GDScript; bootstrap is migration-only. |
+| Numerical engine | Rust engine called from Go | Rust domain/kernel consumed by Rust server and client-core | Do not create a second numerical implementation in Go, Python, or Godot. |
+| Renderer | Rust `mornlea_client` | Godot presentation plus Rust preparation/bridge | Keep the old renderer as a baseline until an approved producer handoff. |
+| AI | Separate Python Agent | Separate Python Agent | Never embed the Agent into the client or let it write world state. |
 
-| 领域 | 覆盖的未来工作 |
-|---|---|
-| 几何与 mesh | 一切 meshing 算法演进：贪心合并改进、LOD、新形状、UV/图集几何映射 |
-| 光照 | 一切光照传播与衰减算法：新光源类型、新传播语义、光照相关性能优化 |
-| 碰撞与物理 | 一切碰撞检测与物理积分：新形状碰撞、流体/载具物理、批量化扩展 |
-| 查询 | 一切体素空间查询：raycast 及其变种（锥形、球形、视线的批量检测） |
-| 世界生成 | 一切种子驱动的程序化生成：新 biome、新矿石、新结构、新噪声 |
-| 流体 | 流体数值内核的一切演进：单格规则求值（存活判定、垂直优先、水平传播、可替换表）与区块重扫扫描（五邻/区段不动点捷径、邻域盒布局）；队列、预算、游标、冲毁结算等编排留 Go |
-| 批量数据变换 | 任何"对 N ≥ 数千的元素做同一种数值运算"的新需求：批量坐标变换、体数据压缩/过滤、排序/归约 |
+The embedded Godot Python runtime and the standalone Agent Python runtime are different products. They have separate processes or runtime closures, dependency locks, lifecycle owners, and contracts. Similar syntax does not justify shared imports or state.
 
-现行带内 worldgen 契约为 `MGW1` layout `3`：材料表 `15` 项（含 `water` 与 `short_grass`，两两互异、唯一豁免仍是 `water == air` 的注水门控），公共 header `566` 字节，经 engine ABI v10 三端（C header、Rust FFI、`packages/shared/nativeabi`）成套演进；调整材料表、布局或 header 长度属于 ABI 变更，必须按第 5 节流程先走 OpenSpec change。
+## 3. Decision rules
 
-### 1.2 mornlea_client（窗口与渲染后端，client ABI 出口）
+1. Does the code decide an authoritative world outcome, persist it, or define a protocol/schema? Write it in the Rust server/domain/protocol/storage boundary.
+2. Does it perform deterministic numerical work over many cells, vertices, samples, entities, or bytes? Write it in the Rust kernel or client-core.
+3. Does it maintain a client mirror, prediction, correction, network session, or bounded semantic snapshot? Write it in Rust client-core.
+4. Does it compose Godot scenes, controls, input actions, audio cues, animation, or resource lifecycles? Write it in embedded Godot Python through the typed bridge.
+5. Does it plan, converse, summarize memory, or provide an AI tool outside the real-time loop? Write it in the independent Python Agent.
+6. Is it only comparing old and new behavior, converting data, or operating a migration gate? Go is allowed temporarily, but the result must be replayable and cannot define a new final contract.
+7. If a task matches more than one rule, place the state and computation together on the side that owns the larger bounded operation. Do not create a high-frequency FFI shuttle to preserve an old package boundary.
 
-| 领域 | 覆盖的未来工作 |
-|---|---|
-| 窗口与事件 | 窗口管理、事件循环、输入设备抓取（键鼠、手柄、触控）、光标/焦点行为 |
-| GPU 后端 | 图形 API 层（Metal/WebGPU/vulkan 后备）、surface/swapchain、GPU 资源池与同步 |
-| Shader 与绘制 | 一切 shader、后处理、粒子绘制等 GPU 侧实现 |
+## 4. Non-negotiable boundaries
 
-### 1.3 未来领域的预分配（现在没有，一旦立项即归 Rust）
+- There is one online authority. A Go/Rust dual writer or a real-time shadow authority is prohibited.
+- Godot/Python consumes typed semantic values. It does not parse packets, load save files, call raw engine/client ABIs, or submit unvalidated world actions.
+- Python callbacks are bounded and non-blocking. They do not perform tick-critical numerical loops, network waits, disk I/O, runtime installation, or unbounded scene scans.
+- Rust server validation is required for human input, local input, and AI proposals alike.
+- Local Memory and remote TCP reuse the same login, packet, validation, and server-core path.
+- Cross-language buffers are null or valid owned buffers, and batches are failure-atomic. Per-cell calls and retained foreign pointers are prohibited.
+- The current Go and Python pilot seams must be named in the relevant OpenSpec change and must have a removal or replacement condition.
 
-- **音频**：设备 I/O 与 DSP 混音（cpal 类生态），Go 只决定"何时何地播放什么"的规则与资源调度。
-- **大规模地形流式处理**：若未来出现按区块批量的解压/过滤/重排流水线，属批量数据变换，归 engine。
+## 5. Test placement
 
-## 2. Go 负责的领域（新代码不进 Rust）
+Rust owns authoritative rule, protocol, persistence, numerical, replay, property, fuzz, and client-core tests. Godot/Python owns typed-bridge, lifecycle, input, UI, audio, animation, and semantic visual tests. The standalone Agent owns HTTP/MCP, candidate validation, cancellation, and memory-isolation tests. Go tests remain valid migration evidence only when they compare recorded behavior or validate conversion/tooling; a Go-only gameplay test is not evidence that Go should remain the final owner.
 
-| 领域 | 覆盖的未来工作 |
-|---|---|
-| 权威规则与玩法 | sim tick 编排、方块交互、伤害/掉落/合成/耐久、命令、聊天、伙伴行为状态机、生命值/死亡结算 |
-| 世界状态语义 | chunk/section/palette/snapshot 的所有权与生命周期、容器（箱子/熔炉/掉落物）状态、昼夜与计时 |
-| 协议 | wire 格式设计、版本号演进、编解码、迁移策略、兼容性说明 |
-| 网络传输 | 帧协议、连接管理、登录、局域网广播、一切 socket 层 |
-| 存档 | schema 设计与版本迁移、zstd envelope、备份、恢复、故障注入覆盖 |
-| 高层渲染语义 | pass 编排、剔除策略决策、HUD/UI 逻辑、字体图集、Avatar/NameTag 语义、 daylight 语义 |
-| 编排与生命周期 | app/server/client 主循环、goroutine 调度、worker 划分、优雅关闭 |
-| 测试与工具链 | oracle 差分测试、benchmark、perfcheck、CI 脚本、fuzz/golden 编排 |
-| FFI 绑定 | `packages/shared/nativeabi` 是 engine ABI 的唯一 Go bridge；client ABI bridge 位于 `packages/client/client` |
-
-**方块/实体类新内容的归属细则**：新方块的规则属性（硬度、掉落、配方、交互）写 Go；新方块/实体的呈现几何与光照参数由 Go 定义为**数据描述**，经既有编码路径交给 Rust 消费；新实体的运动一律复用既有 Rust 物理积分出口，**不得新写 Go 积分**。
-
-## 3. 判定规则（新任务按顺序自问）
-
-1. 是窗口、事件、输入设备、GPU 后端、shader 吗？→ **Rust（mornlea_client）**。
-2. 是对 ≥ 数千个元素做同一种数值变换的循环吗（体素/cell/quad/顶点/样本/字节粒度）？→ **Rust（mornlea_engine）**。
-3. 要求跨平台位级确定性吗（物理、种子生成、模拟对账）？→ **Rust**。
-4. 是 wire 格式、schema、socket、文件 I/O、游戏规则、tick 编排、测试吗？→ **Go**。
-5. 主要工作是"把数据搬过边界再搬回来"吗？→ **边界设计错了**：把计算移到数据所在的一侧；优先消除搬运，而不是增加 FFI 调用频次。
-
-多条命中时，以计算密度最高的一条为准。
-
-## 4. 红线（两侧各自永不触碰的事）
-
-**Go 不得出现：**
-- 生产路径上的体素级 O(N) 密集循环（每方块/每 cell/每 quad 的生产计算）。
-- mesh、光照、碰撞、raycast、物理积分、worldgen 的第二套生产实现或新的 Go fallback。
-- 绕过 `packages/shared/nativeabi` 直接调用 engine ABI；绕过 `packages/client/client` 直接调用 client ABI 或导入 GPU 绑定。
-
-**Rust 不得出现：**
-- 文件、网络、音频设备之外的任何 I/O；协议字节格式的决策；schema 版本号的决策。
-- 业务规则：伤害计算、掉落判定、合成结果、权限、聊天语义。
-- tick 调度与时间驱动。engine 保持**无状态纯函数**性质：一次调用完成一批工作，不拥有跨调用的模拟状态、不起后台线程（mornlea_client 的窗口状态是唯一例外）。
-
-## 5. 边界变更流程
-
-- 新需求看似两侧都能做时，按第 3 节判定，默认归属即最终归属；不重开讨论。
-- 确需把某领域从一侧移到另一侧（含 engine ABI 演进），必须走 OpenSpec change，说明：性能证据（profiler 数据，性能数值只记录不门禁）、ABI 兼容与迁移策略、oracle/golden/fuzz 覆盖的保留方案。
-- 新增 engine 能力的标准落地清单：Rust 实现（含中文 doc comment）→ engine ABI 出口与版本裁决 → `packages/shared/nativeabi` 绑定 → Go 领域调用方 → oracle 差分测试 → `packages/audit` 依赖登记 → `make rust` + 受影响包 race 测试 + `go vet` + `gofmt`。
+Moving a behavior between language boundaries requires an OpenSpec change with a replay corpus, compatibility plan, failure-atomicity tests, and a rollback path. Performance measurements inform the decision but do not excuse a duplicated production implementation or an unbounded bridge.

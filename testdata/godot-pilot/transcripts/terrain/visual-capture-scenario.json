@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "name": "visual-capture",
+  "description": "Deterministic terrain hold for Godot headless visual capture. The helper logs the pilot in, publishes the stone-floor chunk at revision 1, places one stone block at revision 2, and then holds the session so the capture driver can pin a fixed camera and write untracked evidence. No forget or disconnect stage runs; the gate reaps the helper.",
+  "stage_interval_ms": 8000,
+  "world_seed": 72623859790382856,
+  "player_position": [0.5, -32, 0.5],
+  "rounds": [
+    {
+      "name": "capture",
+      "stages": [
+        {
+          "label": "player-ready",
+          "send": "player_state"
+        },
+        {
+          "label": "initial-snapshot",
+          "send": "chunk_snapshot",
+          "dimension": 0,
+          "chunk": [0, 0],
+          "revision": 1,
+          "sections": "stone_floor"
+        },
+        {
+          "label": "chunk-delta",
+          "send": "block_changes",
+          "dimension": 0,
+          "chunk": [0, 0],
+          "base_revision": 1,
+          "new_revision": 2,
+          "changes": [
+            {
+              "position": [8, -48, 8],
+              "block": "stone"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

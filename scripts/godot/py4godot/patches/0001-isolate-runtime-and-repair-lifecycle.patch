@@ -1,0 +1,427 @@
+Subject: [PATCH] isolate embedded Python and repair loader lifecycle
+Upstream-Defect: The 4.7-alpha21 loader initializes CPython from ambient process state, cannot resolve the exported macOS runtime layout, schedules an invalid editor icon update during language registration, and leaves script and resource-loader references alive at shutdown.
+Deletion-Condition: Remove this patch when an exact upstream artifact uses isolated PyConfig, supports a self-contained macOS export, excludes ambient and working-directory imports, and passes Mornlea editor and lifecycle qualification.
+
+--- a/py4godot/godot_bindings/pythonscript.cpp
++++ b/py4godot/godot_bindings/pythonscript.cpp
+@@ -1,96 +1,351 @@
+-#include "main.h"
+ #include "gdextension_interface.h"
++#include "py4godot/cpputils/Wrapper.h"
++#include <Python.h>
+
+-#if defined(__linux__) || defined(__APPLE__)
++#if !defined(GDN_EXPORT)
++#if defined(_WIN32)
++#define GDN_EXPORT __declspec(dllexport)
++#elif defined(__GNUC__)
++#define GDN_EXPORT __attribute__((visibility("default")))
++#else
++#define GDN_EXPORT
++#endif
++#endif
++
++#if !defined(MORNLEA_PYTHON_RUNTIME_DIRECTORY)
++#error "MORNLEA_PYTHON_RUNTIME_DIRECTORY must name the pinned embedded runtime directory"
++#endif
++
++#if defined(__APPLE__)
++#include <dlfcn.h>
++
++#include <filesystem>
++#include <cstring>
+ #include <iostream>
+-#include <dlfcn.h>  // For dlopen, dlsym, dlclose on Linux/macOS
++#include <string>
++#include <vector>
+ #endif
+
+-static GDExtensionInterfacePrintError godot_print_error = NULL;
++static GDExtensionInterfacePrintError godot_print_error = nullptr;
+
+ typedef GDExtensionBool (*Py4GodotInitFunc)(GDExtensionInterfaceGetProcAddress p_get_proc_address,
+                                             GDExtensionClassLibraryPtr p_library,
+                                             GDExtensionInitialization *r_initialization);
+
+-extern "C" {
+-    // Entry point for initializing Python script extension
+-    GDExtensionBool GDN_EXPORT initialize_pythonscript(GDExtensionInterfaceGetProcAddress p_get_proc_address,
+-                                                       GDExtensionClassLibraryPtr p_library,
+-                                                       GDExtensionInitialization *r_initialization) {
+-         godot_print_error = (GDExtensionInterfacePrintError)p_get_proc_address("print_error");
++#if defined(__APPLE__)
++static GDExtensionInitialization upstream_initialization = {};
++static std::filesystem::path python_home;
++static bool python_initialized = false;
++static void *upstream_handle = nullptr;
++static GDExtensionInterfaceGetProcAddress upstream_get_proc_address = nullptr;
++static GDExtensionInterfaceScriptInstanceCreate upstream_script_instance_create = nullptr;
++static GDExtensionScriptInstanceFree upstream_script_instance_free = nullptr;
++static GDExtensionScriptInstanceGetScript upstream_script_instance_get_script = nullptr;
++static GDExtensionMethodBindPtr unreference_method = nullptr;
++static GDExtensionInterfaceObjectMethodBindCall upstream_object_method_bind_call = nullptr;
++static GDExtensionInterfaceObjectMethodBindPtrcall object_method_bind_ptrcall = nullptr;
++static GDExtensionInterfaceObjectDestroy object_destroy = nullptr;
++static GDExtensionInterfaceVariantNewNil variant_new_nil = nullptr;
++static bool initializing_upstream_scene = false;
+
+-        #if defined(__linux__)
+-        void* handle = nullptr;
+-        char python_home[PATH_MAX];
+-        wcstombs(python_home, PYTHONHOME, sizeof(python_home));
++static void report_error(const std::string &message) {
++    std::cerr << message << std::endl;
++    if (godot_print_error != nullptr) {
++        godot_print_error(message.c_str(), "initialize_pythonscript", __FILE__, __LINE__, 1);
++    }
++}
+
++static bool resolve_python_home() {
++    Dl_info loader_info = {};
++    if (dladdr(reinterpret_cast<void *>(&resolve_python_home), &loader_info) == 0 ||
++        loader_info.dli_fname == nullptr) {
++        report_error("Py4Godot hardening could not resolve the loader path");
++        return false;
++    }
++    const std::filesystem::path loader_directory =
++        std::filesystem::weakly_canonical(std::filesystem::path(loader_info.dli_fname).parent_path());
++    if (loader_directory.filename() == "Frameworks") {
++        python_home = loader_directory.parent_path() / "Resources" / "addons" / "py4godot" /
++            MORNLEA_PYTHON_RUNTIME_DIRECTORY / "python";
++    } else {
++        python_home = loader_directory.parent_path();
++    }
++    return !python_home.empty();
++}
+
+-        #if defined(__ANDROID__)
+-        // Load the Android shared library
+-        handle = dlopen("libmain.so", RTLD_NOW | RTLD_GLOBAL);
+-        #elif defined(__aarch64__)
+-        // Load the ARM64 Linux shared library
+-        handle = dlopen((std::string(python_home) + "/bin/main.so").c_str(), RTLD_NOW | RTLD_GLOBAL);
+-        #else
+-        // Load the x86_64 Linux shared library
+-        handle = dlopen((std::string(python_home) + "/bin/main.so").c_str(), RTLD_NOW | RTLD_GLOBAL);
+-        #endif
++static bool initialize_isolated_python() {
++    PyConfig config;
++    PyConfig_InitIsolatedConfig(&config);
++    config.install_signal_handlers = 0;
++    config.use_environment = 0;
++    config.user_site_directory = 0;
++    config.safe_path = 1;
++    config.site_import = 1;
++    config.parse_argv = 0;
+
+-        #elif defined(__APPLE__)
+-        char python_home[PATH_MAX];
+-        wcstombs(python_home, PYTHONHOME, sizeof(python_home));
+-        // Load the shared library on macOS
+-        void* handle = dlopen((std::string(python_home) + "/bin/main.dylib").c_str(), RTLD_NOW | RTLD_GLOBAL);
+-        #endif
++    const std::string home = python_home.string();
++    const std::string executable = (python_home / "bin" / "python3.14").string();
++    PyStatus status = PyConfig_SetBytesString(&config, &config.home, home.c_str());
++    if (!PyStatus_Exception(status)) {
++        status = PyConfig_SetBytesString(&config, &config.program_name, executable.c_str());
++    }
++    if (!PyStatus_Exception(status)) {
++        status = PyConfig_SetBytesString(&config, &config.executable, executable.c_str());
++    }
++    if (!PyStatus_Exception(status)) {
++        status = Py_InitializeFromConfig(&config);
++    }
++    if (PyStatus_Exception(status)) {
++        const char *detail = status.err_msg != nullptr ? status.err_msg : "unknown Python initialization error";
++        report_error(std::string("Py4Godot isolated Python initialization failed: ") + detail);
++        PyConfig_Clear(&config);
++        return false;
++    }
++    PyConfig_Clear(&config);
++    python_initialized = true;
++    return true;
++}
+
+-        #if defined(__linux__) || defined(__APPLE__) || defined(__ANDROID__)
+-        if (!handle) {
+-            godot_print_error("error", "test", "test", 1, 1);
++static bool replace_python_search_path() {
++    const std::vector<std::filesystem::path> entries = {
++        python_home / "lib" / "python314.zip",
++        python_home / "lib" / "python3.14",
++        python_home / "lib" / "python3.14" / "lib-dynload",
++        python_home / "lib" / "python3.14" / "site-packages",
++    };
++    PyObject *path = PyList_New(0);
++    if (path == nullptr) {
++        PyErr_Clear();
++        report_error("Py4Godot hardening could not allocate the isolated import path");
++        return false;
++    }
++    for (const std::filesystem::path &entry : entries) {
++        PyObject *value = PyUnicode_DecodeFSDefault(entry.c_str());
++        if (value == nullptr || PyList_Append(path, value) != 0) {
++            Py_XDECREF(value);
++            Py_DECREF(path);
++            PyErr_Clear();
++            report_error("Py4Godot hardening could not set the isolated import path");
++            return false;
++        }
++        Py_DECREF(value);
++    }
++    const int result = PySys_SetObject("path", path);
++    Py_DECREF(path);
++    if (result != 0) {
++        PyErr_Clear();
++        report_error("Py4Godot hardening could not replace sys.path");
++        return false;
++    }
++    return true;
++}
+
+-            const char* err = dlerror();
+-            if (!err) {
+-                err = "Unknown dlopen error";
+-            }
++static bool resolve_unreference_method() {
++    auto string_name_new = reinterpret_cast<GDExtensionInterfaceStringNameNewWithLatin1Chars>(
++        upstream_get_proc_address("string_name_new_with_latin1_chars"));
++    auto string_name_destructor = reinterpret_cast<GDExtensionPtrDestructor>(
++        reinterpret_cast<GDExtensionInterfaceVariantGetPtrDestructor>(
++            upstream_get_proc_address("variant_get_ptr_destructor"))(
++            GDEXTENSION_VARIANT_TYPE_STRING_NAME));
++    auto classdb_get_method_bind = reinterpret_cast<GDExtensionInterfaceClassdbGetMethodBind>(
++        upstream_get_proc_address("classdb_get_method_bind"));
++    object_method_bind_ptrcall = reinterpret_cast<GDExtensionInterfaceObjectMethodBindPtrcall>(
++        upstream_get_proc_address("object_method_bind_ptrcall"));
++    object_destroy = reinterpret_cast<GDExtensionInterfaceObjectDestroy>(
++        upstream_get_proc_address("object_destroy"));
++    if (string_name_new == nullptr || string_name_destructor == nullptr ||
++        classdb_get_method_bind == nullptr || object_method_bind_ptrcall == nullptr || object_destroy == nullptr) {
++        report_error("Py4Godot hardening could not resolve RefCounted release functions");
++        return false;
++    }
++    void *class_name = nullptr;
++    void *method_name = nullptr;
++    string_name_new(&class_name, "RefCounted", 0);
++    string_name_new(&method_name, "unreference", 0);
++    unreference_method = classdb_get_method_bind(&class_name, &method_name, 2240911060);
++    string_name_destructor(&method_name);
++    string_name_destructor(&class_name);
++    if (unreference_method == nullptr) {
++        report_error("Py4Godot hardening could not resolve RefCounted.unreference");
++        return false;
++    }
++    return true;
++}
+
+-            std::cerr << "Cannot load library: " << err << std::endl;
++static void unreference_godot_object(GDExtensionObjectPtr object) {
++    if (object == nullptr || unreference_method == nullptr || object_method_bind_ptrcall == nullptr) {
++        return;
++    }
++    GDExtensionBool released = 0;
++    object_method_bind_ptrcall(unreference_method, object, nullptr, &released);
++    if (released) {
++        object_destroy(object);
++    }
++}
+
+-            std::string error_msg = std::string("Cannot load library: ") + err;
+-            godot_print_error(error_msg.c_str(), "test", "test", 1, 1);
++static void hardened_script_instance_free(GDExtensionScriptInstanceDataPtr instance) {
++    if (upstream_script_instance_get_script != nullptr) {
++        unreference_godot_object(upstream_script_instance_get_script(instance));
++    }
++    if (upstream_script_instance_free != nullptr) {
++        upstream_script_instance_free(instance);
++    }
++}
+
+-            return 1;
+-        }
++static GDExtensionScriptInstancePtr hardened_script_instance_create(
++    const GDExtensionScriptInstanceInfo *info,
++    GDExtensionScriptInstanceDataPtr instance) {
++    auto *mutable_info = const_cast<GDExtensionScriptInstanceInfo *>(info);
++    upstream_script_instance_free = mutable_info->free_func;
++    upstream_script_instance_get_script = mutable_info->get_script_func;
++    mutable_info->free_func = hardened_script_instance_free;
++    return upstream_script_instance_create(info, instance);
++}
+
+-        // Clear any existing errors
+-        dlerror();
++static bool is_upstream_python_language(GDExtensionObjectPtr instance) {
++    auto language = reinterpret_cast<void **>(dlsym(upstream_handle, "py_language"));
++    if (language == nullptr || *language == nullptr) {
++        return false;
++    }
++    auto *wrapper = reinterpret_cast<godot::Wrapper *>(*language);
++    return wrapper->godot_owner == instance;
++}
+
+-        // Load the py4godot_init symbol
+-        Py4GodotInitFunc load_function_handle = (Py4GodotInitFunc) dlsym(handle, "py4godot_init");
++static void hardened_object_method_bind_call(
++    GDExtensionMethodBindPtr method_bind,
++    GDExtensionObjectPtr instance,
++    const GDExtensionConstVariantPtr *arguments,
++    GDExtensionInt argument_count,
++    GDExtensionUninitializedVariantPtr result,
++    GDExtensionCallError *error) {
++    if (initializing_upstream_scene && is_upstream_python_language(instance)) {
++        variant_new_nil(result);
++        error->error = GDEXTENSION_CALL_OK;
++        error->argument = 0;
++        error->expected = 0;
++        return;
++    }
++    upstream_object_method_bind_call(method_bind, instance, arguments, argument_count, result, error);
++}
+
+-        // Check for dlsym errors
+-        const char* dlsym_error = dlerror();
+-        if (dlsym_error) {
+-            std::cerr << "Cannot load symbol 'py4godot_init': " << dlsym_error << std::endl;
+-            std::string error_msg = std::string("Cannot load symbol 'py4godot_init': ") + dlsym_error;
+-            godot_print_error(error_msg.c_str(), "test", "test", 1, 1);
+-            dlclose(handle);  // Close the library before exiting
+-            return 1;
++static GDExtensionInterfaceFunctionPtr hardened_get_proc_address(const char *name) {
++    if (std::strcmp(name, "script_instance_create") == 0) {
++        if (upstream_script_instance_create == nullptr) {
++            upstream_script_instance_create = reinterpret_cast<GDExtensionInterfaceScriptInstanceCreate>(
++                upstream_get_proc_address(name));
+         }
++        return reinterpret_cast<GDExtensionInterfaceFunctionPtr>(hardened_script_instance_create);
++    }
++    if (std::strcmp(name, "object_method_bind_call") == 0) {
++        if (upstream_object_method_bind_call == nullptr) {
++            upstream_object_method_bind_call = reinterpret_cast<GDExtensionInterfaceObjectMethodBindCall>(
++                upstream_get_proc_address(name));
++            variant_new_nil = reinterpret_cast<GDExtensionInterfaceVariantNewNil>(
++                upstream_get_proc_address("variant_new_nil"));
++        }
++        return reinterpret_cast<GDExtensionInterfaceFunctionPtr>(hardened_object_method_bind_call);
++    }
++    return upstream_get_proc_address(name);
++}
+
+-        // Call the loaded function
+-        int result = load_function_handle(p_get_proc_address, p_library, r_initialization);
++static void release_upstream_refcounted_singletons() {
++    auto loader = reinterpret_cast<void **>(dlsym(upstream_handle, "py_resource_format_loader"));
++    auto saver = reinterpret_cast<void **>(dlsym(upstream_handle, "py_resource_format_saver"));
++    if (loader == nullptr || saver == nullptr) {
++        report_error("Py4Godot hardening could not resolve upstream lifecycle objects");
++        return;
++    }
++    if (*loader != nullptr) {
++        auto *wrapper = reinterpret_cast<godot::Wrapper *>(*loader);
++        object_destroy(wrapper->godot_owner);
++        *loader = nullptr;
++    }
++    if (*saver != nullptr) {
++        auto *wrapper = reinterpret_cast<godot::Wrapper *>(*saver);
++        object_destroy(wrapper->godot_owner);
++        *saver = nullptr;
++    }
++}
+
+-        // Close the library handle only on linux (crash on macos)
+-        #if defined(__linux__)
+-//        dlclose(handle);
+-        #endif
+-        return result;
++static void initialize_hardened(void *userdata, GDExtensionInitializationLevel level) {
++    (void)userdata;
++    if (upstream_initialization.initialize != nullptr) {
++        initializing_upstream_scene = level == GDEXTENSION_INITIALIZATION_SCENE;
++        upstream_initialization.initialize(upstream_initialization.userdata, level);
++        initializing_upstream_scene = false;
++    }
++    if (level != GDEXTENSION_INITIALIZATION_SCENE || !python_initialized) {
++        return;
++    }
++    const PyGILState_STATE gil = PyGILState_Ensure();
++    replace_python_search_path();
++    PyGILState_Release(gil);
++}
+
+-        #endif
+-        #ifdef _WIN64
+-        // Direct call on Windows, where dynamic linking is handled differently
+-        py4godot_init(p_get_proc_address, p_library, r_initialization);
+-        return 1;
+-        #endif
++static void deinitialize_hardened(void *userdata, GDExtensionInitializationLevel level) {
++    (void)userdata;
++    if (upstream_initialization.deinitialize != nullptr) {
++        upstream_initialization.deinitialize(upstream_initialization.userdata, level);
++    }
++    if (level != GDEXTENSION_INITIALIZATION_SCENE || !python_initialized || !Py_IsInitialized()) {
++        return;
++    }
++    release_upstream_refcounted_singletons();
++    PyGILState_Ensure();
++    Py_FinalizeEx();
++    python_initialized = false;
++}
++#endif
+
++extern "C" {
++GDExtensionBool GDN_EXPORT initialize_pythonscript(GDExtensionInterfaceGetProcAddress p_get_proc_address,
++                                                    GDExtensionClassLibraryPtr p_library,
++                                                    GDExtensionInitialization *r_initialization) {
++    godot_print_error = reinterpret_cast<GDExtensionInterfacePrintError>(p_get_proc_address("print_error"));
++    upstream_get_proc_address = p_get_proc_address;
++
++#if defined(__APPLE__)
++    if (!resolve_python_home()) {
++        return 0;
+     }
+-}
+\ No newline at end of file
++    upstream_handle = dlopen((python_home / "bin" / "main.dylib").c_str(), RTLD_NOW | RTLD_GLOBAL);
++    if (upstream_handle == nullptr) {
++        const char *detail = dlerror();
++        report_error(std::string("Cannot load Py4Godot main library: ") +
++                     (detail != nullptr ? detail : "unknown dlopen error"));
++        return 0;
++    }
++    dlerror();
++    auto upstream_init = reinterpret_cast<Py4GodotInitFunc>(dlsym(upstream_handle, "py4godot_init"));
++    const char *symbol_error = dlerror();
++    if (symbol_error != nullptr || upstream_init == nullptr) {
++        report_error(std::string("Cannot load Py4Godot initialization symbol: ") +
++                     (symbol_error != nullptr ? symbol_error : "missing symbol"));
++        return 0;
++    }
++    if (!initialize_isolated_python()) {
++        return 0;
++    }
++
++    upstream_initialization = *r_initialization;
++    if (!resolve_unreference_method()) {
++        return 0;
++    }
++    if (!upstream_init(hardened_get_proc_address, p_library, &upstream_initialization)) {
++        report_error("Py4Godot upstream initialization failed");
++        return 0;
++    }
++    r_initialization->minimum_initialization_level = upstream_initialization.minimum_initialization_level;
++    r_initialization->userdata = upstream_initialization.userdata;
++    r_initialization->initialize = initialize_hardened;
++    r_initialization->deinitialize = deinitialize_hardened;
++    return 1;
++#else
++    if (godot_print_error != nullptr) {
++        godot_print_error("The hardened Py4Godot loader currently supports macOS Apple Silicon only",
++                          "initialize_pythonscript", __FILE__, __LINE__, 1);
++    }
++    return 0;
++#endif
++}
++}

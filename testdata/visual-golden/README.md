@@ -1,131 +1,137 @@
-# 视觉基线索引
+---
+doc_id: visual-golden-index
+doc_revision: 2026-09-15.1
+language: en
+counterpart: README.zh.md
+---
 
-本目录统一存放视觉回归基线，均为测试夹具二进制。
+# Visual baseline index
 
-- `world/`：无窗口世界场景基线 31 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
-- `motion/`：过程 GIF 基线 11 个（被动牛 4 剧本 + motion 演示 7 个），只验呈现、不进比对，对应 `cmd/mornlea/capture/passive_death_scripts.go` 的 `passiveDeathGIFScripts` 与各 motion 演示入口（按 tick 步进抓帧，标准库 `image/gif` 编码）。
-- `ui/`：前端 UI 部件基线 31 张，对应 `packages/engine/crates/mornlea_client/frontend/visual/fixture-names.ts` 的 `fixtureNames`。
+[Chinese](README.zh.md)
 
-旧目录 `cmd/mornlea/capture/testdata/golden/` 与 `engine/crates/mornlea_client/frontend/visual/golden/` 已清空，仅剩空目录，不再写入。
+This directory is the shared home for visual regression baselines. Every file in its baseline classes is a binary test fixture.
 
-## world（31 张）
+- `world/`: 31 windowless world-scene PNG baselines corresponding to `captureScenes` in `cmd/mornlea/capture/capture.go`.
+- `motion/`: 11 process GIF baselines (4 passive-cow scripts and 7 motion demos). They verify presentation only and do not participate in comparison. Their producers are `passiveDeathGIFScripts` in `cmd/mornlea/capture/passive_death_scripts.go` and the individual motion-demo entry points, which capture frames by tick and encode with the standard library's `image/gif` package.
+- `ui/`: 31 frontend UI-component baselines corresponding to `fixtureNames` in `packages/engine/crates/mornlea_client/frontend/visual/fixture-names.ts`.
 
-文件名即场景名加 `.png` 后缀，场景定义与顺序以 `captureScenes` 为准。
+The former `cmd/mornlea/capture/testdata/golden/` and `engine/crates/mornlea_client/frontend/visual/golden/` locations have been emptied and retain only empty directories. Producers no longer write to them.
 
-| 基线文件 | 场景名 | 说明 |
+## world (31 images)
+
+Each filename is the scene name with a `.png` suffix. `captureScenes` is authoritative for scene definitions and order.
+
+| Baseline file | Scene name | Description |
 |---|---|---|
-| `terrain-noon.png` | `terrain-noon` | 正午固定光照下的出生点地形远眺，锁定昼夜管线最亮相位的基准画面。 |
-| `avatar-nametag.png` | `avatar-nametag` | 远端玩家与其双语昵称名牌在正午世界中的透视与字形呈现。 |
-| `debug-panel.png` | `debug-panel` | 面板可见态下的高空世界底图，见证无头路径不引入额外面板像素。 |
-| `skylight-tunnel.png` | `skylight-tunnel` | 天窗竖井内的日光下探与井壁明暗过渡。 |
-| `block-light-room.png` | `block-light-room` | 午夜封闭石室的纯方块光衰减基线。 |
-| `torch-night.png` | `torch-night` | 午夜石室内落地与壁挂火把的暖光照明与火苗精灵。 |
-| `bed-night.png` | `bed-night` | 午夜石室内四朝向完整床的床面亮带与半高轮廓。 |
-| `materials-showcase.png` | `materials-showcase` | 陈列台上全材质方块在正午日光下的质感对照。 |
-| `target-block-feedback.png` | `target-block-feedback` | 相机正前方命中块的高亮描边与定位反馈。 |
-| `grass-closeup.png` | `grass-closeup` | 近景草地条上短草列的交叉面片与贴地形态，短草外观的可辨识基线。 |
-| `oak-grove.png` | `oak-grove` | 橡树群落的树冠、树干与林下地表的组合呈现。 |
-| `sapling-growth.png` | `sapling-growth` | 同一片草地支撑面上近处树苗与远处运行时橡树的对照：树苗经四 quad cutout 路径呈现（交叉斜面、上缘透空、贴地生长），橡树由 `worldgen.TreeBlocks` 的运行时树形几何长成，树干与树冠可辨。 |
-| `ai-companion.png` | `ai-companion` | AI 伙伴在正午世界中的跟随站位与其呈现状态。 |
-| `sword-combat.png` | `sword-combat` | 持剑攻击姿态与权威命中标记同帧的战斗反馈。 |
-| `hostile-mob.png` | `hostile-mob` | 午夜草地火把亮池边缘夜行者群的站位与受击追逐态。 |
-| `ranged-mob.png` | `ranged-mob` | 午夜草地上骨白双足掷骨者正对目标玩家投掷：两枚骨刺钉在飞行中途（沿初速取向）、目标玩家背影与名牌同框，远程敌怪战斗的夜景基线。 |
-| `passive-herd.png` | `passive-herd` | 正午草地上 3 头贴图牛与 1 个纹理生牛肉掉落的站位与掉落相位。 |
-| `passive-graze.png` | `passive-graze` | 正午草地上低头牛与常态牛的位姿对照，及牛吻部身前由草变泥土的一格。 |
-| `water-surface-slope.png` | `water-surface-slope` | 俯视水池的水面高度斜坡与透水可见的池底材质。 |
-| `bucket-pond.png` | `bucket-pond` | 近景草地条上源水、空地、湿耕地各一格，取放前后的视觉证据。 |
-| `mining-crack-early.png` | `mining-crack-early` | 同一目标砖块上的浅阶段世界空间采掘裂纹。 |
-| `mining-crack-heavy.png` | `mining-crack-heavy` | 同一目标砖块上的最重阶段裂纹，与浅阶段对照判读加深。 |
-| `rain-noon.png` | `rain-noon` | 夏至正午雨天固定夹具（相位补偿后显示相位恰 6000，天空与日照和分点基线逐字节一致）：雨粒子、灰天空与压暗后的露天亮度同框；降水形态由温度公式逐粒派生，入画全为雨形。 |
-| `camera-third-back.png` | `camera-third-back` | 同一机位第三人称背面：自身身体可见、无 viewmodel，背部可辨。 |
-| `camera-third-front.png` | `camera-third-front` | 同一机位第三人称正面：自身身体可见、无 viewmodel，脸部可辨。 |
-| `snow-cover.png` | `snow-cover` | 冬中正午雪景固定夹具（Winter/128 + 昼弧 9454 相位补偿，季节化相位恰 6000）：镜头前 1..4 档预铺雪层的分区高差、雪形降水粒子与冬季冷色天空 tint 同框；降水形态由温度公式逐粒派生，入画全为雪。 |
-| `main-menu.png` | `main-menu` | 主菜单相位全景底图，固定自转时刻的纯全景世界画面。 |
-| `settings-menu.png` | `settings-menu` | 设置相位全景底图，同一全景世界的另一自转时刻。 |
-| `avatar-detail.png` | `avatar-detail` | 原创旅人正面、侧面和背面同框，验收服装材质与静态轮廓。 |
-| `far-horizon.png` | `far-horizon` | 高空远眺的近景地形、远环壳带、雾过渡与天空四段构图。 |
-| `water-underwater.png` | `water-underwater` | 眼睛浸没的水下视角，水色叠加与穿水衰减同框。 |
+| `terrain-noon.png` | `terrain-noon` | A distant view of spawn terrain under fixed noon lighting, locking the brightest phase of the day/night pipeline. |
+| `avatar-nametag.png` | `avatar-nametag` | Perspective and glyph rendering for a remote player and bilingual display-name tag in the noon world. |
+| `debug-panel.png` | `debug-panel` | The high-altitude world backdrop while panel state is visible, proving that the headless path adds no panel pixels. |
+| `skylight-tunnel.png` | `skylight-tunnel` | Sunlight descending through a skylight shaft and the light-to-dark transition across its walls. |
+| `block-light-room.png` | `block-light-room` | Pure block-light attenuation in a sealed stone room at midnight. |
+| `torch-night.png` | `torch-night` | Warm illumination and flame sprites from floor and wall torches in a midnight stone room. |
+| `bed-night.png` | `bed-night` | Lit bed surfaces and half-height silhouettes for complete beds facing all four directions in a midnight stone room. |
+| `materials-showcase.png` | `materials-showcase` | A material comparison of every block on a display stand under noon sunlight. |
+| `target-block-feedback.png` | `target-block-feedback` | Highlight outline and positional feedback for the block hit directly in front of the camera. |
+| `grass-closeup.png` | `grass-closeup` | Crossed quads and ground contact for rows of short grass on a nearby turf strip, providing a recognizable short-grass baseline. |
+| `oak-grove.png` | `oak-grove` | Combined rendering of canopies, trunks, and the forest floor in an oak grove. |
+| `sapling-growth.png` | `sapling-growth` | A nearby sapling and a distant runtime oak on the same grass support surface: the sapling uses the four-quad cutout path (crossed diagonal planes, open upper edge, and ground contact), while runtime tree geometry from `worldgen.TreeBlocks` produces a distinguishable trunk and canopy. |
+| `ai-companion.png` | `ai-companion` | An AI companion's follow position and presentation state in the noon world. |
+| `sword-combat.png` | `sword-combat` | Combat feedback combining a sword attack pose and an authoritative hit marker in the same frame. |
+| `hostile-mob.png` | `hostile-mob` | Positions and hit/chase states of nocturnal mobs at the edge of a torch-lit pool on midnight grassland. |
+| `ranged-mob.png` | `ranged-mob` | A bone-white bipedal bone thrower attacking the target player on midnight grassland: two bone spikes are fixed mid-flight and oriented along their initial velocities, with the target player's back and name tag in frame. |
+| `passive-herd.png` | `passive-herd` | Positions and drop phase for three textured cows and one textured raw-beef drop on noon grassland. |
+| `passive-graze.png` | `passive-graze` | Pose comparison between a grazing cow and a normal cow on noon grassland, plus the single block changed from grass to dirt in front of the grazing cow's muzzle. |
+| `water-surface-slope.png` | `water-surface-slope` | A top-down view of water-surface height slopes and pool-floor material visible through the water. |
+| `bucket-pond.png` | `bucket-pond` | One source-water block, one empty block, and one hydrated-farmland block on a nearby turf strip as visual evidence before and after bucket actions. |
+| `mining-crack-early.png` | `mining-crack-early` | An early-stage world-space mining crack on the same target brick block. |
+| `mining-crack-heavy.png` | `mining-crack-heavy` | The heaviest crack stage on the same target brick block, visibly deeper than the early stage. |
+| `rain-noon.png` | `rain-noon` | A fixed summer-solstice noon rain fixture whose compensated display phase is exactly 6000 and whose sky and sunlight are byte-identical to the solstice baseline: rain particles, gray sky, and dimmed outdoor light share the frame; precipitation form is derived per particle from the temperature formula, and every visible particle is rain. |
+| `camera-third-back.png` | `camera-third-back` | Rear third-person view from the shared camera: the player's body and back are visible and no viewmodel is present. |
+| `camera-third-front.png` | `camera-third-front` | Front third-person view from the shared camera: the player's body and face are visible and no viewmodel is present. |
+| `snow-cover.png` | `snow-cover` | A fixed midwinter-noon snow fixture (`Winter/128` plus a 9454 day-arc phase compensation, yielding seasonal phase 6000): four pre-laid snow-depth zones, snow-form precipitation particles, and the cold winter sky tint share the frame; precipitation form is derived per particle from the temperature formula, and every visible particle is snow. |
+| `main-menu.png` | `main-menu` | The main-menu panorama backdrop, showing only the panoramic world at a fixed rotation time. |
+| `settings-menu.png` | `settings-menu` | The settings panorama backdrop at a different rotation time in the same panoramic world. |
+| `avatar-detail.png` | `avatar-detail` | Front, side, and rear views of the original traveler together, validating clothing material and static proportions. |
+| `far-horizon.png` | `far-horizon` | A high-altitude distant view composed of near terrain, the far-ring shell, fog transition, and sky. |
+| `water-underwater.png` | `water-underwater` | A viewpoint with the camera eye submerged, showing both the water-color overlay and attenuation through water. |
 
-## ui（31 张）
+## ui (31 images)
 
-文件名即 fixture 名加 `.png` 后缀，清单以 `fixture-names.ts` 的 `fixtureNames` 为准，对应组件以 `fixtures.tsx` 的注册表为准。
+Each filename is the fixture name with a `.png` suffix. `fixtureNames` in `fixture-names.ts` is authoritative for the list, and the registry in `fixtures.tsx` is authoritative for the corresponding component.
 
-| 基线文件 | fixture 名 | 对应组件 |
+| Baseline file | Fixture name | Component or state |
 |---|---|---|
-| `panel-inventory.png` | `panel-inventory` | 个人背包与2×2合法石砖配方。 |
-| `panel-inventory-empty.png` | `panel-inventory-empty` | 空背包。 |
-| `panel-inventory-full.png` | `panel-inventory-full` | 按物品堆叠上限填满背包、工具合法单件与半耐久。 |
-| `items-all.png` | `items-all` | 生产注册表全物品图标与名称。 |
-| `hud-hotbar-first.png` | `hud-hotbar-first` | HUD首格选中及邻格抬升。 |
-| `hud-hotbar-last.png` | `hud-hotbar-last` | HUD末格选中及邻格抬升。 |
-| `panel-workbench.png` | `panel-workbench` | 3×3合法石锄材料与产物。 |
-| `panel-chest.png` | `panel-chest` | 箱子及统一背包。 |
-| `panel-furnace.png` | `panel-furnace` | 熔炉三格与熔炼/燃烧进度。 |
-| `panel-character.png` | `panel-character` | 只读人物页。 |
-| `panel-inventory-narrow.png` | `panel-inventory-narrow` | 小窗口滚动背包。 |
-| `panel-main-menu.png` | `panel-main-menu` | `MainMenu` 主菜单整屏。 |
-| `panel-settings.png` | `panel-settings` | `SettingsPanel` 设置整屏。 |
-| `panel-pause.png` | `panel-pause` | `PauseMenu` 暂停整屏。 |
-| `panel-loading.png` | `panel-loading` | `LoadingScreen` 加载整屏。 |
-| `panel-debug.png` | `panel-debug` | `DebugPanel` 完整行集合。 |
-| `button-default.png` | `button-default` | `PixelButton` 可用态主菜单按钮。 |
-| `button-disabled.png` | `button-disabled` | `PixelButton` 禁用态主菜单按钮。 |
-| `button-pressed.png` | `button-pressed` | `PixelButton` 选中态窗口预设按钮。 |
-| `input-text.png` | `input-text` | `PixelInput` 材质包路径只读输入。 |
-| `preset-group.png` | `preset-group` | `PixelButton` 三按钮窗口预设组。 |
-| `slider.png` | `slider` | `input.settings-slider` 音量滑块。 |
-| `debug-rows.png` | `debug-rows` | `DebugPanel` 四行最小集合。 |
-| `error-line.png` | `error-line` | `p.menu-error` 错误行。 |
-| `hud-hotbar.png` | `hud-hotbar` | `HudRoot` 仅快捷栏。 |
-| `hud-status.png` | `hud-status` | `HudRoot` 完整状态栈（生命、饥饿、氧气与进食轨道）。 |
-| `hud-armor.png` | `hud-armor` | `HudRoot` 护甲条半档粒度：权威点数 7 呈现 3 个完整图标与 1 个半图标，行位紧贴心形行上方。 |
-| `hud-progress.png` | `hud-progress` | `ProgressTrack` 进食进度轨道。 |
-| `hud-popup-crosshair.png` | `hud-popup-crosshair` | `HudRoot` 弹条、准星与命中标记同框。 |
-| `hud-chat.png` | `hud-chat` | `HudRoot` 多行聊天。 |
-| `hud-container-open.png` | `hud-container-open` | `HudRoot` 容器打开态翻转构图。 |
+| `panel-inventory.png` | `panel-inventory` | Personal inventory with a valid 2×2 stone-brick recipe. |
+| `panel-inventory-empty.png` | `panel-inventory-empty` | Empty inventory. |
+| `panel-inventory-full.png` | `panel-inventory-full` | Inventory filled to item stack limits, with tools represented as valid single items at half durability. |
+| `items-all.png` | `items-all` | Every item icon and name in the production registry. |
+| `hud-hotbar-first.png` | `hud-hotbar-first` | First hotbar slot selected with adjacent-slot lift. |
+| `hud-hotbar-last.png` | `hud-hotbar-last` | Last hotbar slot selected with adjacent-slot lift. |
+| `panel-workbench.png` | `panel-workbench` | Valid 3×3 stone-hoe ingredients and result. |
+| `panel-chest.png` | `panel-chest` | Chest and unified inventory. |
+| `panel-furnace.png` | `panel-furnace` | Three furnace slots plus smelting and burning progress. |
+| `panel-character.png` | `panel-character` | Read-only character page. |
+| `panel-inventory-narrow.png` | `panel-inventory-narrow` | Scrolling inventory in a small window. |
+| `panel-main-menu.png` | `panel-main-menu` | Full-screen `MainMenu`. |
+| `panel-settings.png` | `panel-settings` | Full-screen `SettingsPanel`. |
+| `panel-pause.png` | `panel-pause` | Full-screen `PauseMenu`. |
+| `panel-loading.png` | `panel-loading` | Full-screen `LoadingScreen`. |
+| `panel-debug.png` | `panel-debug` | Complete row set for `DebugPanel`. |
+| `button-default.png` | `button-default` | Enabled main-menu state for `PixelButton`. |
+| `button-disabled.png` | `button-disabled` | Disabled main-menu state for `PixelButton`. |
+| `button-pressed.png` | `button-pressed` | Selected window-preset state for `PixelButton`. |
+| `input-text.png` | `input-text` | Read-only texture-pack path in `PixelInput`. |
+| `preset-group.png` | `preset-group` | Three-button window-preset group using `PixelButton`. |
+| `slider.png` | `slider` | Volume slider for `input.settings-slider`. |
+| `debug-rows.png` | `debug-rows` | Minimal four-row set for `DebugPanel`. |
+| `error-line.png` | `error-line` | Error line rendered by `p.menu-error`. |
+| `hud-hotbar.png` | `hud-hotbar` | `HudRoot` with only the hotbar. |
+| `hud-status.png` | `hud-status` | Complete `HudRoot` status stack for health, hunger, oxygen, and the eating track. |
+| `hud-armor.png` | `hud-armor` | Half-step armor bar in `HudRoot`: an authoritative value of 7 displays three full icons and one half icon, with the row immediately above the heart row. |
+| `hud-progress.png` | `hud-progress` | Eating-progress track in `ProgressTrack`. |
+| `hud-popup-crosshair.png` | `hud-popup-crosshair` | `HudRoot` item popup, crosshair, and hit marker in one frame. |
+| `hud-chat.png` | `hud-chat` | Multi-line chat in `HudRoot`. |
+| `hud-container-open.png` | `hud-container-open` | Reversed `HudRoot` composition while a container is open. |
 
-## motion（11 个）
+## motion (11 files)
 
-motion 过程 GIF 只验呈现、不进比对：`make visual-check` 只比对 `world/` PNG
-（GIF 剧本不设阈值也不进比对；纯比对运行缺省不生成，`GIFS=1` 显式请求或
-更新基线时才生成），`world/` 的 31 张 PNG 纪律也不含它。
+Motion-process GIFs verify presentation only and do not participate in automated pixel comparison. `make visual-check` compares only the PNG files in `world/`. GIF scripts have no threshold and are excluded from comparison; comparison-only runs do not generate them by default, and they are generated only when `GIFS=1` is requested explicitly or when baselines are updated. The rules for the 31 `world/` PNG files do not include these GIFs.
 
-| 演示文件 | 场景 | 帧数/时长 | 生成入口 |
+| Demo file | Scene | Frames/duration | Generation entry point |
 |---|---|---|---|
-| `break-burst.gif` | `break-burst-motion`：完整采掘生命周期——F0–4 目标静置，F5–24 采掘爬坡（裂纹 0→9 扫完），F25 破坏同帧（目标置空 + 采掘熄灭 + 泥土掉落注入），F25–44 粒子存续 + 掉落下落（3 格落差重力积分约 9 tick，F34 着陆），F34–49 掉落静置留存 | 50 帧，每帧 0.13 秒，循环约 6.5 秒 | `go run ./packages/client/cmd/mornlea --motion-demo testdata/visual-golden/motion/break-burst.gif`（仓库根运行） |
+| `break-burst.gif` | `break-burst-motion`: full mining lifecycle—F0–4 target idle; F5–24 mining ramp, completing crack stages 0→9; F25 destruction in the same frame, clearing the target and mining state and injecting a dirt drop; F25–44 persistent particles and a falling drop, whose three-block gravity integration takes about 9 ticks and lands at F34; F34–49 settled drop retained | 50 frames, 0.13 seconds each, approximately 6.5 seconds per loop | `go run ./packages/client/cmd/mornlea --motion-demo testdata/visual-golden/motion/break-burst.gif` (run from the repository root) |
+| `avatar-walk.gif` | Idle → slow walk → fast walk → settled stop; the 40-tick slow walk and 20-tick fast walk each cover 4.3 blocks | 100 frames, 20 Hz, 5 seconds | Add `--motion-scene avatar-walk` to the preceding command and change the output to `avatar-walk.gif` |
+| `drop-scatter.gif` | Empty pre-trigger scene → four stacks spawning on their authoritative frame → scattering and falling → landing | 80 frames, 20 Hz, 4 seconds | Add `--motion-scene drop-scatter` to the preceding command and change the output to `drop-scatter.gif` |
+| `drop-density.gif` | Empty scene → 1 → 4 → 9 → 16 → 32 stacks → remove half to leave 16 → steady state | 160 frames, 20 Hz, 8 seconds | Add `--motion-scene drop-density` to the preceding command and change the output to `drop-density.gif` |
+| `hand-mining.gif` | Iron pickaxe held with a constant early crack stage; the right hand performs 12 sinusoidal swings on the pickaxe's 10-tick period | 120 frames, 20 Hz, 6 seconds | Add `--motion-scene hand-mining` to the preceding command and change the output to `hand-mining.gif` |
+| `hand-attack.gif` | Iron sword held; synthesize one confirmation edge every 12 frames (6 swinging frames and 6 neutral frames) for 10 complete swings | 120 frames, 20 Hz, 6 seconds | Add `--motion-scene hand-attack` to the preceding command and change the output to `hand-attack.gif` |
+| `graze.gif` | `graze`: before and after grazing—6 normal standing frames followed by 6 grazing frames, with a normal cow as reference | 12 frames, approximately 8 fps | Generated with `make visual-update` by `RunPassiveDeathGIFs` inside `RunCapture` (pixel comparison is retired; generation is retained) |
+| `lure.gif` | `lure`: approach while holding wheat—the remote player moves toward a stationary cow frame by frame, with a wheat drop in front of the cow | No more than 48 frames, approximately 8 fps | Same as above |
+| `kill.gif` | `kill`: kill event—on frame 4 the death despawn creates a raw-beef drop, followed by a 20-frame retained red-flash and side-fall period | No more than 48 frames, approximately 8 fps | Same as above |
+| `beef-drop.gif` | `beef-drop`: raw-beef drop—a single raw-beef item floats and rotates from authoritative-tick-derived state | No more than 48 frames, approximately 8 fps | Same as above |
+| `weather-cycle.gif` | `weather-cycle`: complete weather transition—24 clear frames → 24 rain frames → 24 thunderstorm frames including flash frames → 24 clear frames, with particle motion and sky-gray transitions in the same view | 96 frames, 0.13 seconds each, approximately 12.5 seconds per loop | `go run ./packages/client/cmd/mornlea --motion-demo testdata/visual-golden/motion/weather-cycle.gif --motion-scene weather-cycle` (run from the repository root) |
 
-| `avatar-walk.gif` | 静止→慢走→快走→停稳；慢走40 tick与快走20 tick各走4.3格 | 100帧，20Hz，5秒 | 同上加 `--motion-scene avatar-walk`，输出改为 `avatar-walk.gif` |
-| `drop-scatter.gif` | 触发前空场→四堆正式帧出生→散开下落→着陆 | 80帧，20Hz，4秒 | 同上加 `--motion-scene drop-scatter`，输出改为 `drop-scatter.gif` |
-| `drop-density.gif` | 空场→1→4→9→16→32→移除一半至16堆→稳态 | 160帧，20Hz，8秒 | 同上加 `--motion-scene drop-density`，输出改为 `drop-density.gif` |
-| `hand-mining.gif` | 铁镐在手、浅裂纹恒定，右手以镐档周期10 tick正弦挥动12次 | 120帧，20Hz，6秒 | 同上加 `--motion-scene hand-mining`，输出改为 `hand-mining.gif` |
-| `hand-attack.gif` | 铁剑在手、每12帧合成一次确认沿（6帧挥动+6帧中立），共10次完整挥动 | 120帧，20Hz，6秒 | 同上加 `--motion-scene hand-attack`，输出改为 `hand-attack.gif` |
-| `graze.gif` | `graze`：吃草前后——常态站立 6 帧接低头吃草 6 帧，常态牛对照 | 12帧，约8fps | 随 `make visual-update` 由 `RunCapture` 内 `RunPassiveDeathGIFs` 生成（像素比对已退役，只保留生成） |
-| `lure.gif` | `lure`：持麦靠近——远端玩家逐帧靠近静立牛，小麦掉落置于牛身前 | 48帧内，约8fps | 同上 |
-| `kill.gif` | `kill`：击杀——第 4 帧死亡 despawn 并刷出生牛肉掉落，随后 20 帧红闪侧倒保留期 | 48帧内，约8fps | 同上 |
-| `beef-drop.gif` | `beef-drop`：牛肉掉落——单个生牛肉掉落的浮动与旋转（权威 tick 派生） | 48帧内，约8fps | 同上 |
-| `weather-cycle.gif` | `weather-cycle`：天气切换全过程——晴 24 帧→雨 24 帧→雷暴 24 帧（含闪光帧）→回晴 24 帧，粒子起落与天空灰度变化同框 | 96帧，每帧 0.13 秒，循环约 12.5 秒 | `go run ./packages/client/cmd/mornlea --motion-demo testdata/visual-golden/motion/weather-cycle.gif --motion-scene weather-cycle`（仓库根运行） |
+- Raw key PNGs from new demos are written to a side review directory formed by appending `-frames/` to the output path. They are not goldens; the GIF is the complete process, and the PNGs only help reviewers confirm encoding fidelity.
+- Demo scene values live in `packages/client/cmd/mornlea/capture/motion_break_burst.go`, `motion_experience.go`, `motion_hand_swing.go`, and `motion_weather_cycle.go`. They are not appended to `captureScenes`.
+- Encoding uses only the standard library's `image/gif` package, with one adaptive palette shared by the entire animation and no dithering. Fixed input produces byte-identical output.
 
-- 新演示的原始关键PNG写在输出路径加 `-frames/` 的旁路审查目录，不纳入golden；GIF是完整过程，PNG只帮助核对编码保真。
-- 演示场景值住 `packages/client/cmd/mornlea/capture/motion_break_burst.go`、`motion_experience.go`、`motion_hand_swing.go` 与 `motion_weather_cycle.go`，不追加进 `captureScenes`。
-- 编码只用标准库 `image/gif`（全片共享自适应调色板，无抖色），固定输入逐字节一致。
+## Boundaries and selection rules for the three classes
 
-## 三类边界与选用规则
+The three families are routed by observable subject and time dimension. Each registry remains authoritative for filenames and counts:
 
-三大家族按“渲染源 × 时间维度”路由，文件名与数量以各注册表为准（本文不复制清单）：
+- Class 1, window/UI (`ui/`): component-level PNGs for the window and WebView layers. `fixtureNames` in `fixture-names.ts` is authoritative for the registry. A local Chrome instance captures them, the existing dual-threshold comparison applies, and the check does not run in CI.
+- Class 2, stable world (`world/`): one stable frame after convergence from windowless offscreen rendering. `captureScenes` is authoritative for scene definitions and order. `make visual-check` compares them, and `make visual-update` explicitly overwrites them.
+- Class 3, process GIF (`motion/`): complete cross-tick state-transition GIFs captured by tick, covering the pre-trigger, outcome, and settled phases rather than only an excerpt. They are bounded human-review evidence, verify presentation only, and participate in no automated pixel-comparison gate. The four passive-cow scripts are generated by `RunPassiveDeathGIFs` inside `RunCapture` during `make visual-update`; the seven motion demos are generated explicitly through `--motion-demo`.
 
-- 第一类 UI 窗口型（`ui/`）：窗口与 WebView 层的部件级 PNG。清单以 `fixture-names.ts` 的 `fixtureNames` 为准；本机 Chrome 截图、既有双阈值比对，不进 CI。
-- 第二类世界静态（`world/`）：无头离屏渲染收敛后的单帧稳定态 PNG。场景定义与顺序以 `captureScenes` 为准；`make visual-check` 比对、`make visual-update` 显式覆盖。
-- 第三类过程 GIF（`motion/`）：跨 tick 状态迁移的全流程 GIF，按 tick 步进抓帧，覆盖触发前、结算、收敛全过程，不得只截片段。只验呈现、不进任何比对门禁，供人眼审查全流程；其中被动牛 4 剧本随 `make visual-update` 由 `RunCapture` 内生成，motion 演示 7 个经 `--motion-demo` 显式生成。
+Routing discipline: window chrome belongs only in `ui/`, single world frames belong only in `world/`, and temporal processes belong only in GIFs. World frames must not contain window-chrome pixels, and UI fixtures must not recreate world pixels.
 
-路由纪律：窗口 chrome 只进 `ui/`，世界单帧只进 `world/`，时间过程只进 GIF；世界帧不得携带窗口 chrome 像素，UI 夹具不得复刻世界像素。
+The `avatar-detail` PNG fixes the front/side/rear materials and static proportions, while the `avatar-walk` GIF reviews distance-driven gait and settling. Their responsibilities are distinct. The four former GPU container scenes have moved to same-named frontend `panel-*` fixtures; world images do not carry panel content.
 
-人物 `avatar-detail` PNG只钉正侧背材质与静态比例，`avatar-walk` GIF只审查距离驱动的步态与停稳，职责不同。四个旧GPU容器场景已迁移到前端同名 `panel-*` fixtures，世界图不承载面板。
+Deduplication discipline: do not store the same behavior as both a PNG and GIF. Existing pairs with distinct responsibilities—such as a gated sample point versus a human-reviewed full process, including the two crack frames and the mining demo—must record the distinction in this section. A feature's own change must consolidate any new overlap according to this section; this index defines the rule but does not modify existing baselines.
 
-去重纪律：同一行为禁止 PNG + GIF 双存。已并存且职责不同（门禁采样点与全流程人工审查物，如裂纹双帧与采掘演示）必须在本节注明理由；新增重叠由所属玩法 change 按本节收敛，本节只立规则不动既有基线。
+## Update entry points and discipline
 
-## 更新入口与纪律
-
-- 世界基线比对入口为 `make visual-check`（只比对 `world/` PNG；GIF 剧本不进比对，纯比对运行缺省不生成，`GIFS=1` 显式请求或更新基线时生成），覆盖入口为 `make visual-update`，路径常量为 `capture/capture_image.go` 的 `captureGoldenDir` 与 `capture/passive_death_gif.go` 的 `passiveDeathMotionDir`。
-- 部件基线比对入口为 `make frontend-visual-check`（或在 `frontend/` 内执行 `corepack pnpm visual-check`），覆盖入口为 `make frontend-visual-update`（或 `corepack pnpm visual-update`），基线目录由 `visual/visual.mjs` 的 `goldenDir` 经 `repoRoot` 推导。
-- 先目检后覆盖：基线只在预期视觉变化已逐图人工确认后更新，普通验证只比较不自动接受差异；漂移先看实拍图与差异图定位，再决定修代码还是更新基线；基线缺失不静默创建，必须显式请求更新。
-- 比对口径为双阈值，定义与取值以源码为准（`capture/visual_compare.go` 与 `visual/visual.mjs` 的比对函数），本文档不复制具体数值。
+- World baseline comparison uses `make visual-check`. It compares only `world/` PNG files; GIF scripts are excluded, comparison-only runs do not generate them by default, and `GIFS=1` requests them explicitly. `make visual-update` is the overwrite entry point. Path constants are `captureGoldenDir` in `capture/capture_image.go` and `passiveDeathMotionDir` in `capture/passive_death_gif.go`.
+- Component baseline comparison uses `make frontend-visual-check`, or `corepack pnpm visual-check` from `frontend/`. Its overwrite entry point is `make frontend-visual-update`, or `corepack pnpm visual-update`. The `goldenDir` value in `visual/visual.mjs` derives the baseline directory from `repoRoot`.
+- Inspect before overwriting: update baselines only after every expected visual change has been reviewed manually. Ordinary validation compares without accepting differences automatically. When pixels drift, inspect the captured and difference images before deciding whether to fix the code or update the baseline. A missing baseline must fail and must never be created silently; an update must be requested explicitly.
+- Comparison uses two thresholds. Their definitions and values are owned by the comparison functions in `capture/visual_compare.go` and `visual/visual.mjs`; this document intentionally does not duplicate the numeric values.

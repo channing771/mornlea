@@ -1,0 +1,7 @@
+[gd_resource type="Resource" format=3]
+
+[resource]
+resource_name = "extensibility"
+metadata/host_protocol_major = 1
+metadata/host_protocol_minor = 0
+metadata/manifest_paths = PackedStringArray("res://platform/desktop/lifecycle/feature.tres", "res://platform/desktop/input/feature.tres", "res://platform/desktop/audio/feature.tres", "res://features/session/feature.tres", "res://features/player_view/feature.tres", "res://features/world/feature.tres", "res://features/actors/feature.tres", "res://features/ui/feature.tres", "res://tests/fixtures/features/synthetic_optional/feature.tres")

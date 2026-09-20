@@ -95,6 +95,10 @@ func (a *Application) CloseClientSession(cause error) {
 // `releaseWorldConnection` 负责。光标是否恢复由调用方按相位意图决定，不在本
 // 方法内处理。
 func (a *Application) resetSessionOwnedState() {
+	// The adopted runtime is dropped at the session boundary: its mirrors are
+	// the app fields reset below, and the next frame-path use re-adopts fresh
+	// objects seeded from the surviving `serverTick`/`sequence` baselines.
+	a.discardSessionRuntime()
 	if a.remotePlayers != nil {
 		a.remotePlayers.Reset()
 	}

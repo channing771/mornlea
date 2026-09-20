@@ -97,6 +97,19 @@ func TestPassiveSpawnOnlyDuringDay(t *testing.T) {
 	}
 }
 
+func TestPassiveSpawnRejectsNonOverworldAnchor(t *testing.T) {
+	engine, session := spawnTestEngine(t, 0)
+	loadSpawnArena(t, engine, -48, 48, -48, 48)
+	tick := passiveSpawnScan(t, engine, 1, 1, 400)
+	clearPassivesForTest(engine)
+	engine.sessions[session].dimension = core.Depths
+	engine.worldTime.Store(tick)
+	engine.advancePassiveSpawn()
+	if len(engine.passives.entries) != 0 {
+		t.Fatal("depths 锚点生成了被动牛，想要拒绝")
+	}
+}
+
 func TestPassiveSpawnPicksAnchorBySortedSessionAndWorldTime(t *testing.T) {
 	engine, _ := readyMeleePlayers(t, 2)
 	// 竞技场同时覆盖两个锚点的候选环：玩家 1 在原点、玩家 2 在 (40,0)。

@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://features/player_view/camera/camera_feature.py" id="1_script"]
+
+[node name="Camera" type="Node"]
+script = ExtResource("1_script")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+current = false

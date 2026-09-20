@@ -1,0 +1,81 @@
+---
+name: mornlea-architecture
+description: Apply and maintain Mornlea's verified cross-task architecture conventions and directory-scoped AGENTS.md guidance. Use before cross-boundary design or implementation, and at the end of each implementation round to promote durable findings.
+---
+
+# Mornlea Architecture Conventions
+
+Use this skill as a compact decision aid, not as a replacement for repository truth. Resolve current-behavior conflicts in this order: code and tests, canonical `openspec/specs/`, `docs/architecture.md`, current progress documentation, then historical evidence. For new architecture decisions, [`docs/architecture-target.md`](../../../docs/architecture-target.md) is the target authority and current documents identify only the migration seam. Read the scoped `AGENTS.md` nearest the files being changed.
+
+## Directory-scoped guidance
+
+- Treat a directory as important when it is the repository root, a top-level module or package, a subtree root with an independent ownership, dependency, lifecycle, or validation boundary, or a directory that coordinates multiple packages, entry points, or asset classes.
+- Every important directory has a concise `AGENTS.md` beside the work it governs. The guide records the directory's purpose, directory map, ownership and dependency boundaries, entry points, lifecycle constraints, and focused validation. Use the exact uppercase filename `AGENTS.md`; do not introduce a parallel lowercase `agent.md` convention.
+- When an important directory is created, reorganized, or given a materially different responsibility, create or update its `AGENTS.md` in the same change. Read the nearest ancestor guide first and keep child guidance additive rather than copying parent rules.
+- If a directory has no independent invariant, inherit the parent guide and do not create a file merely for symmetry. Generated, vendored, build-output, and testdata-only directories normally inherit unless they own a separately enforced contract.
+- Keep `CLAUDE.md` limited to the established thin-import locations. It is not a second directory guide and must not become a source of divergent rules.
+- Use `docs/agents-md-style.md` for the detailed guide skeleton and self-review checklist; keep this skill focused on placement and architecture decisions.
+
+## Durable ownership rules
+
+- The server is the sole authority for world, player, entity, inventory, and gameplay outcomes. Clients submit intent and hold mirrors, reversible prediction, and presentation state only.
+- Local Memory and remote TCP reuse the same packet, login, validation, session, and authoritative simulation paths. Transport choice must not create a privileged gameplay path.
+- Current production and pilot code may retain Go application/domain orchestration and CPU presentation as a migration exception. New target runtime work assigns authoritative server logic, protocol/storage contracts, client session/mirror/prediction, and numerical kernels to Rust; Godot's qualified embedded Python owns bounded presentation orchestration. GPU and host APIs stay outside Go packages.
+- Cross-language calls use the established versioned bridges. Validate identity, layout, pointers, lengths, alignment, overlap, capacity, and failure atomicity before publishing results. Do not add a production fallback beside a native implementation.
+- Pointers crossing the Go client-core FFI must be null or genuinely valid buffers: a cgo export holds C pointer arguments in pointer-typed stack slots for the whole call, and Go's stack-copy scan (`minLegalPointer` = 4096) fatals on any pointer slot with a value between 0 and 4096 without dereferencing it. Rust callers therefore pass null for empty inputs and zero-capacity queries — never dangling-aligned or sentinel addresses (verified as an intermittent c-shared crash caught by the real-server terrain smoke and pinned by scripted-vtable probes on every pull family and input path).
+- The per-step client frame aggregate is an immutable semantic value in `packages/client/presentation` (`FrameSnapshot`). Every host and any client-core ABI frame family consume that record instead of growing a second host-private or renderer-specific frame encoding.
+- A host with already-constructed session state consumes `packages/client/runtime` through the adoption seam instead of duplicating mirror, predictor, mesher, or sequence ownership; both Memory and remote TCP paths keep one behavior source, and payload-less drop operations never consume publication capacity reserved for upserts.
+- Global chunk readiness does not imply per-session publication readiness. When a session first subscribes to an already-ready shared chunk, the authoritative tick emits a publication wake-up for that session even if the global wanted union is unchanged; stable subscriptions remain quiet, and the publication layer suppresses snapshots already sent to other sessions.
+- The client-core ABI's canonical surface is the header at `packages/client/cmd/mornlea-godot-core/include/mornlea_client_core.h`: Go derives its constants through cgo, Rust mirrors constants and `#[repr(C)]` layouts while parsing the same header text, and both sides enforce both-direction define-set equality so a define can never drift silently between the two consumers.
+- The pilot client core colocates `libmornlea_client.dylib` beside the GDExtension, Go core, and engine dylib only because `packages/client/client`'s darwin cgo entry files share the mirrors' Go package; no production symbol crosses that link. Splitting the cgo entry files away from the mirrors must precede any exported distribution, and pilot performance reports must account for the frameworks that dylib eagerly loads.
+- Every `unsafe` in `mornlea_godot` lives inside the client-core FFI module: one `unsafe extern "C"` block declares the producer exports, and a recursive fail-closed source-scan test enforces the confinement with the godot-rust `ExtensionLibrary` impl as the single pinned exception. Bridge, buffer, and later native work extend that module instead of opening `unsafe` elsewhere.
+- The extension resolves the client-core library at runtime beside its own image (via `dladdr`), never at link time — the Rust workspace must build from a clean checkout where no producer dylib exists — and every resolved signature stays pinned to the frozen declarations while an absent library fails closed. Exported distributions must carry the core dylib as a filesystem resource before any export gate passes.
+- The pinned Py4Godot runtime cannot marshal project-class objects across script-module calls (the receiver's argument cast only knows generated engine classes), so the final Godot Python host and features acquire the typed bridge node themselves through `get_node` plus the registered identity cast, host bindings carry scene paths, and host files never name gameplay bridge methods or concrete features — enforced by audit disciplines and path-scoped checker rules. The standalone Agent Python runtime remains a separate service.
+- Messages and slices become immutable after a successful cross-goroutine send. Tick, network, render, bridge, and upload hot paths use explicit bounded work and avoid blocking I/O.
+
+## Target runtime direction
+
+- The final runtime is Rust authoritative server + Rust client-core + Godot with embedded Python presentation. The current Go client-core and Go server are transition seams; no new real-time feature may expand them without an explicit removal condition.
+- The final Godot feature language is Python. Production GDScript is not a target feature language; the current pure-GDScript Bootstrap is a migration-only openability and diagnostics exception and must not receive gameplay behavior.
+- Python in Godot consumes typed semantic values and submits typed intent. It must not parse protocol bytes, own authoritative mirrors, implement prediction, read saves, call raw ABIs, or perform unbounded numerical work. The independent Agent Python service has separate process, dependencies, and contracts.
+- Rust migration work uses offline replay/differential comparison against Go; Go and Rust must never be concurrent online authorities.
+
+## Godot client direction during migration
+
+- `apps/mornlea-godot/` is the stable Godot project root. `project.godot` and the pure Godot bootstrap remain stable as the pilot grows into a production client.
+- Treat the source project and every export preset as explicit resource closures. Keep one root `project.godot`; reject parent or absolute resource references, escaping or broken source symlinks, implicit autoload state, ignored UID/import sidecars, and generated editor cache state in Git. Each preset may target macOS, Windows, or Linux desktop only and must exclude tests, development tooling, setup diagnostics, provenance, catalog-unselected features, and every non-target native/Python library family. Add target-specific closure rules when another desktop preset is introduced instead of weakening the common gate.
+- `app/` is a feature-agnostic host. Coarse independently replaceable vertical capabilities live under `features/`; ordinary scenes and leaf components do not receive plugin manifests.
+- Product assembly flows one way: launch profile → feature catalog → feature manifest → required client-core feature families → client-core registry.
+- An enabled feature manifest spells required bridge families in the numeric registry grammar (`family@major.minor`, such as `1@1.0`) because the host negotiates against the bridge's `feature_families_json` numeric keys; it declares no dependency on a still-disabled skeleton, which would hard-fail plan resolution once the feature is required. Feature scenes consume typed bridge views only — record-set decoding stays Rust-side, and Python maps confirmed typed words onto displays with fail-closed stable errors instead of fabricated state.
+- The Rust Godot bridge is the sole owner of client-core wire encoding and decoding, including input batches and frame records. Python desktop/features exchange only typed semantic intent and validated dictionaries; one host tick samples one typed frame before fanning it out to child presentation components, preserving revision atomicity and keeping wire magic/codecs out of Python.
+- Godot and embedded Python own scene composition, desktop input adaptation, UI, rendering resources, and presentation. They do not own protocol decoding, authoritative mirrors, prediction rules, saves, or numerical gameplay kernels. Pure GDScript remains limited to the migration Bootstrap/diagnostics allowlist.
+- `platform/desktop/` is the only platform-adapter family. The supported product scope is macOS, Windows, and Linux desktop. Do not prebuild Android, iOS, Web, console, touch, sensor, or mobile-lifecycle abstractions.
+- On macOS export, treat GDExtension libraries, the selected embedded CPython tree, and catalog-selected Python sources as an explicit filesystem packaging closure. Resolve libraries from the exported application layout and materialize Python runtime/source payloads under `Contents/Resources`; do not assume Python can import or load source from the PCK, current directory, system paths, or user paths.
+- Keep Godot Python production and development environments separate. Production dependencies remain explicitly empty unless independently approved; the embedded Py4Godot/CPython unit never receives Ruff, mypy, `uv`, `pip`, or developer packages. Lock development-only tools with the project `uv.lock` and type against local Py4Godot stubs rather than generated add-on modules.
+- Compose isolated Godot Python features through explicit catalog, manifest, scene, and resource paths. Do not depend on the project root being in `sys.path`, directory scanning, unrestricted dynamic imports, or sibling implementation imports; Godot owns discovery and Python owns the typed host lifecycle behind those resources.
+- Keep dynamic Godot resource ownership correct in the Py4Godot binding adapter or audited derivative. Host and feature code must not carry manual reference-count workarounds for generated-wrapper defects; repair and qualify those defects at the binding boundary so load, instantiate, reset, deactivate, and teardown remain leak-free.
+- With the current qualified Py4Godot derivative, Python must not use `ClassDB.instantiate()` for project GDExtension classes: it returns an unusable generic wrapper without an owned native pointer. Keep identity-only calls static through Godot `ClassDB`; any later Python-held native instance requires a binding-boundary repair plus lifecycle qualification before feature code may consume it.
+- Validate the Godot distribution lifecycle as one ordered stack: Rust initializes `Scene` → optional `Editor` → `MainLoop`, then Python assembles the host; shutdown deactivates Python features and releases the bridge before Rust deinitializes `MainLoop` → optional `Editor` → `Scene`. Convert Rust panics and invalid transitions to stable boundary failures, and repeat the complete headless process cycle when lifecycle ownership changes.
+- Keep `packages/client/assets` and the registered client font sources authoritative. Materialize Godot-local atlas, font, license, and provenance derivatives only through the deterministic asset synchronizer; bind them to source Git trees plus per-input and aggregate checksums, and reject missing, changed, symbolic-link, or hand-authored files under `assets/generated/`.
+- Keep Godot build gates optional leaf entry points: legacy make entries (`build`, `test`, `run`, `companion-agent-check`) never reference `scripts/godot` or a `godot-*` target, `scripts/godot` references are admitted only inside the explicit godot gate rules, and the CI Godot job stays outside required pipeline gates until an approved cutover change promotes it.
+
+## Visual and documentation direction
+
+- Route visual evidence by observable semantics, not renderer identity: UI fixtures use `ui/`, stable headless world frames use `world/`, and cross-tick human-review GIFs use `motion/` without automated pixel comparison.
+- Godot pilot captures are untracked evidence under `build/visual/godot-pilot/`. A tracked producer changes only through an approved handoff; never add a renderer-specific golden class or relax thresholds to make a pilot pass. Godot 4.7 `--display-driver headless` / `--headless` only exposes the dummy renderer, so pixel capture and GPU timestamps require a no-focus desktop display driver rather than dummy textures.
+- English is canonical for active/new OpenSpec prose, plans, machine governance, and all new or substantively rewritten source comments. Existing non-English comments and unchanged canonical-spec prose are grandfathered behind non-growth inventories. New or substantively revised explanatory and architectural documents use English `*.md` plus synchronized Chinese `*.zh.md`; unchanged pre-policy documents may remain manifest-classified `legacy` until revision.
+- New architecture and boundary code must include concise English comments or doc comments at ownership, lifecycle, compatibility, and non-obvious failure decisions. Explain intent and trade-offs rather than restating syntax; a new architectural unit with no explanatory comments is incomplete.
+
+## Round-end promotion
+
+At the end of each completed OpenSpec task or explicitly batched set of small related tasks, review ownership, dependency, lifecycle, concurrency, platform, visual, validation, and documentation findings.
+
+Promote a finding into this skill only when all conditions hold:
+
+1. current code, tests, or canonical specifications verify it;
+2. it applies across future tasks rather than only the completed task;
+3. it changes a future placement, dependency, lifecycle, validation, or orchestration decision;
+4. it is not already stated more authoritatively elsewhere;
+5. it is concise, references its authority, and contains no volatile count or task history.
+
+Update the Codex and Claude copies atomically and validate their byte equality. If nothing qualifies, do not edit the skill; record `Architecture skill: no change` with the reason in the active change ledger.

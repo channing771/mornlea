@@ -1,0 +1,32 @@
+From: Mornlea project hardening
+Subject: repair generated wrapper ownership
+Upstream-Defect: Pure-Python smart casts retain the temporary Object wrapper as `casted_from`, so RefCounted wrappers never release ResourceLoader results. Generated singleton accessors also construct a temporary engine object before replacing its pointer, leaking one Object per singleton class used.
+Deletion-Condition: Remove this patch when an exact upstream artifact transfers RefCounted return ownership to the final smart-cast wrapper, constructs singleton wrappers without a temporary engine object, and passes Mornlea dynamic resource lifecycle checks without leaked ObjectDB instances or resources.
+
+diff --git a/generation_files/generate_py_classes.py b/generation_files/generate_py_classes.py
+--- a/generation_files/generate_py_classes.py
++++ b/generation_files/generate_py_classes.py
+@@ -375,6 +375,6 @@ def generate_singleton_constructor(classname):
+     res += f"{INDENT * 2}if _{classname}_singleton_instance is None:"
+     res = generate_newline(res)
+-    res += f"{INDENT * 3}singleton = {classname}()"
++    res += f"{INDENT * 3}singleton = {classname}.construct_without_init()"
+     res = generate_newline(res)
+     res += f"{INDENT * 3}singleton._ptr = constructor({classes_dict[class_['name']]},0, ())"
+     res = generate_newline(res)
+diff --git a/py4godot/utils/smart_cast.py b/py4godot/utils/smart_cast.py
+--- a/py4godot/utils/smart_cast.py
++++ b/py4godot/utils/smart_cast.py
+@@ -1,7 +1,11 @@
+ classes_to_cast_functions = dict()
+ class_names_to_classes_dict = dict()
+ def smart_cast(o:object):
+-  return classes_to_cast_functions[o.get_class()](o)
++  casted = classes_to_cast_functions[o.get_class()](o)
++  if getattr(casted, "casted_from", None) is o:
++    casted.casted_from = None
++  return casted
++
+
+ def register_cast_function(classname, cast_fn):
+   classes_to_cast_functions[classname] = cast_fn

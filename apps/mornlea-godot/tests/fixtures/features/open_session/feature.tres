@@ -1,0 +1,14 @@
+[gd_resource type="Resource" format=3]
+
+[resource]
+resource_name = "open_session"
+metadata/feature_id = "open_session"
+metadata/host_protocol_major = 1
+metadata/host_protocol_minor = 0
+metadata/entry_scene_path = "res://tests/fixtures/features/stub_open_session.tscn"
+metadata/dependencies = PackedStringArray()
+metadata/required_bridge_families = PackedStringArray("2@1.0", "7@1.0")
+metadata/required = true
+metadata/enabled = true
+metadata/budget_class = "light"
+metadata/reset_policy = "reset"

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/fixtures/features/real_bridge_feature.py" id="1_real_bridge"]
+
+[node name="RealBridgeFeature" type="Node"]
+script = ExtResource("1_real_bridge")

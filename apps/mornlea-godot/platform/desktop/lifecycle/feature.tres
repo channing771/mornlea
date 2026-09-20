@@ -1,0 +1,14 @@
+[gd_resource type="Resource" format=3]
+
+[resource]
+resource_name = "platform.desktop.lifecycle"
+metadata/feature_id = "platform.desktop.lifecycle"
+metadata/host_protocol_major = 1
+metadata/host_protocol_minor = 0
+metadata/entry_scene_path = "res://platform/desktop/lifecycle/feature_root.tscn"
+metadata/dependencies = PackedStringArray()
+metadata/required_bridge_families = PackedStringArray("lifecycle@1.0")
+metadata/required = false
+metadata/enabled = false
+metadata/budget_class = "bootstrap"
+metadata/reset_policy = "recreate"

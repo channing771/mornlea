@@ -95,6 +95,7 @@ WebView 组件；采掘不再有屏幕进度条，其进度反馈由世界空间
 | 改动域 | 命令 |
 |---|---|
 | main 装配 / CLI | `go test ./packages/client/cmd/mornlea -count=1` |
+| Godot 隔离 | `go test ./packages/client/cmd/mornlea/... -run 'Godot|Legacy|Default' -race -count=1` |
 | app 装配主体 | `go test ./packages/client/cmd/mornlea/app -race -count=1` |
 | capture 视觉 | `go test ./packages/client/cmd/mornlea/capture -race -count=1`；无窗口视觉 `make visual-check` |
 | benchmark 性能 | `go test ./packages/client/cmd/mornlea/benchmark -race -count=1`；多人门禁 `make test-multiplayer` |

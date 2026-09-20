@@ -1,12 +1,46 @@
 package runtime_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/channing771/mornlea/packages/server/sim/runtime"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/world"
 )
+
+func TestLateSessionPublishesAlreadyReadySharedChunk(t *testing.T) {
+	engine := runtime.NewEngine(0, 0, 0)
+	key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{}}
+
+	engine.RegisterSession(1, core.Overworld, key.Pos)
+	requested := engine.Step()
+	if !reflect.DeepEqual(requested.Acquire, []core.ChunkKey{key}) {
+		t.Fatalf("first Acquire = %+v, want [%+v]", requested.Acquire, key)
+	}
+	engine.SubmitAcquired(runtime.AcquiredChunk{
+		Key: key, Chunk: world.NewChunk(key.Pos), Revision: 7, PersistedRevision: 7,
+	})
+	loaded := engine.Step()
+	if !reflect.DeepEqual(loaded.Ready, []core.ChunkKey{key}) {
+		t.Fatalf("loaded Ready = %+v, want [%+v]", loaded.Ready, key)
+	}
+
+	engine.RegisterSession(2, core.Overworld, key.Pos)
+	joined := engine.Step()
+	if len(joined.Acquire) != 0 {
+		t.Fatalf("late session reacquired shared chunk: %+v", joined.Acquire)
+	}
+	if !reflect.DeepEqual(joined.Ready, []core.ChunkKey{key}) {
+		t.Fatalf("late-session Ready = %+v, want [%+v]", joined.Ready, key)
+	}
+	if !engine.SessionWantsChunk(2, key) {
+		t.Fatalf("late session does not retain shared chunk %+v", key)
+	}
+	if repeated := engine.Step().Ready; len(repeated) != 0 {
+		t.Fatalf("stable subscriptions repeated Ready: %+v", repeated)
+	}
+}
 
 // viewSquareKeys 构造以 center 为圆心、radius 为半径的方形视距键集合，
 // 与 sessionWantedSnapshot 的循环边界同口径。

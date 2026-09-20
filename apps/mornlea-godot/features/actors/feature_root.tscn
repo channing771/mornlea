@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://features/actors/actors_feature.py" id="1_script"]
+[ext_resource type="PackedScene" path="res://features/actors/remote_player/remote_player.tscn" id="2_remote_player"]
+
+[node name="ActorsFeature" type="Node"]
+script = ExtResource("1_script")
+
+[node name="RemotePlayers" parent="." instance=ExtResource("2_remote_player")]

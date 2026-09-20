@@ -1,0 +1,16 @@
+[gd_resource type="Resource" format=3]
+
+[resource]
+resource_name = "full_weather"
+metadata/feature_id = "full_weather"
+metadata/host_protocol_major = 1
+metadata/host_protocol_minor = 0
+metadata/contract_version = "1.0"
+metadata/enabled = false
+metadata/implementation_status = "reserved"
+metadata/entry_scene_path = ""
+metadata/dependencies = PackedStringArray()
+metadata/required_bridge_families = PackedStringArray("8@1.0")
+metadata/required = false
+metadata/budget_class = "heavy"
+metadata/reset_policy = "reset"

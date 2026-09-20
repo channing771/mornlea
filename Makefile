@@ -21,7 +21,7 @@ ARGS ?=
 # dev-check、vet）显式循环该列表，防止新模块成为 ./... 盲区。
 GO_TEST_MODULES := ./packages/contracts ./packages/shared ./packages/server ./packages/client ./packages/tools ./packages/audit
 
-.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev
+.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck comment-language-check fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev godot-build godot-check godot-asset-check godot-project-check godot-python-check godot-input-check godot-camera-check godot-target-check godot-entity-check godot-environment-check godot-hud-check godot-disconnect-check godot-smoke godot-terrain-check godot-capability-check godot-playable-smoke godot-visual-evidence godot-visual-compare godot-benchmark
 
 run test test-multiplayer bench-multiplayer visual-check visual-update: rust
 build: rust
@@ -41,11 +41,31 @@ help:
 		'  make test-multiplayer 运行 M3C 八玩家与 v6 报告测试' \
 		'  make bench-multiplayer 运行三组 M3C 多人微基准' \
 		'  make archcheck        验证依赖闭包与无图形服务端边界' \
+		'  make comment-language-check 验证英文源码注释迁移基线只能下降' \
 		'  make rust             构建固定版本的 Rust cdylib' \
 		'  make rust-check       运行 Rust 格式、clippy 与单测' \
 		'  make frontend-check   菜单 WebView 前端门禁(冻结安装+typecheck+vitest+构建+dist 一致)' \
 		'  make companion-agent-check 运行伙伴 Agent locked 安装、格式、静态检查、类型检查与 Python 单测' \
 		'  make companion-agent-integration 运行无外网 Go/Python 伙伴 Agent 真进程合同' \
+		'  make godot-build         Optional pilot gate: build the offline desktop distribution unit' \
+		'  make godot-check         Optional pilot gate: load the Godot project headlessly' \
+		'  make godot-asset-check   Optional pilot gate: verify generated Godot assets match their inputs' \
+		'  make godot-project-check Optional pilot gate: validate the Godot project structure' \
+		'  make godot-python-check  Optional pilot gate: locked Godot Python static and unit checks' \
+		'  make godot-input-check   Optional pilot gate: validate desktop semantic input' \
+		'  make godot-camera-check  Optional pilot gate: validate typed camera mapping' \
+		'  make godot-target-check  Optional pilot gate: validate typed target feedback' \
+		'  make godot-entity-check  Optional pilot gate: validate remote-player presentation' \
+		'  make godot-environment-check Optional pilot gate: validate typed environment presentation' \
+		'  make godot-hud-check      Optional pilot gate: validate confirmed HUD presentation' \
+		'  make godot-disconnect-check Optional pilot gate: validate terminal session behavior' \
+		'  make godot-smoke         Optional pilot gate: 100-iteration isolated Godot headless smoke' \
+		'  make godot-terrain-check  Optional pilot gate: headless transcript terrain scenario end to end' \
+		'  make godot-capability-check Optional pilot gate: validate disabled coarse capability reservations' \
+		'  make godot-playable-smoke Optional pilot gate: real-server minimum playable scenario' \
+		'  make godot-visual-evidence Optional pilot gate: headless Godot visual evidence' \
+		'  make godot-visual-compare Optional pilot gate: classify Godot evidence against tracked baselines' \
+		'  make godot-benchmark      Optional pilot gate: Godot pilot v23 performance report' \
 		'  make fmt              格式化全部 Rust 与 Go 源码' \
 		'  make visual-check     跑视觉场景并与 golden 基线比对（SCENES= 只跑场景子集、GIFS=1 生成 GIF 供人工审查）' \
 		'  make visual-update    重新生成 golden 基线（VISUAL_OUT 覆盖输出目录，SCENES= 只更新所列场景）' \
@@ -142,11 +162,14 @@ archcheck:
 	$(GO) test ./packages/audit -count=1
 	test -z "$$($(GO) list -deps $(SERVER) | rg 'packages/client/(client|mesh|render)|gfxspike|glfw|webgpu|x/image/font')"
 
+comment-language-check:
+	$(GO) test ./packages/audit -run 'EnglishCommentMigration|CodeCommentLanguage|CommentScanner' -count=1
+
 # dev-check:迭代期快检——gofmt 检查、vet、全仓短测试(重型测试经 `-short` 跳过)
 # 与 Rust fmt/clippy/单测。完整门禁(test/test-race/visual-check/rust-check)
 # 仍留给 CI 与提交前,短模式不做任何正确性放宽。
 dev-check:
-	@unformatted=$$(gofmt -l .); if [ -n "$$unformatted" ]; then echo "gofmt 需要格式化: $$unformatted"; exit 1; fi
+	@unformatted=$$(find . -type f -name '*.go' -not -path './vendor/*' -not -path './.worktrees/*' -not -path './.claude/worktrees/*' -exec gofmt -l {} +); if [ -n "$$unformatted" ]; then echo "gofmt 需要格式化: $$unformatted"; exit 1; fi
 	for module in $(GO_TEST_MODULES); do $(GO) vet $$module/... || exit 1; done
 	for module in $(GO_TEST_MODULES); do $(GO) test $$module/... -short || exit 1; done
 	cd $(RUST_DIR) && $(CARGO) fmt --check
@@ -177,6 +200,7 @@ fmt:
 	find . -type f -name '*.go' \
 		-not -path './vendor/*' \
 		-not -path './.worktrees/*' \
+		-not -path './.claude/worktrees/*' \
 		-exec gofmt -w {} +
 
 # visual-check：SCENES= 传逗号分隔场景子集（如 SCENES=mining-crack-early,mining-crack-heavy）
@@ -209,3 +233,66 @@ agent-dashboard:
 
 agent-ui-dev:
 	cd $(AGENT_BOARD_WEB) && corepack pnpm run dev
+
+# godot-*: optional pilot gates for the Godot client migration. They touch the
+# Godot/Python runtime ONLY when explicitly invoked; legacy targets (build,
+# test, run and friends) must not depend on them or probe scripts/godot.
+godot-build:
+	scripts/godot/build-python-runtime.sh --verify --offline
+	scripts/godot/build-extension.sh --profile release --verify
+	scripts/godot/build-core.sh --profile release --verify
+
+godot-check:
+	scripts/godot/godot.sh --headless --path apps/mornlea-godot --editor --quit
+
+godot-asset-check:
+	scripts/godot/sync-assets.sh --check
+
+godot-project-check:
+	scripts/godot/validate-project.sh
+
+godot-python-check:
+	scripts/godot/python-check.sh --locked
+
+godot-input-check:
+	scripts/godot/input-check.sh
+
+godot-camera-check:
+	scripts/godot/camera-check.sh
+
+godot-target-check:
+	scripts/godot/target-check.sh
+
+godot-entity-check:
+	cd $(RUST_DIR) && $(CARGO) test -p mornlea_godot entity_snapshot --locked
+	scripts/godot/entity-check.sh
+
+godot-environment-check:
+	scripts/godot/environment-check.sh
+
+godot-hud-check:
+	scripts/godot/hud-check.sh
+
+godot-disconnect-check:
+	go test ./packages/client/runtime -run 'Disconnect|Overflow|Shutdown' -race -count=1
+
+godot-smoke:
+	scripts/godot/smoke.sh --iterations 100 --isolated-python
+
+godot-terrain-check:
+	scripts/godot/godot-terrain-check.sh
+
+godot-capability-check:
+	scripts/godot/capability-check.sh
+
+godot-playable-smoke:
+	scripts/godot/playable-smoke.sh --duration 300s
+
+godot-visual-evidence:
+	scripts/godot/capture.sh
+
+godot-visual-compare:
+	scripts/godot/visual-compare.sh
+
+godot-benchmark:
+	scripts/godot/benchmark.sh

@@ -1,67 +1,92 @@
-# Mornlea 项目指南
+# Mornlea Project Guide
 
-## 指南作用域
+## Scope
 
-Agent 指南沿目录祖先链叠加生效；离目标文件最近的 `AGENTS.md` 补充父级指南。局部规则不得降低本文件规定的全局安全、正确性与验证门禁。
+Agent guidance accumulates along the ancestor chain. The nearest `AGENTS.md` adds rules for its subtree, but scoped guidance must not weaken the global safety, correctness, ownership, or validation requirements in this file.
 
-## 项目与契约
+## Project and contracts
 
-Mornlea 是使用 Go 1.26 编写的独立体素游戏，Go 源码经根 `go.work` 组织为六个模块（`packages/contracts`、`packages/shared`、`packages/server`、`packages/client`、`packages/tools` 与 `packages/audit`，模块路径前缀均为 `github.com/channing771/mornlea/packages/<unit>`，仓库根无独立模块），包含自研客户端、权威服务端、世界存储、物理、Rust `mornlea_engine` 数值引擎和 Rust `mornlea_client` wgpu 渲染客户端；项目不兼容官方 Minecraft 协议、存档或版权资源。当前基线已经包含协议 v45；玩家 schema v9、区块 schema v9、世界 metadata v6、独立 `companions.ai` schema v5、独立 `hostile_mobs` schema v2、独立 `passive_mobs` schema v1、engine ABI v11、client ABI v19，benchmark scenario 为 v23。
-## 真相优先级
+Mornlea's current production implementation is an independent voxel game written primarily in Go 1.26. The root `go.work` coordinates six modules: `packages/contracts`, `packages/shared`, `packages/server`, `packages/client`, `packages/tools`, and `packages/audit`; each module path begins with `github.com/channing771/mornlea/packages/<unit>`, and the repository root is not a Go module. The repository contains the custom client, authoritative server, world storage, physics, the Rust `mornlea_engine` numerical engine, and the Rust `mornlea_client` wgpu renderer. The intended final runtime is documented in [`docs/architecture-target.md`](docs/architecture-target.md): Rust owns the real-time server and client core, while Godot uses embedded Python for presentation. It is not compatible with the official Minecraft protocol, saves, or copyrighted assets.
 
-发生冲突时，按以下顺序核实现状：代码与测试 -> `openspec/specs/` -> `docs/architecture.md` -> `docs/notes/progress.md` -> `docs/superpowers/`。历史文档只提供背景，不覆盖已验证的当前行为。
+The current baseline is protocol v45, player schema v9, chunk schema v9, world metadata v6, standalone `companions.ai` schema v5, standalone `hostile_mobs` schema v2, standalone `passive_mobs` schema v1, engine ABI v11, client ABI v19, and benchmark scenario v23.
 
-## 仓库与局部指南
+## Source-of-truth order
 
-- 契约域 Go 模块（跨语言共享的 JSON 契约与 `go:embed` 出口，Go 与 Python 双消费）：`packages/contracts/`
-- 共享域 Go 模块（server/client 双侧共用的领域包）：`packages/shared/`（局部指南随包目录，如 `packages/shared/network/AGENTS.md`）
-- 服务端域 Go 模块（sim/fluid/storage/server 与 `cmd/mornlea-server`）：`packages/server/`（局部指南随包目录）
-- 客户端域 Go 模块（client/render/mesh/lod/audio/assets 与图形客户端命令）：`packages/client/`（局部指南随包目录，依赖方向由 `packages/audit` 强制）
-- 开发工具模块（perfcheck/agent-board 看板/gfxspike/composite_grass_side）：`packages/tools/`
-- 审计单元（跨模块架构门禁测试集，不导入被审单元）：`packages/audit/AGENTS.md`
-- Rust engine、client 与 C ABI：`packages/engine/AGENTS.md`
-- 文档结构、长期说明和测试组织文档：`docs/AGENTS.md`
-- 脚本、发布与自动化：`scripts/AGENTS.md`
-- Python 伙伴 Agent 服务：`packages/agent/AGENTS.md`
-- OpenSpec 项目上下文与产物规则：`openspec/config.yaml`
+When sources conflict, verify the current state in this order: code and tests -> `openspec/specs/` -> `docs/architecture.md` -> `docs/notes/progress.md` -> `docs/superpowers/`. For a new architecture decision, read [`docs/architecture-target.md`](docs/architecture-target.md) as the target and use `docs/architecture.md` only to identify migration seams. Historical documents provide context but do not override verified current behavior or the approved target direction.
 
-## 开始工作前
+## Repository areas and scoped guidance
 
-1. 阅读 `openspec/config.yaml`。
-2. 若任务属于某个 OpenSpec change，依次阅读该 change 的 `proposal.md`、delta specs、`design.md` 和 `tasks.md`。
-3. 检查 `git status`，保留用户已有及与任务无关的改动。
-4. clean checkout 上涉及 Rust 的任务先运行 `make rust`，再执行直接的 focused Go 命令。
+- Cross-language JSON contracts and `go:embed` exports used by Go and Python: `packages/contracts/`.
+- Shared domain packages used by the server and client: `packages/shared/`; more specific guides exist in subdirectories such as `packages/shared/network/AGENTS.md`.
+- Simulation, fluids, storage, server runtime, and `cmd/mornlea-server`: `packages/server/`.
+- Client session, render CPU half, mesh, LOD, audio, assets, and graphical client commands: `packages/client/`; dependency directions are enforced by `packages/audit`.
+- Development tools such as perfcheck, the agent board, gfxspike, and composite grass side generation: `packages/tools/`.
+- Cross-module architecture gates that do not import audited units: `packages/audit/AGENTS.md`.
+- Rust engines, clients, and C ABIs: `packages/engine/AGENTS.md`.
+- Documentation structure, long-lived explanations, and test-organization documents: `docs/AGENTS.md`.
+- Scripts, releases, and automation: `scripts/AGENTS.md`.
+- Python companion Agent service: `packages/agent/AGENTS.md`.
+- OpenSpec project context and artifact rules: `openspec/config.yaml`.
 
-## 全局架构边界
+## Directory-scoped guidance
 
-- 服务端是世界与玩家状态的唯一权威；客户端只持有镜像、预测和呈现状态。
-- 单机 Memory 与远程 TCP 必须复用同一套登录、模拟和校验路径。
-- 任何 Go 包都不得导入 WebGPU 绑定；GPU 渲染由 Rust client 独占。
-- Go 只能经仓库既定的 ABI bridge 调用 Rust，不得增加生产 fallback 或旁路。
-- Go 服务端只通过 loopback Agent HTTP 与 MCP 合同连接独立 Python 服务，不得 shell-out、FFI 或嵌入 Python；Python 只编排 Planner、Dialogue 与 compact memory，不得提交世界动作。
-- 跨 goroutine 发送成功后的消息及其切片视为不可变。
-- 权威 tick、渲染与网络热路径不得执行无界工作或阻塞 CPU、磁盘和网络操作。
-- 仓库不得加入 Mojang 版权材质或其他未经授权的二进制美术资源。
+- Important directories are the repository root, top-level modules or packages, and subtree roots that own an independent ownership, dependency, lifecycle, or validation boundary, or coordinate multiple packages, entry points, or asset classes.
+- Each important directory MUST have a concise `AGENTS.md` beside the work it governs. It records the directory purpose, directory map, ownership and dependency boundaries, entry points, lifecycle constraints, and focused validation. Use the exact uppercase filename; do not introduce a parallel lowercase `agent.md` convention.
+- Create or update the important directory's `AGENTS.md` in the same change when the directory is created, reorganized, or materially reassigned. If it has no independent invariant, inherit the parent guide and do not add a file merely for symmetry.
+- `CLAUDE.md` remains a thin import at established repository or subtree roots; it is not a second source of directory rules.
+- Use `docs/agents-md-style.md` for the detailed directory-guide structure and self-review checklist.
 
-## 工程纪律
+## Before starting work
 
-- 修改保持最小且聚焦，优先复用既有抽象，不顺手重构无关代码。
-- 新增或修改行为时先写失败测试，再完成最小实现和重构。
-- 代码注释、GoDoc 和 Rust doc comment 使用中文；Go/Rust 标识符、wire magic、外部 API 名称和技术术语保留英文。
-- 注释中提及 Go 标识符时用反引号包裹，并解释意图、边界与取舍，而非机械复述代码。
-- 禁止在任何代码注释、GoDoc 或 Rust doc comment 中出现任务标识（形如 `A-01`、`B-23` 等 `[A-F]-[0-9]{2}` 编号）；需关联任务时改为描述功能或契约名称，溯源以 `docs/feature-backlog.md`、Discussion #71 与 OpenSpec change 为准——该编号仅允许出现在规划层产物（`docs/feature-backlog.md`、`docs/notes/`、`docs/agents/` 对规则本身的举例、OpenSpec 产物、`scripts/` 等）中，不得出现在生产或测试代码的注释里。
-- 保护用户已有和无关改动；不得擅自回退、覆盖或清理它们。
-- Git 提交信息（所有 agent 会话一律遵守）只写**单行英文**，格式 `<type>(<scope>): <subject>`：`type` 取 `feat`/`fix`/`docs`/`refactor`/`perf`/`test`/`chore`，`scope` 可省略；`subject` 用英文祈使句、小写开头、不以句号结尾，可含任务编号；不写正文、页脚与 `Co-Authored-By`（合并提交等工具自动生成信息除外）。
-- Pull request（所有 agent 会话一律遵守）：标题沿用提交信息的单行英文格式；正文用英文，直接采用 `.github/PULL_REQUEST_TEMPLATE.md` 模板——`## Summary` 以要点列表概述改动内容与契约/版本影响，`## Validation` 逐行列出实际执行的验证命令与门禁结果（可附 OpenSpec change 链接）；不写中文段落、长篇叙事与 `Generated with` 等签名页脚。
-- 禁止破坏性 Git 操作、强制推送、跳过 Hook 或用豁免变量绕过失败，除非用户明确授权。
+1. Read `openspec/config.yaml`.
+2. If the task belongs to an OpenSpec change, read its `proposal.md`, delta specifications, `design.md`, and `tasks.md` in that order.
+3. Check `git status` and preserve pre-existing and unrelated user changes.
+4. On a clean checkout, run `make rust` before a focused Go command for work that involves Rust.
 
-## 开发流程
+## Global architecture boundaries
 
-复杂功能、新模块、跨包重构、存档、协议或性能契约变更必须走 OpenSpec，代码与计划不一致时先更新 change 产物。OpenSpec change 执行、多步骤修复与重构必须按 `subagent-driven-development` skill 执行：一轮开发一轮审查，进度和裁决写入 ledger；控制会话不得直接实现，评审定义以 skill 内任务评审为准。小型拼写修复、纯格式修改和一次性实验可直接修改，但仍须完成相称验证。详细流程见 `docs/development-process.md`、`docs/openspec.md` 和 `docs/test-organization.md`。
+- The server is the sole authority for world and player state; clients hold only mirrors, predictions, and presentation state.
+- Local Memory and remote TCP modes must reuse the same login, simulation, and validation path.
+- No Go package may import WebGPU bindings; the Rust client exclusively owns GPU rendering.
+- Go may call Rust only through the repository's established ABI bridges; do not add production fallbacks or side channels.
+- The current Go server communicates with the independent Python Agent service only through loopback Agent HTTP and MCP contracts. It must not shell out to, embed, or use FFI with that service. The final Godot product has a separate qualified embedded Python runtime for presentation features; it must not share the Agent's imports, process state, or dependencies. Neither Python runtime may submit unvalidated world actions.
+- New real-time architecture work follows [`docs/architecture-target.md`](docs/architecture-target.md): Rust is the final owner of authoritative server logic, protocol/storage contracts, client session/mirror/prediction, and numerical kernels; Godot's embedded Python is the final presentation language. Existing Go runtime and Python pilot code are transition exceptions and must not be expanded without an explicit removal condition in OpenSpec.
+- A message and its slices are immutable after a successful cross-goroutine send.
+- Authoritative tick, render, and network hot paths must not perform unbounded work or blocking CPU, disk, or network operations.
+- Do not add Mojang copyrighted textures or other unauthorized binary art assets.
 
-## 验证
+## Engineering discipline
 
-按风险递增选择入口：编辑循环与任务闭环默认停在最低相称层级（T0/T1），`dev-check`、`test-race-short`（T2）与全量门禁（T3）只在阶段边界（推送前、提交前或复现 CI 失败）运行；同一基线 SHA 下已记入 change ledger 的验证输出可直接引用，不重跑。定点命令与测试分层见 `docs/notes/test-quickstart.md`：
+- Keep changes minimal and focused, reuse existing abstractions, and do not opportunistically refactor unrelated code.
+- For new or changed behavior, write a failing test first, implement the minimum fix, and then refactor.
+- All new first-party source comments, GoDoc, Rust doc comments, and test comments use English, including every comment added with the Godot architecture. Existing non-English comments are grandfathered and need not be translated as unrelated work; any new or substantively rewritten comment must follow the English rule. Preserve the exact spelling of identifiers, wire magic, external APIs, and technical terms.
+- When a comment names a Go identifier, wrap it in backticks and explain intent, boundaries, or trade-offs rather than restating the code.
+- New architecture and boundary code must include concise English comments or doc comments at ownership, lifecycle, compatibility, and non-obvious failure decisions. A new architectural unit with no explanatory comments is incomplete; do not add comments that merely narrate syntax.
+- Source comments, GoDoc, and Rust doc comments must not contain task identifiers matching `[A-F]-[0-9]{2}`. Refer to the feature or contract by name instead. Task identifiers are allowed only in planning artifacts such as `docs/feature-backlog.md`, `docs/notes/`, examples about this rule under `docs/agents/`, OpenSpec artifacts, and `scripts/`.
+- Preserve all pre-existing and unrelated user changes; never revert, overwrite, or clean them without authorization.
+- Every Git commit message is one English line in the form `<type>(<scope>): <subject>`. `type` is `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, or `chore`; `scope` is optional; the imperative subject starts lowercase and has no trailing period. Do not add a body, footer, or `Co-Authored-By` line except for messages generated automatically by merge tooling.
+- Pull request titles use the same one-line English format. Pull request bodies use `.github/PULL_REQUEST_TEMPLATE.md` in English: concise bullets under `## Summary` for changes and contract/version impact, and one actual command or gate result per line under `## Validation`. Do not add generated-by signatures.
+- Do not use destructive Git operations, force-push, skip Hooks, or bypass failing gates with exemption variables unless the user explicitly authorizes that action.
+
+## Development workflow and orchestration
+
+Complex features, new modules, cross-package refactors, save changes, protocol changes, and performance-contract changes require OpenSpec. Reconcile the change artifacts before continuing whenever implementation and planning diverge. Small spelling fixes, formatting-only changes, and disposable experiments may be handled directly but still require proportionate validation.
+
+After an independently verifiable OpenSpec task or small coherent feature node passes its focused gates, create a scoped Git commit before starting the next node. Use partial staging to exclude unrelated, user-owned, experimental, or incomplete work; never make a broad commit merely to empty a dirty worktree. If pre-existing changes prevent a safe commit, record the exact overlap before accumulating more implementation.
+
+A verified ChatGPT or Codex controller using an OpenAI model has standing project authorization to choose direct, delegated, or mixed execution without a separate per-task user request. This standing authorization means that the absence of an explicit subagent request is not a main-agent-only restriction.
+
+OpenAI-native orchestration is isolation-first. At most three subagents may run concurrently. Prefer a fresh isolated agent for a bounded task that needs independent repository discovery, multi-file reasoning, specialized review, or a long work trace that would otherwise increase main-context retention. Work directly only when the task is tiny, tightly coupled to the controller's current edit, or cheaper to finish than to specify and integrate. Do not delegate merely for parallel speed, independent file ownership, or unused capacity. Give every delegate a concise task brief with only the evidence, paths, constraints, ownership, integration point, and acceptance criteria it needs; do not fork the full conversation by default. Do not restart an already-running agent solely to change its model.
+
+The controller records material orchestration decisions, isolation reasons, and rulings in the change ledger. At the end of each implementation round, review verified architectural discoveries for promotion into the synchronized project-owned `mornlea-architecture` skill. Promote only stable cross-task decision rules backed by current code, tests, or canonical specifications; otherwise record `Architecture skill: no change` rather than adding task history or volatile facts.
+
+An explicit user prohibition or higher-priority runtime restriction always controls. A non-OpenAI or unknown-provider controller must use strict `subagent-driven-development`, including independent implementation and review responsibilities as defined by that skill. In every mode, preserve approved OpenSpec scope, test-first development, ownership boundaries, required validation, completion evidence, destructive-action safety, and authorization for externally consequential actions. Orchestration discretion is not authority to skip a gate or expand the task.
+
+See `docs/development-process.md`, `docs/openspec.md`, and `docs/test-organization.md` for detailed workflow guidance.
+
+## Validation
+
+Choose validation in increasing order of risk. Editing loops and task closure normally stop at the lowest proportionate T0/T1 level. Run `dev-check`, `test-race-short` (T2), and full gates (T3) only at stage boundaries such as before push or commit, or when reproducing CI failures. Validation already recorded in a change ledger may be reused for the same baseline SHA. Focused commands and test tiers are documented in `docs/notes/test-quickstart.md`:
 
 ```bash
 make rust
@@ -75,8 +100,8 @@ make test-race
 openspec validate --all --strict --no-interactive
 ```
 
-benchmark 与 `perfcheck` 的性能数值只记录，不改变退出状态；报告完整性、真实 overflow、数据丢失和 I/O 错误仍必须硬失败。自动测试不得启动或聚焦前台游戏窗口，除非用户明确要求人工验收。
+Benchmark and `perfcheck` measurements are informational and do not change exit status. Report incompleteness, real overflow, data loss, and I/O errors remain hard failures. Automated tests must not launch or focus a foreground game window unless the user explicitly requests manual acceptance testing.
 
-## Hook
+## Hooks
 
-原先挂在 `.codex/hooks.json` 与 `.claude/settings.json` 上的 `scripts/agent-hooks/guard.mjs` 钩子门禁已下线：两处 hook 配置均已移除，`guard.mjs` 实现与 `node --test scripts/agent-hooks/guard.test.mjs` 仍保留在仓库与 CI。钩子不再自动拦截后，代理仍须自觉遵守上文全部门禁，不得以钩子下线为由放宽验证。
+The `scripts/agent-hooks/guard.mjs` gates that were formerly registered in `.codex/hooks.json` and `.claude/settings.json` are no longer installed; both Hook configurations were removed. The implementation and `node --test scripts/agent-hooks/guard.test.mjs` remain in the repository and CI. Agents must still follow every gate above and must not treat the removed automatic Hooks as relaxed policy.

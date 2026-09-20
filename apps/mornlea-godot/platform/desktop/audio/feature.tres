@@ -1,0 +1,14 @@
+[gd_resource type="Resource" format=3]
+
+[resource]
+resource_name = "platform.desktop.audio"
+metadata/feature_id = "platform.desktop.audio"
+metadata/host_protocol_major = 1
+metadata/host_protocol_minor = 0
+metadata/entry_scene_path = "res://platform/desktop/audio/feature_root.tscn"
+metadata/dependencies = PackedStringArray("platform.desktop.lifecycle")
+metadata/required_bridge_families = PackedStringArray("audio-cues@1.0")
+metadata/required = false
+metadata/enabled = false
+metadata/budget_class = "light"
+metadata/reset_policy = "reset"

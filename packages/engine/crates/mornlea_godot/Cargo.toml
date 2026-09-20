@@ -1,0 +1,11 @@
+[package]
+name = "mornlea_godot"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+godot = { version = "=0.5.5", features = ["api-4-7"] }

@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "name": "invalid-enum",
+  "description": "A complete PlayerState payload with weather enum 3, outside the authoritative clear/rain/thunder domain.",
+  "summary_sha256": "6ed1a6d9a6f17f0689ac841897d52080e57de604ed6a4d333f204a81f89ab2c3",
+  "frames": [
+    {
+      "label": "invalid-player-weather",
+      "direction": "server_to_client",
+      "state": "play",
+      "packet_id": 3,
+      "payload_hex": "84030000000000002900000000000000000000000000fcc100808242000043420000003e000080be0000003f0000a03f0000c0be01010100000000000000000000000000000000000011f4000d014101fb32020000000000030281f90c",
+      "expect": {
+        "result": "error",
+        "reject_by": "codec",
+        "error_contains": "player state has out-of-range weather"
+      }
+    }
+  ]
+}

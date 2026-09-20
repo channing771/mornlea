@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "name": "truncated",
+  "description": "A LoginSuccess payload missing the final world-seed byte, proving partial login state is not published.",
+  "summary_sha256": "1d67ba929a4d2f80a9aa22652381b174f2bed590679b16631d873ff761369d63",
+  "frames": [
+    {
+      "label": "truncated-login-success",
+      "direction": "server_to_client",
+      "state": "login",
+      "packet_id": 0,
+      "payload_hex": "00112233445546778899aabbccddeeff08070605040302",
+      "expect": {
+        "result": "error",
+        "reject_by": "codec",
+        "error_contains": "short input"
+      }
+    }
+  ]
+}

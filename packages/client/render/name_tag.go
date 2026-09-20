@@ -115,6 +115,13 @@ func layoutOrderedNameTags(dst *nameTagLayout, atlas GlyphSource, ordered []Name
 		if text == "" {
 			continue
 		}
+		// 目标方块名称弱化：灰阶文字加更透明底，与玩家名牌拉开层次。
+		glyphColor := [4]float32{1, 1, 1, 1}
+		backgroundColor := [4]float32{0.02, 0.02, 0.02, 0.58}
+		if tag.Key.Kind == EntityTarget {
+			glyphColor = [4]float32{0.9, 0.9, 0.9, 0.85}
+			backgroundColor = [4]float32{0.02, 0.02, 0.02, 0.32}
+		}
 
 		start := len(dst.glyphs)
 		penX := float32(0)
@@ -133,7 +140,7 @@ func layoutOrderedNameTags(dst *nameTagLayout, atlas GlyphSource, ordered []Name
 				Anchor: tag.Anchor,
 				X:      x, Y: y, Width: glyph.Width, Height: glyph.Height,
 				U0: glyph.U0, V0: glyph.V0, U1: glyph.U1, V1: glyph.V1,
-				Color: [4]float32{1, 1, 1, 1},
+				Color: glyphColor,
 			})
 			minX, minY = min(minX, x), min(minY, y)
 			maxX, maxY = max(maxX, x+glyph.Width), max(maxY, y+glyph.Height)
@@ -151,7 +158,7 @@ func layoutOrderedNameTags(dst *nameTagLayout, atlas GlyphSource, ordered []Name
 			Anchor: tag.Anchor, CenterX: centerX,
 			X: minX - nameTagPaddingX, Y: minY - nameTagPaddingY,
 			Width: maxX - minX + 2*nameTagPaddingX, Height: maxY - minY + 2*nameTagPaddingY,
-			Color: [4]float32{0.02, 0.02, 0.02, 0.58},
+			Color: backgroundColor,
 		})
 	}
 	return *dst

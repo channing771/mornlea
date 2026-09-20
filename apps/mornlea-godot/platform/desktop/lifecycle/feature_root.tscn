@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://platform/desktop/lifecycle/desktop_lifecycle_feature.py" id="1_script"]
+
+[node name="DesktopLifecycleFeature" type="Node"]
+script = ExtResource("1_script")

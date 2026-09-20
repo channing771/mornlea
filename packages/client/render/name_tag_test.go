@@ -124,6 +124,35 @@ func TestNameTagLayoutSkipsEmptyText(t *testing.T) {
 	}
 }
 
+// 目标方块名称弱化：与玩家名牌同字形布局，但文字置灰降透明、底更透明。
+func TestNameTagLayoutDimsTargetBlockName(t *testing.T) {
+	layout := layoutNameTags(nil, newFakeNameTagAtlas(), []NameTag{
+		{Key: EntityKey{Kind: EntityTarget}, Text: "AV"},
+		{Key: testEntityKey(testNameTagID(1)), Text: "AV"},
+	})
+	if got, want := len(layout.glyphs), 4; got != want {
+		t.Fatalf("glyphs=%d want=%d", got, want)
+	}
+	if got, want := len(layout.backgrounds), 2; got != want {
+		t.Fatalf("backgrounds=%d want=%d", got, want)
+	}
+	// 按身份域排序：玩家在前、目标在后。
+	playerGlyph, targetGlyph := layout.glyphs[0], layout.glyphs[2]
+	if playerGlyph.Color != [4]float32{1, 1, 1, 1} {
+		t.Fatalf("玩家文字颜色=%v，想要纯白不透明", playerGlyph.Color)
+	}
+	if targetGlyph.Color != [4]float32{0.9, 0.9, 0.9, 0.85} {
+		t.Fatalf("目标文字颜色=%v，想要弱化灰阶", targetGlyph.Color)
+	}
+	playerBackground, targetBackground := layout.backgrounds[0], layout.backgrounds[1]
+	if playerBackground.Color != [4]float32{0.02, 0.02, 0.02, 0.58} {
+		t.Fatalf("玩家底色=%v，想要既有深底", playerBackground.Color)
+	}
+	if targetBackground.Color != [4]float32{0.02, 0.02, 0.02, 0.32} {
+		t.Fatalf("目标底色=%v，想要更透明底", targetBackground.Color)
+	}
+}
+
 func testNameTagID(last byte) core.PlayerID {
 	return core.PlayerID{0, 1, 2, 3, 4, 5, 0x46, 7, 0x88, 9, 10, 11, 12, 13, 14, last}
 }

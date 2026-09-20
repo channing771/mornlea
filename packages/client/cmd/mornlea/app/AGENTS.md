@@ -122,6 +122,13 @@ packages/client/cmd/mornlea/app/
   共用的装配入口不落这里（归 `testkit.go`）。每包最多一个 helper 中心，规则
   见 `docs/test-organization.md`。
 
+## Runtime characterization (`characterization_test.go`)
+
+- `TestApplicationCharacterizationTranscriptParity` records one deterministic, bounded
+  semantic transcript for message draining, input prediction, mesh scheduling, basic
+  presentation state, and session reset. It reuses the package helper center, requires
+  no GPU or foreground window, and is the legacy-app reference for later runtime parity.
+
 ## 战斗反馈 (`app/combat_feedback.go`)
 
 - `combatFeedback` 独立于 `audioFeedback` 与 `serverTick`，仅由严格递增的 `network.CombatHit` 驱动，`Observe` 严格递增、`ArmMarker` 重置 6 帧、`AfterRender(rendered)` 仅在 `rendered==true` 时递减并返回本帧是否到期（到期是 hud 分节变化源）、`Reset` 清零；`Application` 直接持有该值，不复用 animation manager。

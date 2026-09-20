@@ -17,7 +17,7 @@ func TestBuildBlockOutlinePartsMakesTwelveExpandedEdges(t *testing.T) {
 	}
 
 	var longAxes [3]int
-	wantColor := [4]float32{1, 1, 1, 0.86}
+	wantColor := [4]float32{1, 1, 1, 0.4}
 	for index, part := range parts {
 		bounds := transformedUnitCubeBounds(part.transform)
 		size := bounds.max.Sub(bounds.min)
@@ -29,8 +29,8 @@ func TestBuildBlockOutlinePartsMakesTwelveExpandedEdges(t *testing.T) {
 					t.Fatalf("实例 %d 有多个长轴: %v", index, size)
 				}
 				longAxis = axis
-			case !outlineFloatNear(size[axis], 0.018):
-				t.Fatalf("实例 %d 尺寸 = %v，想要一轴 1.006、两轴 0.018", index, size)
+			case !outlineFloatNear(size[axis], 0.012):
+				t.Fatalf("实例 %d 尺寸 = %v，想要一轴 1.006、两轴 0.012", index, size)
 			}
 		}
 		if longAxis == -1 {

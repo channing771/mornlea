@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"slices"
 	"sort"
 
 	"github.com/channing771/mornlea/packages/server/sim/entity"
@@ -165,6 +166,7 @@ func (engine *Engine) StepWithTunables(tickTunables TickTunables) TickResult {
 	engine.realm.SweepUnsupportedBeds(pending)
 	finishRealmMutation(pending, &result)
 	sortChunkKeys(result.Ready)
+	result.Ready = slices.Compact(result.Ready)
 
 	result.Tick = currentTick + 1
 	result.WorldTimeTicks = currentWorldTime + 1

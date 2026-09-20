@@ -16,6 +16,8 @@ Implement tasks from an OpenSpec change.
 
 **Input**: Optionally specify a change name. If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
 
+**Project orchestration:** Before choosing an execution shape or implementing tasks, read and follow [the Mornlea implementation orchestration skill](../mornlea-implementation-orchestration/SKILL.md). It determines whether work is direct, delegated, or mixed; this apply workflow still owns change selection, context loading, progress, and completion. Preserve CLI-controlled `blocked`, `ready`, and `all_done` states exactly as reported by OpenSpec.
+
 **Steps**
 
 1. **Select the change**

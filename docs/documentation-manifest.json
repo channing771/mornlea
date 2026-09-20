@@ -1,0 +1,345 @@
+{
+  "schema_version": 1,
+  "classification_policy": {
+    "bilingual": "Maintained explanatory or architectural documentation. The unsuffixed Markdown path is the English canonical target and the .zh.md path is the Chinese counterpart target.",
+    "legacy": "Unchanged pre-policy explanatory or architectural documentation retained at its existing path and language. Its first substantive revision must migrate atomically to an English canonical .md plus Chinese .zh.md pair.",
+    "plan": "Current project planning, task-brief, or ledger content that is governed as English-only planning prose.",
+    "historical": "Immutable reports, completed task records, and other evidence that is not a current behavioral or governance authority.",
+    "machine": "Agent instructions, role definitions, prompts, and other machine-oriented governance with one English normative copy.",
+    "license": "Copied license Markdown retained in its original language; the current governed Markdown set contains no such path.",
+    "generated": "Markdown generated or append-maintained by project automation rather than maintained as an explanatory bilingual pair."
+  },
+  "documents": [
+    {
+      "id": "root-agent-guidance",
+      "classification": "machine",
+      "paths": [
+        "AGENTS.md"
+      ]
+    },
+    {
+      "id": "root-claude-import",
+      "classification": "machine",
+      "paths": [
+        "CLAUDE.md"
+      ]
+    },
+    {
+      "id": "root-readme",
+      "classification": "bilingual",
+      "paths": [
+        "README.md",
+        "README.zh.md"
+      ],
+      "english_path": "README.md",
+      "chinese_path": "README.zh.md",
+      "revision": "2026-09-16.1"
+    },
+    {
+      "id": "docs-agent-guidance",
+      "classification": "machine",
+      "paths": [
+        "docs/AGENTS.md"
+      ]
+    },
+    {
+      "id": "documentation-map",
+      "classification": "bilingual",
+      "paths": [
+        "docs/README.md",
+        "docs/README.zh.md"
+      ],
+      "english_path": "docs/README.md",
+      "chinese_path": "docs/README.zh.md",
+      "revision": "2026-09-15.2"
+    },
+    {
+      "id": "agent-guidance-style",
+      "classification": "bilingual",
+      "paths": [
+        "docs/agents-md-style.md",
+        "docs/agents-md-style.zh.md"
+      ],
+      "english_path": "docs/agents-md-style.md",
+      "chinese_path": "docs/agents-md-style.zh.md",
+      "revision": "2026-09-19.1"
+    },
+    {
+      "id": "agent-orchestration-guide",
+      "classification": "legacy",
+      "paths": [
+        "docs/agents/README.md"
+      ]
+    },
+    {
+      "id": "confirmation-channel-guide",
+      "classification": "legacy",
+      "paths": [
+        "docs/agents/confirmation-channel.md"
+      ]
+    },
+    {
+      "id": "planner-prompt",
+      "classification": "machine",
+      "paths": [
+        "docs/agents/planner-prompt.md"
+      ]
+    },
+    {
+      "id": "planner-role",
+      "classification": "machine",
+      "paths": [
+        "docs/agents/planner.md"
+      ]
+    },
+    {
+      "id": "new-machine-setup",
+      "classification": "legacy",
+      "paths": [
+        "docs/agents/setup-new-machine.md"
+      ]
+    },
+    {
+      "id": "architecture",
+      "classification": "bilingual",
+      "paths": [
+        "docs/architecture.md",
+        "docs/architecture.zh.md"
+      ],
+      "english_path": "docs/architecture.md",
+      "chinese_path": "docs/architecture.zh.md",
+      "revision": "2026-09-16.1"
+    },
+    {
+      "id": "architecture-target",
+      "classification": "bilingual",
+      "paths": [
+        "docs/architecture-target.md",
+        "docs/architecture-target.zh.md"
+      ],
+      "english_path": "docs/architecture-target.md",
+      "chinese_path": "docs/architecture-target.zh.md",
+      "revision": "2026-09-19.2"
+    },
+    {
+      "id": "development-process",
+      "classification": "bilingual",
+      "paths": [
+        "docs/development-process.md",
+        "docs/development-process.zh.md"
+      ],
+      "english_path": "docs/development-process.md",
+      "chinese_path": "docs/development-process.zh.md",
+      "revision": "2026-09-19.1"
+    },
+    {
+      "id": "feature-backlog",
+      "classification": "plan",
+      "paths": [
+        "docs/feature-backlog.md"
+      ]
+    },
+    {
+      "id": "godot-client-pilot-baseline",
+      "classification": "plan",
+      "paths": [
+        "docs/notes/godot-client-pilot-baseline.md"
+      ]
+    },
+    {
+      "id": "godot-client-pilot-report",
+      "classification": "bilingual",
+      "paths": [
+        "docs/notes/godot-client-pilot-report.md",
+        "docs/notes/godot-client-pilot-report.zh.md"
+      ],
+      "english_path": "docs/notes/godot-client-pilot-report.md",
+      "chinese_path": "docs/notes/godot-client-pilot-report.zh.md",
+      "revision": "2026-09-19.1"
+    },
+    {
+      "id": "agent-dashboard-guide",
+      "classification": "legacy",
+      "paths": [
+        "docs/notes/agent-dashboard.md"
+      ]
+    },
+    {
+      "id": "agent-run-log",
+      "classification": "generated",
+      "paths": [
+        "docs/notes/agent-runs.md"
+      ]
+    },
+    {
+      "id": "compatibility-guide",
+      "classification": "legacy",
+      "paths": [
+        "docs/notes/compatibility.md"
+      ]
+    },
+    {
+      "id": "configuration-guide",
+      "classification": "legacy",
+      "paths": [
+        "docs/notes/configuration.md"
+      ]
+    },
+    {
+      "id": "development-capture-guide",
+      "classification": "legacy",
+      "paths": [
+        "docs/notes/dev-capture.md"
+      ]
+    },
+    {
+      "id": "grass-texture-repair-history",
+      "classification": "historical",
+      "paths": [
+        "docs/notes/fix-grass-block-texture/brief-r2.md",
+        "docs/notes/fix-grass-block-texture/brief.md",
+        "docs/notes/fix-grass-block-texture/ledger.md",
+        "docs/notes/fix-grass-block-texture/report-implementer-r2.md"
+      ]
+    },
+    {
+      "id": "gameplay-guide",
+      "classification": "legacy",
+      "paths": [
+        "docs/notes/gameplay.md"
+      ]
+    },
+    {
+      "id": "go-rust-ownership",
+      "classification": "bilingual",
+      "paths": [
+        "docs/notes/go-rust-division.md",
+        "docs/notes/go-rust-division.zh.md"
+      ],
+      "english_path": "docs/notes/go-rust-division.md",
+      "chinese_path": "docs/notes/go-rust-division.zh.md",
+      "revision": "2026-09-19.1"
+    },
+    {
+      "id": "lan-server-guide",
+      "classification": "legacy",
+      "paths": [
+        "docs/notes/lan-server.md"
+      ]
+    },
+    {
+      "id": "limitations-guide",
+      "classification": "legacy",
+      "paths": [
+        "docs/notes/limitations.md"
+      ]
+    },
+    {
+      "id": "lod-performance-history",
+      "classification": "historical",
+      "paths": [
+        "docs/notes/lod-perf-notes.md"
+      ]
+    },
+    {
+      "id": "project-rename-migration",
+      "classification": "legacy",
+      "paths": [
+        "docs/notes/mornlea-migration.md"
+      ]
+    },
+    {
+      "id": "apple-m5-performance-history",
+      "classification": "historical",
+      "paths": [
+        "docs/notes/perf-baseline-m5.md"
+      ]
+    },
+    {
+      "id": "performance-baseline",
+      "classification": "legacy",
+      "paths": [
+        "docs/notes/perf-baseline.md"
+      ]
+    },
+    {
+      "id": "performance-tail-repair-history",
+      "classification": "historical",
+      "paths": [
+        "docs/notes/perf-tail-repair-m5.md"
+      ]
+    },
+    {
+      "id": "implementation-progress",
+      "classification": "legacy",
+      "paths": [
+        "docs/notes/progress.md"
+      ]
+    },
+    {
+      "id": "test-quickstart",
+      "classification": "legacy",
+      "paths": [
+        "docs/notes/test-quickstart.md"
+      ]
+    },
+    {
+      "id": "visual-verification-guide",
+      "classification": "bilingual",
+      "paths": [
+        "docs/notes/visual-verification.md",
+        "docs/notes/visual-verification.zh.md"
+      ],
+      "english_path": "docs/notes/visual-verification.md",
+      "chinese_path": "docs/notes/visual-verification.zh.md",
+      "revision": "2026-09-15.1"
+    },
+    {
+      "id": "webgpu-api-reference",
+      "classification": "legacy",
+      "paths": [
+        "docs/notes/webgpu-api.md"
+      ]
+    },
+    {
+      "id": "openspec-workflow",
+      "classification": "bilingual",
+      "paths": [
+        "docs/openspec.md",
+        "docs/openspec.zh.md"
+      ],
+      "english_path": "docs/openspec.md",
+      "chinese_path": "docs/openspec.zh.md",
+      "revision": "2026-09-19.1"
+    },
+    {
+      "id": "test-organization",
+      "classification": "bilingual",
+      "paths": [
+        "docs/test-organization.md",
+        "docs/test-organization.zh.md"
+      ],
+      "english_path": "docs/test-organization.md",
+      "chinese_path": "docs/test-organization.zh.md",
+      "revision": "2026-09-16.1"
+    },
+    {
+      "id": "texture-pack-guide",
+      "classification": "legacy",
+      "paths": [
+        "docs/texture-packs.md"
+      ]
+    },
+    {
+      "id": "visual-golden-index",
+      "classification": "bilingual",
+      "paths": [
+        "testdata/visual-golden/README.md",
+        "testdata/visual-golden/README.zh.md"
+      ],
+      "english_path": "testdata/visual-golden/README.md",
+      "chinese_path": "testdata/visual-golden/README.zh.md",
+      "revision": "2026-09-15.1"
+    }
+  ]
+}

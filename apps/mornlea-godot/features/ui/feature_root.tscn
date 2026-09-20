@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://features/ui/ui_feature.py" id="1_script"]
+[ext_resource type="PackedScene" path="res://features/ui/hud/hud.tscn" id="2_hud"]
+
+[node name="UIFeature" type="Node"]
+script = ExtResource("1_script")
+
+[node name="HUD" parent="." instance=ExtResource("2_hud")]

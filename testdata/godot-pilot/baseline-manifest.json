@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "git_commit": "84f3e0e75dff6987e47cf2aa50f50d888e85eafb",
+  "worktree_state": "dirty",
+  "platform": {
+    "os": "darwin",
+    "arch": "arm64",
+    "version": "macOS 26.6.2 (25G83)"
+  },
+  "gpu": {
+    "name": "Apple M2 (10 cores)",
+    "api": "Metal 4"
+  },
+  "resolution": {
+    "width": 2560,
+    "height": 1440
+  },
+  "view_distance": 32,
+  "scenes": [
+    "benchmark-v23/still",
+    "benchmark-v23/flying",
+    "visual/ui",
+    "visual/world",
+    "visual/motion"
+  ],
+  "warmup": {
+    "seconds": 10
+  },
+  "sample": {
+    "still_seconds": 60,
+    "flying_seconds": 120,
+    "cooldown_seconds": 30,
+    "minimum_gpu_samples": 128
+  },
+  "protocol_version": 44,
+  "engine_abi_version": 11,
+  "client_abi_version": 19,
+  "client_core_abi_major": 1,
+  "benchmark_scenario_version": 23,
+  "source_reports": [
+    {
+      "path": "testdata/godot-pilot/legacy-rust-memory-v23.json",
+      "sha256": "e588b40e268f317fee1acaa4ff5c1e0ae035cc2ec98dc170e9dc90ce6750339e"
+    }
+  ],
+  "visual_baselines": {
+    "root": "testdata/visual-golden",
+    "ui_images": 31,
+    "world_images": 31,
+    "motion_gifs": 11
+  }
+}

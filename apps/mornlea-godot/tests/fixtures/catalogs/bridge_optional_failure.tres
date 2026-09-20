@@ -1,0 +1,7 @@
+[gd_resource type="Resource" format=3]
+
+[resource]
+resource_name = "bridge_optional_failure"
+metadata/host_protocol_major = 1
+metadata/host_protocol_minor = 0
+metadata/manifest_paths = PackedStringArray("res://tests/fixtures/features/bridge_required_success/feature.tres", "res://tests/fixtures/features/bridge_optional_failure/feature.tres")

@@ -1,0 +1,197 @@
+{
+  "cold_start": {
+    "login_ms": {
+      "comparable": true,
+      "value": 419.6719999999996
+    },
+    "visible_world_ms": {
+      "comparable": true,
+      "value": 419.6719999999996
+    }
+  },
+  "cpu_frame": {
+    "comparable": true,
+    "p50_ms": 6.896,
+    "p95_ms": 6.944444444444445,
+    "p99_ms": 16.666666666666668,
+    "samples": 25062
+  },
+  "gpu_frame": {
+    "comparable": false,
+    "reason": "minimized Metal window did not expose GPU timestamps"
+  },
+  "identity": {
+    "benchmark_scenario_version": 23,
+    "catalog": "apps/mornlea-godot/config/feature_catalog.tres",
+    "client_abi_version": 19,
+    "client_core_abi_major": 1,
+    "cpython_version": "3.14.4",
+    "engine_abi_version": 11,
+    "feature_families": [
+      {
+        "family": 1,
+        "record_bytes": 24,
+        "record_limit": 8,
+        "version": 1
+      },
+      {
+        "family": 2,
+        "record_bytes": 0,
+        "record_limit": 256,
+        "version": 1
+      },
+      {
+        "family": 3,
+        "record_bytes": 0,
+        "record_limit": 128,
+        "version": 1
+      },
+      {
+        "family": 4,
+        "record_bytes": 24,
+        "record_limit": 1,
+        "version": 1
+      },
+      {
+        "family": 5,
+        "record_bytes": 0,
+        "record_limit": 4096,
+        "version": 1
+      },
+      {
+        "family": 6,
+        "record_bytes": 0,
+        "record_limit": 7,
+        "version": 1
+      },
+      {
+        "family": 7,
+        "record_bytes": 0,
+        "record_limit": 64,
+        "version": 1
+      },
+      {
+        "family": 8,
+        "record_bytes": 48,
+        "record_limit": 1,
+        "version": 1
+      }
+    ],
+    "git_commit": "376f435a262bfc8fa611866dedfee8c56225444f",
+    "godot_version": "4.7.2-stable",
+    "gpu": {
+      "api": "4.0",
+      "name": "Apple M2 (Apple8)"
+    },
+    "platform": {
+      "arch": "arm64",
+      "os": "darwin",
+      "version": "macOS 26.6.2"
+    },
+    "protocol_version": 44,
+    "py4godot_source_revision": "d8e17428deeb0428587349b663f6da26cd71ef3a",
+    "py4godot_version": "4.7-alpha21",
+    "resolution": {
+      "height": 1440,
+      "width": 2560
+    },
+    "sample": {
+      "cooldown_seconds": 30,
+      "flying_seconds": 120,
+      "minimum_gpu_samples": 128,
+      "still_seconds": 60
+    },
+    "seed": {
+      "comparable": true,
+      "value": 20260726.0
+    },
+    "valid_sample_count": 25062,
+    "view_distance": {
+      "comparable": true,
+      "value": 2.0
+    },
+    "warmup_seconds": 10,
+    "worktree_state": "dirty"
+  },
+  "input_to_presentation": {
+    "comparable": true,
+    "p50_ms": 6.896,
+    "p95_ms": 6.944444444444445,
+    "p99_ms": 7.4074074074074066,
+    "samples": 17265
+  },
+  "python_host": {
+    "allocation_pressure": {
+      "comparable": true,
+      "p50_ms": 53.0,
+      "p95_ms": 56.0,
+      "p99_ms": 58.0,
+      "samples": 25062
+    },
+    "apply": {
+      "comparable": true,
+      "p50_ms": 0.505584,
+      "p95_ms": 0.769,
+      "p99_ms": 1.206125,
+      "samples": 25062
+    },
+    "process": {
+      "comparable": true,
+      "p50_ms": 1.074083,
+      "p95_ms": 1.712125,
+      "p99_ms": 2.746125,
+      "samples": 25062
+    }
+  },
+  "queues": {
+    "overflow_count": {
+      "comparable": true,
+      "value": 0.0
+    },
+    "uploads_failed": {
+      "comparable": true,
+      "value": 0.0
+    }
+  },
+  "rss": {
+    "peak_bytes": {
+      "comparable": true,
+      "value": 581484544.0
+    },
+    "steady_bytes": {
+      "comparable": true,
+      "value": 581484544.0
+    }
+  },
+  "schema_version": 1,
+  "terrain": {
+    "expanded_bytes": {
+      "comparable": true,
+      "value": 19001400.0
+    },
+    "mesh_count": {
+      "comparable": true,
+      "value": 92.0
+    },
+    "packed_bytes": {
+      "comparable": true,
+      "value": 760056.0
+    },
+    "peak_rid_count": {
+      "comparable": true,
+      "value": 184.0
+    },
+    "prepare_duration_ms": {
+      "comparable": true,
+      "value": 108.008375
+    },
+    "rid_count": {
+      "comparable": true,
+      "value": 184.0
+    },
+    "upload_duration_ms": {
+      "comparable": true,
+      "value": 1003.489438
+    }
+  }
+}

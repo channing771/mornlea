@@ -271,9 +271,11 @@ type CraftingUpdate struct {
 }
 
 type TickResult struct {
-	Acquire            []core.ChunkKey
-	Generate           []core.ChunkKey
-	Forget             map[SessionID][]core.ChunkKey
+	Acquire  []core.ChunkKey
+	Generate []core.ChunkKey
+	Forget   map[SessionID][]core.ChunkKey
+	// `Ready` requests snapshot publication after either a chunk transition or
+	// a new session subscription to a chunk that was already ready globally.
 	Ready              []core.ChunkKey
 	Changes            []ChunkChangeBatch
 	Rejected           []Rejection

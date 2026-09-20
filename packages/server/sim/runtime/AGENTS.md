@@ -31,6 +31,7 @@
 - 每个推进 tick 仅调用一次 `realm.State.NewMutation()`，全部阶段共享该值并在尾部 `Commit` 一次；不得在阶段中途另建 `Mutation` 或绕过 `Commit` 落盘。
 - `ActiveTickTunables` 对 simulation/physics 活动快照各读取一次；二者独立而非跨组原子。server 正常 tick 与关服最终 tick 都把同一局部束传给 manager 和 `StepWithTunables`，权威路径不得再次读取全局快照或调用隐式 physics wrapper。
 - 并发入口（`Enqueue`、`EnqueueCompanionAction`、`EnqueueHostileAction`、`SubmitAcquired`、`SubmitGenerated`）经有界 inbox 与稳定排序进入 tick，跨 goroutine 发送成功后的消息及其切片视为不可变。
+- Treat global chunk readiness and per-session publication readiness as separate state. A session that newly wants an already-ready shared chunk still needs one `TickResult.Ready` wake-up even when the global wanted union is unchanged; stable subscriptions do not repeat it, and the server publication layer suppresses snapshots already sent to other sessions.
 - 权威 tick、持久化与发布热路径不得执行无界工作或阻塞 CPU/磁盘/网络。
 
 ## 定点验证

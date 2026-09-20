@@ -1,0 +1,12 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://app/host/app_root.py" id="1_root"]
+[ext_resource type="Script" path="res://app/host/feature_host.py" id="3_host"]
+
+[node name="AppRoot" type="Node"]
+script = ExtResource("1_root")
+
+[node name="ClientBridge" type="MornleaClientBridge" parent="."]
+
+[node name="FeatureHost" type="Node" parent="."]
+script = ExtResource("3_host")
