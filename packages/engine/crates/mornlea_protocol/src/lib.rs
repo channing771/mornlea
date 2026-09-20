@@ -26,6 +26,7 @@ mod place_block_succeeded;
 mod player_id;
 mod select_hotbar;
 mod server_hello;
+mod take_crafting_output;
 mod varint;
 
 pub use client_hello::ClientHello;
@@ -56,6 +57,7 @@ pub use place_block_succeeded::PlaceBlockSucceeded;
 pub use player_id::PlayerId;
 pub use select_hotbar::SelectHotbar;
 pub use server_hello::ServerHello;
+pub use take_crafting_output::TakeCraftingOutput;
 pub use varint::{decode_uvarint, encode_uvarint};
 
 /// Workspace crate identity consumed by the foundation registration tests.

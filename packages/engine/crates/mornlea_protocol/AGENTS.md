@@ -163,6 +163,15 @@ and `domain_does_not_depend_on_protocol`).
   (`equip_armor_round_trip_preserves_golden_bytes`,
   `equip_armor_rejects_malformed_payload_and_accepts_zero_sequence`).
 
+## Take crafting output (`src/take_crafting_output.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 15 payload is a little-endian `u64` sequence. Zero
+  sequences are `InvalidRange` because they cannot take part in command
+  acknowledgement. Output contents stay server-owned. Truncated payloads
+  and trailing bytes fail before publication
+  (`take_crafting_output_round_trip_preserves_golden_bytes`,
+  `take_crafting_output_rejects_zero_sequence_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash

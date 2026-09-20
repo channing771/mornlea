@@ -724,6 +724,38 @@ fn equip_armor_rejects_malformed_payload_and_accepts_zero_sequence() {
     );
 }
 
+#[test]
+fn take_crafting_output_round_trip_preserves_golden_bytes() {
+    let take = mornlea_protocol::TakeCraftingOutput::new(0x1122_3344_5566_7788).expect("take");
+    let payload = take.encode();
+    assert_eq!(payload, [0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11]);
+    assert_eq!(mornlea_protocol::TakeCraftingOutput::PACKET_ID, 15);
+    let decoded = mornlea_protocol::TakeCraftingOutput::decode(&payload).expect("decode");
+    assert_eq!(decoded, take);
+    assert_eq!(decoded.sequence, 0x1122_3344_5566_7788);
+}
+
+#[test]
+fn take_crafting_output_rejects_zero_sequence_and_malformed_payload() {
+    assert_eq!(
+        mornlea_protocol::TakeCraftingOutput::new(0),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert_eq!(
+        mornlea_protocol::TakeCraftingOutput::decode(&[
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        ]),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
+    );
+    assert!(mornlea_protocol::TakeCraftingOutput::decode(&[0x88]).is_err());
+    let mut trailing = vec![0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::TakeCraftingOutput::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }
