@@ -13,6 +13,7 @@ mod hostile;
 mod identity;
 mod passive;
 mod region;
+mod world_metadata;
 
 pub use crc32c::{crc32c, crc32c_join};
 pub use error::{StorageError, StorageResult};
@@ -33,6 +34,12 @@ pub use region::{
     CURRENT_VERSION as REGION_CURRENT_VERSION, ChunkKey, DATA_START_SECTOR, Entry as RegionEntry,
     MAX_COMPRESSED_CHUNK, REGION_SLOTS, RegionKey, SECTOR_SIZE, decode_region_bank,
     decode_superblock, encode_region_bank, encode_superblock, region_for, select_region_bank,
+};
+pub use world_metadata::{
+    CURRENT_VERSION as METADATA_CURRENT_VERSION, ChunkPos as MetadataChunkPos, Metadata,
+    V1 as METADATA_V1, V2 as METADATA_V2, V3 as METADATA_V3, V4 as METADATA_V4, V5 as METADATA_V5,
+    decode as decode_world_metadata, encode as encode_world_metadata, valid_difficulty,
+    valid_weather,
 };
 
 /// Workspace crate identity consumed by the foundation registration tests.

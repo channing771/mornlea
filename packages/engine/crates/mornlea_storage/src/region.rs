@@ -336,10 +336,6 @@ pub fn select_region_bank(
             "region banks",
             format!("both region banks invalid: bank A: {err_a}; bank B: {err_b}"),
         )),
-        (Err(err_a), Ok(_)) => Err(corrupt(
-            "region banks",
-            format!("bank A is invalid: {err_a}"),
-        )),
     }
 }
 

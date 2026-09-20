@@ -6,11 +6,13 @@ use mornlea_storage::{
     BANK_A_START_SECTOR, BANK_B_START_SECTOR, BANK_SIZE, ChunkKey, DATA_START_SECTOR,
     HOSTILE_CURRENT_SCHEMA, HOSTILE_ENVELOPE_VERSION, HOSTILE_MAX_FILE_LENGTH, HOSTILE_SCHEMA_V1,
     HostileMob, HostileMobsSave, MAX_COMPRESSED_CHUNK, MAX_HOSTILE_MOBS, MAX_PASSIVE_MOBS,
-    PASSIVE_CURRENT_SCHEMA, PASSIVE_ENVELOPE_VERSION, PASSIVE_MAX_FILE_LENGTH, PassiveMob,
-    PassiveMobsSave, PlayerId, REGION_SLOTS, RegionBank, RegionEntry, RegionKey, SECTOR_SIZE,
-    StorageError, crc32c, crc32c_join, decode_hostile_mobs, decode_passive_mobs,
-    decode_region_bank, decode_superblock, encode_hostile_mobs, encode_passive_mobs,
-    encode_region_bank, encode_superblock, region_for, select_region_bank,
+    METADATA_CURRENT_VERSION, METADATA_V1, METADATA_V2, METADATA_V3, METADATA_V4, METADATA_V5,
+    Metadata, MetadataChunkPos, PASSIVE_CURRENT_SCHEMA, PASSIVE_ENVELOPE_VERSION,
+    PASSIVE_MAX_FILE_LENGTH, PassiveMob, PassiveMobsSave, PlayerId, REGION_SLOTS, RegionBank,
+    RegionEntry, RegionKey, SECTOR_SIZE, StorageError, crc32c, crc32c_join, decode_hostile_mobs,
+    decode_passive_mobs, decode_region_bank, decode_superblock, decode_world_metadata,
+    encode_hostile_mobs, encode_passive_mobs, encode_region_bank, encode_superblock,
+    encode_world_metadata, region_for, select_region_bank,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -1218,6 +1220,257 @@ fn u32_at(encoded: &[u8], offset: usize) -> u32 {
 
 fn u64_at(encoded: &[u8], offset: usize) -> u64 {
     u64::from_le_bytes(encoded[offset..offset + 8].try_into().expect("eight bytes"))
+}
+#[test]
+fn metadata_current_schema_round_trip_preserves_bytes() {
+    let metadata = Metadata {
+        format_version: METADATA_CURRENT_VERSION,
+        seed: -42,
+        spawn_dimension: -3,
+        spawn_anchor: MetadataChunkPos { x: 7, z: -11 },
+        world_time_ticks: 987_654,
+        day_phase_offset: 6_781,
+        weather_kind: 2,
+        weather_ticks_remaining: 1_000,
+        depths_spawn_anchor: MetadataChunkPos { x: -4, z: 9 },
+        depths_seed_salt: 0x9E37_79B9_7F4A_7C15,
+        difficulty: 2,
+    };
+    let one = encode_world_metadata(&metadata).expect("encode metadata");
+    let two = encode_world_metadata(&metadata).expect("encode metadata again");
+    assert_eq!(one, two, "same metadata must encode deterministically");
+    assert_eq!(one.len(), 12 + 62 + 4);
+    assert_eq!(&one[0..4], b"MCGM");
+    assert_eq!(u32_at(&one, 4), METADATA_CURRENT_VERSION);
+    assert_eq!(u32_at(&one, 8), 62);
+    assert_eq!(u32_at(&one, one.len() - 4), crc32c(&one[..one.len() - 4]));
+    assert_eq!(
+        decode_world_metadata(&one).expect("decode metadata"),
+        metadata
+    );
+}
+
+#[test]
+fn metadata_rejects_malformed_bytes() {
+    let valid = encode_world_metadata(&Metadata {
+        format_version: METADATA_CURRENT_VERSION,
+        seed: 42,
+        spawn_dimension: 0,
+        spawn_anchor: MetadataChunkPos { x: 3, z: -2 },
+        ..default_metadata()
+    })
+    .expect("encode metadata");
+
+    let mut crc_corrupt = valid.clone();
+    crc_corrupt[12] ^= 0xff;
+    let mut future_version = valid.clone();
+    future_version[4..8].copy_from_slice(&(METADATA_CURRENT_VERSION + 1).to_le_bytes());
+    let mut past_version = valid.clone();
+    past_version[4..8].copy_from_slice(&0u32.to_le_bytes());
+    let mut wrong_payload_length = valid.clone();
+    wrong_payload_length[8..12].copy_from_slice(&19u32.to_le_bytes());
+    let mut trailing = valid.clone();
+    trailing.push(0);
+
+    let cases: Vec<(&str, Vec<u8>)> = vec![
+        ("CRC corruption", crc_corrupt),
+        ("future version", future_version),
+        ("past version", past_version),
+        ("short", valid[..valid.len() - 1].to_vec()),
+        ("trailing", trailing),
+        ("wrong payload length", wrong_payload_length),
+    ];
+    for (name, bytes) in cases {
+        let err = decode_world_metadata(&bytes)
+            .err()
+            .unwrap_or_else(|| panic!("{name}: expected rejection"));
+        assert_eq!(
+            matches!(err, StorageError::FutureVersion(_)),
+            name == "future version",
+            "{name}: unexpected error class {err:?}"
+        );
+    }
+}
+
+#[test]
+fn metadata_legacy_versions_migrate_to_the_same_normalized_result() {
+    let spawn_anchor = MetadataChunkPos { x: 5, z: -6 };
+    // Each legacy payload is a pure tail prefix of v6, so the shared fields
+    // must survive and the missing tails must take their documented defaults.
+    let mut v1 = Vec::new();
+    append_u64(&mut v1, 123_456_789);
+    append_u32(&mut v1, 0);
+    append_u32(&mut v1, spawn_anchor.x as u32);
+    append_u32(&mut v1, spawn_anchor.z as u32);
+
+    let mut v2 = v1.clone();
+    append_u64(&mut v2, 123_456);
+
+    let mut v3 = v2.clone();
+    append_u64(&mut v3, 678);
+
+    let mut v4 = v3.clone();
+    append_u8(&mut v4, 1);
+    append_u32(&mut v4, 5_000);
+
+    let mut v5 = v4.clone();
+    append_u32(&mut v5, 2);
+    append_u32(&mut v5, spawn_anchor.x as u32);
+    append_u32(&mut v5, spawn_anchor.z as u32);
+    append_u64(&mut v5, 0x9E37_79B9_7F4A_7C15);
+
+    let expected_common = Metadata {
+        format_version: METADATA_CURRENT_VERSION,
+        seed: 123_456_789,
+        spawn_dimension: 0,
+        spawn_anchor,
+        ..default_metadata()
+    };
+
+    let decoded_v1 = decode_world_metadata(&seal_metadata(METADATA_V1, v1)).expect("decode v1");
+    let mut want_v1 = expected_common.clone();
+    want_v1.depths_spawn_anchor = spawn_anchor;
+    assert_eq!(decoded_v1, want_v1);
+
+    let decoded_v2 = decode_world_metadata(&seal_metadata(METADATA_V2, v2)).expect("decode v2");
+    let mut want_v2 = expected_common.clone();
+    want_v2.world_time_ticks = 123_456;
+    want_v2.depths_spawn_anchor = spawn_anchor;
+    assert_eq!(decoded_v2, want_v2);
+
+    let decoded_v3 = decode_world_metadata(&seal_metadata(METADATA_V3, v3)).expect("decode v3");
+    let mut want_v3 = expected_common.clone();
+    want_v3.world_time_ticks = 123_456;
+    want_v3.day_phase_offset = 678;
+    want_v3.depths_spawn_anchor = spawn_anchor;
+    assert_eq!(decoded_v3, want_v3);
+
+    let decoded_v4 = decode_world_metadata(&seal_metadata(METADATA_V4, v4)).expect("decode v4");
+    let mut want_v4 = expected_common.clone();
+    want_v4.world_time_ticks = 123_456;
+    want_v4.day_phase_offset = 678;
+    want_v4.weather_kind = 1;
+    want_v4.weather_ticks_remaining = 5_000;
+    want_v4.depths_spawn_anchor = spawn_anchor;
+    assert_eq!(decoded_v4, want_v4);
+
+    let decoded_v5 = decode_world_metadata(&seal_metadata(METADATA_V5, v5)).expect("decode v5");
+    let mut want_v5 = expected_common.clone();
+    want_v5.world_time_ticks = 123_456;
+    want_v5.day_phase_offset = 678;
+    want_v5.weather_kind = 1;
+    want_v5.weather_ticks_remaining = 5_000;
+    want_v5.depths_spawn_anchor = spawn_anchor;
+    assert_eq!(decoded_v5, want_v5);
+}
+
+#[test]
+fn metadata_v5_with_wrong_dimension_count_is_rejected() {
+    let mut payload = Vec::new();
+    append_u64(&mut payload, 1);
+    append_u32(&mut payload, 0);
+    append_u32(&mut payload, 0);
+    append_u32(&mut payload, 0);
+    append_u64(&mut payload, 0);
+    append_u64(&mut payload, 0);
+    append_u8(&mut payload, 1);
+    append_u32(&mut payload, 0);
+    append_u32(&mut payload, 3);
+    append_u32(&mut payload, 0);
+    append_u32(&mut payload, 0);
+    append_u64(&mut payload, 0);
+    let err = decode_world_metadata(&seal_metadata(METADATA_V5, payload))
+        .err()
+        .expect("wrong dimension count must be rejected");
+    assert!(matches!(err, StorageError::Corrupt(_)), "{err:?}");
+}
+
+#[test]
+fn metadata_v6_with_invalid_difficulty_or_weather_is_rejected() {
+    for difficulty in [3u8, 255] {
+        let mut payload = Vec::new();
+        append_u64(&mut payload, 1);
+        append_u32(&mut payload, 0);
+        append_u32(&mut payload, 0);
+        append_u32(&mut payload, 0);
+        append_u64(&mut payload, 0);
+        append_u64(&mut payload, 0);
+        append_u8(&mut payload, 1);
+        append_u32(&mut payload, 0);
+        append_u32(&mut payload, 2);
+        append_u32(&mut payload, 0);
+        append_u32(&mut payload, 0);
+        append_u64(&mut payload, 0);
+        append_u8(&mut payload, difficulty);
+        assert!(decode_world_metadata(&seal_metadata(METADATA_CURRENT_VERSION, payload)).is_err());
+    }
+    for weather in [3u8, 255] {
+        let mut payload = Vec::new();
+        append_u64(&mut payload, 1);
+        append_u32(&mut payload, 0);
+        append_u32(&mut payload, 0);
+        append_u32(&mut payload, 0);
+        append_u64(&mut payload, 0);
+        append_u64(&mut payload, 0);
+        append_u8(&mut payload, weather);
+        append_u32(&mut payload, 0);
+        assert!(decode_world_metadata(&seal_metadata(METADATA_V4, payload)).is_err());
+    }
+}
+
+#[test]
+fn metadata_encode_rejects_non_current_version() {
+    for version in [0u32, 1, 5, 7] {
+        let mut metadata = default_metadata();
+        metadata.format_version = version;
+        assert!(encode_world_metadata(&metadata).is_err());
+    }
+    let mut invalid_difficulty = default_metadata();
+    invalid_difficulty.difficulty = 3;
+    assert!(encode_world_metadata(&invalid_difficulty).is_err());
+    let mut invalid_weather = default_metadata();
+    invalid_weather.weather_kind = 3;
+    assert!(encode_world_metadata(&invalid_weather).is_err());
+}
+
+fn default_metadata() -> Metadata {
+    Metadata {
+        format_version: METADATA_CURRENT_VERSION,
+        seed: 0,
+        spawn_dimension: 0,
+        spawn_anchor: MetadataChunkPos { x: 0, z: 0 },
+        world_time_ticks: 0,
+        day_phase_offset: 0,
+        weather_kind: 0,
+        weather_ticks_remaining: 0,
+        depths_spawn_anchor: MetadataChunkPos { x: 0, z: 0 },
+        depths_seed_salt: 0x9E37_79B9_7F4A_7C15,
+        difficulty: 0,
+    }
+}
+
+/// Wraps a legacy payload in the fixed metadata header and seals the CRC-32C.
+fn seal_metadata(version: u32, mut payload: Vec<u8>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"MCGM");
+    bytes.extend_from_slice(&version.to_le_bytes());
+    bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+    bytes.append(&mut payload);
+    let checksum = crc32c(&bytes);
+    bytes.extend_from_slice(&checksum.to_le_bytes());
+    bytes
+}
+
+fn append_u8(bytes: &mut Vec<u8>, value: u8) {
+    bytes.push(value);
+}
+
+fn append_u32(bytes: &mut Vec<u8>, value: u32) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn append_u64(bytes: &mut Vec<u8>, value: u64) {
+    bytes.extend_from_slice(&value.to_le_bytes());
 }
 fn read_go_fixture(relative: &str) -> Vec<u8> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

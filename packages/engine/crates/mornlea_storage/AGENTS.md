@@ -40,6 +40,7 @@ re-encode equality).
 | `save.passive` | `src/passive.rs` | v1 | 32-byte header + fixed 72-byte records, 30-byte zero reserved tail, canonical ascending-ID order |
 | `save.hostile` | `src/hostile.rs` | v2 | v1 records lack the trailing `kind` byte and migrate to nightcrawler; re-encode keeps each v1 record as the v2 prefix |
 | `save.region` | `src/region.rs` | v1 | fixed 4096-byte superblock plus two 28672-byte banks; newest valid generation wins, ties break to bank A |
+| `save.world-metadata` | `src/world_metadata.rs` | v6 | v1..v6 are pure tail appends; a legacy file keeps its bytes and reads missing tails as documented defaults |
 | `save.player` identity | `src/identity.rs` | — | `PlayerId` UUIDv4 wrapper shared by the entity families |
 
 ## Focused Verification
