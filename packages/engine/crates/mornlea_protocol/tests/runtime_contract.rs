@@ -575,6 +575,57 @@ fn place_block_succeeded_rejects_malformed_payload_and_accepts_zero_sequence() {
     );
 }
 
+#[test]
+fn command_rejected_round_trip_preserves_golden_bytes() {
+    let rejected = mornlea_protocol::CommandRejected::new(7, 6).expect("occupied");
+    let payload = rejected.encode();
+    assert_eq!(
+        payload,
+        [0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06]
+    );
+    assert_eq!(mornlea_protocol::CommandRejected::PACKET_ID, 4);
+    let decoded = mornlea_protocol::CommandRejected::decode(&payload).expect("decode");
+    assert_eq!(decoded, rejected);
+    assert_eq!(decoded.sequence, 7);
+    assert_eq!(decoded.reason, 6);
+}
+
+#[test]
+fn command_rejected_round_trip_preserves_frozen_reason_ids() {
+    for reason in 1u8..=15 {
+        let rejected = mornlea_protocol::CommandRejected::new(1, reason).expect("reason");
+        let mut want = vec![0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, reason];
+        let payload = rejected.encode();
+        assert_eq!(payload, want, "reason {reason}");
+        let decoded = mornlea_protocol::CommandRejected::decode(&payload).expect("decode");
+        assert_eq!(decoded.reason, reason);
+        want.push(0x00);
+        assert_eq!(
+            mornlea_protocol::CommandRejected::decode(&want),
+            Err(mornlea_protocol::ProtocolError::TrailingBytes)
+        );
+    }
+}
+
+#[test]
+fn command_rejected_rejects_unknown_reason_and_malformed_payload() {
+    assert_eq!(
+        mornlea_protocol::CommandRejected::new(1, 0),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    assert_eq!(
+        mornlea_protocol::CommandRejected::new(1, 16),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    assert_eq!(
+        mornlea_protocol::CommandRejected::decode(&[
+            0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        ]),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    assert!(mornlea_protocol::CommandRejected::decode(&[0x01]).is_err());
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

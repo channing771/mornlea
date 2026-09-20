@@ -128,6 +128,16 @@ and `domain_does_not_depend_on_protocol`).
   publication (`place_block_succeeded_round_trip_preserves_golden_bytes`,
   `place_block_succeeded_rejects_malformed_payload_and_accepts_zero_sequence`).
 
+## Command rejected (`src/command_rejected.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 4 payload is a little-endian `u64` sequence followed by a
+  one-byte reject reason. Published reasons are the closed interval
+  `1..=15` copied from Go `CommandRejectReasonID`. Unknown IDs are
+  `InvalidEnum`; trailing bytes fail before publication
+  (`command_rejected_round_trip_preserves_golden_bytes`,
+  `command_rejected_round_trip_preserves_frozen_reason_ids`,
+  `command_rejected_rejects_unknown_reason_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash

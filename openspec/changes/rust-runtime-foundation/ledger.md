@@ -174,3 +174,12 @@
 - Discovered tests (`-- --list`): 34.
 - PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
 - Architecture skill: no change.
+
+## 2026-09-20 — 2.3 protocol.server.CommandRejected
+
+- Baseline: `1790f056 feat(engine): port place-block success codec`.
+- Existing unrelated work: deleted `.codex/skills/pr-submit/SKILL.md` and `.claude/skills/pr-submit/SKILL.md` remain user-owned and excluded.
+- Ruling: play packet ID 4 payload is little-endian `u64` sequence plus reject-reason u8 `1..=15`. Unknown IDs fail as `InvalidEnum`. Golden bytes match Go occupied `070000000000000006` and frozen reason IDs `01`..`0f`. Remaining protocol families stay unchecked in `tasks.md`.
+- Discovered tests (`-- --list`): 37.
+- PASS: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked`
+- Architecture skill: no change.
