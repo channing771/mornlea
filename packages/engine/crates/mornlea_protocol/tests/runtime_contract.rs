@@ -1018,6 +1018,66 @@ fn open_container_rejects_non_finite_and_malformed_payload() {
     );
 }
 
+#[test]
+fn request_chunk_resync_round_trip_preserves_golden_bytes() {
+    let resync = mornlea_protocol::RequestChunkResync::new(
+        4,
+        mornlea_domain::Dimension::OVERWORLD,
+        -2,
+        3,
+        5,
+    );
+    let payload = resync.encode();
+    assert_eq!(
+        payload,
+        [
+            0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfe, 0xff,
+            0xff, 0xff, 0x03, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        ]
+    );
+    assert_eq!(mornlea_protocol::RequestChunkResync::PACKET_ID, 3);
+    let decoded = mornlea_protocol::RequestChunkResync::decode(&payload).expect("decode");
+    assert_eq!(decoded, resync);
+    assert_eq!(decoded.chunk_x, -2);
+    assert_eq!(decoded.chunk_z, 3);
+    assert_eq!(decoded.have_revision, 5);
+    let depths =
+        mornlea_protocol::RequestChunkResync::new(0, mornlea_domain::Dimension::DEPTHS, -1, -1, 0);
+    assert_eq!(
+        mornlea_protocol::RequestChunkResync::decode(&depths.encode()).expect("decode depths"),
+        depths
+    );
+}
+
+#[test]
+fn request_chunk_resync_rejects_unknown_dimension_and_malformed_payload() {
+    let mut unknown = vec![0u8; 8];
+    unknown.extend_from_slice(&2i32.to_le_bytes());
+    unknown.extend_from_slice(&0i32.to_le_bytes());
+    unknown.extend_from_slice(&0i32.to_le_bytes());
+    unknown.extend_from_slice(&0u64.to_le_bytes());
+    assert_eq!(
+        mornlea_protocol::RequestChunkResync::decode(&unknown),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
+    );
+    let mut far = vec![0u8; 8];
+    far.extend_from_slice(&0x0000_0100i32.to_le_bytes());
+    far.extend_from_slice(&0i32.to_le_bytes());
+    far.extend_from_slice(&0i32.to_le_bytes());
+    far.extend_from_slice(&0u64.to_le_bytes());
+    assert!(mornlea_protocol::RequestChunkResync::decode(&far).is_err());
+    assert!(mornlea_protocol::RequestChunkResync::decode(&[0x04]).is_err());
+    let mut trailing = vec![
+        0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfe, 0xff, 0xff,
+        0xff, 0x03, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ];
+    trailing.push(0x00);
+    assert_eq!(
+        mornlea_protocol::RequestChunkResync::decode(&trailing),
+        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+    );
+}
+
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

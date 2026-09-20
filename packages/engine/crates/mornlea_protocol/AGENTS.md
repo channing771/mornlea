@@ -220,6 +220,19 @@ and `domain_does_not_depend_on_protocol`).
   (`open_container_round_trip_preserves_golden_bytes`,
   `open_container_rejects_non_finite_and_malformed_payload`).
 
+## Request chunk resync (`src/request_chunk_resync.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 3 payload is a little-endian `u64` sequence, the target
+  dimension, two little-endian chunk coordinates, and the revision the
+  client already holds. Only domain `Dimension::OVERWORLD` and
+  `Dimension::DEPTHS` are known; any other dimension is `InvalidEnum`.
+  Chunk state stays server-owned; negative coordinates are legal.
+  Truncated payloads and trailing bytes fail before publication
+  (`request_chunk_resync_round_trip_preserves_golden_bytes`,
+  `request_chunk_resync_rejects_unknown_dimension_and_malformed_payload`).
+- `ByteEncoder` / `ByteDecoder` `i32` helpers use two's-complement
+  little-endian encoding, matching the Go primitive.
+
 ## Focused Verification
 
 ```bash

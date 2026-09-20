@@ -51,6 +51,10 @@ impl ByteEncoder {
         self.data.extend_from_slice(&value.to_le_bytes());
     }
 
+    pub(crate) fn i32(&mut self, value: i32) {
+        self.u32(value as u32);
+    }
+
     pub(crate) fn u64(&mut self, value: u64) {
         if self.err.is_some() {
             return;
@@ -137,6 +141,10 @@ impl<'a> ByteDecoder<'a> {
 
     pub(crate) fn u32(&mut self) -> Result<u32, ProtocolError> {
         Ok(u32::from_le_bytes(self.bytes()?))
+    }
+
+    pub(crate) fn i32(&mut self) -> Result<i32, ProtocolError> {
+        Ok(i32::from_le_bytes(self.bytes()?))
     }
 
     pub(crate) fn u64(&mut self) -> Result<u64, ProtocolError> {
