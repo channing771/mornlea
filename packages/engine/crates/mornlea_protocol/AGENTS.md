@@ -448,6 +448,17 @@ and `domain_does_not_depend_on_protocol`).
   (`companion_despawn_round_trip_preserves_identity_bytes`,
   `companion_despawn_rejects_invalid_identity_and_malformed_payload`).
 
+## Hostile despawn (`src/hostile_despawn.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 24 payload is a `u64` server tick, a one-byte record count,
+  and the fixed 8-byte hostile IDs. The count is bounded by
+  `MAX_HOSTILE_RECORDS` (`64`), a zero count and zero IDs are
+  `InvalidRange`, records must be strictly ascending, and a remaining length
+  that is not exactly `count` records is `Truncated` before publication;
+  trailing bytes fail after the last ID
+  (`hostile_despawn_round_trip_preserves_batch_bytes`,
+  `hostile_despawn_rejects_unsorted_zero_and_malformed_payload`).
+
 ## Focused Verification
 
 ```bash

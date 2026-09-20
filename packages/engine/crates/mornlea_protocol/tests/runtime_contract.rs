@@ -2164,3 +2164,52 @@ fn companion_despawn_rejects_invalid_identity_and_malformed_payload() {
         Err(mornlea_protocol::ProtocolError::TrailingBytes)
     );
 }
+
+#[test]
+fn hostile_despawn_round_trip_preserves_batch_bytes() {
+    let despawn = mornlea_protocol::HostileDespawn::new(0x0102_0304_0506_0708, vec![7, 9, 12])
+        .expect("batch");
+    let payload = despawn.encode();
+    assert_eq!(
+        payload,
+        [
+            0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x03, 0x07, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00,
+        ]
+    );
+    assert_eq!(mornlea_protocol::HostileDespawn::PACKET_ID, 24);
+    assert_eq!(payload.len(), 9 + 3 * 8);
+    assert_eq!(
+        mornlea_protocol::HostileDespawn::decode(&payload).expect("decode"),
+        despawn
+    );
+}
+
+#[test]
+fn hostile_despawn_rejects_unsorted_zero_and_malformed_payload() {
+    assert!(mornlea_protocol::HostileDespawn::new(1, Vec::new()).is_err());
+    assert!(mornlea_protocol::HostileDespawn::new(1, vec![0]).is_err());
+    assert!(mornlea_protocol::HostileDespawn::new(1, vec![7, 7]).is_err());
+    assert!(mornlea_protocol::HostileDespawn::new(1, vec![9, 7]).is_err());
+    let mut over = Vec::new();
+    for id in 1..=mornlea_protocol::MAX_HOSTILE_RECORDS {
+        over.push(u64::from(id));
+    }
+    over.push(u64::from(mornlea_protocol::MAX_HOSTILE_RECORDS) + 1);
+    assert!(mornlea_protocol::HostileDespawn::new(1, over).is_err());
+    // A payload whose length disagrees with the count is rejected whole.
+    let mut short = vec![1, 0, 0, 0, 0, 0, 0, 0, 0x02];
+    short.extend_from_slice(&[7, 0, 0, 0, 0, 0, 0, 0]);
+    assert!(mornlea_protocol::HostileDespawn::decode(&short).is_err());
+    // A payload longer than the declared records fails the exact-length
+    // check before any record is published.
+    let padded = vec![1, 0, 0, 0, 0, 0, 0, 0, 0x01, 7, 0, 0, 0, 0, 0, 0, 0, 0];
+    assert_eq!(
+        mornlea_protocol::HostileDespawn::decode(&padded),
+        Err(mornlea_protocol::ProtocolError::Truncated)
+    );
+    let exact = vec![1, 0, 0, 0, 0, 0, 0, 0, 0x01, 7, 0, 0, 0, 0, 0, 0, 0];
+    assert!(mornlea_protocol::HostileDespawn::decode(&exact).is_ok());
+    assert!(mornlea_protocol::HostileDespawn::decode(&[1, 0, 0, 0, 0, 0, 0, 0, 0]).is_err());
+}

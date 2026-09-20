@@ -29,6 +29,7 @@ mod error;
 mod forget_chunks;
 mod frame;
 mod handshake_reject;
+mod hostile_despawn;
 mod keep_alive;
 mod keep_alive_reply;
 mod login_reject;
@@ -84,6 +85,7 @@ pub use error::ProtocolError;
 pub use forget_chunks::{ForgetChunks, MAX_FORGET_CHUNKS};
 pub use frame::{MAX_FRAME_BYTES, read_frame, write_frame};
 pub use handshake_reject::{HANDSHAKE_VERSION_MISMATCH, HandshakeReject};
+pub use hostile_despawn::{HOSTILE_DESPAWN_WIRE_BYTES, HostileDespawn, MAX_HOSTILE_RECORDS};
 pub use keep_alive::KeepAlive;
 pub use keep_alive_reply::KeepAliveReply;
 pub use login_reject::{
