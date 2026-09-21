@@ -266,11 +266,16 @@ escalates a contract conflict rather than changing these decisions.
    symlinks, enforce resolved containment, reject duplicate JSON keys, unknown
    input formats and unknown consumer identities, and enforce the same byte and
    digest rules as the Go validator.
-5. **Executed domain corpus.** Add a manifest-driven Rust consumer for every
-   frozen case owned by the implemented domain families. Dispatch through the
-   real constructors and command orderer, compare normalized values, bind each
-   family ID directly to `mornlea_domain`, require nonzero discovery and prove
-   that a one-field mutation fails.
+5. **Executed domain corpus.** Add a manifest-driven Rust consumer for all 376
+   frozen cases genuinely owned by the implemented domain families. Dispatch
+   through the real constructors and compare normalized values; accepted
+   command cases omit only the Go codec's `fields.wire`. Correct the sole
+   `domain.input` engine-step case to a closed
+   `external:runtime-authority` consumer because its expectation contains Go
+   authority admission and world effects that the domain orderer cannot
+   produce. Keep focused Rust command-order tests for the pure ordering
+   contract, require nonzero corpus discovery, and prove that a one-field
+   semantic mutation fails.
 6. **Bounded domain construction.** Check the 128-byte display-name bound before
    Unicode scalar iteration. Variable semantic batches use a shared maximum of
    4096 records before scanning, sorting or cloning; this is a domain work bound
@@ -323,10 +328,15 @@ The protocol registry closure depends on every packet change plus domain event
 completion. Storage codec closure depends on storage safety repairs.
 
 `rust-runtime-contract-gate` depends on domain completion, protocol registry
-closure and storage codec closure. Kernel work is serialized at its shared
-`api.rs`/`ffi.rs` integration seam: native core, then native world, then
-pathfinding and numerical corpus. Final foundation acceptance depends on the
-complete kernel corpus. No successor may claim F1 acceptance early.
+closure and storage codec closure. `rust-kernel-native-core` depends on that
+contract gate. Kernel work is then serialized at its shared `api.rs`/`ffi.rs`
+integration seam: `rust-kernel-native-world` depends on native core, and
+`rust-kernel-pathfinding-and-corpus` depends on native world. Final
+`rust-runtime-foundation-acceptance` depends explicitly on both the contract
+gate and the complete pathfinding/numerical corpus, preserving the original
+6.3 prerequisites even though the gate is also transitive through native core.
+No successor may begin its implementation before these direct prerequisites or
+claim F1 acceptance early.
 
 The controller creates changes in dependency order, checks exact producer and
 consumer signatures before dispatch, and keeps shared export/manifest edits
