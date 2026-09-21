@@ -26,6 +26,18 @@ pub enum DomainError {
     /// The container generation is zero, which names a slot that was never
     /// used.
     InvalidContainerGeneration,
+    /// The unified slot index is outside the fixed range of the view the
+    /// command addresses.
+    InvalidSlot,
+    /// The source and the target name the same slot, so the move has no
+    /// effect.
+    SourceEqualsTarget,
+    /// Both ends of a crafting move are inside the inventory region, which
+    /// `InventoryMove` already covers.
+    CraftingMoveInsideInventory,
+    /// The furnace output slot is the target of a container move, while the
+    /// authority reserves that slot for taking the smelting product.
+    FurnaceOutputAsTarget,
 }
 
 /// Reports whether the 16 bytes are a non-zero UUIDv4 in wire order.

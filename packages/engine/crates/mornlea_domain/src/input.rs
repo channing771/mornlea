@@ -1,17 +1,24 @@
 //! Semantic command payloads and the replay-ordering test facade.
 //!
-//! The grouped payloads live in `control` and carry no sequence: intake
-//! metadata belongs to the ordering layer, so a payload cannot pretend to know
-//! when it was admitted. `SemanticInput` below is a temporary compatibility
-//! facade that pairs one payload with a sequence, which keeps the existing
-//! replay-order cases exercising `order_inputs` until the ordering layer
-//! replaces it. The facade performs no validation of its own.
+//! The grouped payloads live in `control` (movement and ray), `inventory`
+//! (slot-addressed moves) and `chat` (bounded text), and they carry no
+//! sequence: intake metadata belongs to the ordering layer, so a payload cannot
+//! pretend to know when it was admitted. `SemanticInput` below is a temporary
+//! compatibility facade that pairs one payload with a sequence, which keeps the
+//! existing replay-order cases exercising `order_inputs` until the ordering
+//! layer replaces it. The facade performs no validation of its own.
 
+mod chat;
 mod control;
+mod inventory;
 
+pub use chat::ChatIntent;
 pub use control::{
     Command, HeldActions, Movement, PlacementIntent, PlayerControl, PlayerControlParts,
     ResyncIntent,
+};
+pub use inventory::{
+    ContainerMove, CraftingMove, InventoryMove, PartialMove, StackSource, StackView,
 };
 
 use crate::values::HotbarSlot;

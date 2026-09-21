@@ -21,8 +21,9 @@ pub use identity::{
     ReplayIdentity,
 };
 pub use input::{
-    Command, HeldActions, Movement, PlacementIntent, PlayerControl, PlayerControlParts,
-    ResyncIntent, SemanticInput, order_inputs,
+    ChatIntent, Command, ContainerMove, CraftingMove, HeldActions, InventoryMove, Movement,
+    PartialMove, PlacementIntent, PlayerControl, PlayerControlParts, ResyncIntent, SemanticInput,
+    StackSource, StackView, order_inputs,
 };
 pub use items::{
     ItemStack, durability_max, is_smelting_product, item_stack_limit, smelting_output,

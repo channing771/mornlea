@@ -37,11 +37,23 @@ fn inventory_assigns_domain_families_to_this_crate() {
     let json = read_inventory();
     let owner = format!("\"eventual_owner\": \"{}\"", env!("CARGO_PKG_NAME"));
     let count = json.matches(&owner).count();
+    // The frozen corpus grows one domain family per landed node, so the pinned
+    // set is the reconciliation point the assertion message names: a family the
+    // list does not name still fails, which is what keeps an unmerged row from
+    // passing silently.
+    let families = [
+        "domain.event",
+        "domain.identity_values",
+        "domain.command_control",
+        "domain.values",
+        "domain.input",
+    ];
     assert_eq!(
-        count, 3,
+        count,
+        families.len(),
         "domain inventory rows drifted; update intended domain ports before implementing them"
     );
-    for family in ["domain.event", "domain.values", "domain.input"] {
+    for family in families {
         assert!(
             json.contains(&format!("\"id\": \"{family}\"")),
             "missing domain family {family}"

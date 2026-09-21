@@ -9,6 +9,9 @@
 //! payload stays comparable across two runtimes that admit it differently.
 
 use crate::identity::DomainError;
+use crate::input::inventory::{
+    ContainerMove, CraftingMove, InventoryMove, PartialMove, StackSource,
+};
 use crate::locations::ChunkPos;
 use crate::values::{Dimension, HotbarSlot, LookAngles};
 
@@ -161,12 +164,17 @@ impl ResyncIntent {
 
 /// One client intent the authoritative runtime admits for ordering.
 ///
-/// The variants are the movement and ray families. Each carries only the
-/// grouped payloads above, and none carries a target cell, a hit entity, a
-/// placed block, a consumed item or an outcome. The enum is deliberately open
-/// for extension: later inventory, container and chat intents are added as new
-/// variants beside these, so an existing match stays a compile error rather
-/// than a silent fallthrough.
+/// The variants are the movement, ray, inventory, container and unit-payload
+/// families. Each carries only the grouped payloads above or in
+/// `input::inventory`, and none carries a target cell, a hit entity, a placed
+/// block, a consumed item or an outcome. The four unit variants
+/// (`CloseContainer`, `DropSelectedItem`, `TakeCraftingOutput` and
+/// `EquipArmor`) carry no payload field at all because the wire carries nothing
+/// a client could claim beyond the intent itself: the viewed container, the
+/// selected item, the crafted output and the armor destination all stay
+/// server-owned. The enum is deliberately open for extension: a later intent is
+/// added as a new variant beside these, so an existing match stays a compile
+/// error rather than a silent fallthrough.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Command {
     PlayerInput(PlayerControl),
@@ -178,4 +186,14 @@ pub enum Command {
     BoneMeal(LookAngles),
     CollectWater(LookAngles),
     PlaceWater(LookAngles),
+    MoveInventory(InventoryMove),
+    MoveCrafting(CraftingMove),
+    MoveContainer(ContainerMove),
+    CloseContainer,
+    DropSelectedItem,
+    TakeCraftingOutput,
+    EquipArmor,
+    MovePartial(PartialMove),
+    QuickMove(StackSource),
+    DropStack(StackSource),
 }
