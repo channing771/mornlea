@@ -1,0 +1,7 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "move-inventory",
+  "sequence": 6,
+  "from": 7,
+  "to": 7
+}

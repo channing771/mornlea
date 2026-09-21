@@ -1,0 +1,18 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "chunk_x": 0,
+    "chunk_z": 0,
+    "container_slot": 0,
+    "dimension": 0,
+    "from": 35,
+    "generation": 0,
+    "kind": "furnace",
+    "rule": "stack_split.slot_range",
+    "sequence": "19",
+    "single": false,
+    "to": 36,
+    "view": 0
+  }
+}

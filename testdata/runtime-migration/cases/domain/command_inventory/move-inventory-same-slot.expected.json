@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "from": 7,
+    "rule": "move_inventory.same_slot",
+    "sequence": "6",
+    "to": 7
+  }
+}

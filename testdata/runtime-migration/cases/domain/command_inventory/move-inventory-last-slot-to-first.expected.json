@@ -1,0 +1,10 @@
+{
+  "kind": "ok",
+  "category": "move-inventory",
+  "fields": {
+    "from": 35,
+    "sequence": "6",
+    "to": 0,
+    "wire": "06000000000000002300"
+  }
+}

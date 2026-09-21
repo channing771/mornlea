@@ -1,0 +1,8 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "rule": "chat_command.control_character",
+    "text": "mi\u0001ne"
+  }
+}

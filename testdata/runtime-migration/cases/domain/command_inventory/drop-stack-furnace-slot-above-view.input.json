@@ -1,0 +1,12 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "drop-stack",
+  "sequence": 21,
+  "slot": 39,
+  "view": 2,
+  "kind": "furnace",
+  "chunk_x": -2,
+  "chunk_z": 5,
+  "container_slot": 7,
+  "generation": 3
+}

@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "from": 45,
+    "rule": "move_crafting.slot_range",
+    "sequence": "7",
+    "to": 0
+  }
+}

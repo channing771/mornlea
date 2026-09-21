@@ -1,0 +1,16 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "chunk_x": 0,
+    "chunk_z": 0,
+    "container_slot": 0,
+    "dimension": 0,
+    "from": 200,
+    "generation": 0,
+    "kind": "furnace",
+    "rule": "container_ref.generation",
+    "sequence": "9",
+    "to": 201
+  }
+}

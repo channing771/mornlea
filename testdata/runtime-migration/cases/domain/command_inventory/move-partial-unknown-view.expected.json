@@ -1,0 +1,18 @@
+{
+  "kind": "error",
+  "category": "invalid-enum",
+  "fields": {
+    "chunk_x": 0,
+    "chunk_z": 0,
+    "container_slot": 0,
+    "dimension": 0,
+    "from": 0,
+    "generation": 0,
+    "kind": "furnace",
+    "rule": "stack_split.view",
+    "sequence": "19",
+    "single": false,
+    "to": 1,
+    "view": 3
+  }
+}
