@@ -50,8 +50,8 @@ import (
 // layer applies, so the domain requires only a nonempty batch whose identities
 // are strictly increasing; a case above a wire maximum would therefore record a
 // rejection the domain does not publish. The publish tick is rendered under the
-// Go DTO's own field name — `server_tick` on the remote records and `tick` on
-// the companion ones — while the normalized outcome names it `server_tick`,
+// Go DTO's own field name — "server_tick" on the remote records and `tick` on
+// the companion ones — while the normalized outcome names it "server_tick",
 // because that is the domain record's field name. Every array a case carries is
 // serialized explicitly, an empty one included, so a replay consumer never
 // reads a missing key as an absent batch.
@@ -161,7 +161,7 @@ var updateDomainEventPeopleCorpus = flag.Bool(
 // `Position`, `Yaw` and `Pitch` are decimal float texts rather than JSON
 // numbers because a JSON number cannot express NaN, an infinity or a signed
 // zero, and those exact values are boundaries this family pins. The two batch
-// arrays are plain slices without `omitempty`, so a case that carries a batch
+// arrays are plain slices without "omitempty", so a case that carries a batch
 // always carries the key and an empty batch renders as an explicit empty list
 // rather than vanishing. The six rules share one envelope because each rule
 // reads only the fields it names.
@@ -175,9 +175,9 @@ type domainEventPeopleInput struct {
 	DisplayName *string `json:"display_name,omitempty"`
 
 	// Shared spawn fields. The remote records name the publish tick
-	// `server_tick` and the companion records name it `tick`, because the input
+	// "server_tick" and the companion records name it `tick`, because the input
 	// is the Go DTO's own shape; the normalized outcome names both
-	// `server_tick`, which is the domain record's field name.
+	// "server_tick", which is the domain record's field name.
 	ServerTick *uint64  `json:"server_tick,omitempty"`
 	Tick       *uint64  `json:"tick,omitempty"`
 	Dimension  *int32   `json:"dimension,omitempty"`
@@ -1660,9 +1660,6 @@ func TestDomainEventPeopleOracleExecutesEveryCase(t *testing.T) {
 	}
 	for _, obs := range observations {
 		c := domainEventPeopleCaseByID(t, manifest, obs.CaseID)
-		if obs.ExpectedDigest != c.Expected.SHA256 {
-			t.Fatalf("observation for %s carries expected digest %s, want %s", obs.CaseID, obs.ExpectedDigest, c.Expected.SHA256)
-		}
 		expected := readExpectedOutcome(t, root, c)
 		if !outcomesEqual(obs.Outcome, expected) {
 			t.Fatalf("case %s produced %#v, want %#v", obs.CaseID, obs.Outcome, expected)
@@ -1673,7 +1670,13 @@ func TestDomainEventPeopleOracleExecutesEveryCase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("traceFromObservations: %v", err)
 	}
-	if err := ValidateTrace(trace, manifest); err != nil {
+	for _, obs := range trace.Observations {
+		c := domainEventPeopleCaseByID(t, manifest, obs.CaseID)
+		if obs.ExpectedDigest != c.Expected.SHA256 {
+			t.Fatalf("observation for %s carries expected digest %s, want %s", obs.CaseID, obs.ExpectedDigest, c.Expected.SHA256)
+		}
+	}
+	if err := ValidateTraceAtRoot(root, trace, manifest); err != nil {
 		t.Fatalf("executed event people evidence failed trace validation: %v", err)
 	}
 }
@@ -1918,7 +1921,7 @@ func TestDomainEventPeopleOracleReportPublishesAndValidates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("traceFromObservations: %v", err)
 	}
-	if err := ValidateTrace(trace, manifest); err != nil {
+	if err := ValidateTraceAtRoot(root, trace, manifest); err != nil {
 		t.Fatalf("executed event people evidence failed trace validation: %v", err)
 	}
 
@@ -1931,7 +1934,7 @@ func TestDomainEventPeopleOracleReportPublishesAndValidates(t *testing.T) {
 	if err := ExportTrace(root, target, trace, manifest); err != nil {
 		t.Fatalf("ExportTrace: %v", err)
 	}
-	loaded, err := LoadTrace(target, manifest)
+	loaded, err := LoadTraceAtRoot(root, target, manifest)
 	if err != nil {
 		t.Fatalf("published report does not validate: %v", err)
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -22,7 +23,7 @@ func TestTraceIdentity(t *testing.T) {
 			base.TickSchedule = []uint64{1, 2, 3}
 			base.Inputs[0].Tick = 999
 			base.Observations[0].Tick = 999
-			err := ValidateTrace(base, manifest)
+			err := ValidateTraceAtRoot(root, base, manifest)
 			if err == nil {
 				t.Fatal("expected failure for schedule [1,2,3] with only tick999")
 			}
@@ -32,7 +33,7 @@ func TestTraceIdentity(t *testing.T) {
 		t.Run("duplicate tick2", func(t *testing.T) {
 			base := validTraceForManifest(manifest)
 			base.TickSchedule = []uint64{0, 2, 2, 3}
-			err := ValidateTrace(base, manifest)
+			err := ValidateTraceAtRoot(root, base, manifest)
 			if err == nil || !strings.Contains(err.Error(), "duplicate tick") {
 				t.Fatalf("expected duplicate tick error, got: %v", err)
 			}
@@ -42,7 +43,7 @@ func TestTraceIdentity(t *testing.T) {
 		t.Run("reversed schedule", func(t *testing.T) {
 			base := validTraceForManifest(manifest)
 			base.TickSchedule = []uint64{3, 2, 1}
-			err := ValidateTrace(base, manifest)
+			err := ValidateTraceAtRoot(root, base, manifest)
 			if err == nil || !strings.Contains(err.Error(), "strictly increasing") {
 				t.Fatalf("expected strictly increasing error, got: %v", err)
 			}
@@ -52,7 +53,7 @@ func TestTraceIdentity(t *testing.T) {
 		t.Run("unknown case", func(t *testing.T) {
 			base := validTraceForManifest(manifest)
 			base.Inputs[0].CaseID = "nonexistent.family/1/fake"
-			err := ValidateTrace(base, manifest)
+			err := ValidateTraceAtRoot(root, base, manifest)
 			if err == nil || !strings.Contains(err.Error(), "unknown case") {
 				t.Fatalf("expected unknown case error, got: %v", err)
 			}
@@ -63,7 +64,7 @@ func TestTraceIdentity(t *testing.T) {
 			m2 := manifestWithTwoCases(manifest)
 			base := validTraceForManifest(m2)
 			base.Inputs = base.Inputs[:1] // drop second input
-			err := ValidateTrace(base, m2)
+			err := ValidateTraceAtRoot(root, base, m2)
 			if err == nil || !strings.Contains(err.Error(), "inputs") {
 				t.Fatalf("expected input count error, got: %v", err)
 			}
@@ -74,7 +75,7 @@ func TestTraceIdentity(t *testing.T) {
 			m2 := manifestWithTwoCases(manifest)
 			base := validTraceForManifest(m2)
 			base.Inputs[1].Index = 0
-			err := ValidateTrace(base, m2)
+			err := ValidateTraceAtRoot(root, base, m2)
 			if err == nil || !strings.Contains(err.Error(), "duplicate input index") && !strings.Contains(err.Error(), "non-contiguous") {
 				t.Fatalf("expected duplicate index error, got: %v", err)
 			}
@@ -84,7 +85,7 @@ func TestTraceIdentity(t *testing.T) {
 		t.Run("fake nonempty digest", func(t *testing.T) {
 			base := validTraceForManifest(manifest)
 			base.CorpusDigest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-			err := ValidateTrace(base, manifest)
+			err := ValidateTraceAtRoot(root, base, manifest)
 			if err == nil || !strings.Contains(err.Error(), "corpus digest") {
 				t.Fatalf("expected corpus digest mismatch error, got: %v", err)
 			}
@@ -94,7 +95,7 @@ func TestTraceIdentity(t *testing.T) {
 		t.Run("source SHA mismatch", func(t *testing.T) {
 			base := validTraceForManifest(manifest)
 			base.SourceRevision = "ffffffffffffffffffffffffffffffffffffffff"
-			err := ValidateTrace(base, manifest)
+			err := ValidateTraceAtRoot(root, base, manifest)
 			if err == nil || !strings.Contains(err.Error(), "source revision") {
 				t.Fatalf("expected source revision mismatch error, got: %v", err)
 			}
@@ -104,7 +105,7 @@ func TestTraceIdentity(t *testing.T) {
 		t.Run("one changed normalized scalar", func(t *testing.T) {
 			base := validTraceForManifest(manifest)
 			base.Observations[0].Outcome.Fields["packet_id"] = json.Number("1")
-			err := ValidateTrace(base, manifest)
+			err := ValidateTraceAtRoot(root, base, manifest)
 			if err == nil || !strings.Contains(err.Error(), "outcome does not match") {
 				t.Fatalf("expected outcome mismatch error, got: %v", err)
 			}
@@ -114,7 +115,7 @@ func TestTraceIdentity(t *testing.T) {
 		t.Run("empty selection", func(t *testing.T) {
 			base := validTraceForManifest(manifest)
 			base.SelectedCases = []string{}
-			err := ValidateTrace(base, manifest)
+			err := ValidateTraceAtRoot(root, base, manifest)
 			if err == nil || !strings.Contains(err.Error(), "empty selection") {
 				t.Fatalf("expected empty selection error, got: %v", err)
 			}
@@ -124,7 +125,7 @@ func TestTraceIdentity(t *testing.T) {
 		t.Run("schema1", func(t *testing.T) {
 			base := validTraceForManifest(manifest)
 			base.SchemaVersion = 1
-			err := ValidateTrace(base, manifest)
+			err := ValidateTraceAtRoot(root, base, manifest)
 			if err == nil || !strings.Contains(err.Error(), "schema_version") {
 				t.Fatalf("expected schema version error, got: %v", err)
 			}
@@ -135,7 +136,7 @@ func TestTraceIdentity(t *testing.T) {
 			m2 := manifestWithTwoCases(manifest)
 			base := validTraceForManifest(m2)
 			base.Observations = base.Observations[:1]
-			err := ValidateTrace(base, m2)
+			err := ValidateTraceAtRoot(root, base, m2)
 			if err == nil || !strings.Contains(err.Error(), "observations") {
 				t.Fatalf("expected missing observation error, got: %v", err)
 			}
@@ -150,7 +151,7 @@ func TestTraceIdentity(t *testing.T) {
 			base.TickSchedule = []uint64{0}
 			base.Inputs = base.Inputs[:1]
 			base.Observations = base.Observations[:1]
-			err := ValidateTrace(base, m2)
+			err := ValidateTraceAtRoot(root, base, m2)
 			if err == nil || !strings.Contains(err.Error(), "cannot label itself complete") {
 				t.Fatalf("expected subset cannot label complete error, got: %v", err)
 			}
@@ -161,7 +162,7 @@ func TestTraceIdentity(t *testing.T) {
 		// 1. one real framing case at0
 		t.Run("one real framing case at0", func(t *testing.T) {
 			base := validTraceForManifest(manifest)
-			if err := ValidateTrace(base, manifest); err != nil {
+			if err := ValidateTraceAtRoot(root, base, manifest); err != nil {
 				t.Fatalf("expected valid trace to pass, got: %v", err)
 			}
 		})
@@ -170,7 +171,7 @@ func TestTraceIdentity(t *testing.T) {
 		t.Run("two declared cases at1/2 with exact observations", func(t *testing.T) {
 			m2 := manifestWithTwoCasesAt1And2(manifest)
 			base := validTraceForManifestAt1And2(m2)
-			if err := ValidateTrace(base, m2); err != nil {
+			if err := ValidateTraceAtRoot(root, base, m2); err != nil {
 				t.Fatalf("expected two declared cases at1/2 to pass, got: %v", err)
 			}
 
@@ -190,29 +191,51 @@ func TestTraceIdentity(t *testing.T) {
 	})
 }
 
+func validExecutedForManifest(root string, manifest Inventory) []ExecutedObservation {
+	var executed []ExecutedObservation
+	for _, c := range manifest.Cases {
+		expectedPath := filepath.Join(root, filepath.FromSlash(c.Expected.Path))
+		data, err := os.ReadFile(expectedPath)
+		if err != nil {
+			panic(fmt.Sprintf("read %s: %v", expectedPath, err))
+		}
+		var outcome Outcome
+		dec := json.NewDecoder(bytes.NewReader(data))
+		dec.UseNumber()
+		if err := dec.Decode(&outcome); err != nil {
+			panic(fmt.Sprintf("decode %s: %v", expectedPath, err))
+		}
+		for _, cpStr := range c.Checkpoints {
+			tick, _ := strconv.ParseUint(cpStr, 10, 64)
+			executed = append(executed, ExecutedObservation{
+				Tick:    tick,
+				CaseID:  c.ID,
+				Outcome: outcome,
+			})
+		}
+	}
+	return executed
+}
+
 func TestTraceRunIsDeterministicAndIsolated(t *testing.T) {
 	root := mustRepoRoot(t)
 	manifest := loadRealManifest(t, root)
-	revision := manifest.SourceRevision
+	executed := validExecutedForManifest(root, manifest)
 
-	first, err := RunTrace(TraceRequest{
-		Root:           root,
-		SourceRevision: revision,
-		Seed:           "1",
-		TickSchedule:   []uint64{0},
-	})
+	first, err := BuildTrace(TraceRequest{
+		Seed:         "1",
+		TickSchedule: []uint64{0},
+	}, manifest, executed)
 	if err != nil {
-		t.Fatalf("RunTrace 1: %v", err)
+		t.Fatalf("BuildTrace 1: %v", err)
 	}
 
-	second, err := RunTrace(TraceRequest{
-		Root:           root,
-		SourceRevision: revision,
-		Seed:           "1",
-		TickSchedule:   []uint64{0},
-	})
+	second, err := BuildTrace(TraceRequest{
+		Seed:         "1",
+		TickSchedule: []uint64{0},
+	}, manifest, executed)
 	if err != nil {
-		t.Fatalf("RunTrace 2: %v", err)
+		t.Fatalf("BuildTrace 2: %v", err)
 	}
 
 	if first.CorpusDigest == "" || first.CorpusDigest != second.CorpusDigest {
@@ -229,7 +252,7 @@ func TestTraceRunIsDeterministicAndIsolated(t *testing.T) {
 	if string(firstJSON) != string(secondJSON) {
 		t.Fatalf("trace bytes drifted\nfirst=%s\nsecond=%s", firstJSON, secondJSON)
 	}
-	if err := ValidateTrace(first, manifest); err != nil {
+	if err := ValidateTraceAtRoot(root, first, manifest); err != nil {
 		t.Fatalf("complete trace rejected: %v", err)
 	}
 }
@@ -238,21 +261,264 @@ func TestTraceRejectsIncompleteIdentity(t *testing.T) {
 	root := mustRepoRoot(t)
 	manifest := loadRealManifest(t, root)
 
-	_, err := RunTrace(TraceRequest{
-		Root:         root,
-		TickSchedule: []uint64{0},
-		Seed:         "1",
-	})
-	if err == nil || !strings.Contains(err.Error(), "incomplete") {
-		t.Fatalf("empty source revision: error=%v", err)
-	}
-
 	trace := validTraceForManifest(manifest)
 	trace.Identities.Protocol = 0
 	trace.Identities.AgentHTTP = ""
-	err = ValidateTrace(trace, manifest)
+	err := ValidateTraceAtRoot(root, trace, manifest)
 	if err == nil || !strings.Contains(err.Error(), "incomplete") {
 		t.Fatalf("incomplete identity: error=%v", err)
+	}
+}
+
+func TestExecutedObservationMismatchFailsAgainstUnchangedExpected(t *testing.T) {
+	root := mustRepoRoot(t)
+	manifest := loadRealManifest(t, root)
+	c := manifest.Cases[0]
+
+	mutatedOutcome := Outcome{
+		Kind:     "error",
+		Category: "spy-mismatch",
+	}
+
+	req := TraceRequest{
+		SelectedCases: []string{c.ID},
+		TickSchedule:  []uint64{0},
+	}
+	executed := []ExecutedObservation{
+		{
+			Tick:    0,
+			CaseID:  c.ID,
+			Outcome: mutatedOutcome,
+		},
+	}
+
+	trace, err := BuildTrace(req, manifest, executed)
+	if err != nil {
+		t.Fatalf("BuildTrace: %v", err)
+	}
+
+	err = ValidateTraceAtRoot(root, trace, manifest)
+	if err == nil {
+		t.Fatalf("expected validation failure when executed observation does not match unchanged expected JSON for case %s, got nil", c.ID)
+	}
+	if !strings.Contains(err.Error(), c.ID) || (!strings.Contains(err.Error(), "outcome does not match") && !strings.Contains(err.Error(), "mismatch")) {
+		t.Fatalf("expected outcome mismatch failure identifying case %s, got: %v", c.ID, err)
+	}
+}
+
+func TestTraceValidationRejectsMissingExpected(t *testing.T) {
+	root := mustRepoRoot(t)
+	manifest := loadRealManifest(t, root)
+	c := manifest.Cases[0]
+
+	tempRoot := t.TempDir()
+
+	req := TraceRequest{
+		SelectedCases: []string{c.ID},
+		TickSchedule:  []uint64{0},
+	}
+	executed := []ExecutedObservation{
+		{
+			Tick:    0,
+			CaseID:  c.ID,
+			Outcome: Outcome{Kind: "ok", Category: "frame"},
+		},
+	}
+
+	trace, err := BuildTrace(req, manifest, executed)
+	if err != nil {
+		t.Fatalf("BuildTrace: %v", err)
+	}
+
+	err = ValidateTraceAtRoot(tempRoot, trace, manifest)
+	if err == nil {
+		t.Fatalf("expected validation failure for missing expected file for case %s, got nil", c.ID)
+	}
+	if !strings.Contains(err.Error(), c.ID) {
+		t.Fatalf("expected missing expected file failure identifying case %s, got: %v", c.ID, err)
+	}
+}
+
+func TestTraceValidationRejectsMalformedExpected(t *testing.T) {
+	root := mustRepoRoot(t)
+	manifest := loadRealManifest(t, root)
+	c := manifest.Cases[0]
+
+	tempRoot := t.TempDir()
+	malformedPath := filepath.Join(tempRoot, filepath.FromSlash(c.Expected.Path))
+	if err := os.MkdirAll(filepath.Dir(malformedPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(malformedPath, []byte("not-json{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	req := TraceRequest{
+		SelectedCases: []string{c.ID},
+		TickSchedule:  []uint64{0},
+	}
+	executed := []ExecutedObservation{
+		{
+			Tick:    0,
+			CaseID:  c.ID,
+			Outcome: Outcome{Kind: "ok", Category: "frame"},
+		},
+	}
+
+	trace, err := BuildTrace(req, manifest, executed)
+	if err != nil {
+		t.Fatalf("BuildTrace: %v", err)
+	}
+
+	err = ValidateTraceAtRoot(tempRoot, trace, manifest)
+	if err == nil {
+		t.Fatalf("expected validation failure for malformed expected file for case %s, got nil", c.ID)
+	}
+	if !strings.Contains(err.Error(), c.ID) {
+		t.Fatalf("expected malformed expected file failure identifying case %s, got: %v", c.ID, err)
+	}
+}
+
+func TestTraceValidationRejectsExpectedDigestMismatch(t *testing.T) {
+	root := mustRepoRoot(t)
+	manifest := loadRealManifest(t, root)
+	c := manifest.Cases[0]
+
+	tempRoot := t.TempDir()
+	mutatedPath := filepath.Join(tempRoot, filepath.FromSlash(c.Expected.Path))
+	if err := os.MkdirAll(filepath.Dir(mutatedPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(mutatedPath, []byte(`{"kind":"ok","category":"frame","fields":{"packet_id":99}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	req := TraceRequest{
+		SelectedCases: []string{c.ID},
+		TickSchedule:  []uint64{0},
+	}
+	executed := []ExecutedObservation{
+		{
+			Tick:    0,
+			CaseID:  c.ID,
+			Outcome: Outcome{Kind: "ok", Category: "frame"},
+		},
+	}
+
+	trace, err := BuildTrace(req, manifest, executed)
+	if err != nil {
+		t.Fatalf("BuildTrace: %v", err)
+	}
+
+	err = ValidateTraceAtRoot(tempRoot, trace, manifest)
+	if err == nil {
+		t.Fatalf("expected validation failure for expected file digest mismatch for case %s, got nil", c.ID)
+	}
+	if !strings.Contains(err.Error(), c.ID) {
+		t.Fatalf("expected digest mismatch failure identifying case %s, got: %v", c.ID, err)
+	}
+}
+
+func TestTraceValidationRejectsDifferentCorpusRoot(t *testing.T) {
+	root := mustRepoRoot(t)
+	manifest := loadRealManifest(t, root)
+	c := manifest.Cases[0]
+
+	req := TraceRequest{
+		SelectedCases: []string{c.ID},
+		TickSchedule:  []uint64{0},
+	}
+	executed := []ExecutedObservation{
+		{
+			Tick:    0,
+			CaseID:  c.ID,
+			Outcome: Outcome{Kind: "ok", Category: "frame"},
+		},
+	}
+
+	trace, err := BuildTrace(req, manifest, executed)
+	if err != nil {
+		t.Fatalf("BuildTrace: %v", err)
+	}
+
+	wrongRoot := t.TempDir()
+	err = ValidateTraceAtRoot(wrongRoot, trace, manifest)
+	if err == nil {
+		t.Fatalf("expected validation failure for different corpus root %s, got nil", wrongRoot)
+	}
+	if !strings.Contains(err.Error(), c.ID) {
+		t.Fatalf("expected validation failure identifying case %s, got: %v", c.ID, err)
+	}
+}
+
+func TestBuildTraceRejectsUnknownExecutedObservation(t *testing.T) {
+	root := mustRepoRoot(t)
+	manifest := loadRealManifest(t, root)
+	req := TraceRequest{
+		SelectedCases: []string{manifest.Cases[0].ID},
+		TickSchedule:  []uint64{0},
+	}
+	executed := []ExecutedObservation{
+		{
+			Tick:    0,
+			CaseID:  "unknown.family/45/nonexistent",
+			Outcome: Outcome{Kind: "ok"},
+		},
+	}
+	_, err := BuildTrace(req, manifest, executed)
+	if err == nil || !strings.Contains(err.Error(), "unknown") {
+		t.Fatalf("expected unknown executed observation rejection, got: %v", err)
+	}
+}
+
+func TestBuildTraceRejectsDuplicateExecutedObservation(t *testing.T) {
+	root := mustRepoRoot(t)
+	manifest := loadRealManifest(t, root)
+	c := manifest.Cases[0]
+	req := TraceRequest{
+		SelectedCases: []string{c.ID},
+		TickSchedule:  []uint64{0},
+	}
+	executed := []ExecutedObservation{
+		{Tick: 0, CaseID: c.ID, Outcome: Outcome{Kind: "ok"}},
+		{Tick: 0, CaseID: c.ID, Outcome: Outcome{Kind: "ok"}},
+	}
+	_, err := BuildTrace(req, manifest, executed)
+	if err == nil || !strings.Contains(err.Error(), "duplicate") {
+		t.Fatalf("expected duplicate executed observation rejection, got: %v", err)
+	}
+}
+
+func TestBuildTraceRejectsMissingExecutedObservation(t *testing.T) {
+	root := mustRepoRoot(t)
+	manifest := loadRealManifest(t, root)
+	c := manifest.Cases[0]
+	req := TraceRequest{
+		SelectedCases: []string{c.ID},
+		TickSchedule:  []uint64{0},
+	}
+	executed := []ExecutedObservation{}
+	_, err := BuildTrace(req, manifest, executed)
+	if err == nil || !strings.Contains(err.Error(), "missing") {
+		t.Fatalf("expected missing executed observation rejection, got: %v", err)
+	}
+}
+
+func TestBuildTraceRejectsExtraExecutedObservation(t *testing.T) {
+	root := mustRepoRoot(t)
+	manifest := loadRealManifest(t, root)
+	c := manifest.Cases[0]
+	req := TraceRequest{
+		SelectedCases: []string{c.ID},
+		TickSchedule:  []uint64{0},
+	}
+	executed := []ExecutedObservation{
+		{Tick: 0, CaseID: c.ID, Outcome: Outcome{Kind: "ok"}},
+		{Tick: 999, CaseID: c.ID, Outcome: Outcome{Kind: "ok"}},
+	}
+	_, err := BuildTrace(req, manifest, executed)
+	if err == nil || (!strings.Contains(err.Error(), "unexpected") && !strings.Contains(err.Error(), "extra")) {
+		t.Fatalf("expected extra/unexpected executed observation rejection, got: %v", err)
 	}
 }
 
@@ -312,7 +578,7 @@ func TestTraceRejectsMalformedInput(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tc.data), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			_, err := LoadTrace(path, manifest)
+			_, err := LoadTraceAtRoot(root, path, manifest)
 			if err == nil {
 				t.Fatal("malformed trace was accepted")
 			}

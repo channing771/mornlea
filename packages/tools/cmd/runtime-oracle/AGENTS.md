@@ -43,24 +43,29 @@ or Agent process packages. These boundaries are enforced by `packages/audit`
 
 ## Isolated replay (`trace.go`)
 
-- `RunTrace` executes one isolated run and emits a versioned `Trace` identity
+- `BuildTrace` assembles executed observations into a versioned `Trace` identity
   (source revision, contract versions, corpus digest, seed, ordered checkpoint
-  inputs, tick schedule, and normalized fixture observations). Two isolated runs
-  of the same request produce identical JSON; the repository tree is read-only.
-- The request carries no work directory and no output path. The harness owns the
-  workspace: `RunTrace` calls `NewTraceWorkspace` itself and removes the
-  directory before returning, so no caller can steer a run into a live-save path.
-- `NewTraceWorkspace` creates that exclusive temporary directory with
+  inputs, tick schedule, and normalized observations). Trace assembly is pure
+  and performs only structural validation without filesystem access.
+- `TraceRequest` carries no work directory, repository root, or source revision.
+  The harness owns the workspace.
+- `NewTraceWorkspace` creates an exclusive temporary directory with
   `os.MkdirTemp("", "mornlea-runtime-oracle-")` and returns the cleanup that
   removes exactly that path. A workspace that would resolve inside the
   repository is rejected as a live-path write.
+- `ValidateTraceAtRoot(root, trace, manifest)` validates a trace report against
+  expected assets at an explicit corpus root. It loads every selected expected
+  asset through bounded path, symlink, duplicate-key, and sha256 checks, and
+  compares normalized outcomes. Every load error is recorded; none is skipped.
+- `LoadTraceAtRoot(root, path, manifest)` loads a report from path, enforces
+  duplicate-key and size budgets, and delegates to `ValidateTraceAtRoot`.
 - `ExportTrace(root, target, trace, manifest)` publishes one report and stays
-  separate from execution. It validates the trace first, resolves the target
-  through its existing ancestor, rejects repository containment and symlink
-  components, refuses a preexisting target, creates missing directories one
-  component at a time, and stages the report in the target parent before
-  publishing it with `os.Link`. A link failure is a hard I/O failure;
-  publication never falls back to an overwrite or a rename.
+  separate from execution. It validates the trace against root first, resolves
+  the target through its existing ancestor, rejects repository containment and
+  symlink components, refuses a preexisting target, creates missing directories
+  one component at a time, and stages the report in the target parent before
+  publishing it with `os.Link`. The atomic publication success boundary is the
+  successful link; staged-file cleanup is best-effort.
 - Containment is judged on resolved paths, and only a `..` path element counts
   as leaving the repository: a component whose name merely starts with `..`
   (a sibling such as `..cache`) is a child of the repository, not an escape
@@ -70,14 +75,19 @@ or Agent process packages. These boundaries are enforced by `packages/audit`
   reachable without a symlink component, stay inside its byte budget, and
   match its recorded digest.
 - Incomplete source revision, missing contract identity, empty corpus digest,
-  empty tick schedule, or missing observations fail closed. `LoadTrace`
-  rejects truncated bytes, non-object JSON, and unsupported `schema_version`
-  before trusting identity fields.
-- Enforcement: `TestTraceRunIsDeterministicAndIsolated`,
-  `TestTraceRejectsIncompleteIdentity`, `TestTraceRejectsLivePathWrites`,
-  `TestTraceRejectsMalformedInput`, plus the isolation, path, output, and I/O
-  regressions in `trace_isolation_test.go` (`TestTraceIsolation*`,
-  `TestTracePath*`, `TestTraceOutput*`, `TestTraceIO*`).
+  empty tick schedule, or missing observations fail closed. `LoadTraceAtRoot`
+  rejects truncated bytes, non-object JSON, duplicate keys, and unsupported
+  `schema_version`.
+- Enforcement: `TestExecutedObservationMismatchFailsAgainstUnchangedExpected`,
+  `TestTraceValidationRejectsMissingExpected`,
+  `TestTraceValidationRejectsMalformedExpected`,
+  `TestTraceValidationRejectsExpectedDigestMismatch`,
+  `TestTraceValidationRejectsDifferentCorpusRoot`,
+  `TestBuildTraceRejects*`, `TestTraceRejectsIncompleteIdentity`,
+  `TestTraceRejectsLivePathWrites`, `TestTraceRejectsMalformedInput`,
+  plus the isolation, path, output, and I/O regressions in
+  `trace_isolation_test.go` (`TestTraceIsolation*`, `TestTracePath*`,
+  `TestTraceOutput*`, `TestTraceIO*`).
 
 ## Independent operation runners (`runner_helpers_test.go`, `protocol_frame_test.go`)
 

@@ -206,9 +206,6 @@ func TestAgentContractOracleRunnerEnumeratesEveryAgentCase(t *testing.T) {
 		if !outcomesEqual(obs.Outcome, spy.outcome) {
 			t.Fatalf("observation for %s carries %#v, want the producer's own %#v", obs.CaseID, obs.Outcome, spy.outcome)
 		}
-		if obs.ExpectedDigest == "" {
-			t.Fatalf("observation for %s carries no expected digest", obs.CaseID)
-		}
 	}
 }
 
@@ -226,7 +223,7 @@ func TestAgentContractOracleReportPublishesAndValidates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("traceFromObservations: %v", err)
 	}
-	if err := ValidateTrace(trace, manifest); err != nil {
+	if err := ValidateTraceAtRoot(root, trace, manifest); err != nil {
 		t.Fatalf("executed agent evidence failed trace validation: %v", err)
 	}
 
@@ -239,7 +236,7 @@ func TestAgentContractOracleReportPublishesAndValidates(t *testing.T) {
 	if err := ExportTrace(root, target, trace, manifest); err != nil {
 		t.Fatalf("ExportTrace: %v", err)
 	}
-	loaded, err := LoadTrace(target, manifest)
+	loaded, err := LoadTraceAtRoot(root, target, manifest)
 	if err != nil {
 		t.Fatalf("published report does not validate: %v", err)
 	}
@@ -256,8 +253,13 @@ func TestAgentContractOracleReportPublishesAndValidates(t *testing.T) {
 		t.Fatalf("report carries %d inputs and %d observations, want %d each",
 			len(loaded.Inputs), len(loaded.Observations), len(manifest.Cases))
 	}
-	for index, obs := range loaded.Observations {
-		if !outcomesEqual(obs.Outcome, observations[index].Outcome) {
+	obsByID := make(map[string]Outcome, len(observations))
+	for _, obs := range observations {
+		obsByID[obs.CaseID] = obs.Outcome
+	}
+	for _, obs := range loaded.Observations {
+		want, ok := obsByID[obs.CaseID]
+		if !ok || !outcomesEqual(obs.Outcome, want) {
 			t.Fatalf("report observation for %s does not match the frozen corpus outcome", obs.CaseID)
 		}
 	}
@@ -275,7 +277,7 @@ func TestAgentContractOracleReportRejectsTamperedOutcome(t *testing.T) {
 	if err != nil {
 		t.Fatalf("traceFromObservations: %v", err)
 	}
-	if err := ValidateTrace(trace, manifest); err != nil {
+	if err := ValidateTraceAtRoot(root, trace, manifest); err != nil {
 		t.Fatalf("untampered evidence failed trace validation: %v", err)
 	}
 
@@ -283,7 +285,7 @@ func TestAgentContractOracleReportRejectsTamperedOutcome(t *testing.T) {
 	if trace.Observations[0].Outcome.Kind == "error" {
 		trace.Observations[0].Outcome.Category = "tampered"
 	}
-	err = ValidateTrace(trace, manifest)
+	err = ValidateTraceAtRoot(root, trace, manifest)
 	if err == nil || !strings.Contains(err.Error(), "does not match normalized expected outcome") {
 		t.Fatalf("expected a tampered-outcome rejection, got: %v", err)
 	}
@@ -539,15 +541,14 @@ func agentGoldenFixtureNames(t *testing.T, root, relative string) []string {
 // agentObservationsFromCorpus rebuilds one observation per frozen case from the
 // outcome the package-local producer executed, which is the evidence a report
 // carries.
-func agentObservationsFromCorpus(t *testing.T, root string, manifest Inventory) []Observation {
+func agentObservationsFromCorpus(t *testing.T, root string, manifest Inventory) []ExecutedObservation {
 	t.Helper()
-	observations := make([]Observation, 0, len(manifest.Cases))
+	observations := make([]ExecutedObservation, 0, len(manifest.Cases))
 	for _, c := range manifest.Cases {
-		observations = append(observations, Observation{
-			Tick:           0,
-			CaseID:         c.ID,
-			Outcome:        readExpectedOutcome(t, root, c),
-			ExpectedDigest: c.Expected.SHA256,
+		observations = append(observations, ExecutedObservation{
+			Tick:    0,
+			CaseID:  c.ID,
+			Outcome: readExpectedOutcome(t, root, c),
 		})
 	}
 	return observations

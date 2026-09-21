@@ -14,17 +14,34 @@ import (
 // RepositoryRoot looks for plus a sentinel the assertions can inspect.
 func fakeRepository(t *testing.T) string {
 	t.Helper()
-	root := filepath.Join(t.TempDir(), "repo")
-	if err := os.Mkdir(root, 0o755); err != nil {
+	root := mustRepoRoot(t)
+	fakeRoot := filepath.Join(t.TempDir(), "repo")
+	if err := os.Mkdir(fakeRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "go.work"), []byte("go 1.26\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(fakeRoot, "go.work"), []byte("go 1.26\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "sentinel.txt"), []byte("sentinel\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(fakeRoot, "sentinel.txt"), []byte("sentinel\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return root
+	manifest := loadRealManifest(t, root)
+	for _, c := range manifest.Cases {
+		srcRel := filepath.FromSlash(c.Expected.Path)
+		srcPath := filepath.Join(root, srcRel)
+		dstPath := filepath.Join(fakeRoot, srcRel)
+		if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(srcPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(dstPath, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return fakeRoot
 }
 
 // treeSnapshot records every path below dir so a failure path can be proven to
@@ -55,7 +72,7 @@ func traceFixture(t *testing.T) (Trace, Inventory) {
 	root := mustRepoRoot(t)
 	manifest := loadRealManifest(t, root)
 	trace := validTraceForManifest(manifest)
-	if err := ValidateTrace(trace, manifest); err != nil {
+	if err := ValidateTraceAtRoot(root, trace, manifest); err != nil {
 		t.Fatalf("fixture trace must validate: %v", err)
 	}
 	return trace, manifest
@@ -125,7 +142,7 @@ func TestTraceIsolationWorkspaceRejectsRepositoryResidentTemporaryDirectory(t *t
 	}
 }
 
-func TestTraceIsolationRunTraceLeavesNoWorkspaceBehind(t *testing.T) {
+func TestTraceIsolationBuildTraceLeavesNoWorkspaceBehind(t *testing.T) {
 	root := mustRepoRoot(t)
 	manifest := loadRealManifest(t, root)
 	// Pinning the temporary root makes the "no leftover workspace" assertion
@@ -133,13 +150,12 @@ func TestTraceIsolationRunTraceLeavesNoWorkspaceBehind(t *testing.T) {
 	tempHome := t.TempDir()
 	t.Setenv("TMPDIR", tempHome)
 
-	if _, err := RunTrace(TraceRequest{
-		Root:           root,
-		SourceRevision: manifest.SourceRevision,
-		Seed:           "1",
-		TickSchedule:   []uint64{0},
-	}); err != nil {
-		t.Fatalf("RunTrace: %v", err)
+	executed := validExecutedForManifest(root, manifest)
+	if _, err := BuildTrace(TraceRequest{
+		Seed:         "1",
+		TickSchedule: []uint64{0},
+	}, manifest, executed); err != nil {
+		t.Fatalf("BuildTrace: %v", err)
 	}
 
 	entries, err := os.ReadDir(tempHome)
@@ -190,7 +206,7 @@ func TestTracePathAllowsLexicalSiblingOutsideRepository(t *testing.T) {
 	if err := ExportTrace(repo, target, trace, manifest); err != nil {
 		t.Fatalf("ExportTrace to a lexical sibling: %v", err)
 	}
-	if _, err := LoadTrace(target, manifest); err != nil {
+	if _, err := LoadTraceAtRoot(repo, target, manifest); err != nil {
 		t.Fatalf("LoadTrace published report: %v", err)
 	}
 }
@@ -322,7 +338,7 @@ func TestTraceOutputPublishesAtomicallyAndLeavesNoStagedFile(t *testing.T) {
 	if err := ExportTrace(repo, target, trace, manifest); err != nil {
 		t.Fatalf("ExportTrace: %v", err)
 	}
-	loaded, err := LoadTrace(target, manifest)
+	loaded, err := LoadTraceAtRoot(repo, target, manifest)
 	if err != nil {
 		t.Fatalf("LoadTrace: %v", err)
 	}
@@ -371,52 +387,44 @@ func TestTraceOutputRejectsInvalidTraceWithNonexistentPath(t *testing.T) {
 func TestTraceIORejectsSymlinkedSourceFixture(t *testing.T) {
 	root := mustRepoRoot(t)
 	manifest := loadRealManifest(t, root)
-	relative := manifest.Cases[0].Input.Path
-	full := filepath.Join(root, filepath.FromSlash(relative))
-	backup := full + ".isolation-backup"
-	if err := os.Rename(full, backup); err != nil {
+	tempRoot := t.TempDir()
+	c := manifest.Cases[0]
+
+	// Set up repository-shaped corpus under tempRoot
+	expectedRel := filepath.FromSlash(c.Expected.Path)
+	expectedFull := filepath.Join(tempRoot, expectedRel)
+	if err := os.MkdirAll(filepath.Dir(expectedFull), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	restored := false
-	restore := func() {
-		if restored {
-			return
-		}
-		restored = true
-		_ = os.Remove(full)
-		_ = os.Rename(backup, full)
+	realExpected, err := os.ReadFile(filepath.Join(root, expectedRel))
+	if err != nil {
+		t.Fatal(err)
 	}
-	defer restore()
-	if err := os.Symlink(backup, full); err != nil {
+	target := expectedFull + ".target"
+	if err := os.WriteFile(target, realExpected, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, expectedFull); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err := RunTrace(TraceRequest{
-		Root:           root,
-		SourceRevision: manifest.SourceRevision,
-		Seed:           "1",
-		TickSchedule:   []uint64{0},
-	})
-	// The fixture gate is the canonical corpus validator, so a symlinked source
-	// fixture is rejected with its own "path component ... is a symlink" text
-	// rather than a trace-specific message.
-	if err == nil || !strings.Contains(err.Error(), "path component") || !strings.Contains(err.Error(), "is a symlink") {
+	trace := validTraceForManifest(manifest)
+	err = ValidateTraceAtRoot(tempRoot, trace, manifest)
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
 		t.Fatalf("expected symlinked fixture rejection, got: %v", err)
 	}
+}
 
-	restore()
-	info, statErr := os.Lstat(full)
-	if statErr != nil {
-		t.Fatalf("fixture was not restored: %v", statErr)
+func TestTraceOutputAtomicPublicationSuccessBoundary(t *testing.T) {
+	repo := fakeRepository(t)
+	target := filepath.Join(filepath.Dir(repo), "reports", "success-boundary", "out.json")
+
+	trace, manifest := traceFixture(t)
+	if err := ExportTrace(repo, target, trace, manifest); err != nil {
+		t.Fatalf("ExportTrace: %v", err)
 	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		t.Fatal("fixture is still a symlink")
-	}
-	if !info.Mode().IsRegular() {
-		t.Fatalf("restored fixture is not a regular file: %v", info.Mode())
-	}
-	if _, statErr := os.Stat(backup); !os.IsNotExist(statErr) {
-		t.Fatalf("backup fixture was left behind: %v", statErr)
+	if _, err := os.Stat(target); err != nil {
+		t.Fatalf("published report missing: %v", err)
 	}
 }
 

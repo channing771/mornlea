@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -18,12 +19,17 @@ const traceSchemaVersion = 2
 // temporary workspace, so a request never names a work directory, and report
 // publication is the separate ExportTrace step rather than part of a run.
 type TraceRequest struct {
-	Root           string
-	SourceRevision string
-	Seed           string
-	TickSchedule   []uint64
-	SelectedCases  []string
-	Coverage       string
+	Seed          string
+	TickSchedule  []uint64
+	SelectedCases []string
+	Coverage      string
+}
+
+// ExecutedObservation is one observation produced by executing a registered operation.
+type ExecutedObservation struct {
+	Tick    uint64
+	CaseID  string
+	Outcome Outcome
 }
 
 // Trace is the versioned, language-neutral replay identity.
@@ -122,105 +128,90 @@ func NewTraceWorkspace(root string) (string, func(), error) {
 	return dir, cleanup, nil
 }
 
-// RunTrace executes an isolated trace run and emits a complete replay identity.
-// The harness holds one exclusively owned workspace outside the repository for
-// the whole call and removes it before returning, so a run never depends on a
-// caller-supplied directory. Publishing a report is ExportTrace's step.
-func RunTrace(request TraceRequest) (Trace, error) {
-	if strings.TrimSpace(request.SourceRevision) == "" {
-		return Trace{}, fmt.Errorf("runtime-oracle: incomplete identity: source revision")
-	}
-	if strings.TrimSpace(request.Root) == "" {
-		return Trace{}, fmt.Errorf("runtime-oracle: incomplete identity: repository root")
-	}
-
-	// The workspace is the harness-owned isolation root for this call. This run
-	// stages nothing in it yet; holding it keeps the isolation contract
-	// independent of what a later run chooses to stage there.
-	_, cleanup, err := NewTraceWorkspace(request.Root)
-	if err != nil {
-		return Trace{}, err
-	}
-	defer cleanup()
-
-	families, live, err := Discover(request.Root)
-	if err != nil {
-		return Trace{}, err
-	}
-	inventoryPath := filepath.Join(request.Root, filepath.FromSlash(InventoryRelPath))
-	inventory, err := LoadInventory(inventoryPath)
-	if err != nil {
-		return Trace{}, err
-	}
+// BuildTrace assembles executed observations into a Trace identity.
+func BuildTrace(
+	request TraceRequest,
+	inventory Inventory,
+	executed []ExecutedObservation,
+) (Trace, error) {
 	selectedCases, err := selectTraceCases(request, inventory)
 	if err != nil {
 		return Trace{}, err
 	}
-	if _, err := ReconcileWorking(request.Root, inventory, families, live, BaselineConsumerRegistry(), BaselineNegativeCoverageExceptions()); err != nil {
-		return Trace{}, err
+
+	selectedCaseByID := make(map[string]CaseSpec, len(selectedCases))
+	for _, c := range selectedCases {
+		selectedCaseByID[c.ID] = c
 	}
 
-	corpusDigest, err := CanonicalCorpusDigest(inventory)
-	if err != nil {
-		return Trace{}, fmt.Errorf("runtime-oracle: corpus digest: %w", err)
-	}
-
-	if request.Seed == "" {
-		request.Seed = "0"
-	}
-
-	type pendingCP struct {
-		tick   uint64
-		caseID string
-		c      CaseSpec
-	}
-	var cps []pendingCP
+	expectedMultiset := make(map[CheckpointKey]int)
 	tickSet := make(map[uint64]bool)
+	var expectedCountTotal int
+
 	for _, c := range selectedCases {
 		for _, cpStr := range c.Checkpoints {
 			tick, err := strconv.ParseUint(cpStr, 10, 64)
 			if err != nil {
-				return Trace{}, fmt.Errorf("runtime-oracle: parse checkpoint tick %q: %w", cpStr, err)
+				return Trace{}, fmt.Errorf("runtime-oracle: case %s has invalid checkpoint tick %q: %w", c.ID, cpStr, err)
 			}
-			cps = append(cps, pendingCP{tick: tick, caseID: c.ID, c: c})
+			key := CheckpointKey{Tick: tick, CaseID: c.ID}
+			expectedMultiset[key]++
 			tickSet[tick] = true
+			expectedCountTotal++
 		}
 	}
 
-	sort.SliceStable(cps, func(i, j int) bool {
-		if cps[i].tick != cps[j].tick {
-			return cps[i].tick < cps[j].tick
+	seenExecuted := make(map[CheckpointKey]int, len(executed))
+	for _, obs := range executed {
+		_, ok := selectedCaseByID[obs.CaseID]
+		if !ok {
+			return Trace{}, fmt.Errorf("runtime-oracle: executed observation names unknown case %s", obs.CaseID)
 		}
-		return cps[i].caseID < cps[j].caseID
+		key := CheckpointKey{Tick: obs.Tick, CaseID: obs.CaseID}
+		expectedCount, expected := expectedMultiset[key]
+		if !expected {
+			return Trace{}, fmt.Errorf("runtime-oracle: unexpected executed observation for case %s at tick %d", obs.CaseID, obs.Tick)
+		}
+		seenExecuted[key]++
+		if seenExecuted[key] > expectedCount {
+			return Trace{}, fmt.Errorf("runtime-oracle: duplicate executed observation for case %s at tick %d", obs.CaseID, obs.Tick)
+		}
+	}
+
+	for key, expectedCount := range expectedMultiset {
+		actualCount := seenExecuted[key]
+		if actualCount < expectedCount {
+			return Trace{}, fmt.Errorf("runtime-oracle: missing executed observation for case %s at tick %d", key.CaseID, key.Tick)
+		}
+	}
+
+	if len(executed) != expectedCountTotal {
+		return Trace{}, fmt.Errorf("runtime-oracle: executed observation count %d does not match expected count %d", len(executed), expectedCountTotal)
+	}
+
+	sorted := append([]ExecutedObservation(nil), executed...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		if sorted[i].Tick != sorted[j].Tick {
+			return sorted[i].Tick < sorted[j].Tick
+		}
+		return sorted[i].CaseID < sorted[j].CaseID
 	})
 
-	inputs := make([]TraceInput, len(cps))
-	observations := make([]Observation, len(cps))
-	for i, cp := range cps {
+	inputs := make([]TraceInput, len(sorted))
+	observations := make([]Observation, len(sorted))
+	for i, obs := range sorted {
+		c := selectedCaseByID[obs.CaseID]
 		inputs[i] = TraceInput{
 			Index:       uint64(i),
-			CaseID:      cp.caseID,
-			Tick:        cp.tick,
-			InputDigest: cp.c.Input.SHA256,
+			CaseID:      obs.CaseID,
+			Tick:        obs.Tick,
+			InputDigest: c.Input.SHA256,
 		}
-
-		expectedPath := filepath.Join(request.Root, filepath.FromSlash(cp.c.Expected.Path))
-		data, err := os.ReadFile(expectedPath)
-		if err != nil {
-			return Trace{}, fmt.Errorf("runtime-oracle: read expected file %s: %w", expectedPath, err)
-		}
-		var outcome Outcome
-		dec := json.NewDecoder(bytes.NewReader(data))
-		dec.UseNumber()
-		if err := dec.Decode(&outcome); err != nil {
-			return Trace{}, fmt.Errorf("runtime-oracle: decode expected file %s: %w", expectedPath, err)
-		}
-
 		observations[i] = Observation{
-			Tick:           cp.tick,
-			CaseID:         cp.caseID,
-			Outcome:        outcome,
-			ExpectedDigest: cp.c.Expected.SHA256,
+			Tick:           obs.Tick,
+			CaseID:         obs.CaseID,
+			Outcome:        obs.Outcome,
+			ExpectedDigest: c.Expected.SHA256,
 		}
 	}
 
@@ -228,18 +219,29 @@ func RunTrace(request TraceRequest) (Trace, error) {
 	if len(request.TickSchedule) > 0 {
 		schedule = append([]uint64(nil), request.TickSchedule...)
 	} else {
+		schedule = make([]uint64, 0, len(tickSet))
 		for t := range tickSet {
 			schedule = append(schedule, t)
 		}
 		sort.Slice(schedule, func(i, j int) bool { return schedule[i] < schedule[j] })
 	}
 
+	corpusDigest, err := CanonicalCorpusDigest(inventory)
+	if err != nil {
+		return Trace{}, fmt.Errorf("runtime-oracle: corpus digest: %w", err)
+	}
+
+	seed := request.Seed
+	if seed == "" {
+		seed = "0"
+	}
+
 	trace := Trace{
 		SchemaVersion:  traceSchemaVersion,
-		SourceRevision: request.SourceRevision,
+		SourceRevision: inventory.SourceRevision,
 		CorpusDigest:   corpusDigest,
 		Identities:     inventory.Identities,
-		Seed:           request.Seed,
+		Seed:           seed,
 		Coverage:       request.Coverage,
 		SelectedCases:  request.SelectedCases,
 		TickSchedule:   schedule,
@@ -247,10 +249,156 @@ func RunTrace(request TraceRequest) (Trace, error) {
 		Observations:   observations,
 	}
 
-	if err := ValidateTrace(trace, inventory); err != nil {
+	if err := validateTraceStructure(trace, inventory); err != nil {
 		return Trace{}, err
 	}
 
+	return trace, nil
+}
+
+// ValidateTraceAtRoot validates a trace report against expected assets at root.
+func ValidateTraceAtRoot(root string, trace Trace, manifest Inventory) error {
+	var problems []string
+
+	if structErr := validateTraceStructure(trace, manifest); structErr != nil {
+		if te, ok := structErr.(*TraceError); ok {
+			problems = append(problems, te.Problems...)
+		} else {
+			problems = append(problems, structErr.Error())
+		}
+	}
+
+	if strings.TrimSpace(root) == "" {
+		problems = append(problems, "empty corpus root")
+		return &TraceError{Problems: problems}
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		problems = append(problems, fmt.Sprintf("resolve corpus root %s: %v", root, err))
+		return &TraceError{Problems: problems}
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(absRoot)
+	if err != nil {
+		problems = append(problems, fmt.Sprintf("resolve corpus root %s: %v", root, err))
+		return &TraceError{Problems: problems}
+	}
+
+	manifestCaseByID := make(map[string]CaseSpec, len(manifest.Cases))
+	for _, c := range manifest.Cases {
+		manifestCaseByID[c.ID] = c
+	}
+
+	for _, obs := range trace.Observations {
+		c, ok := manifestCaseByID[obs.CaseID]
+		if !ok {
+			continue
+		}
+		expectedOutcome, err := loadAndValidateExpectedOutcome(resolvedRoot, c)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("case %s: %v", obs.CaseID, err))
+		} else if !outcomesEqual(obs.Outcome, expectedOutcome) {
+			problems = append(problems, fmt.Sprintf("observation for case %s tick %d outcome does not match normalized expected outcome %s", obs.CaseID, obs.Tick, c.Expected.Path))
+		}
+	}
+
+	if len(problems) > 0 {
+		return &TraceError{Problems: problems}
+	}
+	return nil
+}
+
+// loadAndValidateExpectedOutcome loads one expected asset through bounded path,
+// symlink, regular file, size budget, duplicate key, and digest checks.
+func loadAndValidateExpectedOutcome(root string, c CaseSpec) (Outcome, error) {
+	if strings.TrimSpace(root) == "" {
+		return Outcome{}, fmt.Errorf("empty corpus root")
+	}
+	if err := validateCorpusPath(c.Expected.Path); err != nil {
+		return Outcome{}, fmt.Errorf("expected path: %w", err)
+	}
+	if !strings.HasSuffix(c.Expected.Path, ".json") {
+		return Outcome{}, fmt.Errorf("expected asset must have .json extension: %s", c.Expected.Path)
+	}
+	fullPath := filepath.Join(root, filepath.FromSlash(c.Expected.Path))
+	info, err := os.Lstat(fullPath)
+	if err != nil {
+		return Outcome{}, fmt.Errorf("stat expected file %s: %w", fullPath, err)
+	}
+	if err := checkNoSymlinks(root, c.Expected.Path); err != nil {
+		return Outcome{}, fmt.Errorf("symlink check: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return Outcome{}, fmt.Errorf("expected asset cannot be a symlink: %s", fullPath)
+	}
+	if !info.Mode().IsRegular() {
+		return Outcome{}, fmt.Errorf("expected asset is not a regular file: %s", fullPath)
+	}
+	if info.Size() > MaxCaseJSONBytes {
+		return Outcome{}, fmt.Errorf("expected file size %d exceeds budget %d", info.Size(), MaxCaseJSONBytes)
+	}
+	hash, err := hashFile(fullPath)
+	if err != nil {
+		return Outcome{}, fmt.Errorf("hash expected file: %w", err)
+	}
+	if hash != c.Expected.SHA256 {
+		return Outcome{}, fmt.Errorf("expected sha256 %s does not match disk %s", c.Expected.SHA256, hash)
+	}
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		return Outcome{}, fmt.Errorf("read expected file: %w", err)
+	}
+	if err := validateNoDuplicateKeys(content); err != nil {
+		return Outcome{}, fmt.Errorf("duplicate keys in expected json: %w", err)
+	}
+	var outcome Outcome
+	dec := json.NewDecoder(bytes.NewReader(content))
+	dec.UseNumber()
+	if err := dec.Decode(&outcome); err != nil {
+		return Outcome{}, fmt.Errorf("decode expected json: %w", err)
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		return Outcome{}, fmt.Errorf("unexpected trailing content in expected json")
+	}
+	if outcome.Kind != "ok" && outcome.Kind != "error" {
+		return Outcome{}, fmt.Errorf("expected outcome kind must be \"ok\" or \"error\", got %q", outcome.Kind)
+	}
+	return outcome, nil
+}
+
+// LoadTraceAtRoot loads a trace report from path and validates it against expected assets at root.
+func LoadTraceAtRoot(root string, path string, inventory Inventory) (Trace, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return Trace{}, fmt.Errorf("runtime-oracle: read trace: %w", err)
+	}
+	if info.Size() > MaxManifestBytes {
+		return Trace{}, fmt.Errorf("runtime-oracle: trace file size %d exceeds budget %d", info.Size(), MaxManifestBytes)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Trace{}, fmt.Errorf("runtime-oracle: read trace: %w", err)
+	}
+	var raw json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return Trace{}, fmt.Errorf("runtime-oracle: malformed trace: %w", err)
+	}
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed[0] != '{' {
+		return Trace{}, fmt.Errorf("runtime-oracle: malformed trace: expected object")
+	}
+	if err := validateNoDuplicateKeys(data); err != nil {
+		return Trace{}, fmt.Errorf("runtime-oracle: duplicate trace json keys: %w", err)
+	}
+	var trace Trace
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	if err := dec.Decode(&trace); err != nil {
+		return Trace{}, fmt.Errorf("runtime-oracle: decode trace: %w", err)
+	}
+	if err := ValidateTraceAtRoot(root, trace, inventory); err != nil {
+		return Trace{}, err
+	}
 	return trace, nil
 }
 
@@ -262,7 +410,7 @@ func RunTrace(request TraceRequest) (Trace, error) {
 // report or a complete one, a preexisting report is never replaced, and a
 // staging or link failure leaves nothing behind at the target.
 func ExportTrace(root, target string, trace Trace, manifest Inventory) error {
-	if err := ValidateTrace(trace, manifest); err != nil {
+	if err := ValidateTraceAtRoot(root, trace, manifest); err != nil {
 		return err
 	}
 	if strings.TrimSpace(target) == "" {
@@ -423,9 +571,8 @@ func ExportTrace(root, target string, trace Trace, manifest Inventory) error {
 	committed = true
 	// The staged name and the published name are two links to the same bytes;
 	// dropping the staged one leaves only the report in the parent directory.
-	if err := os.Remove(stagedName); err != nil {
-		return fmt.Errorf("runtime-oracle: remove staged trace report: %w", err)
-	}
+	// Cleanup is best-effort: publication succeeds once the target is linked.
+	_ = os.Remove(stagedName)
 	return nil
 }
 
@@ -451,46 +598,10 @@ func selectTraceCases(request TraceRequest, inventory Inventory) ([]CaseSpec, er
 	return selected, nil
 }
 
-// LoadTrace reads a trace artifact and validates it against the manifest.
-func LoadTrace(path string, manifest Inventory) (Trace, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return Trace{}, fmt.Errorf("runtime-oracle: read trace: %w", err)
-	}
-	if info.Size() > MaxManifestBytes {
-		return Trace{}, fmt.Errorf("runtime-oracle: trace file size %d exceeds budget %d", info.Size(), MaxManifestBytes)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return Trace{}, fmt.Errorf("runtime-oracle: read trace: %w", err)
-	}
-	var raw json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return Trace{}, fmt.Errorf("runtime-oracle: malformed trace: %w", err)
-	}
-	trimmed := strings.TrimSpace(string(raw))
-	if trimmed == "" || trimmed[0] != '{' {
-		return Trace{}, fmt.Errorf("runtime-oracle: malformed trace: expected object")
-	}
-	if err := validateNoDuplicateKeys(data); err != nil {
-		return Trace{}, fmt.Errorf("runtime-oracle: duplicate trace json keys: %w", err)
-	}
-	var trace Trace
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.UseNumber()
-	if err := dec.Decode(&trace); err != nil {
-		return Trace{}, fmt.Errorf("runtime-oracle: decode trace: %w", err)
-	}
-	if err := ValidateTrace(trace, manifest); err != nil {
-		return Trace{}, err
-	}
-	return trace, nil
-}
-
-// ValidateTrace enforces schema budgets, manifest binding, strictly increasing
-// schedule, exact input membership/indices, exact observations, and normalized
-// outcome equality.
-func ValidateTrace(trace Trace, manifest Inventory) error {
+// validateTraceStructure enforces schema budgets, manifest binding, strictly
+// increasing schedule, exact input membership/indices, and exact observation
+// key set without filesystem access.
+func validateTraceStructure(trace Trace, manifest Inventory) error {
 	var problems []string
 
 	// 1. Schema / byte / count budgets
@@ -684,25 +795,6 @@ func ValidateTrace(trace Trace, manifest Inventory) error {
 
 		if obs.ExpectedDigest != c.Expected.SHA256 {
 			problems = append(problems, fmt.Sprintf("observation expected digest %s does not match case %s expected %s", obs.ExpectedDigest, obs.CaseID, c.Expected.SHA256))
-		}
-
-		// 6. Normalized outcome equality
-		root, err := RepositoryRoot()
-		if err == nil {
-			expectedPath := c.Expected.Path
-			if !filepath.IsAbs(expectedPath) {
-				expectedPath = filepath.Join(root, filepath.FromSlash(expectedPath))
-			}
-			if data, err := os.ReadFile(expectedPath); err == nil {
-				var expectedOutcome Outcome
-				dec := json.NewDecoder(bytes.NewReader(data))
-				dec.UseNumber()
-				if err := dec.Decode(&expectedOutcome); err == nil {
-					if !outcomesEqual(obs.Outcome, expectedOutcome) {
-						problems = append(problems, fmt.Sprintf("observation for case %s tick %d outcome does not match normalized expected outcome %s", obs.CaseID, obs.Tick, c.Expected.Path))
-					}
-				}
-			}
 		}
 	}
 

@@ -168,7 +168,7 @@ type domainEventWorldInputAlias domainEventWorldInput
 // input.
 //
 // The two batch arrays are pointers here rather than slices because Go's
-// `omitempty` drops a nil slice and an empty slice alike: with plain slices an
+// "omitempty" drops a nil slice and an empty slice alike: with plain slices an
 // empty batch and a rule that names no batch would serialize to the same
 // absent key, and a consumer would have to guess which one the case meant. A
 // pointer separates them, because it is set only when the case carries the
@@ -1447,9 +1447,6 @@ func TestDomainEventWorldOracleExecutesEveryCase(t *testing.T) {
 	}
 	for _, obs := range observations {
 		c := domainEventWorldCaseByID(t, manifest, obs.CaseID)
-		if obs.ExpectedDigest != c.Expected.SHA256 {
-			t.Fatalf("observation for %s carries expected digest %s, want %s", obs.CaseID, obs.ExpectedDigest, c.Expected.SHA256)
-		}
 		expected := readExpectedOutcome(t, root, c)
 		if !outcomesEqual(obs.Outcome, expected) {
 			t.Fatalf("case %s produced %#v, want %#v", obs.CaseID, obs.Outcome, expected)
@@ -1460,7 +1457,13 @@ func TestDomainEventWorldOracleExecutesEveryCase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("traceFromObservations: %v", err)
 	}
-	if err := ValidateTrace(trace, manifest); err != nil {
+	for _, obs := range trace.Observations {
+		c := domainEventWorldCaseByID(t, manifest, obs.CaseID)
+		if obs.ExpectedDigest != c.Expected.SHA256 {
+			t.Fatalf("observation for %s carries expected digest %s, want %s", obs.CaseID, obs.ExpectedDigest, c.Expected.SHA256)
+		}
+	}
+	if err := ValidateTraceAtRoot(root, trace, manifest); err != nil {
 		t.Fatalf("executed event world evidence failed trace validation: %v", err)
 	}
 }
@@ -1730,7 +1733,7 @@ func TestDomainEventWorldOracleReportPublishesAndValidates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("traceFromObservations: %v", err)
 	}
-	if err := ValidateTrace(trace, manifest); err != nil {
+	if err := ValidateTraceAtRoot(root, trace, manifest); err != nil {
 		t.Fatalf("executed event world evidence failed trace validation: %v", err)
 	}
 
@@ -1743,7 +1746,7 @@ func TestDomainEventWorldOracleReportPublishesAndValidates(t *testing.T) {
 	if err := ExportTrace(root, target, trace, manifest); err != nil {
 		t.Fatalf("ExportTrace: %v", err)
 	}
-	loaded, err := LoadTrace(target, manifest)
+	loaded, err := LoadTraceAtRoot(root, target, manifest)
 	if err != nil {
 		t.Fatalf("published report does not validate: %v", err)
 	}

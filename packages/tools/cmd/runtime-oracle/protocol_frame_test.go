@@ -61,7 +61,8 @@ func frameRejectionCategory(err error) (string, bool) {
 // reimplements the length-prefix rule, so the recorded outcome is whatever the
 // production codec decides about these exact bytes.
 func runFrameDecode(c CaseSpec, input []byte) (Outcome, []byte, error) {
-	packetID, payload, err := codec.ReadFrame(bytes.NewReader(input))
+	reader := bytes.NewReader(input)
+	packetID, payload, err := codec.ReadFrame(reader)
 	if err != nil {
 		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 			return Outcome{}, nil, fmt.Errorf("runtime-oracle: case %s: frame reader hit an unexpected end of input: %w", c.ID, err)
@@ -71,6 +72,9 @@ func runFrameDecode(c CaseSpec, input []byte) (Outcome, []byte, error) {
 			return Outcome{}, nil, fmt.Errorf("runtime-oracle: case %s: unclassified framing rejection: %w", c.ID, err)
 		}
 		return Outcome{Kind: "error", Category: category}, nil, nil
+	}
+	if reader.Len() > 0 {
+		return Outcome{Kind: "error", Category: "trailing"}, nil, nil
 	}
 	return Outcome{
 		Kind:     "ok",
@@ -241,9 +245,6 @@ func TestProtocolOracleFrameIndependentOutcomes(t *testing.T) {
 
 	for _, obs := range observations {
 		c := frameCaseByID(t, manifest, obs.CaseID)
-		if obs.ExpectedDigest != c.Expected.SHA256 {
-			t.Fatalf("observation for %s carries expected digest %s, want %s", obs.CaseID, obs.ExpectedDigest, c.Expected.SHA256)
-		}
 		expected := readExpectedOutcome(t, root, c)
 		if !outcomesEqual(obs.Outcome, expected) {
 			t.Fatalf("case %s produced %#v, want %#v", obs.CaseID, obs.Outcome, expected)
@@ -279,7 +280,13 @@ func TestProtocolOracleFrameIndependentOutcomes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("traceFromObservations: %v", err)
 	}
-	if err := ValidateTrace(trace, manifest); err != nil {
+	for _, obs := range trace.Observations {
+		c := frameCaseByID(t, manifest, obs.CaseID)
+		if obs.ExpectedDigest != c.Expected.SHA256 {
+			t.Fatalf("observation for %s carries expected digest %s, want %s", obs.CaseID, obs.ExpectedDigest, c.Expected.SHA256)
+		}
+	}
+	if err := ValidateTraceAtRoot(root, trace, manifest); err != nil {
 		t.Fatalf("executed evidence failed trace validation: %v", err)
 	}
 }
@@ -298,6 +305,26 @@ func TestProtocolOracleFrameOutcomesDistinguishCases(t *testing.T) {
 	noncanonical := frameObservation(t, observations, frameNoncanonicalCaseID)
 	if outcomesEqual(valid.Outcome, noncanonical.Outcome) {
 		t.Fatalf("both framing cases produced the same outcome %#v", valid.Outcome)
+	}
+}
+
+// TestProtocolOracleFrameRunnerRejectsTrailingBytes pins that the frame producer rejects
+// bytes after the first decoded frame, matching Rust.
+func TestProtocolOracleFrameRunnerRejectsTrailingBytes(t *testing.T) {
+	root := mustRepoRoot(t)
+	manifest := frameWorkingManifest(t, root)
+	c := frameCaseByID(t, manifest, frameValidCaseID)
+	input, err := readCaseInput(root, c)
+	if err != nil {
+		t.Fatalf("readCaseInput: %v", err)
+	}
+	trailingInput := append(append([]byte(nil), input...), 0xff)
+	outcome, _, err := runFrameDecode(c, trailingInput)
+	if err != nil {
+		t.Fatalf("runFrameDecode returned error: %v", err)
+	}
+	if outcome.Kind != "error" || outcome.Category != "trailing" {
+		t.Fatalf("expected trailing rejection (kind=error, category=trailing), got: %#v", outcome)
 	}
 }
 
@@ -470,7 +497,7 @@ func TestProtocolOracleFrameExportWritesEvidenceWhenHarnessNamesDirectory(t *tes
 	}
 
 	report := filepath.Join(exportDir, "runtime-corpus-frame.json")
-	if _, err := LoadTrace(report, manifest); err != nil {
+	if _, err := LoadTraceAtRoot(root, report, manifest); err != nil {
 		t.Fatalf("exported report does not validate: %v", err)
 	}
 	for _, c := range manifest.Cases {
@@ -699,7 +726,7 @@ func TestCorpusOutcomeVocabularyMatchesExecutionContract(t *testing.T) {
 }
 
 // frameObservation returns the observation produced for one case.
-func frameObservation(t *testing.T, observations []Observation, id string) Observation {
+func frameObservation(t *testing.T, observations []ExecutedObservation, id string) ExecutedObservation {
 	t.Helper()
 	for _, obs := range observations {
 		if obs.CaseID == id {
@@ -707,5 +734,5 @@ func frameObservation(t *testing.T, observations []Observation, id string) Obser
 		}
 	}
 	t.Fatalf("no observation was produced for case %s", id)
-	return Observation{}
+	return ExecutedObservation{}
 }

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -70,26 +69,16 @@ func runDomainAdmit(c CaseSpec, input []byte) (Outcome, []byte, error) {
 	}
 }
 
-// producedCheckpoint pairs one produced outcome with the checkpoint that
-// produced it, so ordering and reporting can never mix two executions.
-type producedCheckpoint struct {
-	tick    uint64
-	caseID  string
-	c       CaseSpec
-	outcome Outcome
-}
-
 // RunCases executes the manifest selection through the registered Go producers
-// and returns one observation per declared checkpoint.
+// and returns one executed observation per declared checkpoint.
 //
 // The runner owns the evidence boundary: it resolves each case input under the
 // corpus byte budget, proves the input digest matches the manifest, invokes the
 // registered producer once per declared checkpoint, and derives every
-// observation from the values the producer returned. Expected outcomes are read
-// only for the digest the observation carries and are never handed to a
-// producer, so an independent execution cannot be shaped by the recorded
-// expectation.
-func RunCases(root string, manifest Inventory, operations map[string]GoOperation, familyOperations map[string]string) ([]Observation, error) {
+// executed observation from the values the producer returned. Expected outcomes
+// are never read or handed to a producer, so an independent execution cannot
+// be shaped by the recorded expectation.
+func RunCases(root string, manifest Inventory, operations map[string]GoOperation, familyOperations map[string]string) ([]ExecutedObservation, error) {
 	if len(manifest.Cases) == 0 {
 		return nil, fmt.Errorf("runtime-oracle: manifest selection is empty")
 	}
@@ -97,7 +86,7 @@ func RunCases(root string, manifest Inventory, operations map[string]GoOperation
 		return nil, fmt.Errorf("runtime-oracle: no registered Go producers")
 	}
 
-	var produced []producedCheckpoint
+	var produced []ExecutedObservation
 	for _, c := range manifest.Cases {
 		operation, supported := familyOperations[c.Family]
 		if !supported {
@@ -136,36 +125,10 @@ func RunCases(root string, manifest Inventory, operations map[string]GoOperation
 				sum := sha256.Sum256(encoded)
 				outcome.EncodedPayloadDigest = fmt.Sprintf("sha256:%x", sum)
 			}
-			produced = append(produced, producedCheckpoint{tick: tick, caseID: c.ID, c: c, outcome: outcome})
+			produced = append(produced, ExecutedObservation{Tick: tick, CaseID: c.ID, Outcome: outcome})
 		}
 	}
-	return orderObservations(produced)
-}
-
-// orderObservations sorts the produced checkpoints into the deterministic
-// (tick, case) order the trace schema requires and stamps each observation with
-// the expected digest its case declares.
-func orderObservations(produced []producedCheckpoint) ([]Observation, error) {
-	if len(produced) > MaxObservations {
-		return nil, fmt.Errorf("runtime-oracle: observations count %d exceeds budget %d", len(produced), MaxObservations)
-	}
-	sorted := append([]producedCheckpoint(nil), produced...)
-	sort.SliceStable(sorted, func(i, j int) bool {
-		if sorted[i].tick != sorted[j].tick {
-			return sorted[i].tick < sorted[j].tick
-		}
-		return sorted[i].caseID < sorted[j].caseID
-	})
-	observations := make([]Observation, 0, len(sorted))
-	for _, entry := range sorted {
-		observations = append(observations, Observation{
-			Tick:           entry.tick,
-			CaseID:         entry.caseID,
-			Outcome:        entry.outcome,
-			ExpectedDigest: entry.c.Expected.SHA256,
-		})
-	}
-	return observations, nil
+	return produced, nil
 }
 
 // readCaseInput loads one case input under the corpus byte budget and proves
@@ -218,45 +181,8 @@ func decodeExpectedOutcome(root string, c CaseSpec) (Outcome, error) {
 // traceFromObservations assembles executed observations into a trace identity
 // so the evidence is checked by the same completeness rules a published report
 // must satisfy.
-func traceFromObservations(manifest Inventory, observations []Observation) (Trace, error) {
-	digest, err := CanonicalCorpusDigest(manifest)
-	if err != nil {
-		return Trace{}, fmt.Errorf("runtime-oracle: corpus digest: %w", err)
-	}
-	caseByID := make(map[string]CaseSpec, len(manifest.Cases))
-	for _, c := range manifest.Cases {
-		caseByID[c.ID] = c
-	}
-	inputs := make([]TraceInput, 0, len(observations))
-	tickSet := make(map[uint64]bool, len(observations))
-	for i, obs := range observations {
-		c, ok := caseByID[obs.CaseID]
-		if !ok {
-			return Trace{}, fmt.Errorf("runtime-oracle: observation names unknown case %s", obs.CaseID)
-		}
-		inputs = append(inputs, TraceInput{
-			Index:       uint64(i),
-			CaseID:      obs.CaseID,
-			Tick:        obs.Tick,
-			InputDigest: c.Input.SHA256,
-		})
-		tickSet[obs.Tick] = true
-	}
-	schedule := make([]uint64, 0, len(tickSet))
-	for tick := range tickSet {
-		schedule = append(schedule, tick)
-	}
-	sort.Slice(schedule, func(i, j int) bool { return schedule[i] < schedule[j] })
-	return Trace{
-		SchemaVersion:  traceSchemaVersion,
-		SourceRevision: manifest.SourceRevision,
-		CorpusDigest:   digest,
-		Identities:     manifest.Identities,
-		Seed:           "0",
-		TickSchedule:   schedule,
-		Inputs:         inputs,
-		Observations:   observations,
-	}, nil
+func traceFromObservations(manifest Inventory, observations []ExecutedObservation) (Trace, error) {
+	return BuildTrace(TraceRequest{}, manifest, observations)
 }
 
 // exportExecutedEvidence publishes the executed corpus evidence into the
@@ -267,7 +193,7 @@ func traceFromObservations(manifest Inventory, observations []Observation) (Trac
 // through ExportTrace, which gives the export the same containment, symlink and
 // no-replace gates the production reports use, and the per-case fixtures are
 // written into the directory that publication just created and validated.
-func exportExecutedEvidence(t *testing.T, root string, manifest Inventory, observations []Observation) (string, error) {
+func exportExecutedEvidence(t *testing.T, root string, manifest Inventory, observations []ExecutedObservation) (string, error) {
 	t.Helper()
 	value := strings.TrimSpace(os.Getenv(runtimeOracleExportDirEnv))
 	if value == "" {
