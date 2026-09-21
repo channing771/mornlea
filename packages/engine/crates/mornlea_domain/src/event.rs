@@ -1,9 +1,14 @@
 use crate::identity::DomainError;
 
+mod inventory;
 mod outcome;
 mod player;
 mod world;
 
+pub use inventory::{
+    ChestState, ChestStateParts, ContainerClosed, CraftingSize, CraftingState, CraftingStateParts,
+    FurnaceState, FurnaceStateParts, InventoryState, InventoryStateParts,
+};
 pub use outcome::{CombatHit, CombatTarget, CommandRejection, PlacementSuccess, RejectReason};
 pub use player::{
     ActiveMining, ActiveMiningParts, MiningState, MiningStateParts, MotionState, MotionStateParts,

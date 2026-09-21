@@ -26,6 +26,26 @@ pub enum DomainError {
     /// The container generation is zero, which names a slot that was never
     /// used.
     InvalidContainerGeneration,
+    /// The container reference names the wrong kind for the record that
+    /// carries it: a furnace publication needs a furnace reference and a chest
+    /// publication a chest one, which is the Go `validFurnaceRef` /
+    /// `validChestRef` kind rule. The container-neutral closure notification
+    /// accepts either kind, so it never publishes this rejection.
+    InvalidContainerKind,
+    /// A personal crafting grid carries a non-empty slot beyond its own cells,
+    /// which the Go validator rejects so a client never has to guess whether a
+    /// residue slot still applies.
+    InvalidCraftingResidue,
+    /// A furnace timer is outside its fixed range: the smelt progress has to
+    /// stay strictly below the requirement and the burn time at or below its
+    /// maximum, which are the Go `core.FurnaceSmeltTicks` and
+    /// `core.FurnaceBurnTicks` bounds.
+    InvalidFurnaceTimers,
+    /// A furnace slot holds an item that slot cannot contain: the input
+    /// accepts the empty stack or a registered smelting input, the fuel the
+    /// empty stack or coal, and the output the empty stack or a registered
+    /// smelting product.
+    InvalidFurnaceSlot,
     /// The unified slot index is outside the fixed range of the view the
     /// command addresses.
     InvalidSlot,

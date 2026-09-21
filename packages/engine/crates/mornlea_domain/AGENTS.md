@@ -239,6 +239,53 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   chunk or the world, the unregistered change block, and the forget order and
   rejections).
 
+## Inventory and container publications (`src/event/inventory.rs`, `tests/event_inventory.rs`)
+
+- `InventoryState`/`InventoryStateParts`, `CraftingState`/`CraftingStateParts`,
+  `FurnaceState`/`FurnaceStateParts`, `ChestState`/`ChestStateParts` and
+  `ContainerClosed` are the item and container publications an authoritative
+  session sends to the one player that owns them. Every value rule is the Go
+  `protocol` validator's rule for the same record, so a record this crate
+  admits is a record the protocol layer admits.
+- `InventoryState::new` is total because every part is already validated: the
+  selected index is a `HotbarSlot` and every slot a validated `ItemStack`,
+  which together are the exact Go `Inventory.Valid` rule.
+  `CraftingState::try_new` rejects a non-empty slot beyond the personal grid's
+  own cells (`InvalidCraftingResidue`), because the wire always carries all
+  nine slots and a client would otherwise have to guess whether a residue slot
+  still applies. `CraftingSize` is the closed `Personal`/`Workbench` enum
+  behind the wire's `2`/`3` side lengths.
+- `FurnaceState::try_new` and `ChestState::try_new` reuse node 2.3's
+  `ContainerRef` validation rather than re-deriving the bounds: the reference
+  has to name the record's own kind (`InvalidContainerKind`), while its slot
+  range and generation were already checked when the reference was built.
+  `ContainerClosed::new` is total and permits either kind, because the Go
+  packet is named `FurnaceEnd` for historical reasons but carries both
+  container kinds.
+- `FurnaceState` also rejects a progress at or above the smelt requirement or
+  a burn time above its maximum (`InvalidFurnaceTimers`) and a slot holding an
+  item that slot cannot contain (`InvalidFurnaceSlot`): the input accepts the
+  empty stack or a registered smelting input, the fuel the empty stack or
+  coal, and the output the empty stack or a registered smelting product. The
+  whitelists are read from the shared smelting tables in `items.rs` instead of
+  being listed again. No timer consistency rule relating the progress, the
+  burn time and the three stacks exists in the Go validator, and none is
+  invented here.
+- Three Go rules deliberately stay out of this module: a container reference's
+  wire dimension (validated by the protocol conversion before a `ContainerRef`
+  exists), the per-chunk slot counts and the nonzero generation (enforced by
+  `ContainerRef` itself), and the per-stack validity rules (enforced by
+  `ItemStack`). No record carries an equipped-armor array, exactly as the
+  private player publication carries no inventory.
+- Focused entry: `cargo test -p mornlea_domain --test event_inventory --locked`
+  (17 cases: the all-empty inventory with the last slot selected and the
+  preserved selected index and stacks, the personal residue at slots 4 and 8
+  beside the four usable slots, the workbench's ninth slot, the furnace seed
+  and its idle form, every smelting input and product, the three slot
+  whitelists, the progress and burn boundaries, both wrong-kind references,
+  the chest seed, the both-kinds closure, and the absent equipped-armor
+  array).
+
 ## Observations (`src/event.rs`, `tests/runtime_contract.rs`)
 
 - `Observation::new` publishes only `domain.input` and `domain.event`
@@ -258,5 +305,6 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test command_control --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test command_inventory --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_player --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_inventory --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_world --locked
 ```
