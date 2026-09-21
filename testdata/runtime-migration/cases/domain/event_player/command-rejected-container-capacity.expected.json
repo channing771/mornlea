@@ -1,0 +1,8 @@
+{
+  "kind": "ok",
+  "category": "command-rejected",
+  "fields": {
+    "reason": "container_capacity",
+    "sequence": "7"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "kind": "ok",
+  "category": "combat-hit",
+  "fields": {
+    "damage": 1,
+    "server_tick": "7",
+    "target_kind": 2
+  }
+}

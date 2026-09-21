@@ -1,0 +1,8 @@
+{
+  "kind": "ok",
+  "category": "command-rejected",
+  "fields": {
+    "reason": "not_fluid_source",
+    "sequence": "7"
+  }
+}

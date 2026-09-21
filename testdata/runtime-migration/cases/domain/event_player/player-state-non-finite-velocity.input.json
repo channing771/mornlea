@@ -1,0 +1,42 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "player-state",
+  "server_tick": 0,
+  "last_input_sequence": 0,
+  "dimension": 0,
+  "position": [
+    "0",
+    "0",
+    "0"
+  ],
+  "velocity": [
+    "0",
+    "+Inf",
+    "0"
+  ],
+  "yaw": "0",
+  "pitch": "0",
+  "on_ground": true,
+  "ready": true,
+  "reset": false,
+  "mining_active": false,
+  "mining_target": [
+    0,
+    0,
+    0
+  ],
+  "mining_progress": 0,
+  "mining_required": 0,
+  "mining_harvestable": false,
+  "health": 20,
+  "oxygen": 300,
+  "hunger": 20,
+  "saturation_zero": false,
+  "day_phase_offset": 23999,
+  "world_time_ticks": 0,
+  "weather_kind": 0,
+  "season": 0,
+  "season_progress": 255,
+  "temperature": -128,
+  "armor_points": 20
+}

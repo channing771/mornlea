@@ -1,0 +1,8 @@
+{
+  "kind": "ok",
+  "category": "command-rejected",
+  "fields": {
+    "reason": "occupied",
+    "sequence": "7"
+  }
+}

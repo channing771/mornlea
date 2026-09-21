@@ -40,11 +40,12 @@ var goFamilyOperations = map[string]string{
 	"domain.identity_values":   "admit",
 	"domain.command_control":   "admit",
 	"domain.command_inventory": "admit",
+	"domain.event":             "admit",
 }
 
 // runDomainAdmit dispatches one admission case to the producer that owns its
-// family. The four domain families share one admission operation because each
-// case asks a Go authority whether one value is admitted, so the operation name
+// family. The domain families share one admission operation because each case
+// asks a Go authority whether one value is admitted, so the operation name
 // registered in `goFamilyOperations` cannot select the family; the family
 // itself does, and a family with no producer is a hard error rather than a
 // silently skipped case.
@@ -58,6 +59,8 @@ func runDomainAdmit(c CaseSpec, input []byte) (Outcome, []byte, error) {
 		return runDomainControl(c, input)
 	case domainCommandInventoryFamily:
 		return runDomainCommandInventory(c, input)
+	case domainEventPlayerFamily:
+		return runDomainEventPlayer(c, input)
 	default:
 		return Outcome{}, nil, fmt.Errorf("runtime-oracle: case %s names admission family %q, which has no Go producer", c.ID, c.Family)
 	}

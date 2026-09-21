@@ -1,0 +1,8 @@
+{
+  "kind": "ok",
+  "category": "command-rejected",
+  "fields": {
+    "reason": "protected_block",
+    "sequence": "7"
+  }
+}

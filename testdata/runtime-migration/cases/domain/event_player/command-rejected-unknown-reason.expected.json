@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-enum",
+  "fields": {
+    "reason": "unknown_reason",
+    "rule": "command_rejected.registered_reason",
+    "sequence": "7"
+  }
+}

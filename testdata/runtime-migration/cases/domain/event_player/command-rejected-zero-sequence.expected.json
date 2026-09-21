@@ -1,0 +1,8 @@
+{
+  "kind": "ok",
+  "category": "command-rejected",
+  "fields": {
+    "reason": "invalid_ray",
+    "sequence": "0"
+  }
+}
