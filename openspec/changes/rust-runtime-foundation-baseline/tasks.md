@@ -32,7 +32,7 @@ implementation acceptance.
 
 ## 4. Bounded domain construction
 
-- [ ] 4.1 [Bound text and semantic batches before work](plans/04-domain-bounds.md#node-41-bound-text-and-semantic-batches-before-work). Direct prerequisites: 3.10. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test resource_bounds --locked` and `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --locked`.
+- [x] 4.1 [Bound text and semantic batches before work](plans/04-domain-bounds.md#node-41-bound-text-and-semantic-batches-before-work). Direct prerequisites: 3.10. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test resource_bounds --locked` and `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --locked`.
 
 ## 5. Controller closeout
 
