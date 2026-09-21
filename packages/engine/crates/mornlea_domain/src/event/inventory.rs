@@ -36,6 +36,9 @@ const BACKPACK_SLOTS: usize = 27;
 /// `core.CraftingGridSlots`.
 const CRAFTING_GRID_SLOTS: usize = 9;
 
+/// Fixed chest slots one chest state publishes, from the Go `core.ChestSlots`.
+const CHEST_SLOTS: usize = 27;
+
 /// Side length of the personal crafting grid, from the Go
 /// `craftingGridSizePersonal`.
 ///
@@ -296,7 +299,7 @@ fn furnace_output_admits(stack: ItemStack) -> bool {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ChestStateParts {
     pub container: ContainerRef,
-    pub items: [ItemStack; 27],
+    pub items: [ItemStack; CHEST_SLOTS],
 }
 
 /// The chest one session is currently viewing.
@@ -306,7 +309,7 @@ pub struct ChestStateParts {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ChestState {
     container: ContainerRef,
-    items: [ItemStack; 27],
+    items: [ItemStack; CHEST_SLOTS],
 }
 
 impl ChestState {
