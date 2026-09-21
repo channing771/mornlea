@@ -39,10 +39,14 @@ const (
 	// eventual owner is the Rust domain crate, which owns the envelope and the
 	// ordering rule this family pins.
 	commandOrderFamily = "domain.input"
-	// commandOrderVersion labels the case as the current command ordering rule
-	// rather than a numbered schema: the ordering has no version history, so a
-	// version number would imply a migration path that does not exist.
-	commandOrderVersion = "current"
+	// commandOrderVersion is the version segment of this family's case identity,
+	// which must name the family's current version rather than a label of its
+	// own. `domain.input` is pinned by the runtime oracle's discovery to the
+	// protocol version, so the case carries that number: a case whose version
+	// segment does not name a version its family publishes is inconsistent with
+	// the family it belongs to, even though the manifest's case ID check only
+	// requires the `<family>/<version>/<label>` shape.
+	commandOrderVersion = "45"
 	// commandOrderOperation is the manifest operation name for an ordering case.
 	commandOrderOperation = "order"
 	// commandOrderConsumer is the manifest consumer this family pins: the Rust
