@@ -90,5 +90,13 @@ checkbox/status source.
 - Independent review: Spec ✅ compliant, Task quality Approved, no Critical/Important issues, 1 deferred minor (companion test corpus digest comparison).
 - Verification: `go test ./packages/tools/cmd/runtime-oracle ./packages/shared/companion -race -count=1` passed; audit passed; `testdata/runtime-migration` diff clean; no `-update-*` flags found by ripgrep.
 
+## 2026-09-21 — Node 2.2 completion
+
+- Node 2.2 implementer: `fec9ddc4` (`test(engine): harden runtime corpus loading`) and `b1b26341` (`fix(engine): narrow protocol clippy allowances and reject duplicate declared cases`).
+- Files changed: `runtime_corpus.rs`, `AGENTS.md` in `packages/engine/tests`, `Cargo.toml` in `mornlea_domain` and `mornlea_protocol`, `Cargo.lock`, and new `corpus_loader.rs` in `mornlea_domain/tests/`.
+- Independent review: Spec ✅ compliant, Task quality Approved; fix round 1 resolved clippy allowances and added duplicate declared case validation; re-review PASS.
+- Verification: `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_loader --locked` passed; protocol frame corpus passed; clippy (-D warnings) clean; cargo fmt clean; `testdata/runtime-migration` diff clean.
+
+
 
 
