@@ -83,13 +83,11 @@ pub fn assert_domain_normalized(executed: &ExecutedCase) {
     if (executed.case.family == "domain.command_control"
         || executed.case.family == "domain.command_inventory")
         && expected_clone.get("kind").and_then(|k| k.as_str()) == Some("ok")
-    {
-        if let Some(fields) = expected_clone
+        && let Some(fields) = expected_clone
             .get_mut("fields")
             .and_then(|f| f.as_object_mut())
-        {
-            fields.remove("wire");
-        }
+    {
+        fields.remove("wire");
     }
 
     assert_eq!(
