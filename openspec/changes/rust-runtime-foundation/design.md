@@ -182,3 +182,188 @@ The fully specified work is indexed by117 nodes (one retained accepted registrat
 - Dev-only corpus dependencies are serde_json at the already locked version and sha2 0.10, with a narrow lock review. No foundation production dependency or game version changes.
 
 The main Agent chose these policies. Workers may report contrary source evidence, but cannot silently change them, tighten compatibility, generate expectations from Rust output or start additional runtime ownership work.
+
+## Reviewed baseline extraction and successor changes
+
+### Intent and status
+
+The original change is too large to remain one worker delivery: it contains 117
+nodes spanning executable evidence, domain values, 59 packet families, seven
+save families, numerical APIs, pathfinding and final acceptance. The first 16
+checked nodes (1.1–1.6, 2.1–2.10) form a useful baseline, but independent
+closeout reviews found that their checked status overstates executable evidence
+and resource-bound coverage. They MUST NOT be archived as complete without the
+repairs below.
+
+The selected strategy is extract-and-retire:
+
+1. create `rust-runtime-foundation-baseline` for only the implemented evidence
+   and domain surface;
+2. complete and independently review its six repair nodes;
+3. sync its deliberately narrow delta into the canonical
+   `rust-runtime-foundation` specification and archive it;
+4. create the bounded successor changes listed below; and
+5. archive this original change without syncing its superseded broad delta once
+   every successor artifact is present and strictly valid.
+
+Until the written successor plans are approved, this file records the selected
+design only. The existing `tasks.md` remains the status source and no old task
+is reinterpreted as completing a successor change.
+
+### Alternatives rejected
+
+- Keep this change as a parent tracker while successor changes also own task
+  state: rejected because the same work would have two checkbox/status sources.
+- Keep one change and only split worker briefs: rejected because planning,
+  validation and archive scope would remain the same oversized rollback unit.
+- Archive the 16 checked nodes without repairs: rejected because passing focused
+  tests do not prove that the Go-produced corpus was executed by Rust or that
+  coverage and trace validation fail closed.
+
+### Baseline scope
+
+`rust-runtime-foundation-baseline` owns only the behavior already intended by
+nodes 1.1–1.6 and 2.1–2.10:
+
+- the schema-2 offline corpus representation, isolated trace workspace, narrow
+  audit allowance, framing seed case and service-free Agent contract cases;
+- registration and dependency direction for `mornlea_domain`,
+  `mornlea_protocol` and `mornlea_storage`;
+- domain identities, text and scalar values, item/drop/container values, the 19
+  sequenced command payloads, separate chat intent, deterministic command
+  ordering, and player/world/inventory/remote-player/companion publications.
+
+It explicitly excludes the unfinished hostile/passive, projectile/drop and
+chat event families, the 30-variant event closure, complete packet/save
+coverage, numerical APIs, pathfinding and final differential acceptance. The
+baseline delta MUST describe partial executable infrastructure rather than
+claim complete foundation coverage.
+
+### Baseline repair nodes
+
+Each repair is an independently rejectable test-first node. A worker receives
+the frozen interface and file ownership from the later implementation plan and
+escalates a contract conflict rather than changing these decisions.
+
+1. **Working versus complete inventory validation.** Keep an explicitly named
+   partial validation path for in-progress manifests. Add a separate complete
+   acceptance path that binds every live family and supported version to
+   executable positive and applicable negative cases and resolves each
+   `rust_consumer` through a closed callable registry. The external Agent
+   consumer is an explicit typed exception, not an arbitrary nonempty string.
+2. **Executed traces and fail-closed expected values.** `RunTrace` MUST consume
+   observations returned by registered operations and MUST NOT read expected
+   files to manufacture observations. Trace validation receives an explicit
+   corpus root and returns an error for root resolution, read, digest or JSON
+   failures before accepting an outcome.
+3. **Isolated corpus generation.** Remove CLI and test flags that rewrite the
+   tracked manifest or frozen case directories in place. Generation publishes
+   only into a fresh external harness directory through the existing
+   containment and no-replace path; controller-reviewed import is a separate
+   step. Tests construct repository-shaped fixtures under `t.TempDir()` and
+   never rename a tracked corpus file.
+4. **Rust corpus-loader parity.** Walk every path component without following
+   symlinks, enforce resolved containment, reject duplicate JSON keys, unknown
+   input formats and unknown consumer identities, and enforce the same byte and
+   digest rules as the Go validator.
+5. **Executed domain corpus.** Add a manifest-driven Rust consumer for every
+   frozen case owned by the implemented domain families. Dispatch through the
+   real constructors and command orderer, compare normalized values, bind each
+   family ID directly to `mornlea_domain`, require nonzero discovery and prove
+   that a one-field mutation fails.
+6. **Bounded domain construction.** Check the 128-byte display-name bound before
+   Unicode scalar iteration. Variable semantic batches use a shared maximum of
+   4096 records before scanning, sorting or cloning; this is a domain work bound
+   rather than the smaller packet caps, so existing multi-frame semantics remain
+   representable. `ForgetChunks` uses fallible pre-reservation before copying
+   its bounded uniqueness scratch. Allocation failure and an over-budget batch
+   return typed domain errors without partial publication. Vector validation
+   uses a neutral non-finite-value error rather than a rotation-only label.
+
+The value 4096 reuses the established bounded world/publication work scale,
+preserves the accepted tests that domain batches may exceed the remote-player
+and companion wire caps, and prevents an arbitrary safe Rust caller from
+triggering unbounded validation work. Protocol adapters retain their tighter
+per-packet limits.
+
+### Successor changes
+
+Every successor is one independent OpenSpec status and rollback unit. Detailed
+task packets will copy, not merely link to, the exact relevant contracts and
+tests from this change so an isolated worker does not need the controller
+conversation or a superseded task number to invent behavior.
+
+| Successor change | Migrated nodes | Deliverable |
+| --- | --- | --- |
+| `rust-domain-event-completion` | 2.11–2.14 | Remaining entity/chat values and the complete 30-variant semantic event surface |
+| `rust-protocol-foundation-and-login` | 3.1–3.3, 3.10–3.15 | Caller-buffer primitives, shared values, structural admission and handshake/login packets |
+| `rust-protocol-client-world-intents` | 3.16–3.20, 3.23, 3.27–3.29, 3.31–3.32 | Client control, session and world-interaction packets |
+| `rust-protocol-client-inventory-intents` | 3.21–3.22, 3.24–3.26, 3.30, 3.33–3.36 | Client inventory, crafting, container, armor and stack packets |
+| `rust-protocol-server-world-session` | 3.37–3.43, 3.57 | Server chunk/player/session outcomes and placement success |
+| `rust-protocol-server-player-inventory` | 3.44–3.47, 3.50–3.52, 3.58 | Remote-player, inventory, container and crafting publications |
+| `rust-protocol-server-chat-companion` | 3.53–3.56 | Chat and companion publications |
+| `rust-protocol-server-mobs-combat` | 3.59–3.65 | Hostile/passive and combat publications |
+| `rust-protocol-server-object-drops` | 3.48–3.49, 3.66–3.68 | Item-drop and projectile publications |
+| `rust-protocol-registry-closure` | 3.4–3.5, 3.69 | Complete typed registry, semantic adapters and allocation audit |
+| `rust-storage-safety-repairs` | 4.1–4.5 | Queue/cardinality/chunk/region repairs and shared current values |
+| `rust-storage-codec-closure` | 4.6–4.12 | Versioned player, metadata, entity, chunk, companion and region codecs |
+| `rust-runtime-contract-gate` | 6.1–6.2 | Integrated domain/protocol/storage evidence and the pre-kernel gate |
+| `rust-kernel-native-core` | 5.1–5.4 | Common safe surface, collision, physics and ray continuation |
+| `rust-kernel-native-world` | 5.5–5.11 | Worldgen, probes, trees, LOD, fluids and mesh/light |
+| `rust-kernel-pathfinding-and-corpus` | 5.12–5.14 | Immutable pathfinding plus complete numerical corpus |
+| `rust-runtime-foundation-acceptance` | 6.3–6.6 | Differential replay, mutation gates, governance review and final stage gates |
+
+### Dependency and integration order
+
+The archived baseline is the first prerequisite. After it closes,
+`rust-domain-event-completion`, `rust-protocol-foundation-and-login` and
+`rust-storage-safety-repairs` may proceed independently. Both client protocol
+changes and all five server packet changes depend on the protocol foundation.
+The protocol registry closure depends on every packet change plus domain event
+completion. Storage codec closure depends on storage safety repairs.
+
+`rust-runtime-contract-gate` depends on domain completion, protocol registry
+closure and storage codec closure. Kernel work is serialized at its shared
+`api.rs`/`ffi.rs` integration seam: native core, then native world, then
+pathfinding and numerical corpus. Final foundation acceptance depends on the
+complete kernel corpus. No successor may claim F1 acceptance early.
+
+The controller creates changes in dependency order, checks exact producer and
+consumer signatures before dispatch, and keeps shared export/manifest edits
+serial. Parallel workers never own overlapping crate roots, manifests, corpus
+indexes or integration tests in the same worktree.
+
+### Mandatory Superpowers lifecycle
+
+Every successor proposal and every materially revised task packet uses
+`superpowers:brainstorming` before design and `superpowers:writing-plans` before
+implementation. Each behavior or defect node uses
+`superpowers:test-driven-development`; review repairs also use
+`superpowers:systematic-debugging`. Delegated execution uses
+`superpowers:subagent-driven-development`, each independently verified node is
+reviewed through `superpowers:requesting-code-review`, and no completion or
+archive claim is made before `superpowers:verification-before-completion` has
+fresh evidence.
+
+These are task-entry requirements, not optional guidance. Each successor's
+`tasks.md` carries the applicable skill list, exact red/green commands, files,
+interfaces, exclusions, commit and rollback. The controller, not a worker,
+updates task status and the append-only ledger after independently checking the
+reported diff and commands.
+
+### Archive and rollback policy
+
+The baseline archives only after all six repairs, independent re-review,
+focused Rust/Go/audit gates, stage-boundary gates and strict OpenSpec validation
+pass at one recorded result SHA. Its delta is then synced because it describes
+implemented behavior. This original change is archived later with its spec sync
+explicitly skipped: its broad delta is superseded by the canonical baseline and
+the successor deltas, and syncing it would claim unfinished behavior.
+
+Before archiving the original change, verify every old unchecked node appears
+exactly once in the successor map and every old checked node is either present
+in the archived baseline or named by a baseline repair. The supersession ledger
+records the mapping and validation evidence. Rollback restores this original
+change as the planning source and removes only unimplemented successor
+artifacts; it never reverts accepted runtime commits, rewrites frozen fixtures,
+changes a game format or enables another online authority.
