@@ -188,6 +188,53 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   sequences, the frozen reject-reason wire table, and the combat hit and
   target-kind boundaries).
 
+## Section storage and world observations (`src/sections.rs`, `src/event/world.rs`, `tests/event_world.rs`)
+
+- `sections.rs` owns the domain's single copy of the registered block numbering
+  and the world geometry. `registered_block` is the exported numbering
+  predicate beside the item predicates, and `chunk_block_index` is the
+  chunk-ordered index a sorted block-change batch compares; both are ported
+  from the Go `core` rules the protocol crate's `block.rs` mirrors. This crate
+  sits below `mornlea_protocol` and cannot import it, so the numbering lives
+  here and the tests pin every value against the Go rule; a protocol port
+  consumes this copy rather than growing a second one.
+- `PalettedSection` is a private validated enum-backed value: a private
+  `SectionStorage` enum holds `Single`, `Indexed4`, `Indexed8` and `Direct15`,
+  so no caller can assemble storage the rules reject. `single`, `indexed` and
+  `direct` are all fallible and check the Go `protocol.SectionData.Validate`
+  rules in that validator's order — slot width, palette bounds, palette
+  uniqueness and registration, exact word count, every packed slot inside the
+  palette, the direct words' unused high bits, and every decoded block's
+  registration. `block_at` reads one cell straight out of the packed layout,
+  and `as_single`/`as_indexed`/`as_direct` hand out borrowed slices, so no
+  accessor exposes mutable storage and a codec conversion preserves the
+  representation instead of recompressing or reordering a palette. The section
+  count is the fixed array's type, and a 4096-cell section has no tail entry
+  at any published width.
+- `event/world.rs` holds the three compact world observations.
+  `ChunkSnapshot` carries the fixed 24-section array, so Y is implicit in
+  array order and the value has no Y field to disagree with its position; a
+  zero revision is the only relation left to check because the dimension and
+  every section are already validated. `BlockChanges` owns the revision
+  transition (a base inside `1..=u64::MAX-1` and a new revision of exactly
+  `base + 1`), the world Y span, the announced-chunk membership and the
+  strictly increasing chunk-ordered index, and admits the empty batch as the
+  revision barrier the Go validator allows. `ForgetChunks` requires a nonempty
+  batch of distinct chunks and preserves the input order, sorting a copy for
+  the uniqueness check so the recorded sequence survives. The 4096 wire batch
+  caps and the wire-only section Y stay in the protocol layer, because they
+  are transport budgets and layout fields rather than semantic relations.
+- Focused entry: `cargo test -p mornlea_domain --test event_world --locked`
+  (17 cases: single air and the sentinel, the 4-bit two-entry palette with one
+  cell set, the 8-bit ninety-ID palette, direct 15-bit block 89 at the last
+  cell, the 255/256/257 word counts, the duplicate, unregistered, oversized
+  and empty palettes, the unknown width, the slot outside the palette, the
+  direct high bits, the preserved section 23 and the zero revision, the empty
+  revision barrier, the negative chunk and world local index, the duplicate
+  and unsorted changes, the revision relations, the positions outside the
+  chunk or the world, the unregistered change block, and the forget order and
+  rejections).
+
 ## Observations (`src/event.rs`, `tests/runtime_contract.rs`)
 
 - `Observation::new` publishes only `domain.input` and `domain.event`
@@ -200,6 +247,7 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
 
 ```bash
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test command_order --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_world --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test runtime_contract --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test runtime_contract --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test identity_values --locked
@@ -207,4 +255,5 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test command_control --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test command_inventory --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_player --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_world --locked
 ```

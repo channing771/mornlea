@@ -2,12 +2,17 @@ use crate::identity::DomainError;
 
 mod outcome;
 mod player;
+mod world;
 
 pub use outcome::{CombatHit, CombatTarget, CommandRejection, PlacementSuccess, RejectReason};
 pub use player::{
     ActiveMining, ActiveMiningParts, MiningState, MiningStateParts, MotionState, MotionStateParts,
     PlayerState, PlayerStateParts, Season, SurvivalState, SurvivalStateParts, Weather, WorldState,
     WorldStateParts,
+};
+pub use world::{
+    BlockChange, BlockChanges, BlockChangesParts, ChunkSnapshot, ChunkSnapshotParts, ForgetChunks,
+    ForgetChunksParts,
 };
 
 /// Inventory family owned by this crate for semantic player inputs.

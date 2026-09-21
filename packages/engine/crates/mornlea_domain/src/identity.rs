@@ -70,6 +70,36 @@ pub enum DomainError {
     /// intake metadata cannot order them: the arrival index is the producer's
     /// admission position and has to be unique inside one tick and session.
     DuplicateArrival,
+    /// The block number is outside the registered range, so no section
+    /// storage, palette entry or block-change value can name it.
+    InvalidBlock,
+    /// The indexed slot width is neither 4 nor 8, so no packed word layout
+    /// exists for the section.
+    InvalidSectionBits,
+    /// The palette is empty, above the `2^bits` capacity, or names one block
+    /// twice, so a packed slot cannot resolve to exactly one block.
+    InvalidSectionPalette,
+    /// The packed word count is not the exact count the slot width requires
+    /// for 4096 cells.
+    InvalidSectionWords,
+    /// A direct word carries bits above its 15-bit slot, which no legal
+    /// section sets.
+    InvalidSectionHighBits,
+    /// A packed slot names a palette index the palette does not hold.
+    InvalidSectionSlot,
+    /// The revision transition is not exactly `base + 1` from a base inside
+    /// `1..=u64::MAX - 1`, so the batch does not continue one chunk history.
+    InvalidRevision,
+    /// The block Y coordinate is outside the world's vertical span.
+    InvalidBlockY,
+    /// The position's chunk column disagrees with the chunk the batch
+    /// announces.
+    InvalidBlockChunk,
+    /// The changes are not strictly increasing by chunk-ordered block index,
+    /// so the batch is not the canonical order the authority publishes.
+    InvalidChangeOrder,
+    /// The forget batch is empty or names one chunk twice.
+    InvalidForgetChunks,
 }
 
 /// Reports whether the 16 bytes are a non-zero UUIDv4 in wire order.
