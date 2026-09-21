@@ -1,0 +1,36 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "session-sequence-arrival",
+  "tick": 7,
+  "commands": [
+    {
+      "session": 2,
+      "sequence": 1,
+      "arrival_index": 0,
+      "kind": "select_hotbar",
+      "slot": 0
+    },
+    {
+      "session": 1,
+      "sequence": 9,
+      "arrival_index": 0,
+      "kind": "select_hotbar",
+      "slot": 2
+    },
+    {
+      "session": 1,
+      "sequence": 9,
+      "arrival_index": 1,
+      "kind": "place_block",
+      "slot": 0,
+      "yaw": "3.1415927"
+    },
+    {
+      "session": 1,
+      "sequence": 8,
+      "arrival_index": 2,
+      "kind": "select_hotbar",
+      "slot": 1
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "kind": "ok",
+  "category": "session-sequence-arrival",
+  "fields": {
+    "admitted": [
+      {
+        "session": "1",
+        "sequence": "8",
+        "arrival_index": "2",
+        "kind": "select_hotbar",
+        "slot": 1
+      },
+      {
+        "session": "1",
+        "sequence": "9",
+        "arrival_index": "0",
+        "kind": "select_hotbar",
+        "slot": 2
+      },
+      {
+        "session": "2",
+        "sequence": "1",
+        "arrival_index": "0",
+        "kind": "select_hotbar",
+        "slot": 0
+      }
+    ],
+    "chunk_revision": "1",
+    "commands": [
+      {
+        "session": "2",
+        "sequence": "1",
+        "arrival_index": "0",
+        "kind": "select_hotbar",
+        "slot": 0
+      },
+      {
+        "session": "1",
+        "sequence": "9",
+        "arrival_index": "0",
+        "kind": "select_hotbar",
+        "slot": 2
+      },
+      {
+        "session": "1",
+        "sequence": "9",
+        "arrival_index": "1",
+        "kind": "place_block",
+        "slot": 0,
+        "yaw": "db0f4940"
+      },
+      {
+        "session": "1",
+        "sequence": "8",
+        "arrival_index": "2",
+        "kind": "select_hotbar",
+        "slot": 1
+      }
+    ],
+    "discarded": [
+      {
+        "session": "1",
+        "sequence": "9",
+        "arrival_index": "1",
+        "kind": "place_block",
+        "slot": 0,
+        "yaw": "db0f4940"
+      }
+    ],
+    "last_admitted_sequence": [
+      {
+        "session": "1",
+        "sequence": "9"
+      },
+      {
+        "session": "2",
+        "sequence": "1"
+      }
+    ],
+    "placed_blocks": 0,
+    "placement_slot_counts": [
+      {
+        "session": "1",
+        "slot": 0,
+        "count": 64
+      }
+    ],
+    "placement_successes": [],
+    "rejections": [],
+    "selected_hotbar": [
+      {
+        "session": "1",
+        "slot": 2
+      },
+      {
+        "session": "2",
+        "slot": 0
+      }
+    ],
+    "tick": "7"
+  }
+}
