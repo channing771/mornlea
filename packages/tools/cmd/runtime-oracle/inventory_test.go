@@ -1,39 +1,13 @@
 package main
 
 import (
-	"flag"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-var updateRuntimeInventory = flag.Bool(
-	"update-runtime-inventory",
-	false,
-	"rewrite testdata/runtime-migration/contracts.json from live registries",
-)
-
 func TestContractInventoryReconcilesFrozenCorpus(t *testing.T) {
 	root, families, live := discoverLive(t)
-	cases, err := DiscoverCases(root)
-	if err != nil {
-		t.Fatalf("discover cases: %v", err)
-	}
-
-	if *updateRuntimeInventory {
-		encoded, err := encodeInventory(inventoryFrom(live, families, cases))
-		if err != nil {
-			t.Fatalf("encode inventory: %v", err)
-		}
-		path := filepath.Join(root, filepath.FromSlash(InventoryRelPath))
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatalf("create inventory directory: %v", err)
-		}
-		if err := os.WriteFile(path, append(encoded, '\n'), 0o644); err != nil {
-			t.Fatalf("write inventory: %v", err)
-		}
-	}
 
 	inventory, err := LoadInventory(filepath.Join(root, filepath.FromSlash(InventoryRelPath)))
 	if err != nil {

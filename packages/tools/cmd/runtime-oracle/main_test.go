@@ -27,6 +27,21 @@ func TestCLIFlagSetCannotRewriteTheFrozenCorpus(t *testing.T) {
 	}
 }
 
+// TestTestBinaryFlagsCannotRewriteTheFrozenCorpus pins that the test binary's
+// default flag set registers no flag which rewrites the frozen corpus at
+// InventoryRelPath. A package-level flag.Bool binds to that set at init, so the
+// removed -update-runtime-inventory flag was reachable through `go test
+// -update-runtime-inventory` and rewrote the manifest from DiscoverCases, a
+// stub returning a single case, replacing the frozen 454-case corpus while the
+// suite still reported success. The newFlagSet check above cannot observe
+// package-level flags, so this assertion guards the default flag set directly;
+// see newFlagSet for why no corpus-rewriting entry point may exist.
+func TestTestBinaryFlagsCannotRewriteTheFrozenCorpus(t *testing.T) {
+	if f := flag.Lookup("update-runtime-inventory"); f != nil {
+		t.Fatalf("test binary must register no corpus-rewriting flag, got -%s", f.Name)
+	}
+}
+
 // TestRunReconcilesTheFrozenInventoryAgainstLiveRegistries keeps the CLI's only
 // behavior green: reconcile and validate the frozen corpus against the live
 // registries discovered from the real repository root.
