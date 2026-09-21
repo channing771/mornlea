@@ -1,0 +1,38 @@
+{
+  "kind": "error",
+  "category": "invalid-identity",
+  "fields": {
+    "rule": "companion_states.state_0.player_id.nonzero",
+    "server_tick": "7",
+    "states": [
+      {
+        "dimension": 0,
+        "id": "00000000000000000000000000000000",
+        "look": {
+          "pitch": "3f000000",
+          "yaw": "c0400000"
+        },
+        "position": [
+          "c0f00000",
+          "428c0000",
+          "41340000"
+        ],
+        "reset": false
+      },
+      {
+        "dimension": 0,
+        "id": "2233445546674889aabbccddeeff00ff",
+        "look": {
+          "pitch": "3f000000",
+          "yaw": "c0400000"
+        },
+        "position": [
+          "c0f00000",
+          "428c0000",
+          "41340000"
+        ],
+        "reset": false
+      }
+    ]
+  }
+}

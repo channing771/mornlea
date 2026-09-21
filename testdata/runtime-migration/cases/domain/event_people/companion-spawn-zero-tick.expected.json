@@ -1,0 +1,19 @@
+{
+  "kind": "ok",
+  "category": "companion-spawn",
+  "fields": {
+    "dimension": 0,
+    "id": "2233445546674889aabbccddeeff00ff",
+    "look": {
+      "pitch": "bf000000",
+      "yaw": "40400000"
+    },
+    "name": "Buddy",
+    "position": [
+      "c1080000",
+      "428c0000",
+      "41440000"
+    ],
+    "server_tick": "0"
+  }
+}

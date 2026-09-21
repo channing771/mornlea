@@ -1,0 +1,37 @@
+{
+  "kind": "ok",
+  "category": "remote-player-states",
+  "fields": {
+    "server_tick": "0",
+    "states": [
+      {
+        "dimension": 0,
+        "look": {
+          "pitch": "3f400000",
+          "yaw": "bf800000"
+        },
+        "player_id": "00112233445546778899aabbccddeefe",
+        "position": [
+          "40200000",
+          "42820000",
+          "c0880000"
+        ],
+        "reset": false
+      },
+      {
+        "dimension": 0,
+        "look": {
+          "pitch": "3f400000",
+          "yaw": "bf800000"
+        },
+        "player_id": "00112233445546778899aabbccddeeff",
+        "position": [
+          "40200000",
+          "42820000",
+          "c0880000"
+        ],
+        "reset": false
+      }
+    ]
+  }
+}

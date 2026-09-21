@@ -1,0 +1,17 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "companion-spawn",
+  "tick": 41,
+  "dimension": 0,
+  "position": [
+    "-8.5",
+    "70",
+    "12.25"
+  ],
+  "yaw": "3",
+  "pitch": "-0.5",
+  "id": "2233445546674889aabbccddeeff00ff",
+  "name": "Best Buddy",
+  "players": [],
+  "states": []
+}

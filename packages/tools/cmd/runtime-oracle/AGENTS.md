@@ -114,9 +114,12 @@ family's cases: `protocol_frame_test.go` (framing), `agent_contract_test.go`
 `external:agent-contract` marker plus this Go test target), and
 `domain_values_test.go`, `domain_identity_values_test.go`,
 `domain_command_control_test.go`, `domain_command_inventory_test.go`,
-`domain_event_player_test.go`, `domain_event_world_test.go` and
-`domain_event_inventory_test.go` (the domain families). The world-event file
-also carries the shared router arm the inventory producer registers into.
+`domain_event_player_test.go`, `domain_event_world_test.go`,
+`domain_event_inventory_test.go` and `domain_event_people_test.go` (the domain
+families). The world-event file also carries the shared router arm
+(`runDomainEvent`) that the inventory and people producers register their rule
+names into, because the `domain.event` family is shared by four producers and
+the rule name is the only discriminator the manifest carries.
 
 - Expected outcomes are generated only through each producer's own update flag
   and come from executing the real Go validator or codec, never from a

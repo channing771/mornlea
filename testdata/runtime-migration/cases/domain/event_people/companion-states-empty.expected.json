@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "rule": "companion_states.count_range",
+    "server_tick": "7",
+    "states": []
+  }
+}

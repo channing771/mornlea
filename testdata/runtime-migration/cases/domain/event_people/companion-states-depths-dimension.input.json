@@ -1,0 +1,32 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "companion-states",
+  "tick": 7,
+  "players": [],
+  "states": [
+    {
+      "id": "2233445546674889aabbccddeeff00fe",
+      "dimension": 0,
+      "position": [
+        "-7.5",
+        "70",
+        "11.25"
+      ],
+      "yaw": "-3",
+      "pitch": "0.5",
+      "reset": false
+    },
+    {
+      "id": "2233445546674889aabbccddeeff00ff",
+      "dimension": 1,
+      "position": [
+        "-7.5",
+        "70",
+        "11.25"
+      ],
+      "yaw": "-3",
+      "pitch": "0.5",
+      "reset": false
+    }
+  ]
+}

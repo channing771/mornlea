@@ -1,0 +1,17 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "companion-spawn",
+  "tick": 41,
+  "dimension": 0,
+  "position": [
+    "-8.5",
+    "70",
+    "12.25"
+  ],
+  "yaw": "3",
+  "pitch": "-0.5",
+  "id": "00000000000000000000000000000000",
+  "name": "Buddy",
+  "players": [],
+  "states": []
+}

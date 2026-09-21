@@ -1,0 +1,32 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "remote-player-states",
+  "server_tick": 7,
+  "players": [
+    {
+      "player_id": "00112233445546778899aabbccddeefe",
+      "dimension": 0,
+      "position": [
+        "2.5",
+        "65",
+        "-4.25"
+      ],
+      "yaw": "-1",
+      "pitch": "0.75",
+      "reset": false
+    },
+    {
+      "player_id": "00112233445546778899aabbccddeeff",
+      "dimension": 0,
+      "position": [
+        "2.5",
+        "65",
+        "-4.25"
+      ],
+      "yaw": "-1",
+      "pitch": "0.75",
+      "reset": false
+    }
+  ],
+  "states": []
+}

@@ -1,0 +1,7 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "companion-states",
+  "tick": 7,
+  "players": [],
+  "states": []
+}

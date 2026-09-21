@@ -1,0 +1,7 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "remote-player-despawn",
+  "player_id": "00112233445546778899aabbccddeefe",
+  "players": [],
+  "states": []
+}

@@ -1,0 +1,8 @@
+{
+  "kind": "error",
+  "category": "invalid-identity",
+  "fields": {
+    "player_id": "00000000000000000000000000000000",
+    "rule": "player_id.nonzero"
+  }
+}
