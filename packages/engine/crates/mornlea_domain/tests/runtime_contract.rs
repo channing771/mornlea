@@ -45,6 +45,7 @@ fn inventory_assigns_domain_families_to_this_crate() {
         "domain.event",
         "domain.identity_values",
         "domain.command_control",
+        "domain.command_inventory",
         "domain.values",
         "domain.input",
     ];
