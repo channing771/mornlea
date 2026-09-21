@@ -138,50 +138,6 @@ fn non_finite_input_rotation_is_rejected() {
 }
 
 #[test]
-fn semantic_inputs_order_by_sequence_then_kind() {
-    let player = mornlea_domain::PlayerControl::new(mornlea_domain::PlayerControlParts {
-        movement: mornlea_domain::Movement {
-            move_x: 0,
-            move_z: 0,
-            jump: false,
-        },
-        look: mornlea_domain::LookAngles::try_new(0.0, 0.0).expect("finite angles"),
-        actions: mornlea_domain::HeldActions {
-            primary: false,
-            eating: false,
-            sprinting: false,
-            sneaking: false,
-        },
-    });
-    let later = mornlea_domain::SemanticInput::Player {
-        sequence: 2,
-        control: player,
-    };
-    let place = mornlea_domain::SemanticInput::Place {
-        sequence: 1,
-        intent: mornlea_domain::PlacementIntent::try_new(
-            mornlea_domain::LookAngles::try_new(0.0, 0.0).expect("finite angles"),
-            3,
-        )
-        .expect("slot three"),
-    };
-    let select = mornlea_domain::SemanticInput::SelectHotbar {
-        sequence: 1,
-        slot: mornlea_domain::HotbarSlot::new(1).expect("slot one"),
-    };
-    let ordered = mornlea_domain::order_inputs([later.clone(), select.clone(), place.clone()]);
-    assert_eq!(
-        ordered
-            .iter()
-            .map(mornlea_domain::SemanticInput::kind)
-            .collect::<Vec<_>>(),
-        vec!["place_block", "select_hotbar", "player_input"]
-    );
-    assert_eq!(ordered[0].sequence(), 1);
-    assert_eq!(ordered[2].sequence(), 2);
-}
-
-#[test]
 fn observations_order_by_tick_then_family() {
     let late = mornlea_domain::Observation::new(2, "domain.input", "sha256:a").unwrap();
     let early_event = mornlea_domain::Observation::new(1, "domain.event", "sha256:b").unwrap();

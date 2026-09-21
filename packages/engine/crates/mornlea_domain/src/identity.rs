@@ -38,6 +38,18 @@ pub enum DomainError {
     /// The furnace output slot is the target of a container move, while the
     /// authority reserves that slot for taking the smelting product.
     FurnaceOutputAsTarget,
+    /// The sequence is zero on a command that has to take part in command
+    /// acknowledgement, which is the one sequenced intent whose wire sequence
+    /// may not be zero.
+    InvalidSequence,
+    /// The ordering scratch cannot hold one key slot per command, either
+    /// because the requested capacity could not be reserved or because the
+    /// batch is larger than the scratch the caller supplied.
+    InsufficientScratch,
+    /// Two envelopes name the same tick, session and arrival index, so the
+    /// intake metadata cannot order them: the arrival index is the producer's
+    /// admission position and has to be unique inside one tick and session.
+    DuplicateArrival,
 }
 
 /// Reports whether the 16 bytes are a non-zero UUIDv4 in wire order.

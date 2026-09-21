@@ -110,10 +110,36 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   outside `Command`: chat has no wire sequence and is consumed through its own
   FIFO. It performs no addressing, warp, stop or queue policy, and the text is
   retained verbatim including a leading mention.
-- `SemanticInput` and `order_inputs` are a temporary replay-ordering test
-  facade that pairs a payload with a sequence and performs no validation of
-  its own; `order_inputs` sorts by sequence, then kind name
-  (`semantic_inputs_order_by_sequence_then_kind`).
+
+## Command envelope and ordering (`src/input/order.rs`, `tests/command_order.rs`)
+
+- `CommandEnvelopeParts { tick, session, sequence, arrival_index: u64, command: Command }`
+  is the only place intake metadata meets a payload. `CommandEnvelope::try_new`
+  keeps the fields verbatim and rejects a zero sequence for
+  `TakeCraftingOutput` alone, because that command has to take part in command
+  acknowledgement; every other command accepts sequence zero, which is
+  wire-valid. No payload carries a sequence of its own.
+- `CommandOrderScratch::try_with_capacity` owns one `(u64, u64, u64)` key slot
+  per command and never grows: `capacity` is the caller's budget, and an
+  unreservable request fails closed with `InsufficientScratch` rather than
+  aborting. `order_commands` refuses a batch larger than the scratch before it
+  fills a single key.
+- `order_commands` orders in place by `(tick, session, sequence,
+  arrival_index)`. No key consults the command kind, so a same-sequence pair of
+  different kinds resolves to the earliest arrival — the Go authority's
+  behavior in `packages/server/sim/runtime/engine_step.go`, which has no
+  kind-name tiebreaker. Session generation stays runtime ingress lifecycle data
+  and is neither filtered nor checked here.
+- The arrival key `(tick, session, arrival_index)` is validated before any
+  command moves: a duplicate is `DuplicateArrival` and leaves the caller's
+  slice byte for byte unchanged, because a caller cannot otherwise tell which
+  of the two it submitted first. A warm call allocates nothing — the slice is
+  sorted in place and the keys come from the scratch.
+- Focused entry: `cargo test -p mornlea_domain --test command_order --locked`
+  (12 cases: the red input, reverse arrival, same-kind duplicates, the same
+  sequence across sessions, two ticks, duplicate arrival with unchanged input,
+  an empty batch, exact and short scratch, scratch reuse after failure, the
+  zero-sequence rule, and the unreservable capacity).
 
 ## Observations (`src/event.rs`, `tests/runtime_contract.rs`)
 
@@ -126,6 +152,7 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
 ## Focused Verification
 
 ```bash
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test command_order --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test runtime_contract --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test runtime_contract --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test identity_values --locked
