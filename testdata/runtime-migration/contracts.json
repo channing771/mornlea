@@ -663,9 +663,15 @@
         {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        },
+        {
+          "path": "packages/server/sim/runtime/engine_step.go",
+          "sha256": "sha256:99a3aa88d7258fb6c50a407c01a6c2f68abaad8d180f215fcf6ed4b964124d1b"
         }
       ],
-      "cases": null
+      "cases": [
+        "domain.input/45/session-sequence-arrival"
+      ]
     },
     {
       "id": "kernel.mornlea_collision_resolve",
@@ -9586,6 +9592,25 @@
       "expected": {
         "path": "testdata/runtime-migration/cases/domain/command_inventory/take-crafting-output-zero-sequence.expected.json",
         "sha256": "sha256:b5def8fa7ef7efb21072ff119d639f5c98be90b8d432cfc7e6baf88881742b7e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.input/45/session-sequence-arrival",
+      "family": "domain.input",
+      "version": "45",
+      "operation": "order",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/command_order/session-sequence-arrival.input.json",
+        "sha256": "sha256:6bd9bb130217a50025c9d194a9b14e64a4a5af9d5890e448ff2ff936d8a15f1d"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/command_order/session-sequence-arrival.expected.json",
+        "sha256": "sha256:e9ee48ad8d451014981729697fe67acf9a797426d2f30cf11cbb6c7f2bd4d601"
       },
       "checkpoints": [
         "0"
