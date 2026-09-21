@@ -340,9 +340,25 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
 - `order_observations` sorts by tick, then family id
   (`observations_order_by_tick_then_family`).
 
+## Domain corpus dispatch (`tests/corpus_domain.rs`, `tests/corpus_domain/`)
+
+- Integration test `corpus_domain.rs` loads `testdata/runtime-migration/contracts.json`
+  and routes all 376 `mornlea_domain` cases into eight closed topic modules:
+  `identity_text` (31), `values` (99), `command_control` (28), `command_inventory` (54),
+  `event_player` (47), `event_world` (38), `event_inventory` (33), and `event_people` (46).
+- Every domain case is JSON-formatted and specifies operation `admit`. Single ownership
+  is enforced across the closed partition; catch-all predicates are prohibited.
+- `domain.input/45/session-sequence-arrival` is assigned to `external:runtime-authority`
+  because its expectation carries authoritative admission, deduplication, and world effects.
+- `support.rs` provides shared strict JSON parsing, primitive type readers, exact-array
+  length bounds, float-token and UUID hex parsers, normalized outcome builders, and
+  command wire-stripping comparison.
+
 ## Focused Verification
 
 ```bash
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain corpus_structure --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain support:: --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test command_order --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test runtime_contract --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test runtime_contract --locked

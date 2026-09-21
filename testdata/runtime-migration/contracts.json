@@ -9876,7 +9876,7 @@
       "checkpoints": [
         "0"
       ],
-      "rust_consumer": "mornlea_domain"
+      "rust_consumer": "external:runtime-authority"
     },
     {
       "id": "domain.event/1/combat-hit-admitted",
