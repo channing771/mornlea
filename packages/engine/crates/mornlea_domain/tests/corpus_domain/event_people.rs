@@ -278,7 +278,7 @@ struct RawRemoteSpawn {
 /// Executes one `remote-player-spawn` case.
 ///
 /// The rule is selected from the raw values in the Go validator's precedence:
-/// the identity, the display name, the dimension, the position, and finally
+/// the display name, the identity, the dimension, the position, and finally
 /// the rotation. A remote-player spawn publishes no pitch bound, so a pitch
 /// far outside the vertical look range stays publishable here.
 fn execute_remote_player_spawn(
@@ -348,20 +348,20 @@ fn execute_remote_player_spawn(
 }
 
 /// Selects the first rule one remote-player spawn breaks, in the Go
-/// validator's precedence.
+/// validator's precedence: the display name fires before the identity.
 fn remote_spawn_rejection(raw: &RawRemoteSpawn) -> Option<Rejection> {
-    if let Some(suffix) = identity_rule(raw.player_id) {
-        return Some(Rejection {
-            category: "invalid-identity",
-            rule: format!("remote_player_spawn.player_id.{suffix}"),
-            error: Some(DomainError::InvalidIdentity),
-        });
-    }
     if let Some(suffix) = display_name_rule(&raw.display_name) {
         return Some(Rejection {
             category: "invalid-value",
             rule: format!("remote_player_spawn.display_name.{suffix}"),
             error: Some(DomainError::InvalidText),
+        });
+    }
+    if let Some(suffix) = identity_rule(raw.player_id) {
+        return Some(Rejection {
+            category: "invalid-identity",
+            rule: format!("remote_player_spawn.player_id.{suffix}"),
+            error: Some(DomainError::InvalidIdentity),
         });
     }
     if let Err(error) = admit_remote_dimension(raw.dimension) {
@@ -437,9 +437,9 @@ fn construct_remote_spawn(
     subject: &str,
     raw: RawRemoteSpawn,
 ) -> Result<RemotePlayerSpawn, DispatchError> {
-    let player_id = PlayerId::try_from_bytes(raw.player_id)
-        .map_err(|error| construction_conflict(case, subject, error))?;
     let display_name = DisplayName::try_from_canonical(raw.display_name)
+        .map_err(|error| construction_conflict(case, subject, error))?;
+    let player_id = PlayerId::try_from_bytes(raw.player_id)
         .map_err(|error| construction_conflict(case, subject, error))?;
     let byte = u8::try_from(raw.dimension)
         .map_err(|_| classification_conflict(case, subject, "dimension outside the byte range"))?;
