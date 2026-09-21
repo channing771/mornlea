@@ -68,7 +68,7 @@ Dependencies: 2.5, 1.5. Own new `input/order.rs`, tests `command_order.rs`, new 
 
 Exact red input, in this arrival order at tick7: session2/seq1/arrival0 SelectHotbar(0); session1/seq9/arrival0 SelectHotbar(2); session1/seq9/arrival1 PlaceBlock(slot0); session1/seq8/arrival2 SelectHotbar(1). Output order is session1 seq8,session1 seq9 arrival0,session1 seq9 arrival1,session2 seq1. Current lexical-kind sort chooses the wrong seq9 winner; Go authority accepts the earlier SelectHotbar and discards the later same-sequence PlaceBlock. Add reverse-arrival case, same-kind duplicates, same sequence across sessions, two ticks, duplicate arrival error with unchanged input, empty batch, exact/short scratch and scratch reuse after failure. Remove the obsolete production SemanticInput/order_inputs compatibility facade and update its remaining tests here. Scope excludes changing Step or session admission.
 
-Run domain `command_order`; `go test ./packages/server/sim/runtime -run 'TestCommandOrderOracle|TestEngineSortsCommandsAndDeduplicatesSequence' -count=1`. A focused Go command involving Rust is preceded by `make rust` on a clean checkout. Case `domain.input/current/session-sequence-arrival` compares full normalized commands and selected outcome.
+Run domain `command_order`; `go test ./packages/server/sim/runtime -run 'TestCommandOrderOracle|TestEngineSortsCommandsAndDeduplicatesSequence' -count=1`. A focused Go command involving Rust is preceded by `make rust` on a clean checkout. Case `domain.input/45/session-sequence-arrival` compares full normalized commands and selected outcome.
 
 <a id="node-2-7"></a>
 
