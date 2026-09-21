@@ -19,11 +19,14 @@ mod values;
 pub use event::{
     ActiveMining, ActiveMiningParts, BlockChange, BlockChanges, BlockChangesParts, ChestState,
     ChestStateParts, ChunkSnapshot, ChunkSnapshotParts, CombatHit, CombatTarget, CommandRejection,
-    ContainerClosed, CraftingSize, CraftingState, CraftingStateParts, FAMILY_EVENT, FAMILY_INPUT,
-    ForgetChunks, ForgetChunksParts, FurnaceState, FurnaceStateParts, InventoryState,
-    InventoryStateParts, MiningState, MiningStateParts, MotionState, MotionStateParts, Observation,
-    PlacementSuccess, PlayerState, PlayerStateParts, RejectReason, Season, SurvivalState,
-    SurvivalStateParts, Weather, WorldState, WorldStateParts, order_observations,
+    CompanionDespawn, CompanionSpawn, CompanionSpawnParts, CompanionState, CompanionStateParts,
+    CompanionStates, CompanionStatesParts, ContainerClosed, CraftingSize, CraftingState,
+    CraftingStateParts, FAMILY_EVENT, FAMILY_INPUT, ForgetChunks, ForgetChunksParts, FurnaceState,
+    FurnaceStateParts, InventoryState, InventoryStateParts, MiningState, MiningStateParts,
+    MotionState, MotionStateParts, Observation, PlacementSuccess, PlayerState, PlayerStateParts,
+    RejectReason, RemotePlayerDespawn, RemotePlayerSpawn, RemotePlayerSpawnParts,
+    RemotePlayerState, RemotePlayerStateParts, RemotePlayerStates, RemotePlayerStatesParts, Season,
+    SurvivalState, SurvivalStateParts, Weather, WorldState, WorldStateParts, order_observations,
 };
 pub use identity::{
     CompanionId, DomainError, HostileId, Identities, PassiveId, PlayerId, ProjectileId,

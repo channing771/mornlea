@@ -120,6 +120,22 @@ pub enum DomainError {
     InvalidChangeOrder,
     /// The forget batch is empty or names one chunk twice.
     InvalidForgetChunks,
+    /// A state batch carries no record at all, which no authority publishes:
+    /// the batch is the delta a subscriber applies, so an empty one names
+    /// nothing to apply and the Go validator rejects a count below one.
+    EmptyStateBatch,
+    /// The batch's identities are not strictly increasing, so the batch is not
+    /// the canonical order the authority publishes and a duplicate identity
+    /// would apply one record on top of itself.
+    InvalidStateOrder,
+    /// A companion record names a dimension other than the overworld, which
+    /// the Go companion validators reject because both the companion body and
+    /// its spawn live in the overworld alone.
+    InvalidCompanionDimension,
+    /// A companion record's pitch is outside the inclusive vertical look range
+    /// the Go `validCompanionPose` predicate publishes, so it describes a look
+    /// no companion can have.
+    InvalidCompanionPitch,
 }
 
 /// Reports whether the 16 bytes are a non-zero UUIDv4 in wire order.

@@ -286,6 +286,52 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   the chest seed, the both-kinds closure, and the absent equipped-armor
   array).
 
+## Remote-player and companion observations (`src/event/people.rs`, `tests/event_people.rs`)
+
+- `RemotePlayerSpawn`/`RemotePlayerSpawnParts`, `RemotePlayerDespawn`,
+  `RemotePlayerState`/`RemotePlayerStateParts`,
+  `RemotePlayerStates`/`RemotePlayerStatesParts`,
+  `CompanionSpawn`/`CompanionSpawnParts`, `CompanionDespawn`,
+  `CompanionState`/`CompanionStateParts` and
+  `CompanionStates`/`CompanionStatesParts` are the visibility-derived
+  observations an authoritative session publishes about the other players and
+  the companions one subscriber can see. Every value rule is the Go `protocol`
+  validator's rule for the same record, so a record this crate admits is a
+  record the protocol layer admits.
+- The batch record types omit the enclosing tick because the batch owns it:
+  `server_tick` is the domain's single name for the publish tick, and the Go
+  `CompanionStates.Tick` is renamed to match rather than keeping a second name
+  for the same concept. A spawn's flattened yaw and pitch become one `look`.
+  A despawn is a checked `PlayerId` / `CompanionId`, never raw bytes.
+- The batch structs own `states: Box<[...]>` of already-validated records and
+  require a nonempty batch whose identities are strictly increasing
+  (`EmptyStateBatch`, `InvalidStateOrder`). The 7-record remote-player and
+  4-record companion wire maxima stay in the protocol layer because they are
+  transport budgets, so a domain batch of eight or five records is publishable
+  and a protocol adapter splits it.
+- The per-record rules differ by subject and the difference is the Go one: a
+  remote-player record accepts either playable dimension and any finite pitch
+  (`4.0` is publishable), while a companion record accepts the overworld alone
+  and a pitch inside the inclusive ±pi/2 range
+  (`InvalidCompanionDimension`, `InvalidCompanionPitch`). Both rules are pinned
+  per record and inside the batch.
+- No record carries a profile, a persona, mining progress or a velocity: the Go
+  `CompanionUpdate` keeps `velocity`, `ground` and `mining` for the simulation,
+  and the remote-player publication drops the survival, inventory and mining
+  fields the private player publication owns. `event_people.rs` pins the
+  absence by naming every field of every record in its seed literals, so an
+  added field fails to compile.
+- Constructor totality follows the crate convention: the despawns and the
+  remote-player records are total because every part is an already-validated
+  domain value, while the two companion records are fallible because the
+  companion dimension and pitch rules are relations a type cannot express.
+- Focused entry: `cargo test -p mornlea_domain --test event_people --locked`
+  (29 cases: the six seed records, the zero tick, the depths dimension, the
+  unbounded remote pitch, the checked identities, the empty, reversed and
+  duplicate batches, the two above-wire-maximum batches, the inclusive pitch
+  limits, the next float above the limit, the spaced companion name, and the
+  absent profile, persona, mining and velocity fields).
+
 ## Observations (`src/event.rs`, `tests/runtime_contract.rs`)
 
 - `Observation::new` publishes only `domain.input` and `domain.event`
@@ -307,4 +353,5 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_player --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_inventory --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_world --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_people --locked
 ```

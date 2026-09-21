@@ -2,6 +2,7 @@ use crate::identity::DomainError;
 
 mod inventory;
 mod outcome;
+mod people;
 mod player;
 mod world;
 
@@ -10,6 +11,12 @@ pub use inventory::{
     FurnaceState, FurnaceStateParts, InventoryState, InventoryStateParts,
 };
 pub use outcome::{CombatHit, CombatTarget, CommandRejection, PlacementSuccess, RejectReason};
+pub use people::{
+    CompanionDespawn, CompanionSpawn, CompanionSpawnParts, CompanionState, CompanionStateParts,
+    CompanionStates, CompanionStatesParts, RemotePlayerDespawn, RemotePlayerSpawn,
+    RemotePlayerSpawnParts, RemotePlayerState, RemotePlayerStateParts, RemotePlayerStates,
+    RemotePlayerStatesParts,
+};
 pub use player::{
     ActiveMining, ActiveMiningParts, MiningState, MiningStateParts, MotionState, MotionStateParts,
     PlayerState, PlayerStateParts, Season, SurvivalState, SurvivalStateParts, Weather, WorldState,
