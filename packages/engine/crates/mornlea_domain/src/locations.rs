@@ -49,6 +49,42 @@ impl ChunkPos {
     }
 }
 
+/// World block coordinate triple.
+///
+/// The coordinates are stored exactly as received with no range check, because
+/// the Go `core.BlockPos` imposes none on the records this crate ports: the
+/// player-state mining target has no coordinate rule at all, and the
+/// block-change batch is the only family that bounds Y. The type carries no
+/// invariant, so construction is total and named `new` rather than `try_new`.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct BlockPos {
+    x: i32,
+    y: i32,
+    z: i32,
+}
+
+impl BlockPos {
+    /// The all-zero block position, which is the exact target an inactive
+    /// mining block has to carry.
+    pub const ORIGIN: Self = Self { x: 0, y: 0, z: 0 };
+
+    pub fn new(x: i32, y: i32, z: i32) -> Self {
+        Self { x, y, z }
+    }
+
+    pub fn x(self) -> i32 {
+        self.x
+    }
+
+    pub fn y(self) -> i32 {
+        self.y
+    }
+
+    pub fn z(self) -> i32 {
+        self.z
+    }
+}
+
 /// Stable identity of one authoritative drop for its whole lifetime.
 ///
 /// The field declaration order is the Go `core.DropID.Compare` total order:

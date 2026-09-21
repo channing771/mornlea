@@ -1,5 +1,15 @@
 use crate::identity::DomainError;
 
+mod outcome;
+mod player;
+
+pub use outcome::{CombatHit, CombatTarget, CommandRejection, PlacementSuccess, RejectReason};
+pub use player::{
+    ActiveMining, ActiveMiningParts, MiningState, MiningStateParts, MotionState, MotionStateParts,
+    PlayerState, PlayerStateParts, Season, SurvivalState, SurvivalStateParts, Weather, WorldState,
+    WorldStateParts,
+};
+
 /// Inventory family owned by this crate for semantic player inputs.
 pub const FAMILY_INPUT: &str = "domain.input";
 /// Inventory family owned by this crate for replay observations.

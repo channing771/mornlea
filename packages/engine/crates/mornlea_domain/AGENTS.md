@@ -142,6 +142,52 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   zero-sequence rule, the unreservable capacity, and the envelope carrying
   every payload family unchanged).
 
+## Command outcomes and player publications (`src/event/outcome.rs`, `src/event/player.rs`, `tests/event_player.rs`)
+
+- `CommandRejection`, `PlacementSuccess` and `CombatHit` in `event/outcome.rs` are
+  the three results an authoritative tick publishes to the session that caused
+  them. `CommandRejection::new` and `PlacementSuccess::new` are total and keep a
+  zero sequence, which the Go wire accepts and the `/warp` rejects publish;
+  `CombatHit::try_new` rejects a zero server tick and a damage value outside
+  `1..=MAX_HEALTH`, which is the Go `CombatHit.Validate` rule.
+- `RejectReason` is the closed set of the fifteen published reasons. Its wire
+  value comes from the explicit `wire_id` match, never from a discriminant cast,
+  so reordering the variants cannot change what the wire carries; the Go
+  internal enum runs `0..14` while the wire enum runs `1..15`.
+  `CombatTarget` is the same shape for the three published kinds
+  (`try_new`/`wire_id`), and `Weather` and `Season` pin their wire IDs the same
+  way.
+- `PlayerState` in `event/player.rs` is the private per-session publication and
+  nothing else: body, survival and world scalars. It carries no inventory, no
+  crafting, no container and no equipped-armor field, because those are
+  separate records owned by later nodes; the seed literal in the test lists
+  every field explicitly, so an added field fails to compile.
+- The grouped records follow the crate's parts convention.
+  `MotionState::new` is total because its parts carry already-validated
+  `FiniteVec3`s; `SurvivalState::try_new` rejects a health, oxygen, hunger or
+  armor value above the Go `core` maximum rather than clamping it;
+  `WorldState::try_new` rejects a day phase offset at or above one display day;
+  season progress and temperature are the two full-range scalars and carry no
+  sub-range rule.
+- `MiningState::try_new` is the checked conversion of one wire mining block, not
+  an inference. An inactive block has to be entirely empty — exact zero target,
+  zero progress and requirement, false harvestable flag — because the Go
+  validator rejects an inactive block that still carries part of a swing, and a
+  client would otherwise have to guess whether a stale target still applies. An
+  active block goes through `ActiveMining::try_new`, which requires
+  `0 < progress < required` so a completed swing is published as inactive.
+- `BlockPos` in `src/locations.rs` is the world block coordinate triple. Like
+  `ChunkPos` it carries no invariant and constructs totally, because the Go
+  `core.BlockPos` imposes no coordinate rule on the player-state mining target;
+  `BlockPos::ORIGIN` is the exact zero target an inactive block has to carry.
+- Focused entry: `cargo test -p mornlea_domain --test event_player --locked`
+  (13 cases: the seed record and its field map, the absent inventory and
+  armor, the four survival maxima plus one, the offset, weather, season and
+  dimension boundaries, the full-range scalars, the non-finite pose and
+  angles, the inactive mining residue, the active mining range, the zero
+  sequences, the frozen reject-reason wire table, and the combat hit and
+  target-kind boundaries).
+
 ## Observations (`src/event.rs`, `tests/runtime_contract.rs`)
 
 - `Observation::new` publishes only `domain.input` and `domain.event`
@@ -160,4 +206,5 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test items_locations --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test command_control --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test command_inventory --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_player --locked
 ```

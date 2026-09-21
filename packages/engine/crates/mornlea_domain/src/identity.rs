@@ -38,6 +38,26 @@ pub enum DomainError {
     /// The furnace output slot is the target of a container move, while the
     /// authority reserves that slot for taking the smelting product.
     FurnaceOutputAsTarget,
+    /// A survival scalar is above the authoritative maximum the Go core
+    /// publishes for it: health, oxygen, hunger or armor points.
+    InvalidSurvivalValue,
+    /// The day phase offset is at or above the length of one display day, so
+    /// it no longer names a phase inside the cycle it shifts.
+    InvalidDayPhaseOffset,
+    /// The weather ID is outside the three published kinds.
+    InvalidWeather,
+    /// The season ID is outside the four published seasons.
+    InvalidSeason,
+    /// The wire mining block names no legal union member: an inactive block
+    /// still carries a target, a progress, a requirement or the harvestable
+    /// flag, or an active block reports a progress that is zero or not below
+    /// its requirement.
+    InvalidMiningState,
+    /// The combat hit carries a zero server tick or a damage value outside
+    /// `1..=MAX_HEALTH`, so it confirms no landed hit.
+    InvalidCombatHit,
+    /// The combat target ID is outside the three published kinds.
+    InvalidCombatTarget,
     /// The sequence is zero on a command that has to take part in command
     /// acknowledgement, which is the one sequenced intent whose wire sequence
     /// may not be zero.

@@ -15,7 +15,12 @@ mod locations;
 mod text;
 mod values;
 
-pub use event::{FAMILY_EVENT, FAMILY_INPUT, Observation, order_observations};
+pub use event::{
+    ActiveMining, ActiveMiningParts, CombatHit, CombatTarget, CommandRejection, FAMILY_EVENT,
+    FAMILY_INPUT, MiningState, MiningStateParts, MotionState, MotionStateParts, Observation,
+    PlacementSuccess, PlayerState, PlayerStateParts, RejectReason, Season, SurvivalState,
+    SurvivalStateParts, Weather, WorldState, WorldStateParts, order_observations,
+};
 pub use identity::{
     CompanionId, DomainError, HostileId, Identities, PassiveId, PlayerId, ProjectileId,
     ReplayIdentity,
@@ -28,7 +33,7 @@ pub use input::{
 pub use items::{
     ItemStack, durability_max, is_smelting_product, item_stack_limit, smelting_output,
 };
-pub use locations::{ChunkPos, ContainerKind, ContainerRef, DropId};
+pub use locations::{BlockPos, ChunkPos, ContainerKind, ContainerRef, DropId};
 pub use text::{CommandText, CompanionName, DisplayName, SpeechText};
 pub use values::{Dimension, FiniteVec3, HotbarSlot, LookAngles};
 
