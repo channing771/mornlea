@@ -472,7 +472,11 @@ fn load_cases_filtered(
             let ver = v.as_str().ok_or_else(|| CorpusError {
                 message: format!("family {fid} supported_version must be string"),
             })?;
-            supported_versions.insert(ver.to_string());
+            if !supported_versions.insert(ver.to_string()) {
+                return Err(CorpusError {
+                    message: format!("family {fid} contains duplicate supported_version: {ver}"),
+                });
+            }
         }
 
         let mut declared_cases = HashSet::new();
@@ -482,7 +486,11 @@ fn load_cases_filtered(
                     let cid = c.as_str().ok_or_else(|| CorpusError {
                         message: format!("family {fid} case element must be string"),
                     })?;
-                    declared_cases.insert(cid.to_string());
+                    if !declared_cases.insert(cid.to_string()) {
+                        return Err(CorpusError {
+                            message: format!("family {fid} contains duplicate case id: {cid}"),
+                        });
+                    }
                 }
             } else if !cases_val.is_null() {
                 return Err(CorpusError {

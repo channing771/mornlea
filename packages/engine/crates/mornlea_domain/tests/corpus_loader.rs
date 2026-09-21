@@ -497,6 +497,18 @@ fn rejects_table_cases() {
                 c.checkpoints = vec!["0x10"];
             },
         },
+        TableTestCase {
+            name: "duplicate_family_case",
+            mutate: |c| {
+                c.family_cases = vec!["domain.test/v1/case-1", "domain.test/v1/case-1"];
+            },
+        },
+        TableTestCase {
+            name: "duplicate_supported_version",
+            mutate: |c| {
+                c.supported_versions = vec!["v1", "v1"];
+            },
+        },
     ];
 
     for tc in cases {
