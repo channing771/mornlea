@@ -1,0 +1,111 @@
+{
+  "kind": "error",
+  "category": "invalid-enum",
+  "fields": {
+    "chunk": [
+      3,
+      -5
+    ],
+    "dimension": 2,
+    "revision": "7",
+    "rule": "chunk_snapshot.dimension",
+    "sections": [
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      }
+    ]
+  }
+}

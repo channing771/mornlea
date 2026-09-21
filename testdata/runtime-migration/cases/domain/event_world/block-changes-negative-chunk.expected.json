@@ -1,0 +1,31 @@
+{
+  "kind": "ok",
+  "category": "block-changes",
+  "fields": {
+    "base_revision": "1",
+    "changes": [
+      {
+        "block": 2,
+        "position": [
+          -16,
+          -64,
+          -16
+        ]
+      },
+      {
+        "block": 3,
+        "position": [
+          -1,
+          -64,
+          -1
+        ]
+      }
+    ],
+    "chunk": [
+      -1,
+      -1
+    ],
+    "dimension": 0,
+    "new_revision": "2"
+  }
+}

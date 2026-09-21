@@ -1,0 +1,156 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "chunk-snapshot",
+  "dimension": 0,
+  "chunk": [
+    3,
+    -5
+  ],
+  "revision": 7,
+  "sections": [
+    {
+      "storage": 0,
+      "single": 90,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    },
+    {
+      "storage": 0,
+      "single": 0,
+      "palette": null,
+      "packed": null
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "chunks": [],
+    "dimension": 0,
+    "rule": "forget_chunks.nonempty_positions"
+  }
+}

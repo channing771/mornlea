@@ -49,6 +49,10 @@ var goFamilyOperations = map[string]string{
 // registered in `goFamilyOperations` cannot select the family; the family
 // itself does, and a family with no producer is a hard error rather than a
 // silently skipped case.
+//
+// The `domain.event` family is shared by two producers, so its case routes
+// through `runDomainEvent`, which selects the producer by the rule the case
+// names.
 func runDomainAdmit(c CaseSpec, input []byte) (Outcome, []byte, error) {
 	switch c.Family {
 	case domainValuesFamily:
@@ -60,7 +64,7 @@ func runDomainAdmit(c CaseSpec, input []byte) (Outcome, []byte, error) {
 	case domainCommandInventoryFamily:
 		return runDomainCommandInventory(c, input)
 	case domainEventPlayerFamily:
-		return runDomainEventPlayer(c, input)
+		return runDomainEvent(c, input)
 	default:
 		return Outcome{}, nil, fmt.Errorf("runtime-oracle: case %s names admission family %q, which has no Go producer", c.ID, c.Family)
 	}

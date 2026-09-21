@@ -1,0 +1,15 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "forget-chunks",
+  "dimension": 0,
+  "chunks": [
+    [
+      0,
+      0
+    ],
+    [
+      1,
+      -2
+    ]
+  ]
+}
