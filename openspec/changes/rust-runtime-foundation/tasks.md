@@ -28,7 +28,7 @@ Execution order follows direct dependencies, not numeric headings: evidence prim
 - [x] 2.5 [Inventory, container and chat intents](plans/02-domain.md#node-2-5). Direct prerequisites: 2.3, 2.4. Execute the linked packet's named red/green and integration commands.
 - [x] 2.6 [Envelope ordering and Go authority counterexample](plans/02-domain.md#node-2-6). Direct prerequisites: 2.5, 1.5. Execute the linked packet's named red/green and integration commands.
 - [x] 2.7 [Command outcomes and player publications](plans/02-domain.md#node-2-7). Direct prerequisites: 2.2, 1.5. Execute the linked packet's named red/green and integration commands.
-- [ ] 2.8 [Compact chunk observations](plans/02-domain.md#node-2-8). Direct prerequisites: 2.2. Execute the linked packet's named red/green and integration commands.
+- [x] 2.8 [Compact chunk observations](plans/02-domain.md#node-2-8). Direct prerequisites: 2.2. Execute the linked packet's named red/green and integration commands.
 - [ ] 2.9 [Inventory and container publications](plans/02-domain.md#node-2-9). Direct prerequisites: 2.3. Execute the linked packet's named red/green and integration commands.
 - [ ] 2.10 [Remote-player and companion observations](plans/02-domain.md#node-2-10). Direct prerequisites: 2.2. Execute the linked packet's named red/green and integration commands.
 - [ ] 2.11 [Hostile and passive observations](plans/02-domain.md#node-2-11). Direct prerequisites: 2.2. Execute the linked packet's named red/green and integration commands.
