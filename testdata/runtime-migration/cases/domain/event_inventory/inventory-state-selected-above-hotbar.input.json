@@ -1,0 +1,191 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "inventory-state",
+  "selected": 9,
+  "hotbar": [
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    }
+  ],
+  "backpack": [
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    }
+  ],
+  "slots": [],
+  "items": []
+}

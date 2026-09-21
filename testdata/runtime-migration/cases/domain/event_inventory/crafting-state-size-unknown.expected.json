@@ -1,0 +1,60 @@
+{
+  "kind": "error",
+  "category": "invalid-enum",
+  "fields": {
+    "output": {
+      "count": 0,
+      "durability": 0,
+      "item": 0
+    },
+    "rule": "crafting_state.size",
+    "size": "unknown",
+    "slots": [
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      }
+    ]
+  }
+}

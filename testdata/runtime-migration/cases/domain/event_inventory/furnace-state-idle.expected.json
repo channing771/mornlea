@@ -1,0 +1,32 @@
+{
+  "kind": "ok",
+  "category": "furnace-state",
+  "fields": {
+    "burn_ticks": 0,
+    "container": {
+      "chunk": [
+        2,
+        -3
+      ],
+      "generation": 9,
+      "kind": "furnace",
+      "slot": 31
+    },
+    "fuel": {
+      "count": 0,
+      "durability": 0,
+      "item": 0
+    },
+    "input": {
+      "count": 0,
+      "durability": 0,
+      "item": 0
+    },
+    "output": {
+      "count": 0,
+      "durability": 0,
+      "item": 0
+    },
+    "progress_ticks": 0
+  }
+}

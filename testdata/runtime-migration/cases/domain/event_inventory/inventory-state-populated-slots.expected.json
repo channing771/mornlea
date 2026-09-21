@@ -1,0 +1,191 @@
+{
+  "kind": "ok",
+  "category": "inventory-state",
+  "fields": {
+    "backpack": [
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 1,
+        "durability": 0,
+        "item": 7
+      }
+    ],
+    "hotbar": [
+      {
+        "count": 64,
+        "durability": 0,
+        "item": 1
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 1,
+        "durability": 0,
+        "item": 5
+      }
+    ],
+    "selected": 0
+  }
+}

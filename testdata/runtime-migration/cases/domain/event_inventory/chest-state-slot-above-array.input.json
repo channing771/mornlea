@@ -1,0 +1,153 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "chest-state",
+  "hotbar": [],
+  "backpack": [],
+  "slots": [],
+  "container": {
+    "kind": 1,
+    "chunk": [
+      -4,
+      5
+    ],
+    "slot": 16,
+    "generation": 4
+  },
+  "items": [
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 1,
+      "count": 64,
+      "durability": 0
+    }
+  ]
+}

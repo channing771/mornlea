@@ -1,0 +1,153 @@
+{
+  "kind": "error",
+  "category": "invalid-enum",
+  "fields": {
+    "container": {
+      "chunk": [
+        2,
+        -3
+      ],
+      "generation": 9,
+      "kind": "furnace",
+      "slot": 31
+    },
+    "items": [
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 64,
+        "durability": 0,
+        "item": 1
+      }
+    ],
+    "rule": "chest_state.ref_kind"
+  }
+}

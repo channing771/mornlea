@@ -1787,10 +1787,10 @@ func TestDomainOracle_event_world(t *testing.T) {
 }
 
 // runDomainEvent routes one `domain.event` case to the producer that owns its
-// rule. The family is shared by the world observations and the player and
-// outcome records, so the rule name is the only discriminator the manifest
-// carries, and a rule no producer names fails the run rather than falling back
-// to one that cannot execute it.
+// rule. The family is shared by the world observations, the player and outcome
+// records and the inventory and container publications, so the rule name is
+// the only discriminator the manifest carries, and a rule no producer names
+// fails the run rather than falling back to one that cannot execute it.
 func runDomainEvent(c CaseSpec, input []byte) (Outcome, []byte, error) {
 	envelope, err := domainEventDecodeRule(input)
 	if err != nil {
@@ -1801,6 +1801,10 @@ func runDomainEvent(c CaseSpec, input []byte) (Outcome, []byte, error) {
 		return runDomainEventWorld(c, input)
 	case "player-state", "command-rejected", "place-block-succeeded", "combat-hit":
 		return runDomainEventPlayer(c, input)
+	case domainEventInventoryRuleInventory, domainEventInventoryRuleCrafting,
+		domainEventInventoryRuleFurnace, domainEventInventoryRuleChest,
+		domainEventInventoryRuleClosed:
+		return runDomainEventInventory(c, input)
 	default:
 		return Outcome{}, nil, fmt.Errorf("runtime-oracle: case %s names unknown rule %q", c.ID, envelope.Rule)
 	}

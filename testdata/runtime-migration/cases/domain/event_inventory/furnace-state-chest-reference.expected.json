@@ -1,0 +1,33 @@
+{
+  "kind": "error",
+  "category": "invalid-enum",
+  "fields": {
+    "burn_ticks": 1600,
+    "container": {
+      "chunk": [
+        -4,
+        5
+      ],
+      "generation": 4,
+      "kind": "chest",
+      "slot": 15
+    },
+    "fuel": {
+      "count": 1,
+      "durability": 0,
+      "item": 5
+    },
+    "input": {
+      "count": 1,
+      "durability": 0,
+      "item": 6
+    },
+    "output": {
+      "count": 1,
+      "durability": 0,
+      "item": 7
+    },
+    "progress_ticks": 199,
+    "rule": "furnace_state.ref_kind"
+  }
+}

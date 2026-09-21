@@ -1,0 +1,59 @@
+{
+  "kind": "ok",
+  "category": "crafting-state",
+  "fields": {
+    "output": {
+      "count": 0,
+      "durability": 0,
+      "item": 0
+    },
+    "size": "workbench",
+    "slots": [
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 1,
+        "durability": 0,
+        "item": 1
+      }
+    ]
+  }
+}
