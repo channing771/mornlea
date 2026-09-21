@@ -50,9 +50,11 @@ impl HotbarSlot {
 pub struct FiniteVec3([f32; 3]);
 
 impl FiniteVec3 {
+    /// Reports `NonFiniteValue` for a NaN or infinite component; rotation
+    /// keeps the narrower `NonFiniteRotation` in `LookAngles`.
     pub fn try_new(components: [f32; 3]) -> Result<Self, DomainError> {
         if !components.iter().all(|component| component.is_finite()) {
-            return Err(DomainError::NonFiniteRotation);
+            return Err(DomainError::NonFiniteValue);
         }
         Ok(Self(components))
     }

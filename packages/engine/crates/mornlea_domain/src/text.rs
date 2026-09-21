@@ -72,12 +72,43 @@ fn has_surrounding_whitespace(text: &str) -> bool {
 /// scalars, at most 128 bytes, no surrounding whitespace, and no control
 /// character. Normalization is deliberately not performed here; the caller
 /// trims first and this rule decides whether the result is publishable.
+///
+/// The scalar inspection is routed through the private visitor seam so a test
+/// can observe how many scalars a rejection actually inspects. `on_scalar` is
+/// invoked once per inspected scalar; the admitted set is unchanged.
 fn is_canonical_display_name(text: &str) -> bool {
-    let scalars = text.chars().count();
-    (1..=DISPLAY_NAME_MAX_SCALARS).contains(&scalars)
-        && text.len() <= DISPLAY_NAME_MAX_BYTES
-        && !has_surrounding_whitespace(text)
-        && !text.chars().any(is_pinned_control)
+    is_canonical_display_name_with_visit(text, |_| {})
+}
+
+/// Visitor variant of the display-name rule: identical admission result, with
+/// `on_scalar` invoked once per scalar the rule inspects.
+///
+/// The empty and byte checks run before any `chars()` iterator is built, so an
+/// oversized input costs one length compare instead of a scan; the scalar
+/// count, surrounding-whitespace and control checks then share one bounded
+/// scan because the byte bound caps the input length.
+fn is_canonical_display_name_with_visit(text: &str, mut on_scalar: impl FnMut(char)) -> bool {
+    if text.is_empty() || text.len() > DISPLAY_NAME_MAX_BYTES {
+        return false;
+    }
+    let mut scalars = 0usize;
+    let mut first_scalar = None;
+    let mut last_scalar = None;
+    let mut has_control = false;
+    for ch in text.chars() {
+        on_scalar(ch);
+        if first_scalar.is_none() {
+            first_scalar = Some(ch);
+        }
+        last_scalar = Some(ch);
+        if is_pinned_control(ch) {
+            has_control = true;
+        }
+        scalars += 1;
+    }
+    let surrounded = first_scalar.is_some_and(is_pinned_whitespace)
+        || last_scalar.is_some_and(is_pinned_whitespace);
+    (1..=DISPLAY_NAME_MAX_SCALARS).contains(&scalars) && !surrounded && !has_control
 }
 
 /// Applies the Go bounded-text admission rule to a canonical text: at least
@@ -164,5 +195,34 @@ impl SpeechText {
 
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An oversized display name must be rejected by the byte bound before a
+    /// single scalar is inspected, even when the text also carries a control
+    /// scalar a later rule would reject. The visitor count is the observable:
+    /// zero means the scan never ran.
+    #[test]
+    fn oversized_display_name_skips_scalar_scan() {
+        let oversized = format!("{}a\u{0001}", "a".repeat(128));
+        assert!(oversized.len() > DISPLAY_NAME_MAX_BYTES);
+        let visited = core::cell::Cell::new(0usize);
+        let admitted = is_canonical_display_name_with_visit(&oversized, |ch| {
+            visited.set(visited.get() + 1);
+            let _ = ch;
+        });
+        assert!(
+            !admitted,
+            "an oversized name is not a canonical display name"
+        );
+        assert_eq!(
+            visited.get(),
+            0,
+            "the byte bound must reject before any scalar is inspected"
+        );
     }
 }

@@ -8,9 +8,10 @@
 //! observes. Every rule below is the Go `protocol` validator's rule for the
 //! same record, with two deliberate differences: the wire's section `Y` field
 //! is its array index here, so the domain value carries no `Y` that could
-//! disagree with its position, and the 4096 wire batch caps stay in the
-//! protocol layer because they are transport budgets rather than semantic
-//! relations.
+//! disagree with its position, and the protocol packet ceilings stay in the
+//! protocol layer as transport budgets, while this layer enforces only the
+//! shared `MAX_SEMANTIC_BATCH_RECORDS` semantic work cap before any content
+//! relation runs.
 //!
 //! The conversion discipline is preservation: a codec conversion copies the
 //! sections and the change order exactly as they are, and never recompresses a
@@ -146,9 +147,14 @@ impl BlockChanges {
     ///
     /// An empty batch is admitted: a tick that moves an item but writes no
     /// block still advances the revision, so the empty batch is the revision
-    /// barrier the Go validator allows. The 4096 wire cap is not checked here,
-    /// because it is a transport budget the protocol layer applies.
+    /// barrier the Go validator allows. The shared
+    /// `MAX_SEMANTIC_BATCH_RECORDS` work cap is checked before every content
+    /// relation, and the protocol packet's own change-count ceiling stays a
+    /// transport budget applied above this layer.
     pub fn try_new(parts: BlockChangesParts) -> Result<Self, DomainError> {
+        if parts.changes.len() > crate::MAX_SEMANTIC_BATCH_RECORDS {
+            return Err(DomainError::BatchTooLarge);
+        }
         if parts.base_revision == 0
             || parts.base_revision == u64::MAX
             || parts.new_revision != parts.base_revision + 1
@@ -221,13 +227,19 @@ impl ForgetChunks {
     /// The order is preserved exactly as given because the protocol does not
     /// demand a sorted batch: the authority groups and sorts when it publishes,
     /// so a replay has to observe the sequence the record carried. The
-    /// uniqueness check therefore sorts a copy rather than the batch itself.
-    /// The 4096 wire cap is a protocol budget and is not checked here.
+    /// uniqueness check therefore sorts a fallible scratch copy rather than
+    /// the batch itself, and the shared `MAX_SEMANTIC_BATCH_RECORDS` work cap
+    /// is checked before every content relation; the protocol packet's own
+    /// chunk-count ceiling stays a transport budget applied above this layer.
     pub fn try_new(parts: ForgetChunksParts) -> Result<Self, DomainError> {
+        if parts.chunks.len() > crate::MAX_SEMANTIC_BATCH_RECORDS {
+            return Err(DomainError::BatchTooLarge);
+        }
         if parts.chunks.is_empty() {
             return Err(DomainError::InvalidForgetChunks);
         }
-        let mut ordered: Vec<ChunkPos> = parts.chunks.to_vec();
+        let mut ordered = reserve_sorted_scratch(parts.chunks.len())?;
+        ordered.extend_from_slice(&parts.chunks);
         ordered.sort_unstable();
         if ordered.windows(2).any(|pair| pair[0] == pair[1]) {
             return Err(DomainError::InvalidForgetChunks);
@@ -245,5 +257,39 @@ impl ForgetChunks {
     /// The retired chunks in the order the record carried them.
     pub fn chunks(&self) -> &[ChunkPos] {
         &self.chunks
+    }
+}
+
+/// Reserves the fallible scratch buffer the forget-batch uniqueness scan
+/// sorts into, one slot per chunk.
+///
+/// The reservation is checked before any copy or sort: a failed reserve maps
+/// to `Allocation` and the caller publishes nothing, so an admitted batch
+/// never pays proportional work for a capacity the process cannot back. The
+/// borrowed input is never mutated and the scratch is not returned to
+/// production callers.
+fn reserve_sorted_scratch(count: usize) -> Result<Vec<ChunkPos>, DomainError> {
+    let mut scratch: Vec<ChunkPos> = Vec::new();
+    scratch
+        .try_reserve_exact(count)
+        .map_err(|_| DomainError::Allocation)?;
+    Ok(scratch)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `usize::MAX` slots can never back a real allocation, so the reserve
+    /// fails deterministically with the typed `Allocation` error instead of
+    /// aborting; ordinary callers cannot request that size because the
+    /// semantic batch cap rejects it first, so this is a unit-level pin of
+    /// the error mapping rather than a production hook.
+    #[test]
+    fn allocation_failure_maps_to_typed_error() {
+        assert_eq!(
+            reserve_sorted_scratch(usize::MAX),
+            Err(DomainError::Allocation)
+        );
     }
 }

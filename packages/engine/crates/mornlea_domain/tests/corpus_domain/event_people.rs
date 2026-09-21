@@ -375,7 +375,7 @@ fn remote_spawn_rejection(raw: &RawRemoteSpawn) -> Option<Rejection> {
         return Some(Rejection {
             category: "invalid-value",
             rule: "remote_player_spawn.position_finite".to_string(),
-            error: Some(DomainError::NonFiniteRotation),
+            error: Some(DomainError::NonFiniteValue),
         });
     }
     if !raw.yaw.is_finite() || !raw.pitch.is_finite() {
@@ -676,7 +676,7 @@ fn remote_states_rejection(states: &[RawRemoteState]) -> Option<Rejection> {
             return Some(Rejection {
                 category: "invalid-value",
                 rule: format!("remote_player_states.player_{index}.position_finite"),
-                error: Some(DomainError::NonFiniteRotation),
+                error: Some(DomainError::NonFiniteValue),
             });
         }
         if !state.yaw.is_finite() || !state.pitch.is_finite() {
@@ -920,7 +920,7 @@ fn companion_spawn_rejection(raw: &RawCompanionSpawn) -> Option<Rejection> {
         return Some(Rejection {
             category: "invalid-value",
             rule: "companion_spawn.position_finite".to_string(),
-            error: Some(DomainError::NonFiniteRotation),
+            error: Some(DomainError::NonFiniteValue),
         });
     }
     if !raw.yaw.is_finite() || !raw.pitch.is_finite() {
@@ -1188,7 +1188,7 @@ fn companion_states_rejection(states: &[RawCompanionState]) -> Option<Rejection>
             return Some(Rejection {
                 category: "invalid-value",
                 rule: format!("companion_states.state_{index}.position_finite"),
-                error: Some(DomainError::NonFiniteRotation),
+                error: Some(DomainError::NonFiniteValue),
             });
         }
         if !state.yaw.is_finite() || !state.pitch.is_finite() {

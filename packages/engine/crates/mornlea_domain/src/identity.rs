@@ -136,6 +136,18 @@ pub enum DomainError {
     /// the Go `validCompanionPose` predicate publishes, so it describes a look
     /// no companion can have.
     InvalidCompanionPitch,
+    /// A position or velocity vector carries a NaN or infinite component, so
+    /// no replay can reproduce the body state it would describe. Rotation has
+    /// its own narrower error in `NonFiniteRotation`.
+    NonFiniteValue,
+    /// A semantic batch carries more than `MAX_SEMANTIC_BATCH_RECORDS`
+    /// records, so construction rejects it before any per-record scan, copy,
+    /// or sort spends work proportional to the oversized input.
+    BatchTooLarge,
+    /// A construction scratch could not reserve the capacity the batch needs,
+    /// so the constructor publishes nothing rather than a partially built
+    /// value.
+    Allocation,
 }
 
 /// Reports whether the 16 bytes are a non-zero UUIDv4 in wire order.

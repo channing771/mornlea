@@ -42,6 +42,34 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   3000 and U+0000..001F, U+007F..009F), never a Unicode crate, so behavior
   cannot drift with a Unicode-version bump and the crate's empty production
   dependency set holds. U+200B stays accepted, as in Go; there is no NFC.
+- The display-name admission rule routes its scalar inspection through the
+  private `is_canonical_display_name_with_visit` seam
+  (`oversized_display_name_skips_scalar_scan` in `src/text.rs`): the empty and
+  128-byte checks run before any `chars()` iterator is built, so an oversized
+  input is rejected without inspecting a single scalar. `CompanionName`
+  inherits that byte-first gate before its embedded-whitespace scan.
+
+## Resource bounds (`src/lib.rs`, `src/event/world.rs`, `src/event/people.rs`, `tests/resource_bounds.rs`)
+
+- `MAX_SEMANTIC_BATCH_RECORDS` (`4096`) is the shared semantic work cap for
+  `BlockChanges`, `ForgetChunks`, `RemotePlayerStates` and `CompanionStates`.
+  Each constructor checks it at its first line and reports `BatchTooLarge`
+  before every content relation, so an oversized input costs a length compare
+  instead of proportional scans, copies or sorts. It is a work bound, not a
+  wire budget: the protocol packet ceilings (4096 block changes and forget
+  chunks, 7 remote-player records, 4 companion records) stay transport budgets
+  in `mornlea_protocol`.
+- `DomainError::NonFiniteValue` is the vector finiteness error
+  (`FiniteVec3::try_new`); `NonFiniteRotation` stays the rotation error owned
+  by `LookAngles::try_new`. `DomainError::Allocation` is the typed mapping of
+  a failed scratch reservation: `ForgetChunks` sorts a `try_reserve_exact`
+  scratch (`reserve_sorted_scratch` in `event/world.rs`,
+  `allocation_failure_maps_to_typed_error`) and never copies, sorts or
+  publishes before the reserve succeeds.
+- Precedence is pinned by `tests/resource_bounds.rs`: every batch type admits
+  a 4096-record input and rejects a 4097-record input that also violates a
+  later content rule with `BatchTooLarge`, proving the gate precedes the
+  content scan. The empty block-change revision barrier stays admitted.
 
 ## Item, drop and container values (`src/items.rs`, `src/locations.rs`, `tests/items_locations.rs`)
 
@@ -63,7 +91,9 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   Absence is `Option<ContainerRef>`; there is no invalid domain reference.
 - `ChunkPos` and `FiniteVec3`/`LookAngles` are plain coordinates and finite
   vectors: private fields, getters, no normalization, no clamping, and exact
-  `f32` bit preservation including negative zero.
+  `f32` bit preservation including negative zero. `FiniteVec3::try_new`
+  reports a non-finite component as `NonFiniteValue`, while `LookAngles`
+  keeps the narrower `NonFiniteRotation` for its own angles.
 
 ## Value and input bounds (`src/values.rs`, `src/input.rs`, `src/input/control.rs`, `src/input/inventory.rs`, `src/input/chat.rs`, `tests/runtime_contract.rs`, `tests/command_control.rs`, `tests/command_inventory.rs`)
 
@@ -224,10 +254,13 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   `base + 1`), the world Y span, the announced-chunk membership and the
   strictly increasing chunk-ordered index, and admits the empty batch as the
   revision barrier the Go validator allows. `ForgetChunks` requires a nonempty
-  batch of distinct chunks and preserves the input order, sorting a copy for
-  the uniqueness check so the recorded sequence survives. The 4096 wire batch
-  caps and the wire-only section Y stay in the protocol layer, because they
-  are transport budgets and layout fields rather than semantic relations.
+  batch of distinct chunks and preserves the input order, sorting a fallible
+  reserved scratch for the uniqueness check so the recorded sequence survives
+  and a failed reservation maps to `Allocation` without publishing. The
+  protocol packet ceilings and the wire-only section Y stay in the protocol
+  layer, because they are transport budgets and layout fields rather than
+  semantic relations; the domain adds only the shared
+  `MAX_SEMANTIC_BATCH_RECORDS` work cap ahead of every content relation.
 - Focused entry: `cargo test -p mornlea_domain --test event_world --locked`
   (17 cases: single air and the sentinel, the 4-bit two-entry palette with one
   cell set, the 8-bit ninety-ID palette, direct 15-bit block 89 at the last
@@ -304,11 +337,12 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   for the same concept. A spawn's flattened yaw and pitch become one `look`.
   A despawn is a checked `PlayerId` / `CompanionId`, never raw bytes.
 - The batch structs own `states: Box<[...]>` of already-validated records and
-  require a nonempty batch whose identities are strictly increasing
-  (`EmptyStateBatch`, `InvalidStateOrder`). The 7-record remote-player and
-  4-record companion wire maxima stay in the protocol layer because they are
-  transport budgets, so a domain batch of eight or five records is publishable
-  and a protocol adapter splits it.
+  require a batch inside the shared `MAX_SEMANTIC_BATCH_RECORDS` work cap
+  (`BatchTooLarge`), nonempty (`EmptyStateBatch`), and strictly increasing by
+  identity (`InvalidStateOrder`). The 7-record remote-player and 4-record
+  companion wire maxima stay in the protocol layer because they are transport
+  budgets, so a domain batch of eight or five records is still publishable and
+  a protocol adapter splits it.
 - The per-record rules differ by subject and the difference is the Go one: a
   remote-player record accepts either playable dimension and any finite pitch
   (`4.0` is publishable), while a companion record accepts the overworld alone
@@ -357,6 +391,7 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
 ## Focused Verification
 
 ```bash
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test resource_bounds --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain corpus_structure --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain support:: --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test command_order --locked

@@ -311,15 +311,15 @@ fn event_player_player_state_rejects_non_finite_pose_and_angles() {
     // the failure is the vector and angle constructors', pinned here.
     assert_eq!(
         FiniteVec3::try_new([f32::NAN, 0.0, 0.0]),
-        Err(DomainError::NonFiniteRotation)
+        Err(DomainError::NonFiniteValue)
     );
     assert_eq!(
         FiniteVec3::try_new([0.0, f32::INFINITY, 0.0]),
-        Err(DomainError::NonFiniteRotation)
+        Err(DomainError::NonFiniteValue)
     );
     assert_eq!(
         FiniteVec3::try_new([0.0, 0.0, f32::NEG_INFINITY]),
-        Err(DomainError::NonFiniteRotation)
+        Err(DomainError::NonFiniteValue)
     );
     assert_eq!(
         LookAngles::try_new(f32::NAN, 0.0),

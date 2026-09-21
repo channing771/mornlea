@@ -388,20 +388,19 @@ fn player_state_rejection(raw: &RawPlayerState) -> Option<Rejection> {
         });
     }
     if raw.position.iter().any(|value| !value.is_finite()) {
-        // Vector finiteness currently reports `NonFiniteRotation`; the
-        // bounds node retargets it to `NonFiniteValue` without changing the
-        // normalized rule.
+        // Vector finiteness reports `NonFiniteValue`; the rotation slots keep
+        // the narrower `NonFiniteRotation` error.
         return Some(Rejection {
             category: "invalid-value",
             rule: "player_state.finite_position",
-            error: Some(DomainError::NonFiniteRotation),
+            error: Some(DomainError::NonFiniteValue),
         });
     }
     if raw.velocity.iter().any(|value| !value.is_finite()) {
         return Some(Rejection {
             category: "invalid-value",
             rule: "player_state.finite_velocity",
-            error: Some(DomainError::NonFiniteRotation),
+            error: Some(DomainError::NonFiniteValue),
         });
     }
     if !raw.yaw.is_finite() || !raw.pitch.is_finite() {

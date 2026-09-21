@@ -11,8 +11,9 @@
 //! so a record this crate admits is a record the protocol layer admits and the
 //! other way around. Four Go wire rules deliberately stay out of this file.
 //! The 7-record remote-player batch maximum and the 4-record companion batch
-//! maximum are transport budgets the protocol layer applies, so the domain
-//! requires only a nonempty batch whose identities are strictly increasing.
+//! maximum are transport budgets the protocol layer applies; the domain bounds
+//! only semantic work with the shared `MAX_SEMANTIC_BATCH_RECORDS` cap, then
+//! requires a nonempty batch whose identities are strictly increasing.
 //! The publish tick a record carries is the enclosing batch's tick, renamed
 //! `server_tick` so the one name means the one concept across the crate. And
 //! the flattened yaw and pitch are one already-validated `LookAngles` named
@@ -240,8 +241,13 @@ impl RemotePlayerStates {
     /// The 7-record wire maximum is not checked here: it is a transport budget
     /// the protocol layer applies when it splits a batch for a frame, and a
     /// domain rule refusing eight records would disagree with an authority
-    /// that publishes them in two frames.
+    /// that publishes them in two frames. The shared
+    /// `MAX_SEMANTIC_BATCH_RECORDS` work cap is the domain's own bound and is
+    /// checked before the emptiness and identity-order relations.
     pub fn try_new(parts: RemotePlayerStatesParts) -> Result<Self, DomainError> {
+        if parts.states.len() > crate::MAX_SEMANTIC_BATCH_RECORDS {
+            return Err(DomainError::BatchTooLarge);
+        }
         if parts.states.is_empty() {
             return Err(DomainError::EmptyStateBatch);
         }
@@ -465,8 +471,13 @@ impl CompanionStates {
     /// The 4-record wire maximum is not checked here: it is the companion
     /// activity limit the protocol layer applies, and a domain rule refusing a
     /// fifth record would disagree with an authority that publishes the
-    /// companions it has in more than one frame.
+    /// companions it has in more than one frame. The shared
+    /// `MAX_SEMANTIC_BATCH_RECORDS` work cap is the domain's own bound and is
+    /// checked before the emptiness and identity-order relations.
     pub fn try_new(parts: CompanionStatesParts) -> Result<Self, DomainError> {
+        if parts.states.len() > crate::MAX_SEMANTIC_BATCH_RECORDS {
+            return Err(DomainError::BatchTooLarge);
+        }
         if parts.states.is_empty() {
             return Err(DomainError::EmptyStateBatch);
         }

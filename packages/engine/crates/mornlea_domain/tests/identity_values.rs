@@ -144,15 +144,15 @@ fn identity_values_hotbar_slot_closed_range_is_zero_through_eight() {
 fn identity_values_finite_vec3_rejects_non_finite_components() {
     assert_eq!(
         FiniteVec3::try_new([1.0, f32::NAN, 0.0]),
-        Err(DomainError::NonFiniteRotation)
+        Err(DomainError::NonFiniteValue)
     );
     assert_eq!(
         FiniteVec3::try_new([f32::INFINITY, 0.0, 0.0]),
-        Err(DomainError::NonFiniteRotation)
+        Err(DomainError::NonFiniteValue)
     );
     assert_eq!(
         FiniteVec3::try_new([0.0, 0.0, f32::NEG_INFINITY]),
-        Err(DomainError::NonFiniteRotation)
+        Err(DomainError::NonFiniteValue)
     );
 
     let vector = FiniteVec3::try_new([1.0, -2.0, 0.5]).expect("finite vector");
