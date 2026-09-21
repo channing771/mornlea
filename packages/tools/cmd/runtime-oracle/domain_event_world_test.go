@@ -133,6 +133,12 @@ var updateDomainEventWorldCorpus = flag.Bool(
 // carries its storage kind plus the fields that kind names, so an absent field
 // and an explicit zero stay distinguishable: a zero palette entry and a zero
 // packed word are both meaningful values.
+//
+// The two batch arrays keep the same discipline at the record level: a case
+// that carries a batch serializes it explicitly, an empty batch included, and a
+// case that carries no batch at all omits the key. `MarshalJSON` owns that
+// distinction so a replay consumer never has to read a missing key as an empty
+// batch.
 type domainEventWorldInput struct {
 	Consumer string `json:"consumer"`
 	Rule     string `json:"rule"`
@@ -151,6 +157,43 @@ type domainEventWorldInput struct {
 
 	// Forget batch fields, which retire whole chunk columns.
 	Chunks [][]int32 `json:"chunks,omitempty"`
+}
+
+// domainEventWorldInputAlias is `domainEventWorldInput` without its method
+// set. Marshaling through the alias is what lets `MarshalJSON` render the
+// struct's own fields without calling itself.
+type domainEventWorldInputAlias domainEventWorldInput
+
+// domainEventWorldInputWire is the frozen on-disk rendering of one corpus
+// input.
+//
+// The two batch arrays are pointers here rather than slices because Go's
+// `omitempty` drops a nil slice and an empty slice alike: with plain slices an
+// empty batch and a rule that names no batch would serialize to the same
+// absent key, and a consumer would have to guess which one the case meant. A
+// pointer separates them, because it is set only when the case carries the
+// array at all. A nil array therefore stays absent from the input, an empty
+// non-nil one serializes as an explicit empty list, and a non-empty one keeps
+// the exact bytes it had before this rule existed.
+type domainEventWorldInputWire struct {
+	domainEventWorldInputAlias
+	Changes *[]domainEventWorldChange `json:"changes,omitempty"`
+	Chunks  *[][]int32                `json:"chunks,omitempty"`
+}
+
+// MarshalJSON renders one corpus input under the batch-array rule above. The
+// shadowed pointer fields win over the alias's slice fields by Go's shallowest
+// depth rule, so the alias contributes every other field unchanged and in its
+// declared order.
+func (in domainEventWorldInput) MarshalJSON() ([]byte, error) {
+	wire := domainEventWorldInputWire{domainEventWorldInputAlias: domainEventWorldInputAlias(in)}
+	if in.Changes != nil {
+		wire.Changes = &in.Changes
+	}
+	if in.Chunks != nil {
+		wire.Chunks = &in.Chunks
+	}
+	return json.Marshal(wire)
 }
 
 // domainEventWorldSection is the frozen rendering of one wire section.
@@ -477,7 +520,10 @@ func domainEventWorldCases() []domainEventWorldCase {
 		domainEventWorldChangesCase("block-changes-empty-revision-barrier", func(in *domainEventWorldInput) {
 			in.BaseRevision = domainEventWorldUint64(5)
 			in.NewRevision = domainEventWorldUint64(6)
-			in.Changes = nil
+			// The revision barrier carries an empty batch rather than no
+			// batch: the empty slice is what keeps the input's explicit
+			// empty list distinct from a rule that names no batch at all.
+			in.Changes = []domainEventWorldChange{}
 		}),
 		domainEventWorldChangesCase("block-changes-depths-dimension", func(in *domainEventWorldInput) {
 			in.Dimension = domainEventWorldInt32(int32(core.Depths))
@@ -551,7 +597,9 @@ func domainEventWorldCases() []domainEventWorldCase {
 			in.Chunks = [][]int32{{0, 0}, {0, 0}}
 		}),
 		domainEventWorldForgetCase("forget-chunks-empty", func(in *domainEventWorldInput) {
-			in.Chunks = nil
+			// An empty forget batch is carried, not absent, for the same
+			// reason as the change batch's revision barrier.
+			in.Chunks = [][]int32{}
 		}),
 		domainEventWorldForgetCase("forget-chunks-dimension-unknown", func(in *domainEventWorldInput) {
 			in.Dimension = domainEventWorldInt32(2)
