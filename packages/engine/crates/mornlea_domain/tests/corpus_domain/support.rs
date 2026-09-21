@@ -37,7 +37,14 @@ pub fn execute_topic(
     owns: OwnsCase,
     execute: ExecuteCase,
 ) -> Result<Vec<ExecutedCase>, DispatchError> {
-    assert!(expected_count > 0, "expected_count must be nonzero");
+    // The exact nonzero count is part of the closed partition contract, so a
+    // zero budget is an invalid case rather than a process-aborting assertion.
+    if expected_count == 0 {
+        return Err(DispatchError::InvalidCase {
+            case_id: "execute_topic".to_string(),
+            message: "expected_count must be nonzero".to_string(),
+        });
+    }
     let all_cases = load_cases_for_consumer(CorpusConsumer::Domain);
     let mut executed = Vec::new();
     let mut seen_ids = HashSet::new();
@@ -436,6 +443,14 @@ pub fn parse_uuid_hex(
             ),
         ));
     }
+    // Reject non-ASCII before slicing fixed-width pairs: a multi-byte character
+    // at an odd byte offset would otherwise split a UTF-8 boundary and panic.
+    if !text.is_ascii() {
+        return Err(invalid_case(
+            case,
+            format!("non-ASCII characters in UUID at '{path}': '{text}'"),
+        ));
+    }
     let mut bytes = [0u8; 16];
     for i in 0..16 {
         let chunk = &text[i * 2..i * 2 + 2];
@@ -714,11 +729,32 @@ mod tests {
             value_i64(&case, "i64", &serde_json::json!(9223372036854775807i64)).unwrap(),
             i64::MAX
         );
+        // One above i64::MAX is not representable and must be rejected.
+        assert!(value_i64(&case, "i64", &serde_json::json!(9223372036854775808u64)).is_err());
+        // One below i64::MIN parses as a float, which is never an integral i64.
+        assert!(
+            value_i64(
+                &case,
+                "i64",
+                &serde_json::from_str::<serde_json::Value>("-9223372036854775809").unwrap()
+            )
+            .is_err()
+        );
 
         // u64
         assert_eq!(
             value_u64(&case, "u64", &serde_json::json!(18446744073709551615u64)).unwrap(),
             u64::MAX
+        );
+        // Negative and above-maximum values must be rejected.
+        assert!(value_u64(&case, "u64", &serde_json::json!(-1)).is_err());
+        assert!(
+            value_u64(
+                &case,
+                "u64",
+                &serde_json::from_str::<serde_json::Value>("18446744073709551616").unwrap()
+            )
+            .is_err()
         );
     }
 
@@ -769,6 +805,13 @@ mod tests {
 
         // non-hex rejected
         assert!(parse_uuid_hex(&case, "uuid", "0123456789abcdef0123456789abcdeg").is_err());
+
+        // A multi-byte character must be rejected rather than splitting a UTF-8
+        // boundary while slicing fixed-width hex pairs. This token is exactly 32
+        // bytes long and starts its two-byte character at an odd byte offset.
+        let split_boundary = format!("{}é{}", "a".repeat(29), "b");
+        assert_eq!(split_boundary.len(), 32);
+        assert!(parse_uuid_hex(&case, "uuid", &split_boundary).is_err());
     }
 
     #[test]
@@ -796,6 +839,12 @@ mod tests {
         // invalid tokens
         assert!(parse_f32_token(&case, "token", "infinity").is_err());
         assert!(parse_f32_token(&case, "token", "invalid").is_err());
+
+        // A decimal token with no exponent letter that overflows f32 must be a
+        // hard failure, not a silently accepted infinity.
+        assert!(
+            parse_f32_token(&case, "token", "9999999999999999999999999999999999999999").is_err()
+        );
     }
 
     #[test]
@@ -905,5 +954,19 @@ mod tests {
             assert_domain_normalized(&executed_err);
         });
         assert!(res_err.is_err(), "wire in error must NOT be stripped");
+    }
+
+    #[test]
+    fn support_execute_topic_rejects_zero_expected_count() {
+        // A zero count contradicts the "exact nonzero count" contract, so it must
+        // be reported as an invalid case instead of aborting the process.
+        let result = execute_topic(0, |_| false, |case| Ok(case.normalized.clone()));
+        match result {
+            Err(DispatchError::InvalidCase { case_id, .. }) => {
+                assert_eq!(case_id, "execute_topic");
+            }
+            Err(DispatchError::NotImplemented { .. }) => panic!("unexpected NotImplemented error"),
+            Ok(_) => panic!("zero expected count must not be accepted"),
+        }
     }
 }
