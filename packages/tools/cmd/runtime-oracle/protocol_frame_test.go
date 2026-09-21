@@ -31,11 +31,6 @@ const (
 	// entry landed with the corpus merge, so the runner reads it from the frozen
 	// manifest like every other case instead of building an entry itself.
 	frameNoncanonicalCaseID = frameFamily + "/" + frameVersion + "/noncanonical-length"
-	// runtimeOracleExportDirEnv names the harness-owned directory explicit
-	// fixture export writes into. There is no repository default: an unset
-	// variable means nothing is exported, so executed evidence never lands in
-	// the tree by accident.
-	runtimeOracleExportDirEnv = "RUNTIME_ORACLE_EXPORT_DIR"
 )
 
 // frameRejectionCategory resolves the language-neutral rejection category for
@@ -492,17 +487,18 @@ func TestProtocolOracleFrameExportWritesEvidenceWhenHarnessNamesDirectory(t *tes
 	if err != nil {
 		t.Fatalf("exportExecutedEvidence: %v", err)
 	}
-	if published != exportDir {
-		t.Fatalf("exported into %s, want %s", published, exportDir)
+	wantPublished := filepath.Join(exportDir, "runtime-oracle", "protocol-frame")
+	if published != wantPublished {
+		t.Fatalf("exported into %s, want %s", published, wantPublished)
 	}
 
-	report := filepath.Join(exportDir, "runtime-corpus-frame.json")
+	report := filepath.Join(published, "runtime-corpus-frame.json")
 	if _, err := LoadTraceAtRoot(root, report, manifest); err != nil {
 		t.Fatalf("exported report does not validate: %v", err)
 	}
 	for _, c := range manifest.Cases {
 		for _, name := range []string{"input.bin", "expected.json", "outcome.json"} {
-			path := filepath.Join(exportDir, filepath.FromSlash(c.ID), name)
+			path := filepath.Join(published, filepath.FromSlash(c.ID), name)
 			info, statErr := os.Lstat(path)
 			if statErr != nil {
 				t.Fatalf("exported fixture %s is missing: %v", path, statErr)
@@ -579,18 +575,19 @@ func TestProtocolOracleFrameExportRefusesNonFreshDirectory(t *testing.T) {
 	}
 
 	exportDir := filepath.Join(t.TempDir(), "runtime-oracle-export")
-	if err := os.Mkdir(exportDir, 0o755); err != nil {
+	producerDir := filepath.Join(exportDir, "runtime-oracle", "protocol-frame")
+	if err := os.MkdirAll(producerDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(exportDir, "sentinel"), []byte("sentinel\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(producerDir, "sentinel"), []byte("sentinel\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv(runtimeOracleExportDirEnv, exportDir)
 	if _, err := exportExecutedEvidence(t, root, manifest, observations); err == nil ||
-		!strings.Contains(err.Error(), "not fresh") {
-		t.Fatalf("expected a freshness rejection, got: %v", err)
+		!strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("expected already exists rejection, got: %v", err)
 	}
-	data, readErr := os.ReadFile(filepath.Join(exportDir, "sentinel"))
+	data, readErr := os.ReadFile(filepath.Join(producerDir, "sentinel"))
 	if readErr != nil {
 		t.Fatal(readErr)
 	}

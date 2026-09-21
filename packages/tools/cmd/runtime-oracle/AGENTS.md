@@ -91,9 +91,9 @@ or Agent process packages. These boundaries are enforced by `packages/audit`
 
 ## Independent operation runners (`runner_helpers_test.go`, `protocol_frame_test.go`)
 
-`runner_helpers_test.go` is a pure helper file: it declares `GoOperation`, the
-registries, `RunCases`, and the fixture/export helpers, and carries no test
-function, so it follows the `*_helpers_test.go` naming rule.
+`runner_helpers_test.go` declares `GoOperation`, the registries, `RunCases`,
+and the isolated export helpers (`exportGeneratedAssets`,
+`exportGeneratedAssetsFromEnvironment`).
 
 - `GoOperation` and the `map[string]GoOperation` registry live in test code
   only. A producer receives the case specification and the case input bytes and
@@ -114,13 +114,21 @@ function, so it follows the `*_helpers_test.go` naming rule.
   publishes the frozen outcome vocabulary: `kind` is `ok` or `error`, and an
   `error` category is one of the structural, login admission, or storage values
   the execution contract names.
-- Explicit fixture export is gated by `RUNTIME_ORACLE_EXPORT_DIR`. There is no
-  repository default: an unset variable exports nothing. A named directory must
-  be fresh and directly addressed, and the report is published through
-  `ExportTrace`, so the export inherits the same containment, symlink and
-  no-replace gates. Production `main.go` reconciles and validates existing
-  artifacts and has no trace-generation mode.
-- Enforcement: `TestProtocolOracleFrameIndependentOutcomes`,
+- Explicit fixture and asset export is gated by `RUNTIME_ORACLE_EXPORT_DIR`.
+  There is no repository default: an unset variable exports nothing. When set,
+  `exportGeneratedAssets` resolves the export root through its nearest existing
+  ancestor, rejects repository containment and any symlink below that ancestor,
+  creates only the designated fresh producer child (`<exportRoot>/<producerID>`),
+  rejects preexisting producer directories, and writes fixed relative assets
+  with create-exclusive semantics without path escaping or replacement.
+  Production `main.go` reconciles and validates existing artifacts and has no
+  trace-generation mode.
+- Enforcement: `TestExportGeneratedAssetsRejectsRepositoryContainedRoots`,
+  `TestExportGeneratedAssetsRejectsSymlinkedAncestor`,
+  `TestExportGeneratedAssetsRejectsEscapingRelativePath`,
+  `TestExportGeneratedAssetsRejectsPreexistingProducerChild`,
+  `TestExportGeneratedAssetsSuccessfulMultiProducerExport`,
+  `TestProtocolOracleFrameIndependentOutcomes`,
   `TestCorpusOutcomeVocabularyMatchesExecutionContract`,
   `TestProtocolOracleFrameOutcomesDistinguishCases`,
   `TestProtocolOracleFrameRunnerRejects*`,
@@ -144,16 +152,19 @@ families). The world-event file also carries the shared router arm
 names into, because the `domain.event` family is shared by four producers and
 the rule name is the only discriminator the manifest carries.
 
-- Expected outcomes are generated only through each producer's own update flag
-  and come from executing the real Go validator or codec, never from a
-  hand-written value or a Rust result. A normal run only reads and compares.
+- Expected outcomes come from executing the real Go validator or codec, never
+  from a hand-written value or a Rust result. Every test run compares generated
+  bytes against the frozen corpus read-only; package-test flags or code paths
+  capable of rewriting the tracked corpus are strictly prohibited.
 - No file in this package may rewrite the frozen manifest: the CLI has no such
   flag and the test binary registers none, because both the discovery stub and
   any partial regeneration would silently gut the corpus. Manifest merges are
   controller-side and manual.
 - Enforcement: `TestDomainOracle_<topic>` per producer,
   `TestAgentContractOracle*`, `TestCorpusOutcomeVocabularyMatchesExecutionContract`
-  over every committed expectation, and `TestTestBinaryFlagsCannotRewriteTheFrozenCorpus`.
+  over every committed expectation, and `TestTestBinaryFlagsCannotRewriteTheFrozenCorpus`
+  (which asserts that no flag containing `update` or mentioning tracked corpus
+  rewrites can be registered in the test binary).
 
 ## Focused Verification
 

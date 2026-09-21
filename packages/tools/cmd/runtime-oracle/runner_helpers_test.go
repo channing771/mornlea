@@ -5,12 +5,214 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 )
+
+const (
+	// runtimeOracleExportDirEnv names the harness-owned directory explicit
+	// fixture export writes into. There is no repository default: an unset
+	// variable means nothing is exported, so executed evidence never lands in
+	// the tree by accident.
+	runtimeOracleExportDirEnv = "RUNTIME_ORACLE_EXPORT_DIR"
+)
+
+// generatedAsset pairs a relative slash path with raw bytes.
+type generatedAsset struct {
+	RelativePath string
+	Data         []byte
+}
+
+var validProducerIDs = map[string]bool{
+	"runtime-oracle/protocol-frame":           true,
+	"runtime-oracle/domain-identity-values":   true,
+	"runtime-oracle/domain-values":            true,
+	"runtime-oracle/domain-command-control":   true,
+	"runtime-oracle/domain-command-inventory": true,
+	"runtime-oracle/domain-event-player":      true,
+	"runtime-oracle/domain-event-world":       true,
+	"runtime-oracle/domain-event-inventory":   true,
+	"runtime-oracle/domain-event-people":      true,
+	"companion/agent-contract":                true,
+}
+
+func exportGeneratedAssets(
+	repoRoot string,
+	exportRoot string,
+	producerID string,
+	assets []generatedAsset,
+) (string, error) {
+	if !validProducerIDs[producerID] {
+		return "", fmt.Errorf("runtime-oracle: unrecognized producer ID: %q", producerID)
+	}
+	if strings.TrimSpace(exportRoot) == "" {
+		return "", fmt.Errorf("runtime-oracle: export root cannot be empty")
+	}
+
+	absRoot, err := filepath.Abs(repoRoot)
+	if err != nil {
+		return "", fmt.Errorf("runtime-oracle: resolve repository root %s: %w", repoRoot, err)
+	}
+	if resolved, err := filepath.EvalSymlinks(absRoot); err == nil {
+		absRoot = resolved
+	}
+
+	absExport, err := filepath.Abs(exportRoot)
+	if err != nil {
+		return "", fmt.Errorf("runtime-oracle: resolve export root %s: %w", exportRoot, err)
+	}
+
+	// Walk upward from absExport until an existing ancestor is found.
+	var missing []string
+	existing := absExport
+	for {
+		_, statErr := os.Lstat(existing)
+		if statErr == nil {
+			break
+		}
+		if !os.IsNotExist(statErr) {
+			return "", fmt.Errorf("runtime-oracle: stat export root %s: %w", existing, statErr)
+		}
+		missing = append(missing, filepath.Base(existing))
+		parent := filepath.Dir(existing)
+		if parent == existing {
+			return "", fmt.Errorf("runtime-oracle: export root %s has no existing ancestor", exportRoot)
+		}
+		existing = parent
+	}
+	for i, j := 0, len(missing)-1; i < j; i, j = i+1, j-1 {
+		missing[i], missing[j] = missing[j], missing[i]
+	}
+
+	resolvedExisting, err := filepath.EvalSymlinks(existing)
+	if err != nil {
+		return "", fmt.Errorf("runtime-oracle: resolve export ancestor %s: %w", existing, err)
+	}
+	resolvedExport := filepath.Join(append([]string{resolvedExisting}, missing...)...)
+
+	// Check repository containment on both resolved export path and existing ancestor.
+	live, err := isLivePath(absRoot, resolvedExport)
+	if err != nil {
+		return "", err
+	}
+	if live {
+		return "", fmt.Errorf("runtime-oracle: live-path write rejected: export root %s is inside repository", exportRoot)
+	}
+	liveExisting, err := isLivePath(absRoot, existing)
+	if err != nil {
+		return "", err
+	}
+	if liveExisting {
+		return "", fmt.Errorf("runtime-oracle: live-path write rejected: export ancestor %s is inside repository", existing)
+	}
+
+	// Reject symlink components below the nearest existing ancestor.
+	for component := existing; ; component = filepath.Dir(component) {
+		if component == "/" || component == "." || component == filepath.Dir(component) {
+			break
+		}
+		if component == "/var" || component == "/tmp" || component == "/etc" {
+			break
+		}
+		info, statErr := os.Lstat(component)
+		if statErr != nil {
+			return "", fmt.Errorf("runtime-oracle: stat export path %s: %w", component, statErr)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("runtime-oracle: symlink component rejected: %s", component)
+		}
+	}
+
+	// Check and create the fixed producer child.
+	producerChild := filepath.Join(absExport, filepath.FromSlash(producerID))
+	if _, statErr := os.Lstat(producerChild); statErr == nil {
+		return "", fmt.Errorf("runtime-oracle: producer child already exists: %s", producerChild)
+	} else if !os.IsNotExist(statErr) {
+		return "", fmt.Errorf("runtime-oracle: stat producer child %s: %w", producerChild, statErr)
+	}
+
+	if err := os.MkdirAll(producerChild, 0o755); err != nil {
+		return "", fmt.Errorf("runtime-oracle: create producer directory %s: %w", producerChild, err)
+	}
+
+	for _, asset := range assets {
+		if strings.TrimSpace(asset.RelativePath) == "" {
+			return "", fmt.Errorf("runtime-oracle: empty asset relative path")
+		}
+		if strings.Contains(asset.RelativePath, "\\") {
+			return "", fmt.Errorf("runtime-oracle: backslash rejected in relative path: %s", asset.RelativePath)
+		}
+		if filepath.IsAbs(asset.RelativePath) || strings.HasPrefix(asset.RelativePath, "/") {
+			return "", fmt.Errorf("runtime-oracle: absolute path rejected: %s", asset.RelativePath)
+		}
+		for _, part := range strings.Split(asset.RelativePath, "/") {
+			if part == "." || part == ".." {
+				return "", fmt.Errorf("runtime-oracle: relative path contains ./..: %s", asset.RelativePath)
+			}
+		}
+		cleaned := filepath.Clean(asset.RelativePath)
+		if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("runtime-oracle: path escapes producer directory: %s", asset.RelativePath)
+		}
+
+		target := filepath.Join(producerChild, filepath.FromSlash(asset.RelativePath))
+		rel, relErr := filepath.Rel(producerChild, target)
+		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("runtime-oracle: path escapes producer directory: %s", asset.RelativePath)
+		}
+
+		targetDir := filepath.Dir(target)
+		if err := os.MkdirAll(targetDir, 0o755); err != nil {
+			return "", fmt.Errorf("runtime-oracle: create asset directory %s: %w", targetDir, err)
+		}
+
+		for d := targetDir; d != producerChild && len(d) > len(producerChild); d = filepath.Dir(d) {
+			info, lstatErr := os.Lstat(d)
+			if lstatErr != nil {
+				return "", fmt.Errorf("runtime-oracle: stat asset dir %s: %w", d, lstatErr)
+			}
+			if info.Mode()&os.ModeSymlink != 0 {
+				return "", fmt.Errorf("runtime-oracle: symlink component rejected: %s", d)
+			}
+		}
+
+		f, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err != nil {
+			return "", fmt.Errorf("runtime-oracle: create exclusive asset %s: %w", asset.RelativePath, err)
+		}
+		if _, err := f.Write(asset.Data); err != nil {
+			f.Close()
+			return "", fmt.Errorf("runtime-oracle: write asset %s: %w", asset.RelativePath, err)
+		}
+		if err := f.Close(); err != nil {
+			return "", fmt.Errorf("runtime-oracle: close asset %s: %w", asset.RelativePath, err)
+		}
+	}
+
+	return producerChild, nil
+}
+
+func exportGeneratedAssetsFromEnvironment(
+	t *testing.T,
+	repoRoot string,
+	producerID string,
+	assets []generatedAsset,
+) string {
+	t.Helper()
+	exportRoot := strings.TrimSpace(os.Getenv(runtimeOracleExportDirEnv))
+	if exportRoot == "" {
+		return ""
+	}
+	dir, err := exportGeneratedAssets(repoRoot, exportRoot, producerID, assets)
+	if err != nil {
+		t.Fatalf("export generated assets for %s: %v", producerID, err)
+	}
+	return dir
+}
 
 // GoOperation executes one corpus case through a real Go producer.
 //
@@ -199,31 +401,25 @@ func exportExecutedEvidence(t *testing.T, root string, manifest Inventory, obser
 	if value == "" {
 		return "", nil
 	}
-	absDir, err := filepath.Abs(value)
-	if err != nil {
-		return "", fmt.Errorf("runtime-oracle: resolve export directory %s: %w", value, err)
-	}
-	// A named directory has to be both fresh and directly addressed: an existing
-	// entry is refused, and an entry that is itself a symlink is refused rather
-	// than followed, so a redirect can never move an export outside the
-	// directory the harness named.
-	if info, statErr := os.Lstat(absDir); statErr == nil {
-		if info.Mode()&os.ModeSymlink != 0 {
-			return "", fmt.Errorf("runtime-oracle: symlink component rejected: %s", absDir)
-		}
-		return "", fmt.Errorf("runtime-oracle: export directory %s is not fresh", value)
-	} else if !os.IsNotExist(statErr) {
-		return "", fmt.Errorf("runtime-oracle: stat export directory %s: %w", value, statErr)
-	}
 
 	trace, err := traceFromObservations(manifest, observations)
 	if err != nil {
 		return "", err
 	}
-	report := filepath.Join(absDir, "runtime-corpus-frame.json")
-	if err := ExportTrace(root, report, trace, manifest); err != nil {
+	reportTarget := filepath.Join(t.TempDir(), "runtime-corpus-frame.json")
+	if err := ExportTrace(root, reportTarget, trace, manifest); err != nil {
 		return "", fmt.Errorf("runtime-oracle: export executed evidence: %w", err)
 	}
+	reportData, err := os.ReadFile(reportTarget)
+	if err != nil {
+		return "", fmt.Errorf("runtime-oracle: read exported report: %w", err)
+	}
+
+	var assets []generatedAsset
+	assets = append(assets, generatedAsset{
+		RelativePath: "runtime-corpus-frame.json",
+		Data:         reportData,
+	})
 
 	caseByID := make(map[string]CaseSpec, len(manifest.Cases))
 	for _, c := range manifest.Cases {
@@ -246,29 +442,14 @@ func exportExecutedEvidence(t *testing.T, root string, manifest Inventory, obser
 		if err != nil {
 			return "", fmt.Errorf("runtime-oracle: export case %s outcome: %w", c.ID, err)
 		}
-		writeExportFile(t, absDir, filepath.Join(c.ID, "input.bin"), input)
-		writeExportFile(t, absDir, filepath.Join(c.ID, "expected.json"), expected)
-		writeExportFile(t, absDir, filepath.Join(c.ID, "outcome.json"), outcome)
+		assets = append(assets,
+			generatedAsset{RelativePath: filepath.ToSlash(filepath.Join(c.ID, "input.bin")), Data: input},
+			generatedAsset{RelativePath: filepath.ToSlash(filepath.Join(c.ID, "expected.json")), Data: expected},
+			generatedAsset{RelativePath: filepath.ToSlash(filepath.Join(c.ID, "outcome.json")), Data: outcome},
+		)
 	}
-	return absDir, nil
-}
 
-// writeExportFile writes one exported artifact below dir. The joined path is
-// re-checked against the export root so a case identity can never steer a write
-// outside the harness-owned directory.
-func writeExportFile(t *testing.T, dir, rel string, data []byte) {
-	t.Helper()
-	target := filepath.Join(dir, rel)
-	contained, relErr := filepath.Rel(dir, target)
-	if relErr != nil || contained == ".." || strings.HasPrefix(contained, ".."+string(filepath.Separator)) {
-		t.Fatalf("runtime-oracle: export path %s escapes %s", target, dir)
-	}
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		t.Fatalf("runtime-oracle: create export directory: %v", err)
-	}
-	if err := os.WriteFile(target, data, 0o644); err != nil {
-		t.Fatalf("runtime-oracle: write export file: %v", err)
-	}
+	return exportGeneratedAssets(root, value, "runtime-oracle/protocol-frame", assets)
 }
 
 // marshalCanonicalJSON renders one value with recursively sorted keys so two
@@ -290,4 +471,194 @@ func marshalCanonicalJSON(value any) ([]byte, error) {
 	}
 	buf.WriteByte('\n')
 	return buf.Bytes(), nil
+}
+
+// computeTrackedCorpusDigest computes a deterministic SHA256 digest over all
+// files under testdata/runtime-migration to prove the tree remains unchanged.
+func computeTrackedCorpusDigest(t *testing.T, repoRoot string) string {
+	t.Helper()
+	casesDir := filepath.Join(repoRoot, "testdata", "runtime-migration")
+	hasher := sha256.New()
+	err := filepath.WalkDir(casesDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(casesDir, path)
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(hasher, "%s\x00%x\n", filepath.ToSlash(rel), sha256.Sum256(data))
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("compute tracked corpus digest: %v", err)
+	}
+	return fmt.Sprintf("sha256:%x", hasher.Sum(nil))
+}
+
+// assertTrackedCorpusUnchanged asserts the tracked corpus digest matches the baseline.
+func assertTrackedCorpusUnchanged(t *testing.T, repoRoot, before string) {
+	t.Helper()
+	after := computeTrackedCorpusDigest(t, repoRoot)
+	if before != after {
+		t.Fatalf("tracked corpus was modified: before %s, after %s", before, after)
+	}
+}
+
+// TestExportGeneratedAssetsRejectsRepositoryContainedRoots pins that an export
+// root inside the repository is refused before anything is created.
+func TestExportGeneratedAssetsRejectsRepositoryContainedRoots(t *testing.T) {
+	root := mustRepoRoot(t)
+	before := computeTrackedCorpusDigest(t, root)
+	defer assertTrackedCorpusUnchanged(t, root, before)
+
+	exportRoot := filepath.Join(root, "export-contained-probe")
+	assets := []generatedAsset{{RelativePath: "test.json", Data: []byte("{}\n")}}
+	_, err := exportGeneratedAssets(root, exportRoot, "runtime-oracle/domain-values", assets)
+	if err == nil || !strings.Contains(err.Error(), "live-path") {
+		t.Fatalf("expected live-path rejection, got: %v", err)
+	}
+	if _, statErr := os.Lstat(exportRoot); !os.IsNotExist(statErr) {
+		t.Fatalf("export directory was created inside repository: %v", statErr)
+	}
+}
+
+// TestExportGeneratedAssetsRejectsSymlinkedAncestor pins that an export root
+// reached through a symlink ancestor is refused.
+func TestExportGeneratedAssetsRejectsSymlinkedAncestor(t *testing.T) {
+	root := mustRepoRoot(t)
+	before := computeTrackedCorpusDigest(t, root)
+	defer assertTrackedCorpusUnchanged(t, root, before)
+
+	parent := t.TempDir()
+	realDir := filepath.Join(parent, "real")
+	if err := os.Mkdir(realDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	symlinkDir := filepath.Join(parent, "symlink-ancestor")
+	if err := os.Symlink(realDir, symlinkDir); err != nil {
+		t.Fatal(err)
+	}
+	exportRoot := filepath.Join(symlinkDir, "export-target")
+	assets := []generatedAsset{{RelativePath: "test.json", Data: []byte("{}\n")}}
+	_, err := exportGeneratedAssets(root, exportRoot, "runtime-oracle/domain-values", assets)
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("expected symlink rejection, got: %v", err)
+	}
+	entries, readErr := os.ReadDir(realDir)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("export wrote through symlink ancestor: %v", entries)
+	}
+}
+
+// TestExportGeneratedAssetsRejectsEscapingRelativePath pins that asset paths
+// escaping the producer child, carrying backslashes, or containing ./.. are rejected.
+func TestExportGeneratedAssetsRejectsEscapingRelativePath(t *testing.T) {
+	root := mustRepoRoot(t)
+	before := computeTrackedCorpusDigest(t, root)
+	defer assertTrackedCorpusUnchanged(t, root, before)
+
+	exportRoot := filepath.Join(t.TempDir(), "escaping-test")
+	badPaths := []string{
+		"../escaped.json",
+		"/absolute.json",
+		"sub/../../escaped.json",
+		"sub\\backslash.json",
+		"./current.json",
+		"sub/./current.json",
+		"sub/../escaped.json",
+	}
+	for _, bad := range badPaths {
+		assets := []generatedAsset{{RelativePath: bad, Data: []byte("{}\n")}}
+		_, err := exportGeneratedAssets(root, exportRoot, "runtime-oracle/domain-values", assets)
+		if err == nil {
+			t.Errorf("expected rejection for escaping relative path %q, got nil", bad)
+		}
+	}
+}
+
+// TestExportGeneratedAssetsRejectsPreexistingProducerChild pins that a producer
+// directory that already exists is refused and cannot be overwritten.
+func TestExportGeneratedAssetsRejectsPreexistingProducerChild(t *testing.T) {
+	root := mustRepoRoot(t)
+	before := computeTrackedCorpusDigest(t, root)
+	defer assertTrackedCorpusUnchanged(t, root, before)
+
+	exportRoot := filepath.Join(t.TempDir(), "preexisting-test")
+	assets := []generatedAsset{{RelativePath: "initial.txt", Data: []byte("first\n")}}
+	published, err := exportGeneratedAssets(root, exportRoot, "runtime-oracle/domain-values", assets)
+	if err != nil {
+		t.Fatalf("initial export failed: %v", err)
+	}
+	wantPublished := filepath.Join(exportRoot, "runtime-oracle", "domain-values")
+	if published != wantPublished {
+		t.Fatalf("published = %s, want %s", published, wantPublished)
+	}
+
+	secondAssets := []generatedAsset{{RelativePath: "initial.txt", Data: []byte("second\n")}}
+	_, err = exportGeneratedAssets(root, exportRoot, "runtime-oracle/domain-values", secondAssets)
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("expected already exists rejection, got: %v", err)
+	}
+
+	data, readErr := os.ReadFile(filepath.Join(published, "initial.txt"))
+	if readErr != nil {
+		t.Fatalf("read asset: %v", readErr)
+	}
+	if string(data) != "first\n" {
+		t.Fatalf("existing asset was overwritten: %q", string(data))
+	}
+}
+
+// TestExportGeneratedAssetsSuccessfulMultiProducerExport pins that multiple
+// distinct producers can export into the same external export root.
+func TestExportGeneratedAssetsSuccessfulMultiProducerExport(t *testing.T) {
+	root := mustRepoRoot(t)
+	before := computeTrackedCorpusDigest(t, root)
+	defer assertTrackedCorpusUnchanged(t, root, before)
+
+	exportRoot := filepath.Join(t.TempDir(), "multi-export-test")
+	assets1 := []generatedAsset{
+		{RelativePath: "values.json", Data: []byte("{\"val\":1}\n")},
+	}
+	pub1, err := exportGeneratedAssets(root, exportRoot, "runtime-oracle/domain-values", assets1)
+	if err != nil {
+		t.Fatalf("producer 1 export failed: %v", err)
+	}
+
+	assets2 := []generatedAsset{
+		{RelativePath: "identity.json", Data: []byte("{\"id\":2}\n")},
+	}
+	pub2, err := exportGeneratedAssets(root, exportRoot, "runtime-oracle/domain-identity-values", assets2)
+	if err != nil {
+		t.Fatalf("producer 2 export failed: %v", err)
+	}
+
+	wantPub1 := filepath.Join(exportRoot, "runtime-oracle", "domain-values")
+	wantPub2 := filepath.Join(exportRoot, "runtime-oracle", "domain-identity-values")
+	if pub1 != wantPub1 {
+		t.Fatalf("producer 1 path = %s, want %s", pub1, wantPub1)
+	}
+	if pub2 != wantPub2 {
+		t.Fatalf("producer 2 path = %s, want %s", pub2, wantPub2)
+	}
+
+	d1, err := os.ReadFile(filepath.Join(pub1, "values.json"))
+	if err != nil || string(d1) != "{\"val\":1}\n" {
+		t.Fatalf("unexpected asset 1 content: %q, err: %v", string(d1), err)
+	}
+	d2, err := os.ReadFile(filepath.Join(pub2, "identity.json"))
+	if err != nil || string(d2) != "{\"id\":2}\n" {
+		t.Fatalf("unexpected asset 2 content: %q, err: %v", string(d2), err)
+	}
 }

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"io/fs"
@@ -92,16 +91,6 @@ var domainControlFamilySources = []string{
 // slug with an optional zero-padded numeric suffix, so a boundary row sorts in
 // numeric order under a lexical sort.
 var domainControlLabelPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*(-[0-9]+)?$`)
-
-// updateDomainControlCorpus rewrites the frozen command control corpus from the
-// executed protocol DTOs. It follows the same discipline as the other fixture
-// update flags: an ordinary run only compares, so a frozen artifact is never
-// silently regenerated to match an implementation.
-var updateDomainControlCorpus = flag.Bool(
-	"update-domain-command-control-corpus",
-	false,
-	"rewrite testdata/runtime-migration/cases/domain/command_control from the executed protocol command DTOs",
-)
 
 // domainControlInput is the frozen, self-describing corpus input for one case.
 //
@@ -961,27 +950,14 @@ func domainControlSyncCorpus(t *testing.T, records []domainControlRecord) {
 		want[record.label+".expected.json"] = append(outcome, '\n')
 	}
 
-	if *updateDomainControlCorpus {
-		for relative, data := range want {
-			target := filepath.Join(corpusDir, filepath.FromSlash(relative))
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				t.Fatalf("create corpus directory: %v", err)
-			}
-			if err := os.WriteFile(target, data, 0o644); err != nil {
-				t.Fatalf("write %s: %v", relative, err)
-			}
-		}
-		return
-	}
-
 	for relative, data := range want {
 		target := filepath.Join(corpusDir, filepath.FromSlash(relative))
 		committed, err := os.ReadFile(target)
 		if err != nil {
-			t.Fatalf("read frozen corpus case %s: %v (rerun with -update-domain-command-control-corpus after reviewing the change)", relative, err)
+			t.Fatalf("read frozen corpus case %s: %v", relative, err)
 		}
 		if !bytes.Equal(committed, data) {
-			t.Errorf("frozen corpus case %s drifted from the executed protocol DTO (rerun with -update-domain-command-control-corpus after reviewing the change)", relative)
+			t.Errorf("frozen corpus case %s drifted from the executed protocol DTO", relative)
 		}
 	}
 
@@ -1008,6 +984,20 @@ func domainControlSyncCorpus(t *testing.T, records []domainControlRecord) {
 			t.Errorf("frozen corpus case %s is not produced by any executed table row", relative)
 		}
 	}
+
+	var relatives []string
+	for relative := range want {
+		relatives = append(relatives, relative)
+	}
+	sort.Strings(relatives)
+	assets := make([]generatedAsset, 0, len(relatives))
+	for _, relative := range relatives {
+		assets = append(assets, generatedAsset{
+			RelativePath: relative,
+			Data:         want[relative],
+		})
+	}
+	exportGeneratedAssetsFromEnvironment(t, root, "runtime-oracle/domain-command-control", assets)
 }
 
 // domainControlCaseID renders the manifest case identity one corpus label

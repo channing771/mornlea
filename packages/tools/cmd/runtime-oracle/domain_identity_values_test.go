@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"io/fs"
@@ -81,16 +80,6 @@ var domainIdentityFamilySources = []string{
 // slug with an optional zero-padded numeric suffix, so a boundary row sorts in
 // numeric order under a lexical sort.
 var domainIdentityLabelPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*(-[0-9]+)?$`)
-
-// updateDomainIdentityCorpus rewrites the frozen identity and text corpus from
-// the executed validators. It follows the same discipline as the other fixture
-// update flags: an ordinary run only compares, so a frozen artifact is never
-// silently regenerated to match an implementation.
-var updateDomainIdentityCorpus = flag.Bool(
-	"update-domain-identity-corpus",
-	false,
-	"rewrite testdata/runtime-migration/cases/domain/identity_values from the executed core validators",
-)
 
 // The plan names one canonical UUIDv4 vector set for the identity boundary: a
 // valid value plus the zero, wrong-version and wrong-variant rejections. These
@@ -670,27 +659,14 @@ func domainIdentitySyncCorpus(t *testing.T, records []domainIdentityRecord) {
 		want[record.label+".expected.json"] = append(outcome, '\n')
 	}
 
-	if *updateDomainIdentityCorpus {
-		for relative, data := range want {
-			target := filepath.Join(corpusDir, filepath.FromSlash(relative))
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				t.Fatalf("create corpus directory: %v", err)
-			}
-			if err := os.WriteFile(target, data, 0o644); err != nil {
-				t.Fatalf("write %s: %v", relative, err)
-			}
-		}
-		return
-	}
-
 	for relative, data := range want {
 		target := filepath.Join(corpusDir, filepath.FromSlash(relative))
 		committed, err := os.ReadFile(target)
 		if err != nil {
-			t.Fatalf("read frozen corpus case %s: %v (rerun with -update-domain-identity-corpus after reviewing the change)", relative, err)
+			t.Fatalf("read frozen corpus case %s: %v", relative, err)
 		}
 		if !bytes.Equal(committed, data) {
-			t.Errorf("frozen corpus case %s drifted from the executed validator (rerun with -update-domain-identity-corpus after reviewing the change)", relative)
+			t.Errorf("frozen corpus case %s drifted from the executed validator", relative)
 		}
 	}
 
@@ -717,6 +693,20 @@ func domainIdentitySyncCorpus(t *testing.T, records []domainIdentityRecord) {
 			t.Errorf("frozen corpus case %s is not produced by any executed table row", relative)
 		}
 	}
+
+	var relatives []string
+	for relative := range want {
+		relatives = append(relatives, relative)
+	}
+	sort.Strings(relatives)
+	assets := make([]generatedAsset, 0, len(relatives))
+	for _, relative := range relatives {
+		assets = append(assets, generatedAsset{
+			RelativePath: relative,
+			Data:         want[relative],
+		})
+	}
+	exportGeneratedAssetsFromEnvironment(t, root, "runtime-oracle/domain-identity-values", assets)
 }
 
 // domainIdentityCaseID renders the manifest case identity one corpus label

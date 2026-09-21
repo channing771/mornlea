@@ -37,8 +37,20 @@ func TestCLIFlagSetCannotRewriteTheFrozenCorpus(t *testing.T) {
 // package-level flags, so this assertion guards the default flag set directly;
 // see newFlagSet for why no corpus-rewriting entry point may exist.
 func TestTestBinaryFlagsCannotRewriteTheFrozenCorpus(t *testing.T) {
-	if f := flag.Lookup("update-runtime-inventory"); f != nil {
-		t.Fatalf("test binary must register no corpus-rewriting flag, got -%s", f.Name)
+	var forbidden []string
+	flag.CommandLine.VisitAll(func(f *flag.Flag) {
+		name := strings.ToLower(f.Name)
+		usage := strings.ToLower(f.Usage)
+		if strings.Contains(name, "update") ||
+			strings.Contains(usage, "tracked corpus") ||
+			strings.Contains(usage, "frozen corpus") ||
+			strings.Contains(usage, "testdata/runtime-migration") {
+			forbidden = append(forbidden, f.Name)
+		}
+	})
+	if len(forbidden) > 0 {
+		sort.Strings(forbidden)
+		t.Fatalf("test binary must register no corpus-rewriting flags, got: %v", forbidden)
 	}
 }
 
