@@ -227,7 +227,7 @@ func TestProtocolOracleFrameIndependentOutcomes(t *testing.T) {
 	manifest := frameWorkingManifest(t, root)
 
 	_, families, live := discoverLive(t)
-	if err := Reconcile(root, manifest, families, live); err != nil {
+	if _, err := ReconcileWorking(root, manifest, families, live, BaselineConsumerRegistry(), BaselineNegativeCoverageExceptions()); err != nil {
 		t.Fatalf("working manifest drifted from current registries: %v", err)
 	}
 

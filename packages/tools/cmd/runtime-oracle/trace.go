@@ -156,7 +156,7 @@ func RunTrace(request TraceRequest) (Trace, error) {
 	if err != nil {
 		return Trace{}, err
 	}
-	if err := Reconcile(request.Root, inventory, families, live); err != nil {
+	if _, err := ReconcileWorking(request.Root, inventory, families, live, BaselineConsumerRegistry(), BaselineNegativeCoverageExceptions()); err != nil {
 		return Trace{}, err
 	}
 

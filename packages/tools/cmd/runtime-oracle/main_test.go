@@ -51,7 +51,8 @@ func TestRunReconcilesTheFrozenInventoryAgainstLiveRegistries(t *testing.T) {
 	if err := run(nil, &stdout); err != nil {
 		t.Fatalf("run against repository root %s: %v", root, err)
 	}
-	if got := stdout.String(); !strings.HasPrefix(got, "inventory ok: ") {
+	got := stdout.String()
+	if !strings.HasPrefix(got, "inventory ok: covered_versions=") || !strings.Contains(got, "uncovered_versions=") {
 		t.Fatalf("unexpected CLI output %q", got)
 	}
 }

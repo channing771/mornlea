@@ -19,13 +19,26 @@ or Agent process packages. These boundaries are enforced by `packages/audit`
   files. It does not load production packages.
 - `LoadInventory` reads the frozen corpus at `InventoryRelPath`
   (`testdata/runtime-migration/contracts.json`).
-- `Reconcile` fails closed on a missing supported family, version drift, an
-  extra inventory row, missing provenance, a missing coverage fixture, or
-  incomplete identity. It does not infer parity from a covered subset.
+- `ReconcileWorking` permits in-progress manifests to contain zero-case families
+  and returns sorted `Covered` and `Uncovered` coverage points without claiming
+  complete acceptance; `ReconcileComplete` fails closed with an `*InventoryError`
+  if any uncovered family/version point remains.
+- Both reconciliation paths share a private validator that enforces identity,
+  source provenance, case structural and cryptographic validity, case version
+  membership in its family's `supported_versions`, expected outcome `kind: "ok"`
+  plus `kind: "error"` (unless covered by a reviewed `NegativeCoverageExceptions`
+  rationale), and consumer membership in the closed `BaselineConsumerRegistry()`
+  (`corpus_frame`, `mornlea_domain`, `external:agent-contract`,
+  `external:runtime-authority`).
 - Enforcement: `TestContractInventoryReconcilesFrozenCorpus`,
+  `TestContractInventoryWorkingReportsZeroCaseFamilies`,
+  `TestContractInventoryCompleteRejectsZeroCaseFamilies`,
+  `TestContractInventoryRejectsUnknownConsumer`,
+  `TestContractInventoryRejectsUnsupportedCaseVersion`,
+  `TestContractInventoryWorkingAndCompleteCoverage`,
   `TestContractInventoryRejectsMissingFamily`,
   `TestContractInventoryRejectsVersionMismatch`,
-  `TestContractInventoryRejectsMissingCoverageFixture`,
+  `TestContractInventoryRejectsMissingProvenanceSource`,
   `TestContractInventoryRejectsIncompleteIdentity`.
 
 ## Isolated replay (`trace.go`)

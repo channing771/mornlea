@@ -48,9 +48,10 @@ func run(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if err := Reconcile(root, frozen, families, live); err != nil {
+	report, err := ReconcileWorking(root, frozen, families, live, BaselineConsumerRegistry(), BaselineNegativeCoverageExceptions())
+	if err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "inventory ok: %d families\n", len(frozen.Families))
+	fmt.Fprintf(stdout, "inventory ok: covered_versions=%d uncovered_versions=%d\n", len(report.Covered), len(report.Uncovered))
 	return nil
 }

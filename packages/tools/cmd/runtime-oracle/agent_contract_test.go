@@ -115,7 +115,7 @@ func TestAgentContractOracleManifestReconcilesExecutedAgentCases(t *testing.T) {
 	}
 
 	_, families, live := discoverLive(t)
-	if err := Reconcile(root, manifest, families, live); err != nil {
+	if _, err := ReconcileWorking(root, manifest, families, live, BaselineConsumerRegistry(), BaselineNegativeCoverageExceptions()); err != nil {
 		t.Fatalf("agent working manifest drifted from current registries: %v", err)
 	}
 	agentAssertGoldenCoverage(t, root, manifest)

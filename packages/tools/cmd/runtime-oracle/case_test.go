@@ -29,7 +29,7 @@ func TestContractInventoryRejectsTamperedPayload(t *testing.T) {
 	inv := inventoryFrom(live, families, cases)
 	// Point case input to tampered file without updating SHA256
 	inv.Cases[0].Input.Path = relTampered
-	err = Reconcile(root, inv, families, live)
+	_, err = ReconcileWorking(root, inv, families, live, BaselineConsumerRegistry(), BaselineNegativeCoverageExceptions())
 	if err == nil || !strings.Contains(err.Error(), "does not match disk") {
 		t.Fatalf("expected sha256 mismatch for tampered payload, got: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestContractInventoryRejectsDuplicateCaseID(t *testing.T) {
 	dupCase := cases[0]
 	inv.Cases = append(inv.Cases, dupCase)
 
-	err = Reconcile(root, inv, families, live)
+	_, err = ReconcileWorking(root, inv, families, live, BaselineConsumerRegistry(), BaselineNegativeCoverageExceptions())
 	if err == nil || !strings.Contains(err.Error(), "duplicate case "+dupCase.ID) {
 		t.Fatalf("expected duplicate case error, got: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestContractInventoryRejectsAbsentRustConsumer(t *testing.T) {
 	inv := inventoryFrom(live, families, cases)
 	inv.Cases[0].RustConsumer = "  "
 
-	err = Reconcile(root, inv, families, live)
+	_, err = ReconcileWorking(root, inv, families, live, BaselineConsumerRegistry(), BaselineNegativeCoverageExceptions())
 	if err == nil || !strings.Contains(err.Error(), "missing rust_consumer") {
 		t.Fatalf("expected missing rust_consumer error, got: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestContractInventoryRejectsInvalidPaths(t *testing.T) {
 	} {
 		inv := inventoryFrom(live, families, cases)
 		inv.Cases[0].Input.Path = invalid
-		err := Reconcile(root, inv, families, live)
+		_, err := ReconcileWorking(root, inv, families, live, BaselineConsumerRegistry(), BaselineNegativeCoverageExceptions())
 		if err == nil {
 			t.Fatalf("expected path error for %q, got nil", invalid)
 		}
@@ -132,7 +132,7 @@ func TestContractInventoryRejectsGoSourceAsBinaryAsset(t *testing.T) {
 	inv.Cases[0].Input.SHA256, _ = hashFile(filepath.Join(root, "packages/shared/network/codec/frame.go"))
 	inv.Cases[0].InputFormat = "binary"
 
-	err = Reconcile(root, inv, families, live)
+	_, err = ReconcileWorking(root, inv, families, live, BaselineConsumerRegistry(), BaselineNegativeCoverageExceptions())
 	if err == nil || !strings.Contains(err.Error(), "cannot be a Go source file") {
 		t.Fatalf("expected rejection of .go file as binary asset, got: %v", err)
 	}

@@ -58,6 +58,72 @@ type SourceSpec struct {
 	SHA256 string `json:"sha256"`
 }
 
+// ConsumerKind discriminates between Rust and Go corpus consumers.
+type ConsumerKind uint8
+
+const (
+	ConsumerRust ConsumerKind = iota + 1
+	ConsumerExternalGo
+)
+
+// ConsumerRegistry maps consumer identity names to their implementation kind.
+type ConsumerRegistry map[string]ConsumerKind
+
+// CoveragePoint identifies one family and supported version pair.
+type CoveragePoint struct {
+	FamilyID string
+	Version  string
+}
+
+// CoverageReport separates covered from uncovered points.
+type CoverageReport struct {
+	Covered   []CoveragePoint
+	Uncovered []CoveragePoint
+}
+
+// NegativeCoverageExceptions names family/version points for which no invalid
+// representation exists. Every entry carries a nonempty reviewed rationale.
+type NegativeCoverageExceptions map[CoveragePoint]string
+
+// BaselineConsumerRegistry returns the closed baseline consumer registry.
+func BaselineConsumerRegistry() ConsumerRegistry {
+	return ConsumerRegistry{
+		"corpus_frame":               ConsumerRust,
+		"mornlea_domain":             ConsumerRust,
+		"external:agent-contract":    ConsumerExternalGo,
+		"external:runtime-authority": ConsumerExternalGo,
+	}
+}
+
+// BaselineNegativeCoverageExceptions returns the baseline negative coverage exceptions.
+func BaselineNegativeCoverageExceptions() NegativeCoverageExceptions {
+	return make(NegativeCoverageExceptions)
+}
+
+// ReconcileWorking checks an in-progress inventory against current registries.
+func ReconcileWorking(
+	root string,
+	inventory Inventory,
+	discovered []Family,
+	live Identities,
+	consumers ConsumerRegistry,
+	negativeExceptions NegativeCoverageExceptions,
+) (CoverageReport, error) {
+	return reconcileInventory(root, inventory, discovered, live, consumers, negativeExceptions, false)
+}
+
+// ReconcileComplete checks an inventory for complete acceptance.
+func ReconcileComplete(
+	root string,
+	inventory Inventory,
+	discovered []Family,
+	live Identities,
+	consumers ConsumerRegistry,
+	negativeExceptions NegativeCoverageExceptions,
+) (CoverageReport, error) {
+	return reconcileInventory(root, inventory, discovered, live, consumers, negativeExceptions, true)
+}
+
 // Family is one supported protocol, save, kernel, or agent contract.
 type Family struct {
 	ID                string       `json:"id"`
@@ -146,9 +212,16 @@ func LoadInventory(path string) (Inventory, error) {
 	return inventory, nil
 }
 
-// Reconcile compares a frozen inventory with families discovered from
-// current registries and source.
-func Reconcile(root string, inventory Inventory, discovered []Family, live Identities) error {
+// reconcileInventory is the shared private validator for ReconcileWorking and ReconcileComplete.
+func reconcileInventory(
+	root string,
+	inventory Inventory,
+	discovered []Family,
+	live Identities,
+	consumers ConsumerRegistry,
+	negativeExceptions NegativeCoverageExceptions,
+	complete bool,
+) (CoverageReport, error) {
 	var problems []string
 	problems = append(problems, identityProblems(inventory.Identities, live)...)
 
@@ -247,6 +320,30 @@ func Reconcile(root string, inventory Inventory, discovered []Family, live Ident
 		}
 	}
 
+	for pt, rationale := range negativeExceptions {
+		if strings.TrimSpace(rationale) == "" {
+			problems = append(problems, fmt.Sprintf("negative coverage exception for %s/%s has empty rationale", pt.FamilyID, pt.Version))
+		}
+		fam, ok := inventoryByID[pt.FamilyID]
+		if !ok || !containsString(fam.SupportedVersions, pt.Version) {
+			problems = append(problems, fmt.Sprintf("negative coverage exception for unknown family/version %s/%s", pt.FamilyID, pt.Version))
+		}
+	}
+
+	type pointCoverage struct {
+		hasOK    bool
+		hasError bool
+	}
+	pointCoverageMap := make(map[CoveragePoint]*pointCoverage)
+	for _, family := range inventory.Families {
+		for _, ver := range family.SupportedVersions {
+			pt := CoveragePoint{FamilyID: family.ID, Version: ver}
+			if _, exists := pointCoverageMap[pt]; !exists {
+				pointCoverageMap[pt] = &pointCoverage{}
+			}
+		}
+	}
+
 	caseByID := make(map[string]CaseSpec, len(inventory.Cases))
 	casesByFamily := make(map[string][]string)
 	for _, c := range inventory.Cases {
@@ -261,8 +358,18 @@ func Reconcile(root string, inventory Inventory, discovered []Family, live Ident
 		caseByID[c.ID] = c
 		casesByFamily[c.Family] = append(casesByFamily[c.Family], c.ID)
 
-		if err := validateCaseSpec(root, c, inventoryByID); err != nil {
+		kind, err := validateCaseSpecConsumer(root, c, inventoryByID, consumers)
+		if err != nil {
 			problems = append(problems, fmt.Sprintf("case %s: %v", c.ID, err))
+		} else {
+			pt := CoveragePoint{FamilyID: c.Family, Version: c.Version}
+			if cov := pointCoverageMap[pt]; cov != nil {
+				if kind == "ok" {
+					cov.hasOK = true
+				} else if kind == "error" {
+					cov.hasError = true
+				}
+			}
 		}
 	}
 
@@ -274,61 +381,180 @@ func Reconcile(root string, inventory Inventory, discovered []Family, live Ident
 	}
 
 	problems = append(problems, requiredKindProblems(inventory.Families)...)
+
+	var report CoverageReport
+	seenPoints := make(map[CoveragePoint]bool)
+	for _, family := range inventory.Families {
+		for _, ver := range family.SupportedVersions {
+			pt := CoveragePoint{FamilyID: family.ID, Version: ver}
+			if seenPoints[pt] {
+				continue
+			}
+			seenPoints[pt] = true
+
+			cov := pointCoverageMap[pt]
+			rationale, hasNegEx := negativeExceptions[pt]
+			validException := hasNegEx && strings.TrimSpace(rationale) != ""
+
+			if cov != nil && cov.hasOK && (cov.hasError || validException) {
+				report.Covered = append(report.Covered, pt)
+			} else {
+				report.Uncovered = append(report.Uncovered, pt)
+			}
+		}
+	}
+
+	sortCoveragePoints(report.Covered)
+	sortCoveragePoints(report.Uncovered)
+
+	if complete {
+		for _, pt := range report.Uncovered {
+			problems = append(problems, fmt.Sprintf("uncovered point %s version %s", pt.FamilyID, pt.Version))
+		}
+	}
+
 	if len(problems) == 0 {
-		return nil
+		return report, nil
 	}
 	sort.Strings(problems)
-	return &InventoryError{Problems: problems}
+	return report, &InventoryError{Problems: problems}
 }
 
+// validateCaseSpec validates one case specification against its family and the baseline consumer registry.
 func validateCaseSpec(root string, c CaseSpec, families map[string]Family) error {
+	_, err := validateCaseSpecConsumer(root, c, families, BaselineConsumerRegistry())
+	return err
+}
+
+func validateCaseSpecConsumer(root string, c CaseSpec, families map[string]Family, consumers ConsumerRegistry) (string, error) {
 	fam, ok := families[c.Family]
 	if !ok {
-		return fmt.Errorf("unknown family %s", c.Family)
+		return "", fmt.Errorf("unknown family %s", c.Family)
 	}
 	expectedPrefix := c.Family + "/" + c.Version + "/"
 	if !strings.HasPrefix(c.ID, expectedPrefix) || len(c.ID) <= len(expectedPrefix) {
-		return fmt.Errorf("id %q must match %s<label>", c.ID, expectedPrefix)
+		return "", fmt.Errorf("id %q must match %s<label>", c.ID, expectedPrefix)
+	}
+	if !containsString(fam.SupportedVersions, c.Version) {
+		return "", fmt.Errorf("case version %q is absent from family supported_versions", c.Version)
+	}
+	if strings.TrimSpace(c.RustConsumer) == "" {
+		return "", fmt.Errorf("missing rust_consumer")
+	}
+	if _, ok := consumers[c.RustConsumer]; !ok {
+		return "", fmt.Errorf("unknown consumer %q", c.RustConsumer)
 	}
 
 	switch c.Operation {
 	case "decode", "encode", "migrate", "admit", "order", "kernel", "agent-contract":
 	default:
-		return fmt.Errorf("invalid operation %q", c.Operation)
+		return "", fmt.Errorf("invalid operation %q", c.Operation)
 	}
 
 	if c.InputFormat != "binary" && c.InputFormat != "json" {
-		return fmt.Errorf("invalid input_format %q (must be 'binary' or 'json')", c.InputFormat)
-	}
-	if strings.TrimSpace(c.RustConsumer) == "" {
-		return fmt.Errorf("missing rust_consumer")
+		return "", fmt.Errorf("invalid input_format %q (must be 'binary' or 'json')", c.InputFormat)
 	}
 	if len(c.Checkpoints) == 0 {
-		return fmt.Errorf("empty checkpoints")
+		return "", fmt.Errorf("empty checkpoints")
 	}
 	for _, cp := range c.Checkpoints {
 		if _, err := strconv.ParseUint(cp, 10, 64); err != nil {
-			return fmt.Errorf("invalid checkpoint %q (must be u64 decimal string)", cp)
+			return "", fmt.Errorf("invalid checkpoint %q (must be u64 decimal string)", cp)
 		}
 	}
 
 	// Validate input asset
 	if err := validateAsset(root, c.Input, c.InputFormat == "json", MaxBinaryBytes); err != nil {
-		return fmt.Errorf("input asset %s: %w", c.Input.Path, err)
+		return "", fmt.Errorf("input asset %s: %w", c.Input.Path, err)
 	}
-	// Validate expected asset (always JSON)
-	if err := validateAsset(root, c.Expected, true, MaxCaseJSONBytes); err != nil {
-		return fmt.Errorf("expected asset %s: %w", c.Expected.Path, err)
+	// Validate expected asset (always JSON) and extract kind
+	kind, err := validateExpectedAsset(root, c.Expected)
+	if err != nil {
+		return "", fmt.Errorf("expected asset %s: %w", c.Expected.Path, err)
 	}
 	// Validate encoded asset (optional)
 	if c.Encoded != nil {
 		if err := validateAsset(root, *c.Encoded, false, MaxBinaryBytes); err != nil {
-			return fmt.Errorf("encoded asset %s: %w", c.Encoded.Path, err)
+			return "", fmt.Errorf("encoded asset %s: %w", c.Encoded.Path, err)
 		}
 	}
 
-	_ = fam
-	return nil
+	return kind, nil
+}
+
+func validateExpectedAsset(root string, asset AssetRef) (string, error) {
+	if err := validateCorpusPath(asset.Path); err != nil {
+		return "", err
+	}
+	if !hexSha256Pattern.MatchString(asset.SHA256) {
+		return "", fmt.Errorf("invalid sha256 %s", asset.SHA256)
+	}
+	if !strings.HasSuffix(asset.Path, ".json") {
+		return "", fmt.Errorf("json asset must have .json extension: %s", asset.Path)
+	}
+	if err := checkNoSymlinks(root, asset.Path); err != nil {
+		return "", err
+	}
+	fullPath := filepath.Join(root, filepath.FromSlash(asset.Path))
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("stat: %w", err)
+	}
+	if info.Size() > MaxCaseJSONBytes {
+		return "", fmt.Errorf("file size %d exceeds budget %d", info.Size(), MaxCaseJSONBytes)
+	}
+	hash, err := hashFile(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("hash: %w", err)
+	}
+	if hash != asset.SHA256 {
+		return "", fmt.Errorf("sha256 %s does not match disk %s", asset.SHA256, hash)
+	}
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		return "", err
+	}
+	if err := validateNoDuplicateKeys(content); err != nil {
+		return "", fmt.Errorf("duplicate json keys: %w", err)
+	}
+
+	var payload map[string]any
+	dec := json.NewDecoder(bytes.NewReader(content))
+	dec.UseNumber()
+	if err := dec.Decode(&payload); err != nil {
+		return "", fmt.Errorf("decode expected json: %w", err)
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		return "", fmt.Errorf("unexpected trailing content in expected json")
+	}
+	rawKind, ok := payload["kind"]
+	if !ok {
+		return "", fmt.Errorf("expected outcome missing top-level kind")
+	}
+	kind, ok := rawKind.(string)
+	if !ok || (kind != "ok" && kind != "error") {
+		return "", fmt.Errorf("expected outcome kind must be \"ok\" or \"error\", got %v", rawKind)
+	}
+	return kind, nil
+}
+
+func containsString(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+func sortCoveragePoints(points []CoveragePoint) {
+	sort.Slice(points, func(i, j int) bool {
+		if points[i].FamilyID != points[j].FamilyID {
+			return points[i].FamilyID < points[j].FamilyID
+		}
+		return points[i].Version < points[j].Version
+	})
 }
 
 func validateAsset(root string, asset AssetRef, isJSON bool, maxBytes int64) error {
