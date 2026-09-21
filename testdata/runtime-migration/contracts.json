@@ -262,12 +262,24 @@
           "sha256": "sha256:3c3be2df1230fb36562bed74d5a3a678cf8c8234938aa97aaadcd0f8c707aa1d"
         },
         {
+          "path": "packages/shared/core/chest.go",
+          "sha256": "sha256:776e738bf659fbfd47a38521522a1b18f6197037a0c249b5eb678ffd234b090d"
+        },
+        {
           "path": "packages/shared/core/combat.go",
           "sha256": "sha256:429655fb654a87d18944e16239631e685b742fbbf2b0bcf6d46db6f0e30f8e0f"
         },
         {
+          "path": "packages/shared/core/container.go",
+          "sha256": "sha256:b5c4d2e12ce20fd73f593e62d1ee95726747c0d8834ae5e675f69957445ec040"
+        },
+        {
           "path": "packages/shared/core/day_phase.go",
           "sha256": "sha256:0e024d5753cbfd30d8a676d68a3fb3a571b62e9dfe742a4eec8b97055a1dccfc"
+        },
+        {
+          "path": "packages/shared/core/furnace.go",
+          "sha256": "sha256:799d4808eee0bab4548fa78e80147772d9929af1b0b8af1fd197d171f535133d"
         },
         {
           "path": "packages/shared/core/health.go",
@@ -278,12 +290,24 @@
           "sha256": "sha256:98d831fa9f5cbccf9baea8fac1b2b59f751be1f52285dac17054d31f910ab177"
         },
         {
+          "path": "packages/shared/core/inventory.go",
+          "sha256": "sha256:9f4cfca67a09c4d64fa7a038ef53eb1e2ae7acb504e4a3375847f035807bfb05"
+        },
+        {
+          "path": "packages/shared/core/item.go",
+          "sha256": "sha256:5ca451788a1c14bc4be1dfc8793784e3bbff0a08f08ea14cfc86e0a2658497af"
+        },
+        {
           "path": "packages/shared/core/pos.go",
           "sha256": "sha256:a09aff1a2d09cbdb8f5494ebb70ae933d5b7415ac9cc078a295524d358424469"
         },
         {
           "path": "packages/shared/core/season.go",
           "sha256": "sha256:1c358ec7499289c5c0f04a04d0891dca466d0b0d3d62e1dd3742f55362422555"
+        },
+        {
+          "path": "packages/shared/core/smelting.go",
+          "sha256": "sha256:5b8ee8878ae518273212e85296963ffed9136c8d7addaa5c60ebe6741bb772a0"
         },
         {
           "path": "packages/shared/core/weather.go",
@@ -296,6 +320,14 @@
         {
           "path": "packages/shared/network/protocol/message_combat.go",
           "sha256": "sha256:7200997afd81b484db299ba8429decdb340c939bcd6c7ea2c93d9d1bda1cdd8b"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_container.go",
+          "sha256": "sha256:b12db722f43c2ff6877fe33445ad3b204a56e1d946a592da7764591e0a650ad2"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_inventory.go",
+          "sha256": "sha256:71311db367570501567a6163b7a030a89aea702f3aa6fcf66a7f6a1e0a401192"
         },
         {
           "path": "packages/shared/network/protocol/message_player.go",
@@ -325,6 +357,10 @@
         "domain.event/1/block-changes-unsorted",
         "domain.event/1/block-changes-y-above-world",
         "domain.event/1/block-changes-y-below-world",
+        "domain.event/1/chest-state-furnace-reference",
+        "domain.event/1/chest-state-seed",
+        "domain.event/1/chest-state-slot-above-array",
+        "domain.event/1/chest-state-unregistered-item",
         "domain.event/1/chunk-snapshot-dimension-unknown",
         "domain.event/1/chunk-snapshot-direct-high-bits",
         "domain.event/1/chunk-snapshot-direct-last-cell",
@@ -368,11 +404,40 @@
         "domain.event/1/command-rejected-protected-block",
         "domain.event/1/command-rejected-unknown-reason",
         "domain.event/1/command-rejected-zero-sequence",
+        "domain.event/1/container-closed-chest",
+        "domain.event/1/container-closed-furnace",
+        "domain.event/1/container-closed-unknown-kind",
+        "domain.event/1/crafting-state-personal-residue-slot-four",
+        "domain.event/1/crafting-state-personal-seed",
+        "domain.event/1/crafting-state-size-unknown",
+        "domain.event/1/crafting-state-workbench-slot-eight",
         "domain.event/1/forget-chunks-dimension-unknown",
         "domain.event/1/forget-chunks-duplicate",
         "domain.event/1/forget-chunks-empty",
         "domain.event/1/forget-chunks-reversed-unique-order",
         "domain.event/1/forget-chunks-seed",
+        "domain.event/1/furnace-state-burn-above-maximum",
+        "domain.event/1/furnace-state-chest-reference",
+        "domain.event/1/furnace-state-fuel-stone",
+        "domain.event/1/furnace-state-idle",
+        "domain.event/1/furnace-state-input-clay",
+        "domain.event/1/furnace-state-input-raw-beef",
+        "domain.event/1/furnace-state-input-raw-iron",
+        "domain.event/1/furnace-state-input-sand",
+        "domain.event/1/furnace-state-input-stone",
+        "domain.event/1/furnace-state-input-unregistered-item",
+        "domain.event/1/furnace-state-output-brick",
+        "domain.event/1/furnace-state-output-cooked-beef",
+        "domain.event/1/furnace-state-output-glass",
+        "domain.event/1/furnace-state-output-iron-ingot",
+        "domain.event/1/furnace-state-output-stone",
+        "domain.event/1/furnace-state-progress-at-requirement",
+        "domain.event/1/furnace-state-seed",
+        "domain.event/1/furnace-state-slot-above-array",
+        "domain.event/1/furnace-state-zero-generation",
+        "domain.event/1/inventory-state-populated-slots",
+        "domain.event/1/inventory-state-seed",
+        "domain.event/1/inventory-state-selected-above-hotbar",
         "domain.event/1/place-block-succeeded-acknowledged-sequence",
         "domain.event/1/place-block-succeeded-zero-sequence",
         "domain.event/1/player-state-armor-points-above-max",
@@ -11364,6 +11429,633 @@
       "expected": {
         "path": "testdata/runtime-migration/cases/domain/event_world/forget-chunks-seed.expected.json",
         "sha256": "sha256:782ff766c8f83f396063191446957a7b5df3263c5bead483e72292cf0efb67c7"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chest-state-furnace-reference",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/chest-state-furnace-reference.input.json",
+        "sha256": "sha256:a05c861f3c7c3f97644a8c5a55d627c4ea01d1284e9cd33025e3e5ff408b902a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/chest-state-furnace-reference.expected.json",
+        "sha256": "sha256:80d38d8159dd0061bdbc0047cc54b8806ac6ae2c34424e3e97c483f59d589fde"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chest-state-seed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/chest-state-seed.input.json",
+        "sha256": "sha256:4bdcb6daf48755fbfcd1d75822c810f919f8d2e6315b66afd26041def4c570c7"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/chest-state-seed.expected.json",
+        "sha256": "sha256:ca0a04349768c16844cfcff8fafd110d29c79395a3731b2d05927d4a920eec35"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chest-state-slot-above-array",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/chest-state-slot-above-array.input.json",
+        "sha256": "sha256:f8fdd753f313536b257a8d371b26d8eb6eca0fda969683e3fed5d16181cc50ae"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/chest-state-slot-above-array.expected.json",
+        "sha256": "sha256:77e75e5155ba9bed2219322933ef1713f21af2f3aee3714db5eced429c37d60b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chest-state-unregistered-item",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/chest-state-unregistered-item.input.json",
+        "sha256": "sha256:a534bfd65fe84f42a78f2e55328fa42eafbce4c616091d3e96d32951f9f9c24a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/chest-state-unregistered-item.expected.json",
+        "sha256": "sha256:d0fff760e64d17f83849c62819115010358bbf4759ec2730b813aab961b057d9"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/container-closed-chest",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/container-closed-chest.input.json",
+        "sha256": "sha256:b439e89852596ace96c9badc58c20082568305c8df03689ecb301243015fa5f8"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/container-closed-chest.expected.json",
+        "sha256": "sha256:48f575569ab0bc5b857883af292a374d41a18a904003b563cfb1e3109f30dc72"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/container-closed-furnace",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/container-closed-furnace.input.json",
+        "sha256": "sha256:77dbff7c0063f6485249f741fb026a68a25c2e4e992991abfb2e1067e1774368"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/container-closed-furnace.expected.json",
+        "sha256": "sha256:17c1cdeafbc64bf5519aa76a44846d33b841010bbd9bc9f67ff8168001beff31"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/container-closed-unknown-kind",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/container-closed-unknown-kind.input.json",
+        "sha256": "sha256:f5ec6c7cc41aae30142c7c9460f65c1e908dcff35bbef3a5bc320de8ddbd0d7e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/container-closed-unknown-kind.expected.json",
+        "sha256": "sha256:bbe47943f62d843eeb9dee3906b4bea78143a8c8892e6baf91b15643413c6cf0"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/crafting-state-personal-residue-slot-four",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/crafting-state-personal-residue-slot-four.input.json",
+        "sha256": "sha256:ed89698335718dfa83af1c2e4c59b9aab139268c30aa80fa4931968de21f1be3"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/crafting-state-personal-residue-slot-four.expected.json",
+        "sha256": "sha256:7c8f35dc725711da06787bab7f36b7dedfa21dd3dcf6441915850f6929e3cee0"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/crafting-state-personal-seed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/crafting-state-personal-seed.input.json",
+        "sha256": "sha256:a347ce8bea4cd0e5eb532c1ccaf6066e33f1e5e188b4b950de0c22bf1600fb1d"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/crafting-state-personal-seed.expected.json",
+        "sha256": "sha256:032b1608751754a322f92f8b76549340953dd4836563bd3d7604627618bebce0"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/crafting-state-size-unknown",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/crafting-state-size-unknown.input.json",
+        "sha256": "sha256:25b079990ee51490a0d72fa925cbd0ab956cbb8a63132bd82f5cb82e8b74b9fc"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/crafting-state-size-unknown.expected.json",
+        "sha256": "sha256:0c206454507b8ea7c81bb402f24d83157d7017c24a019987dbe8b9abe8f43400"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/crafting-state-workbench-slot-eight",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/crafting-state-workbench-slot-eight.input.json",
+        "sha256": "sha256:bbf21fd5f79f8bfa644567b56a35ea7ea6465976d3266cddbcbd9154d204519f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/crafting-state-workbench-slot-eight.expected.json",
+        "sha256": "sha256:07e806b2e395697e8efed7c648c44e9093415578c3b12a7a846de00812ba86bb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-burn-above-maximum",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-burn-above-maximum.input.json",
+        "sha256": "sha256:fde10f6423debdd4a32cf3c3a33757d0d7b6784e223136cb69c5ae42058c8137"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-burn-above-maximum.expected.json",
+        "sha256": "sha256:d6abe8f981a52fb8f83bb1cca25158d39bcf56b3137df4dec174bcd5aeae6908"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-chest-reference",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-chest-reference.input.json",
+        "sha256": "sha256:8260a7ae98bc30f1e0017cdf0eb4d2745d7ff322671df731a27c26589f25639d"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-chest-reference.expected.json",
+        "sha256": "sha256:7949f0ea9f44d67d2969c67802442632f365e06121fedb348279ae34d5688caa"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-fuel-stone",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-fuel-stone.input.json",
+        "sha256": "sha256:155a3d13489801f384c38150a377a8c295a30f5287a5f0074cb9af242fd61db5"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-fuel-stone.expected.json",
+        "sha256": "sha256:c76b653bf674937a831e77a06ac757ce5c876fe49e59003ca2f1eb1f6ecd5aa9"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-idle",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-idle.input.json",
+        "sha256": "sha256:66135b7cf2701da7aa6a2174c0917f3222bf23eff2cf8c2d81b5ed5464f31f8c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-idle.expected.json",
+        "sha256": "sha256:763c3fe8b4a432b75e9e14e92f52056fe1f057036baa45b0bedef7433abcba9e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-input-clay",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-input-clay.input.json",
+        "sha256": "sha256:9313e184cbab4483198b50ce2e48fc0e61d2f9c37c6b39a871ae9b5c38676fee"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-input-clay.expected.json",
+        "sha256": "sha256:5791c88f67bcb8f11dde94936cdb731c7fd9653481ca0005dfda576b3b4f93da"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-input-raw-beef",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-input-raw-beef.input.json",
+        "sha256": "sha256:1ead658ae88944b6d4846947519e2399a4dc2948ece3dc1073a099541e30d98e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-input-raw-beef.expected.json",
+        "sha256": "sha256:d8efa5dee4b7b96862842d19122440d097ddbf802d7eeb13b02d02c5e974294a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-input-raw-iron",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-input-raw-iron.input.json",
+        "sha256": "sha256:0081cb18dd44ccba7b782ef08b67c9a154360f56f9b8eaade4fe37d540803f83"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-input-raw-iron.expected.json",
+        "sha256": "sha256:00257f952bfc1b6ae587b0dc0536c3d8cb03801540cbae82255e458ff8d85f84"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-input-sand",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-input-sand.input.json",
+        "sha256": "sha256:b97e92580fa050e8b19ec13437668aa50739b488e2598226c5756642168fa5ee"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-input-sand.expected.json",
+        "sha256": "sha256:a4bdf9f99e22f320f60723c802aefc101fa7a818f9be347d076eca9c8ab0f351"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-input-stone",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-input-stone.input.json",
+        "sha256": "sha256:e5e0ac3a3ee799d5b0c2dbd6cb837aea183c1409ecda6ab7dcf88ea9b4b337be"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-input-stone.expected.json",
+        "sha256": "sha256:2a57ccb03a8d82c842206e5d07a5dd69e729aab31a7f6fde1cc7b021af2120f3"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-input-unregistered-item",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-input-unregistered-item.input.json",
+        "sha256": "sha256:9f20656162c5ddc645cb67c8b365d950e9fecbf53cd3f313e4f1f14c5fe53d9b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-input-unregistered-item.expected.json",
+        "sha256": "sha256:dbb1ff75b66b9e378c364f9541fa00f36e75612ccd70532d8f0834d57cc53b95"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-output-brick",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-output-brick.input.json",
+        "sha256": "sha256:4e680cf8cd182b2d091c349a7d6fd4ef1fb168060522e2190d7e9b680375b258"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-output-brick.expected.json",
+        "sha256": "sha256:620d8621bef07b27101aa6e5d260c2b4b3c34aed162f363d9575080b868929fb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-output-cooked-beef",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-output-cooked-beef.input.json",
+        "sha256": "sha256:6386bc9ad6f060da4abcf5bb766807af62be823aea6b7b63234d6afdfea4eeb0"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-output-cooked-beef.expected.json",
+        "sha256": "sha256:ac12a3d31f1c1fcfbf324eaaf70e158cbd53c52b84346abced027c1110d37757"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-output-glass",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-output-glass.input.json",
+        "sha256": "sha256:2a3347afc4adc877bbdd1e92b50b5cbe128644358f0e3dc00216bb84d2f711cc"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-output-glass.expected.json",
+        "sha256": "sha256:7b66dda85a9d2e27a91a60644408db2dd9ea92220defb838e5ee73ffd801adab"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-output-iron-ingot",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-output-iron-ingot.input.json",
+        "sha256": "sha256:0081cb18dd44ccba7b782ef08b67c9a154360f56f9b8eaade4fe37d540803f83"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-output-iron-ingot.expected.json",
+        "sha256": "sha256:00257f952bfc1b6ae587b0dc0536c3d8cb03801540cbae82255e458ff8d85f84"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-output-stone",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-output-stone.input.json",
+        "sha256": "sha256:23420d6e2f25403f47a31f58658fa880f40c41b51ea229103880d63dcfc0df0a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-output-stone.expected.json",
+        "sha256": "sha256:95cf9a6bbfbd2ceac6d939c93ac486e69b9ee981ac63b5e6270760fbb8f8d0bf"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-progress-at-requirement",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-progress-at-requirement.input.json",
+        "sha256": "sha256:a8621457f167433febe173208e99a744b2831b4e3d9d0efb73d96665c0da00f1"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-progress-at-requirement.expected.json",
+        "sha256": "sha256:8b602125fdab2c621ff71b831932278e5725d69d4b311b4f8771e13f1f8e082c"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-seed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-seed.input.json",
+        "sha256": "sha256:0081cb18dd44ccba7b782ef08b67c9a154360f56f9b8eaade4fe37d540803f83"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-seed.expected.json",
+        "sha256": "sha256:00257f952bfc1b6ae587b0dc0536c3d8cb03801540cbae82255e458ff8d85f84"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-slot-above-array",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-slot-above-array.input.json",
+        "sha256": "sha256:3c34a13377288ab015f698503e2537049abe41e4141f95616b1438b14c05b33f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-slot-above-array.expected.json",
+        "sha256": "sha256:dd8732a4688037749c43f3d9fe118164f138b5d063647d505c2a925bc7268861"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/furnace-state-zero-generation",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-zero-generation.input.json",
+        "sha256": "sha256:8a6a15032ea4625c7baa0cf339c4169c55e43e09dc7ea4646a54573627b9e20b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/furnace-state-zero-generation.expected.json",
+        "sha256": "sha256:fd834e5714b1a1f794ee3b2f1395abce3bbc3fb8ccb0c734e58be4717069384f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/inventory-state-populated-slots",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/inventory-state-populated-slots.input.json",
+        "sha256": "sha256:99340f609cd5064b8446f4da8544d1bc187a1e3c36a25882b9d89a63a90ca12c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/inventory-state-populated-slots.expected.json",
+        "sha256": "sha256:2879358e8026e67d3cbbc24a139a8708771a3cae70f3246f8ef9fc9549702b5d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/inventory-state-seed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/inventory-state-seed.input.json",
+        "sha256": "sha256:03c5921c1cf3e9f5578a0d861b736365b4fca10b45ac85a58ea083adea02c5ad"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/inventory-state-seed.expected.json",
+        "sha256": "sha256:a6d6518e8cd7ed9f951d17b7a70b883e4dbebfa03a2cbd926d0a9a436af75d7a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/inventory-state-selected-above-hotbar",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/inventory-state-selected-above-hotbar.input.json",
+        "sha256": "sha256:6b7ff70a9413a1b6225c4cc7a28d3d18c2376c08f17a39bce4e1d0d50047bd32"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_inventory/inventory-state-selected-above-hotbar.expected.json",
+        "sha256": "sha256:a9bf908dc95940ce80c586c1e7aea51941148e058e6af782f1fd51e438725d9b"
       },
       "checkpoints": [
         "0"
