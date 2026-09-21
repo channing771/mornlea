@@ -10,7 +10,7 @@ implementation acceptance.
 ## 1. Go evidence truthfulness
 
 - [x] 1.1 [Separate working and complete inventory reconciliation](plans/01-evidence.md#node-11-separate-working-and-complete-inventory-reconciliation). Direct prerequisites: none. Run `go test ./packages/tools/cmd/runtime-oracle -race -count=1 -run 'TestContractInventory(Working|Complete|RejectsUnknownConsumer|RejectsUnsupportedCaseVersion)'`.
-- [ ] 1.2 [Build traces only from executed observations](plans/01-evidence.md#node-12-build-traces-only-from-executed-observations). Direct prerequisites: 1.1. Run `go test ./packages/tools/cmd/runtime-oracle -race -count=1 -run 'TestTrace|TestProtocolOracleFrame|TestExecutedObservation'`.
+- [x] 1.2 [Build traces only from executed observations](plans/01-evidence.md#node-12-build-traces-only-from-executed-observations). Direct prerequisites: 1.1. Run `go test ./packages/tools/cmd/runtime-oracle -race -count=1 -run 'TestTrace|TestProtocolOracleFrame|TestExecutedObservation'`.
 
 ## 2. Corpus publication and loading
 

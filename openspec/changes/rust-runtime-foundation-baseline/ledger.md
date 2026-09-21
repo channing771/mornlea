@@ -76,3 +76,11 @@ checkbox/status source.
 - Independent review: Spec ✅ compliant, Task quality Approved, no Critical/Important/Minor issues.
 - Verification: `go test ./packages/tools/cmd/runtime-oracle -race -count=1 -run 'TestContractInventory(Working|Complete|RejectsUnknownConsumer|RejectsUnsupportedCaseVersion)'` passed; full `runtime-oracle` passed under `-race`; audit passed; `testdata/runtime-migration` diff clean.
 
+## 2026-09-21 — Node 1.2 completion
+
+- Node 1.2 implementer: `aeaa008c` (`fix(runtime-oracle): require executed trace observations`).
+- Files changed: `trace.go`, `trace_test.go`, `trace_isolation_test.go`, `protocol_frame_test.go`, `runner_helpers_test.go`, `agent_contract_test.go`, `domain_*_test.go` (8 files), `AGENTS.md` in `packages/tools/cmd/runtime-oracle`.
+- Independent review: Spec ✅ compliant, Task quality Approved, no Critical/Important issues, 1 deferred minor (outcome parsing cache in `ValidateTraceAtRoot`).
+- Verification: `go test ./packages/tools/cmd/runtime-oracle -race -count=1 -run 'TestTrace|TestProtocolOracleFrame|TestExecutedObservation'` passed; full `runtime-oracle` passed under `-race`; audit passed; `testdata/runtime-migration` diff clean.
+
+
