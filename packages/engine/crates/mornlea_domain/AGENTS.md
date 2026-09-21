@@ -139,7 +139,8 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   (12 cases: the red input, reverse arrival, same-kind duplicates, the same
   sequence across sessions, two ticks, duplicate arrival with unchanged input,
   an empty batch, exact and short scratch, scratch reuse after failure, the
-  zero-sequence rule, and the unreservable capacity).
+  zero-sequence rule, the unreservable capacity, and the envelope carrying
+  every payload family unchanged).
 
 ## Observations (`src/event.rs`, `tests/runtime_contract.rs`)
 
