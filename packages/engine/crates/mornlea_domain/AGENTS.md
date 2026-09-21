@@ -65,7 +65,7 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   vectors: private fields, getters, no normalization, no clamping, and exact
   `f32` bit preservation including negative zero.
 
-## Value and input bounds (`src/values.rs`, `src/input.rs`, `src/input/control.rs`, `tests/runtime_contract.rs`, `tests/command_control.rs`)
+## Value and input bounds (`src/values.rs`, `src/input.rs`, `src/input/control.rs`, `src/input/inventory.rs`, `src/input/chat.rs`, `tests/runtime_contract.rs`, `tests/command_control.rs`, `tests/command_inventory.rs`)
 
 - `Dimension` accepts only overworld and depths; any other ID is
   `InvalidDimension` (`invalid_dimension_and_hotbar_ranges_are_rejected`).
@@ -84,12 +84,32 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   the authority, and `HeldActions::primary` maps exactly to the Go `Mining`
   bit without implying that mining wins over combat. No payload names a
   target cell, a hit entity, a placed block, a consumed item or an outcome.
-- `Command` is the extensible intent enum introduced with the movement and
-  ray variants (`PlayerInput`, `PlaceBlock`, `Resync`, `SelectHotbar`,
-  `OpenContainer`, `TillSoil`, `BoneMeal`, `CollectWater`, `PlaceWater`);
-  later inventory, container and chat intents are added as new variants.
+- `Command` is the extensible intent enum over all 19 sequenced play
+  variants: the movement and ray variants (`PlayerInput`, `PlaceBlock`,
+  `Resync`, `SelectHotbar`, `OpenContainer`, `TillSoil`, `BoneMeal`,
+  `CollectWater`, `PlaceWater`) plus the inventory and container variants
+  (`MoveInventory`, `MoveCrafting`, `MoveContainer`, `CloseContainer`,
+  `DropSelectedItem`, `TakeCraftingOutput`, `EquipArmor`, `MovePartial`,
+  `QuickMove`, `DropStack`). No payload carries a sequence, an envelope, a
+  target cell, a hit entity, a placed block, a consumed item or an outcome.
   `ResyncIntent` accepts a zero `have_revision` because it names a chunk the
   client holds nothing for.
+- The inventory and container payloads in `input/inventory.rs` pin the exact
+  Go bounds per command. `StackView {Inventory, Crafting, Container(ContainerRef)}`
+  replaces the raw view numbers and the all-zero sentinel reference: absence of
+  a container is expressed by the variant itself, so a zero `ContainerRef`
+  never enters the domain type. `MoveCrafting` alone rejects two
+  inventory-region indices, and `MoveContainer` alone rejects the furnace
+  output slot as a destination; `MovePartial`, `QuickMove` and `DropStack`
+  share the view and reference bounds without those stricter rules because
+  the protocol does not reject them and the authority applies item and slot
+  rules later. A malformed real container reference is rejected before slot
+  checks. `TakeCraftingOutput` carries nothing but its variant because its
+  nonzero-sequence rule belongs to envelope construction.
+- `ChatIntent { text: CommandText }` in `input/chat.rs` is deliberately
+  outside `Command`: chat has no wire sequence and is consumed through its own
+  FIFO. It performs no addressing, warp, stop or queue policy, and the text is
+  retained verbatim including a leading mention.
 - `SemanticInput` and `order_inputs` are a temporary replay-ordering test
   facade that pairs a payload with a sequence and performs no validation of
   its own; `order_inputs` sorts by sequence, then kind name
@@ -111,4 +131,5 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test identity_values --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test items_locations --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test command_control --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test command_inventory --locked
 ```
