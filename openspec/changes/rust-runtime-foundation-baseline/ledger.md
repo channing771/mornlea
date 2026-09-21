@@ -83,4 +83,12 @@ checkbox/status source.
 - Independent review: Spec ✅ compliant, Task quality Approved, no Critical/Important issues, 1 deferred minor (outcome parsing cache in `ValidateTraceAtRoot`).
 - Verification: `go test ./packages/tools/cmd/runtime-oracle -race -count=1 -run 'TestTrace|TestProtocolOracleFrame|TestExecutedObservation'` passed; full `runtime-oracle` passed under `-race`; audit passed; `testdata/runtime-migration` diff clean.
 
+## 2026-09-21 — Node 2.1 completion
+
+- Node 2.1 implementer: `0599910d` (`test(runtime-oracle): isolate corpus generation exports`).
+- Files changed: `runner_helpers_test.go`, `protocol_frame_test.go`, `domain_*_test.go` (8 files), `main_test.go`, `AGENTS.md` in `packages/tools/cmd/runtime-oracle`, and `runtime_contract_oracle_test.go`, `AGENTS.md` in `packages/shared/companion`.
+- Independent review: Spec ✅ compliant, Task quality Approved, no Critical/Important issues, 1 deferred minor (companion test corpus digest comparison).
+- Verification: `go test ./packages/tools/cmd/runtime-oracle ./packages/shared/companion -race -count=1` passed; audit passed; `testdata/runtime-migration` diff clean; no `-update-*` flags found by ripgrep.
+
+
 

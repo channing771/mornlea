@@ -14,7 +14,7 @@ implementation acceptance.
 
 ## 2. Corpus publication and loading
 
-- [ ] 2.1 [Remove tracked-corpus rewrite paths](plans/02-corpus.md#node-21-remove-tracked-corpus-rewrite-paths). Direct prerequisites: 1.2. Run `go test ./packages/tools/cmd/runtime-oracle ./packages/shared/companion -race -count=1` and `git diff --exit-code -- testdata/runtime-migration`.
+- [x] 2.1 [Remove tracked-corpus rewrite paths](plans/02-corpus.md#node-21-remove-tracked-corpus-rewrite-paths). Direct prerequisites: 1.2. Run `go test ./packages/tools/cmd/runtime-oracle ./packages/shared/companion -race -count=1` and `git diff --exit-code -- testdata/runtime-migration`.
 - [ ] 2.2 [Make the Rust corpus loader fail closed](plans/02-corpus.md#node-22-make-the-rust-corpus-loader-fail-closed). Direct prerequisites: 1.1. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_loader --locked` and `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract corpus_frame --locked`.
 
 ## 3. Executable Rust domain corpus
