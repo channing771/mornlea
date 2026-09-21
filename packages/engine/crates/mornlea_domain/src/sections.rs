@@ -152,11 +152,13 @@ impl PalettedSection {
 
     /// Wraps one indexed section at 4 or 8 bits per slot.
     ///
-    /// The rules are checked in the Go validator's order: the slot width, the
-    /// palette bounds, the palette uniqueness and registration, the exact word
-    /// count, and finally that every packed slot resolves inside the palette.
-    /// The palette is kept exactly as given, so a conversion never reorders or
-    /// recompresses it.
+    /// The rules match the Go validator's admitted set exactly; only the check
+    /// order differs, because this constructor scans the palette once for
+    /// uniqueness and registration before it validates the word count, while
+    /// the Go validator counts words first. No input is admitted by one and
+    /// rejected by the other, so the difference is observable only in which
+    /// error a doubly invalid section reports. The palette is kept exactly as
+    /// given, so a conversion never reorders or recompresses it.
     pub fn indexed(bits: u8, palette: Box<[u16]>, words: Box<[u64]>) -> Result<Self, DomainError> {
         if bits != 4 && bits != 8 {
             return Err(DomainError::InvalidSectionBits);

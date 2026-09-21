@@ -202,12 +202,16 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   `SectionStorage` enum holds `Single`, `Indexed4`, `Indexed8` and `Direct15`,
   so no caller can assemble storage the rules reject. `single`, `indexed` and
   `direct` are all fallible and check the Go `protocol.SectionData.Validate`
-  rules in that validator's order — slot width, palette bounds, palette
-  uniqueness and registration, exact word count, every packed slot inside the
-  palette, the direct words' unused high bits, and every decoded block's
-  registration. `block_at` reads one cell straight out of the packed layout,
-  and `as_single`/`as_indexed`/`as_direct` hand out borrowed slices, so no
-  accessor exposes mutable storage and a codec conversion preserves the
+  rules — slot width, palette bounds, palette uniqueness and registration, the
+  exact word count, every packed slot inside the palette, the direct words'
+  unused high bits, and every decoded block's registration. The admitted set
+  is exactly the Go validator's; only the check order differs, because the
+  indexed constructor scans the palette once for uniqueness and registration
+  before it validates the word count while the Go validator counts words
+  first, so a doubly invalid section can report a different error without any
+  input changing sides. `block_at` reads one cell straight out of the packed
+  layout, and `as_single`/`as_indexed`/`as_direct` hand out borrowed slices, so
+  no accessor exposes mutable storage and a codec conversion preserves the
   representation instead of recompressing or reordering a palette. The section
   count is the fixed array's type, and a 4096-cell section has no tail entry
   at any published width.
@@ -247,7 +251,6 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
 
 ```bash
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test command_order --locked
-rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_world --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test runtime_contract --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test runtime_contract --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test identity_values --locked
