@@ -68,3 +68,11 @@ checkbox/status source.
 - Planning validation: `git diff --check` passed;
   `openspec validate rust-runtime-foundation-baseline --strict --no-interactive`
   passed; `openspec validate --all --strict --no-interactive` passed 126/126.
+
+## 2026-09-21 — Node 1.1 completion
+
+- Node 1.1 implementer: `7548126c` (`fix(runtime-oracle): distinguish working and complete coverage`).
+- Files changed: `inventory.go`, `inventory_test.go`, `case_test.go`, `main.go`, `main_test.go`, `trace.go`, `agent_contract_test.go`, `protocol_frame_test.go`, `AGENTS.md` in `packages/tools/cmd/runtime-oracle`.
+- Independent review: Spec ✅ compliant, Task quality Approved, no Critical/Important/Minor issues.
+- Verification: `go test ./packages/tools/cmd/runtime-oracle -race -count=1 -run 'TestContractInventory(Working|Complete|RejectsUnknownConsumer|RejectsUnsupportedCaseVersion)'` passed; full `runtime-oracle` passed under `-race`; audit passed; `testdata/runtime-migration` diff clean.
+
