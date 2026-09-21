@@ -254,16 +254,20 @@
       "numeric_semantics": "source revision, contract versions, fixture digest, seed, ordered input, tick schedule, normalized observations",
       "sources": [
         {
-          "path": "packages/shared/network/protocol/message_player.go",
-          "sha256": "sha256:097f4a8e062eaaeed57b42f3ae9d86c5e94c7b9ccf62ed78cd9a958bddb7f485"
+          "path": "packages/shared/core/armor.go",
+          "sha256": "sha256:8a0253f95a3bb125193cfca71ff1b39e3e191210dac5bd819e420d2d151e0fa8"
         },
         {
-          "path": "packages/shared/network/protocol/message_combat.go",
-          "sha256": "sha256:7200997afd81b484db299ba8429decdb340c939bcd6c7ea2c93d9d1bda1cdd8b"
+          "path": "packages/shared/core/block.go",
+          "sha256": "sha256:3c3be2df1230fb36562bed74d5a3a678cf8c8234938aa97aaadcd0f8c707aa1d"
         },
         {
-          "path": "packages/shared/network/protocol/registry.go",
-          "sha256": "sha256:ee6e4390c2713f466bf691cc5c649ad68eea42164081055ffa0428aee416fb2a"
+          "path": "packages/shared/core/combat.go",
+          "sha256": "sha256:429655fb654a87d18944e16239631e685b742fbbf2b0bcf6d46db6f0e30f8e0f"
+        },
+        {
+          "path": "packages/shared/core/day_phase.go",
+          "sha256": "sha256:0e024d5753cbfd30d8a676d68a3fb3a571b62e9dfe742a4eec8b97055a1dccfc"
         },
         {
           "path": "packages/shared/core/health.go",
@@ -274,28 +278,36 @@
           "sha256": "sha256:98d831fa9f5cbccf9baea8fac1b2b59f751be1f52285dac17054d31f910ab177"
         },
         {
-          "path": "packages/shared/core/armor.go",
-          "sha256": "sha256:8a0253f95a3bb125193cfca71ff1b39e3e191210dac5bd819e420d2d151e0fa8"
-        },
-        {
-          "path": "packages/shared/core/weather.go",
-          "sha256": "sha256:4d08032c0ded4be4c39f31fd7b4dcac6205983229b9c2accb44fe2de8b8a0292"
+          "path": "packages/shared/core/pos.go",
+          "sha256": "sha256:a09aff1a2d09cbdb8f5494ebb70ae933d5b7415ac9cc078a295524d358424469"
         },
         {
           "path": "packages/shared/core/season.go",
           "sha256": "sha256:1c358ec7499289c5c0f04a04d0891dca466d0b0d3d62e1dd3742f55362422555"
         },
         {
-          "path": "packages/shared/core/day_phase.go",
-          "sha256": "sha256:0e024d5753cbfd30d8a676d68a3fb3a571b62e9dfe742a4eec8b97055a1dccfc"
+          "path": "packages/shared/core/weather.go",
+          "sha256": "sha256:4d08032c0ded4be4c39f31fd7b4dcac6205983229b9c2accb44fe2de8b8a0292"
         },
         {
-          "path": "packages/shared/core/combat.go",
-          "sha256": "sha256:429655fb654a87d18944e16239631e685b742fbbf2b0bcf6d46db6f0e30f8e0f"
+          "path": "packages/shared/network/protocol/message_chunk.go",
+          "sha256": "sha256:47c599e2a5e9444fd7434c8eb77ca2e089dea5ca05df3a20a5be629b961e7ae3"
         },
         {
-          "path": "packages/shared/core/pos.go",
-          "sha256": "sha256:a09aff1a2d09cbdb8f5494ebb70ae933d5b7415ac9cc078a295524d358424469"
+          "path": "packages/shared/network/protocol/message_combat.go",
+          "sha256": "sha256:7200997afd81b484db299ba8429decdb340c939bcd6c7ea2c93d9d1bda1cdd8b"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_player.go",
+          "sha256": "sha256:097f4a8e062eaaeed57b42f3ae9d86c5e94c7b9ccf62ed78cd9a958bddb7f485"
+        },
+        {
+          "path": "packages/shared/network/protocol/registry.go",
+          "sha256": "sha256:ee6e4390c2713f466bf691cc5c649ad68eea42164081055ffa0428aee416fb2a"
+        },
+        {
+          "path": "packages/shared/network/protocol/snapshot.go",
+          "sha256": "sha256:fd7129728bef6f45d7f1c56d2ac7a908d3fa39a4821833d19e7a962816f6dc6a"
         }
       ],
       "cases": [
@@ -345,7 +357,45 @@
         "domain.event/1/player-state-oxygen-above-max",
         "domain.event/1/player-state-season-unknown",
         "domain.event/1/player-state-seed",
-        "domain.event/1/player-state-weather-kind-unknown"
+        "domain.event/1/player-state-weather-kind-unknown",
+        "domain.event/1/block-changes-depths-dimension",
+        "domain.event/1/block-changes-dimension-unknown",
+        "domain.event/1/block-changes-duplicate-position",
+        "domain.event/1/block-changes-empty-revision-barrier",
+        "domain.event/1/block-changes-negative-chunk",
+        "domain.event/1/block-changes-position-outside-chunk",
+        "domain.event/1/block-changes-revision-gap",
+        "domain.event/1/block-changes-revision-overflow",
+        "domain.event/1/block-changes-revision-zero-base",
+        "domain.event/1/block-changes-seed",
+        "domain.event/1/block-changes-unregistered-block",
+        "domain.event/1/block-changes-unsorted",
+        "domain.event/1/block-changes-y-above-world",
+        "domain.event/1/block-changes-y-below-world",
+        "domain.event/1/chunk-snapshot-dimension-unknown",
+        "domain.event/1/chunk-snapshot-direct-high-bits",
+        "domain.event/1/chunk-snapshot-direct-last-cell",
+        "domain.event/1/chunk-snapshot-direct-unregistered",
+        "domain.event/1/chunk-snapshot-direct-words-short",
+        "domain.event/1/chunk-snapshot-indexed-bits-unknown",
+        "domain.event/1/chunk-snapshot-indexed-palette-duplicate",
+        "domain.event/1/chunk-snapshot-indexed-palette-empty",
+        "domain.event/1/chunk-snapshot-indexed-palette-over-capacity",
+        "domain.event/1/chunk-snapshot-indexed-palette-unregistered",
+        "domain.event/1/chunk-snapshot-indexed-slot-absent",
+        "domain.event/1/chunk-snapshot-indexed4-one-cell",
+        "domain.event/1/chunk-snapshot-indexed4-words-long",
+        "domain.event/1/chunk-snapshot-indexed4-words-short",
+        "domain.event/1/chunk-snapshot-indexed8-ninety-ids",
+        "domain.event/1/chunk-snapshot-section-count-short",
+        "domain.event/1/chunk-snapshot-seed",
+        "domain.event/1/chunk-snapshot-single-unregistered",
+        "domain.event/1/chunk-snapshot-zero-revision",
+        "domain.event/1/forget-chunks-dimension-unknown",
+        "domain.event/1/forget-chunks-duplicate",
+        "domain.event/1/forget-chunks-empty",
+        "domain.event/1/forget-chunks-reversed-unique-order",
+        "domain.event/1/forget-chunks-seed"
       ]
     },
     {
@@ -10592,6 +10642,728 @@
       "expected": {
         "path": "testdata/runtime-migration/cases/domain/event_player/player-state-weather-kind-unknown.expected.json",
         "sha256": "sha256:523eda3cce875ead81aabf80a7c19536cb8c2111931bd941f3b66f2b4b210d21"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/block-changes-depths-dimension",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-depths-dimension.input.json",
+        "sha256": "sha256:12069e9d31737896cc858c1913a40281fa366af15e5a7a1e60b4564270bab16b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-depths-dimension.expected.json",
+        "sha256": "sha256:dc40bb627958b47ea953ee5b2ec306ddf388b7c72c60ebe7146b3903c8983538"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/block-changes-dimension-unknown",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-dimension-unknown.input.json",
+        "sha256": "sha256:45a79b87b08590af2fb077f4e052441b8a3b9d944bd29a3e9cfb8b9b6852657d"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-dimension-unknown.expected.json",
+        "sha256": "sha256:895a92a5a397edae3ba2cc063af00bd4ab9d94a14de17f6043c131e56ec61aec"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/block-changes-duplicate-position",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-duplicate-position.input.json",
+        "sha256": "sha256:fd75a5b224bb14aabb3e08e1f3259701d7b636204309e4c7dd85b66bc505c893"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-duplicate-position.expected.json",
+        "sha256": "sha256:8bc8426fa2e29695b08bd6ce2482e26e40b791fd89421a4851a08f06e62d85bd"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/block-changes-empty-revision-barrier",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-empty-revision-barrier.input.json",
+        "sha256": "sha256:9f9bdc48ff0b846248d96a8ea15066f5b1787b009d652bf6ea975e695090f472"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-empty-revision-barrier.expected.json",
+        "sha256": "sha256:25649c76e83c01f1deca9972d319d0a15d17f4a41865694e9dd869f9e6b1531c"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/block-changes-negative-chunk",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-negative-chunk.input.json",
+        "sha256": "sha256:18f1bf8b726375fdbe299d7faea95c53cd7ec6e7a9e710c62bfdb4d2fb57e50c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-negative-chunk.expected.json",
+        "sha256": "sha256:21be50fb8132c26e742d88243fa4262bf5a4ce14e6ae05bab571277dc675762b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/block-changes-position-outside-chunk",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-position-outside-chunk.input.json",
+        "sha256": "sha256:f6659571e3df67c692c2513d2317af299d7196972ed9d6b5a464942508566762"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-position-outside-chunk.expected.json",
+        "sha256": "sha256:1ffc639c260275a9697f2245f772d381d1fa21a3514f9f65f9e779675ec67d8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/block-changes-revision-gap",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-revision-gap.input.json",
+        "sha256": "sha256:4192efa9c799de656d10d29ba584f65fa64ac42e1a6929c2f20823880efbf4f1"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-revision-gap.expected.json",
+        "sha256": "sha256:c52135b14a7eee97235ad91f3d852669ad6467afa526bf9cbf6dcc8028126e0e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/block-changes-revision-overflow",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-revision-overflow.input.json",
+        "sha256": "sha256:1b57785ba88bee95c89f80de15a3fc76d8d6ca874fe2f76a2f1d49f296775998"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-revision-overflow.expected.json",
+        "sha256": "sha256:0fe14c6afc81cadc1d34476bca560641a96f8c914eb4bfa34a1523a9c691ddaa"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/block-changes-revision-zero-base",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-revision-zero-base.input.json",
+        "sha256": "sha256:b797208964f87707e2f06037832abdbccde457408e8bad76f361bd1a770dda9a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-revision-zero-base.expected.json",
+        "sha256": "sha256:e0e83bea4047165d6f013b3e04e4788bdbda1c09718b053fce64efd34dc2908d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/block-changes-seed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-seed.input.json",
+        "sha256": "sha256:af1013438be9f6cd39e9ceca9db59234703da3834b79c9b216890fe6e8f4e0a2"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-seed.expected.json",
+        "sha256": "sha256:33b289745d6838dc2e02e87d194c20677fd6f3766c7a5f59a72a166050cbe549"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/block-changes-unregistered-block",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-unregistered-block.input.json",
+        "sha256": "sha256:3701c50289ee0f0fa0fb04a4ffdda454eaa8f63de3bf9aeafb96a3f4d6cda2d2"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-unregistered-block.expected.json",
+        "sha256": "sha256:3833a73c438989c59c952c8d23d35867ef1ef1575ee940a666c9d368d201bb10"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/block-changes-unsorted",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-unsorted.input.json",
+        "sha256": "sha256:db20d8d6c6996da62553a1438791d8f3e2b3b651e5c4844f63a4336b4ebe426a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-unsorted.expected.json",
+        "sha256": "sha256:209b755ca237d21fed81d527b3d999c777ae0d0324f2e02b3810777a53bb09f2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/block-changes-y-above-world",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-y-above-world.input.json",
+        "sha256": "sha256:94e20434f444571b2b5b80b0528314cc1b38d6866d924b20a6fc8461f88bb6b4"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-y-above-world.expected.json",
+        "sha256": "sha256:d76ce01c820c5ca63176550009dbe419fdabbcdd1a59ffbeb94cf6e8aee74702"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/block-changes-y-below-world",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-y-below-world.input.json",
+        "sha256": "sha256:ee45ffac1afe1206c1d5859e00df0bfb6603d6e2f6b6d40b32ac6c9ac779187e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-y-below-world.expected.json",
+        "sha256": "sha256:cd71b852fb8bcfaff64d60c0614cc8c74576240d47fb7d1e71405f2a2c915c25"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-dimension-unknown",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-dimension-unknown.input.json",
+        "sha256": "sha256:112ac3a928cf7b6ac5eaf09c192b73f51e4319f9cd22d6485de1898e549c536f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-dimension-unknown.expected.json",
+        "sha256": "sha256:e8a107da9c1af70642150bd2a8c4306eae3ab89490910d46a0b1a5f2d29b0ecb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-direct-high-bits",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-direct-high-bits.input.json",
+        "sha256": "sha256:f5cc094782bb4b8f5f38b5a6ade2a335e25e5bfb41f57943b7351d39060f17fa"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-direct-high-bits.expected.json",
+        "sha256": "sha256:0a901f63664aa4af3da2d5011cb5a25d1543a91f4781f8fe38ecc7a3d811850b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-direct-last-cell",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-direct-last-cell.input.json",
+        "sha256": "sha256:dd613e9af3fb7e448d77a82c442d5065e18ccfae6f862d09d87904c97877981c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-direct-last-cell.expected.json",
+        "sha256": "sha256:f540a78473d9e75b4097f26e0601ab68b00c24be0a2fe6889eedd219941b7f99"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-direct-unregistered",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-direct-unregistered.input.json",
+        "sha256": "sha256:33a0b0e78bacba388ed0a376fc60a5b9fc2d50210634f918828a7a72fb5eeff9"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-direct-unregistered.expected.json",
+        "sha256": "sha256:865126bab19d192a18b88d1af96602aca6d64c330875d8445eef1e668a417045"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-direct-words-short",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-direct-words-short.input.json",
+        "sha256": "sha256:e745cc6a50731a9c9ec194bd422f646a4ee4cd1b30f860b807689942de17a6ee"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-direct-words-short.expected.json",
+        "sha256": "sha256:b907f05bc481125fc924b8f9f845b035ac9978beb8f5f8c87f3f7d7e2a6a0546"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-indexed-bits-unknown",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed-bits-unknown.input.json",
+        "sha256": "sha256:4338d5d26008adc1c7ac9935acb1e791c1368c65970e25b0a7443a6172373a5f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed-bits-unknown.expected.json",
+        "sha256": "sha256:d6d7078a3769a37f2b8072b314da909fe60507e3ced3ec4912f5f90989408cba"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-indexed-palette-duplicate",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed-palette-duplicate.input.json",
+        "sha256": "sha256:d0a47e0e016cde5c6d3b7b902eab1a748558065cb77161028906804691558802"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed-palette-duplicate.expected.json",
+        "sha256": "sha256:8f6013f717ef52e3497b2fbfd98cf72dbdf66dce42e6eae8bf9b429b449ec803"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-indexed-palette-empty",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed-palette-empty.input.json",
+        "sha256": "sha256:b98a96fb0d670d7fa0a07cfcfb1c553896f73d161cdc46d2645b01a044d21ac0"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed-palette-empty.expected.json",
+        "sha256": "sha256:459c68f8fd754cdc2aeb56a492b6a9494d84f40770c16094aa0f5c8ac72cfe20"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-indexed-palette-over-capacity",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed-palette-over-capacity.input.json",
+        "sha256": "sha256:791117ef411b876795c31d567bf5902102d8a2915525780cbe4a7a9fd819b5b9"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed-palette-over-capacity.expected.json",
+        "sha256": "sha256:ee3d71e77b1763086df4cc16707c757de4744db9c3a7f68d29affe2202c3b6b2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-indexed-palette-unregistered",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed-palette-unregistered.input.json",
+        "sha256": "sha256:f89f49993d85fee16f1c003b3ca93c1711c28bc4c28edb5e73326ca162534d31"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed-palette-unregistered.expected.json",
+        "sha256": "sha256:00dbe1402757ea9132a76a7a5a6967001f083b7ecd07267256d3f3b5bcc60a47"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-indexed-slot-absent",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed-slot-absent.input.json",
+        "sha256": "sha256:259da7cd2000dd1bd3c19502e9659d419d355f9712aa73edad86abe831cace3c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed-slot-absent.expected.json",
+        "sha256": "sha256:38bcfcebf4a1f8c3cc4938f62056101f41ceab7de4d003b02bc1f616a91370da"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-indexed4-one-cell",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed4-one-cell.input.json",
+        "sha256": "sha256:3301b01e1431373eeaff6f987f8b7803086d799150996ab00b65c8b25ec1674b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed4-one-cell.expected.json",
+        "sha256": "sha256:4e1e6356635ed26888c78e7e3ed640726103bfb5529b5d787eebe23b59859840"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-indexed4-words-long",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed4-words-long.input.json",
+        "sha256": "sha256:387bb63a870848067f951fc87f7736adc0ff4b1da8ec7dd334e3a96fc6082151"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed4-words-long.expected.json",
+        "sha256": "sha256:d91d29578ada8488f60a314974528ea62c17264827d5b861addcd69ee9f8d43c"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-indexed4-words-short",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed4-words-short.input.json",
+        "sha256": "sha256:d840b1667fe04b0a281ad2066047ee67b8e35b5e12a62ee7d72fbe7dd41a0a27"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed4-words-short.expected.json",
+        "sha256": "sha256:2f1d9918743a89c926a1e4ab68035ed4471d40bc8aa4a59eec3ede2d26934526"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-indexed8-ninety-ids",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed8-ninety-ids.input.json",
+        "sha256": "sha256:5e398b61b1aeac753587f2f81ad0286a42e64d5ec915a7d2527f34894ee48b51"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-indexed8-ninety-ids.expected.json",
+        "sha256": "sha256:78151773d1b3894183ee8b5852c6bfb6abc7994dc21d0730c8b4f78381f2de6c"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-section-count-short",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-section-count-short.input.json",
+        "sha256": "sha256:93ba78b3dc5809e5af5f46a5378658fa14232ce66001bfabf0a5ebedd5a26522"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-section-count-short.expected.json",
+        "sha256": "sha256:3ffb5f5874b4d5685714b66e93d7844a63882254e4097e49008651182047bc16"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-seed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-seed.input.json",
+        "sha256": "sha256:9379bf419c93ba0a7805c4773ba06aae975550fa90e809be7d47d8c159e342f8"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-seed.expected.json",
+        "sha256": "sha256:2096d3fcb079fd54beadc514f4dbf11beb93e125c2edadee9d91fe357183d2d8"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-single-unregistered",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-single-unregistered.input.json",
+        "sha256": "sha256:4663e6f20eb524cdddfc8914b85fabb0eb5d0c7444895b17cd24ba5844b55409"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-single-unregistered.expected.json",
+        "sha256": "sha256:039ea743ad546309a9a26b0a3fb11d304d80cfcc822d3fa426926a2a23c729d4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chunk-snapshot-zero-revision",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-zero-revision.input.json",
+        "sha256": "sha256:48a964d26a75f611493a105e6f6ec7e4eb3aea243e0987b9610b431e026386b3"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/chunk-snapshot-zero-revision.expected.json",
+        "sha256": "sha256:ffd22e423a9d7bfdf9f8bfb557a72417a476ef9982f5b5bb86b03a9f9518627f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/forget-chunks-dimension-unknown",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/forget-chunks-dimension-unknown.input.json",
+        "sha256": "sha256:f3280bf024eed9c3efc5309e35ab0de3a25de22ad00bc602e265855e46ed83b0"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/forget-chunks-dimension-unknown.expected.json",
+        "sha256": "sha256:a95e01f32b957032be72a1d7cf0562e57f694d16912a018981dfae6da332720e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/forget-chunks-duplicate",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/forget-chunks-duplicate.input.json",
+        "sha256": "sha256:a9a8662709daf805568a28eb0b17bab66591e914fda036669c3533b929859e18"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/forget-chunks-duplicate.expected.json",
+        "sha256": "sha256:390cfa9ed11ca44302e56e44a28250f456eb25c5bb41e77123a94ce8bd3a833d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/forget-chunks-empty",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/forget-chunks-empty.input.json",
+        "sha256": "sha256:d4191d0da520933db1f2226dc1d2318a4cfa74e0467295e2cc92a3802cfc8b62"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/forget-chunks-empty.expected.json",
+        "sha256": "sha256:7dbb3169df5a1270e026aea62e1d7c65866f41efc264caae1c1d9ec3d43e5408"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/forget-chunks-reversed-unique-order",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/forget-chunks-reversed-unique-order.input.json",
+        "sha256": "sha256:b6aea9c7c87ce1bc648ab0de0ab0d58cb30141e1969ee9ef5e08a7b04fadfe62"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/forget-chunks-reversed-unique-order.expected.json",
+        "sha256": "sha256:df0d6ab74ff469eb7000c4e942a47cdf1ce1bab4f1fbf5f92a0227b7ab55d33a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/forget-chunks-seed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/forget-chunks-seed.input.json",
+        "sha256": "sha256:920a5cab6f0524bde8a63c4c68e1a6fbd9509184708c45521bda40066b8446cd"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_world/forget-chunks-seed.expected.json",
+        "sha256": "sha256:782ff766c8f83f396063191446957a7b5df3263c5bead483e72292cf0efb67c7"
       },
       "checkpoints": [
         "0"
