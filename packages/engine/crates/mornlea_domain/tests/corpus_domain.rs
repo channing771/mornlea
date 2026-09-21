@@ -32,6 +32,244 @@ pub mod event_people;
 
 use runtime_corpus::{CorpusConsumer, try_load_cases_from_root};
 use std::collections::HashSet;
+use support::{ExecuteCase, ExecutedCase, OwnsCase, assert_domain_normalized};
+
+/// The domain.input ordering case stays with `external:runtime-authority`
+/// because its expectation reports authoritative behavior
+/// `mornlea_domain::order_commands` cannot produce; the handwritten
+/// `command_order` tests remain the domain ordering proof.
+const EXTERNAL_AUTHORITY_CASE_ID: &str = "domain.input/45/session-sequence-arrival";
+
+/// Exact integrated total across the eight closed topics.
+const TOTAL_DOMAIN_CASES: usize = 376;
+
+/// One closed topic adapter: its frozen count, ownership predicate, and
+/// executor. Counts are consumed from each topic's own frozen constant so the
+/// gate cannot drift from the per-topic contracts those topics pin themselves.
+struct TopicAdapter {
+    name: &'static str,
+    exact_count: usize,
+    owns: OwnsCase,
+    execute: ExecuteCase,
+}
+
+/// The frozen partition. Order does not affect dispatch, but the counts are
+/// part of the exact single-ownership contract.
+const TOPICS: &[TopicAdapter] = &[
+    TopicAdapter {
+        name: "identity_text",
+        exact_count: identity_text::EXPECTED_COUNT,
+        owns: identity_text::owns,
+        execute: identity_text::execute,
+    },
+    TopicAdapter {
+        name: "values",
+        exact_count: values::EXPECTED_COUNT,
+        owns: values::owns,
+        execute: values::execute,
+    },
+    TopicAdapter {
+        name: "command_control",
+        exact_count: command_control::EXPECTED_COUNT,
+        owns: command_control::owns,
+        execute: command_control::execute,
+    },
+    TopicAdapter {
+        name: "command_inventory",
+        exact_count: command_inventory::EXPECTED_COUNT,
+        owns: command_inventory::owns,
+        execute: command_inventory::execute,
+    },
+    TopicAdapter {
+        name: "event_player",
+        exact_count: event_player::EXPECTED_COUNT,
+        owns: event_player::owns,
+        execute: event_player::execute,
+    },
+    TopicAdapter {
+        name: "event_world",
+        exact_count: event_world::EXPECTED_COUNT,
+        owns: event_world::owns,
+        execute: event_world::execute,
+    },
+    TopicAdapter {
+        name: "event_inventory",
+        exact_count: event_inventory::EXPECTED_COUNT,
+        owns: event_inventory::owns,
+        execute: event_inventory::execute,
+    },
+    TopicAdapter {
+        name: "event_people",
+        exact_count: event_people::EXPECTED_COUNT,
+        owns: event_people::owns,
+        execute: event_people::execute,
+    },
+];
+
+/// Loads the domain corpus once and dispatches every case to its single owner.
+///
+/// The retained `FrozenCase` inside each `ExecutedCase` stays the comparison
+/// source: no topic reloads its case, and no path here re-reads expectation
+/// files inside the dispatch loop. Gaps (a case owned by nobody), overlaps
+/// (a case owned by several topics), and duplicates (a repeated case id) all
+/// fail here, and every topic must execute exactly its frozen count.
+fn dispatch_domain_partition() -> Vec<ExecutedCase> {
+    let root = runtime_corpus::find_repo_root();
+    let domain_cases =
+        try_load_cases_from_root(&root, CorpusConsumer::Domain).expect("load domain cases");
+
+    let mut executed = Vec::new();
+    let mut seen_ids: HashSet<String> = HashSet::new();
+    let mut counts = vec![0usize; TOPICS.len()];
+
+    for case in &domain_cases {
+        assert!(
+            seen_ids.insert(case.id.clone()),
+            "duplicate domain case id: {}",
+            case.id
+        );
+
+        let mut owners = TOPICS
+            .iter()
+            .enumerate()
+            .filter(|(_, topic)| (topic.owns)(case));
+        let (owner_index, owner) = owners
+            .next()
+            .unwrap_or_else(|| panic!("case {} has no owning topic", case.id));
+        assert!(
+            owners.next().is_none(),
+            "case {} is owned by multiple topics",
+            case.id
+        );
+
+        let actual = (owner.execute)(case)
+            .unwrap_or_else(|error| panic!("case {} failed to execute: {error}", case.id));
+        counts[owner_index] += 1;
+        executed.push(ExecutedCase {
+            case: case.clone(),
+            actual,
+        });
+    }
+
+    for (topic, count) in TOPICS.iter().zip(counts.iter()) {
+        assert_eq!(
+            *count, topic.exact_count,
+            "topic {} count mismatch",
+            topic.name
+        );
+    }
+    assert_eq!(
+        executed.len(),
+        TOTAL_DOMAIN_CASES,
+        "expected exactly {TOTAL_DOMAIN_CASES} dispatched domain cases"
+    );
+
+    executed
+}
+
+#[test]
+fn corpus_domain_executes_376_unique_cases() {
+    let executed = dispatch_domain_partition();
+
+    let mut unique_executed_ids = HashSet::new();
+    for case in &executed {
+        assert!(
+            unique_executed_ids.insert(case.case.id.as_str()),
+            "duplicate executed case id: {}",
+            case.case.id
+        );
+    }
+    assert_eq!(
+        unique_executed_ids.len(),
+        TOTAL_DOMAIN_CASES,
+        "the gate must report exactly {TOTAL_DOMAIN_CASES} unique executed ids"
+    );
+
+    for case in &executed {
+        assert_domain_normalized(case);
+    }
+}
+
+#[test]
+fn corpus_domain_excludes_external_authority_case() {
+    let root = runtime_corpus::find_repo_root();
+
+    // The external authority case is not loaded as domain work.
+    let domain_cases =
+        try_load_cases_from_root(&root, CorpusConsumer::Domain).expect("load domain cases");
+    assert!(
+        !domain_cases
+            .iter()
+            .any(|case| case.id == EXTERNAL_AUTHORITY_CASE_ID),
+        "the external authority case must not be loaded as a domain case",
+    );
+
+    // It still exists under its own consumer, and no domain topic claims or
+    // dispatches it.
+    let authority_cases = try_load_cases_from_root(&root, CorpusConsumer::ExternalRuntimeAuthority)
+        .expect("load external runtime authority cases");
+    let authority = authority_cases
+        .iter()
+        .find(|case| case.id == EXTERNAL_AUTHORITY_CASE_ID)
+        .unwrap_or_else(|| panic!("external authority case missing from its own consumer"));
+    for topic in TOPICS {
+        assert!(
+            !(topic.owns)(authority),
+            "the external authority case must not dispatch to topic {}",
+            topic.name
+        );
+    }
+}
+
+#[test]
+fn corpus_domain_comparator_detects_semantic_drift() {
+    let executed = dispatch_domain_partition();
+    let accepted = executed
+        .iter()
+        .find(|case| case.actual.get("kind").and_then(|kind| kind.as_str()) == Some("ok"))
+        .expect("at least one accepted domain case");
+
+    // The unmutated pair passes comparison before the drift is injected.
+    assert_domain_normalized(&ExecutedCase {
+        case: accepted.case.clone(),
+        actual: accepted.actual.clone(),
+    });
+
+    // Mutate exactly one non-wire semantic field of the frozen expectation.
+    // The retained FrozenCase is the comparison source, so the mutation models
+    // expectation drift rather than a reloaded or regenerated outcome.
+    let mut mutated_case = accepted.case.clone();
+    let fields = mutated_case
+        .normalized
+        .get_mut("fields")
+        .and_then(|fields| fields.as_object_mut())
+        .expect("accepted expectation has a fields object");
+    let mutation_value = serde_json::json!({ "corpus_gate_mutation": true });
+    let field_name = fields
+        .keys()
+        .find(|key| key.as_str() != "wire")
+        .expect("accepted expectation has a non-wire field")
+        .clone();
+    let prior_value = fields
+        .insert(field_name.clone(), mutation_value.clone())
+        .expect("mutated field had a prior value");
+    assert_ne!(
+        prior_value, mutation_value,
+        "the injected drift must actually change the field"
+    );
+
+    let mutated = ExecutedCase {
+        case: mutated_case,
+        actual: accepted.actual.clone(),
+    };
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        assert_domain_normalized(&mutated);
+    }));
+    assert!(
+        outcome.is_err(),
+        "drift in expectation field '{field_name}' must fail comparison"
+    );
+}
 
 #[test]
 fn corpus_structure() {
