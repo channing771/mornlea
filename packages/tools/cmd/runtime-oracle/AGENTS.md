@@ -105,6 +105,30 @@ function, so it follows the `*_helpers_test.go` naming rule.
   `TestProtocolOracleFrameRunnerInvokesProducerOncePerCheckpoint`,
   `TestProtocolOracleFrameExport*`.
 
+## Family producers (`domain_*_test.go`, `agent_contract_test.go`)
+
+Each corpus family has exactly one producer file, and each declares a
+family-scoped working manifest so a run never hands its producer another
+family's cases: `protocol_frame_test.go` (framing), `agent_contract_test.go`
+(the Agent HTTP/MCP contracts, whose consumer is the explicit
+`external:agent-contract` marker plus this Go test target), and
+`domain_values_test.go`, `domain_identity_values_test.go`,
+`domain_command_control_test.go`, `domain_command_inventory_test.go`,
+`domain_event_player_test.go`, `domain_event_world_test.go` and
+`domain_event_inventory_test.go` (the domain families). The world-event file
+also carries the shared router arm the inventory producer registers into.
+
+- Expected outcomes are generated only through each producer's own update flag
+  and come from executing the real Go validator or codec, never from a
+  hand-written value or a Rust result. A normal run only reads and compares.
+- No file in this package may rewrite the frozen manifest: the CLI has no such
+  flag and the test binary registers none, because both the discovery stub and
+  any partial regeneration would silently gut the corpus. Manifest merges are
+  controller-side and manual.
+- Enforcement: `TestDomainOracle_<topic>` per producer,
+  `TestAgentContractOracle*`, `TestCorpusOutcomeVocabularyMatchesExecutionContract`
+  over every committed expectation, and `TestTestBinaryFlagsCannotRewriteTheFrozenCorpus`.
+
 ## Focused Verification
 
 ```bash

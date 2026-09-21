@@ -764,8 +764,9 @@ func domainEventInventoryClosed(c CaseSpec, spec domainEventInventoryInput) (pro
 }
 
 // domainEventInventoryStackOrEmpty renders one optional stack as its frozen
-// value, keeping an absent field and an explicit empty stack distinguishable
-// for the caller that requires the field.
+// value. A nil stack collapses to the zero stack, so an absent field and an
+// explicit empty stack serialize identically; the furnace path relies on that
+// collapse, and no committed case omits the field.
 func domainEventInventoryStackOrEmpty(stack *domainEventInventoryStack) domainEventInventoryStack {
 	if stack == nil {
 		return domainEventInventoryStack{}
