@@ -30,7 +30,7 @@ Execution order follows direct dependencies, not numeric headings: evidence prim
 - [x] 2.7 [Command outcomes and player publications](plans/02-domain.md#node-2-7). Direct prerequisites: 2.2, 1.5. Execute the linked packet's named red/green and integration commands.
 - [x] 2.8 [Compact chunk observations](plans/02-domain.md#node-2-8). Direct prerequisites: 2.2. Execute the linked packet's named red/green and integration commands.
 - [x] 2.9 [Inventory and container publications](plans/02-domain.md#node-2-9). Direct prerequisites: 2.3. Execute the linked packet's named red/green and integration commands.
-- [ ] 2.10 [Remote-player and companion observations](plans/02-domain.md#node-2-10). Direct prerequisites: 2.2. Execute the linked packet's named red/green and integration commands.
+- [x] 2.10 [Remote-player and companion observations](plans/02-domain.md#node-2-10). Direct prerequisites: 2.2. Execute the linked packet's named red/green and integration commands.
 - [ ] 2.11 [Hostile and passive observations](plans/02-domain.md#node-2-11). Direct prerequisites: 2.2. Execute the linked packet's named red/green and integration commands.
 - [ ] 2.12 [Projectile and item-drop observations](plans/02-domain.md#node-2-12). Direct prerequisites: 2.3. Execute the linked packet's named red/green and integration commands.
 - [ ] 2.13 [Chat tagged union](plans/02-domain.md#node-2-13). Direct prerequisites: 2.2. Execute the linked packet's named red/green and integration commands.
