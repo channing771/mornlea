@@ -254,6 +254,10 @@
       "numeric_semantics": "source revision, contract versions, fixture digest, seed, ordered input, tick schedule, normalized observations",
       "sources": [
         {
+          "path": "packages/shared/companion/identity.go",
+          "sha256": "sha256:b9988a5f3237caf810dc0dff9100132c756f73b095386af40cd381f22301e1cd"
+        },
+        {
           "path": "packages/shared/core/armor.go",
           "sha256": "sha256:8a0253f95a3bb125193cfca71ff1b39e3e191210dac5bd819e420d2d151e0fa8"
         },
@@ -298,6 +302,10 @@
           "sha256": "sha256:5ca451788a1c14bc4be1dfc8793784e3bbff0a08f08ea14cfc86e0a2658497af"
         },
         {
+          "path": "packages/shared/core/player_id.go",
+          "sha256": "sha256:c293fd738909b3c291a62c0df8b716aca46e4127dee6fe023d098de3d24bfe06"
+        },
+        {
           "path": "packages/shared/core/pos.go",
           "sha256": "sha256:a09aff1a2d09cbdb8f5494ebb70ae933d5b7415ac9cc078a295524d358424469"
         },
@@ -320,6 +328,10 @@
         {
           "path": "packages/shared/network/protocol/message_combat.go",
           "sha256": "sha256:7200997afd81b484db299ba8429decdb340c939bcd6c7ea2c93d9d1bda1cdd8b"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_companion.go",
+          "sha256": "sha256:03bbf95ee0651a09f89e0395b53cc448218f25a86a8da7cd6ef669ec52016395"
         },
         {
           "path": "packages/shared/network/protocol/message_container.go",
@@ -404,6 +416,30 @@
         "domain.event/1/command-rejected-protected-block",
         "domain.event/1/command-rejected-unknown-reason",
         "domain.event/1/command-rejected-zero-sequence",
+        "domain.event/1/companion-despawn-seed",
+        "domain.event/1/companion-despawn-zero-identity",
+        "domain.event/1/companion-spawn-depths-dimension",
+        "domain.event/1/companion-spawn-dimension-unknown",
+        "domain.event/1/companion-spawn-non-finite-position",
+        "domain.event/1/companion-spawn-non-finite-rotation",
+        "domain.event/1/companion-spawn-pitch-above-limit",
+        "domain.event/1/companion-spawn-pitch-at-lower-limit",
+        "domain.event/1/companion-spawn-pitch-at-upper-limit",
+        "domain.event/1/companion-spawn-pitch-below-limit",
+        "domain.event/1/companion-spawn-seed",
+        "domain.event/1/companion-spawn-spaced-name",
+        "domain.event/1/companion-spawn-wrong-version-identity",
+        "domain.event/1/companion-spawn-zero-identity",
+        "domain.event/1/companion-spawn-zero-tick",
+        "domain.event/1/companion-states-depths-dimension",
+        "domain.event/1/companion-states-duplicate",
+        "domain.event/1/companion-states-empty",
+        "domain.event/1/companion-states-non-finite-position",
+        "domain.event/1/companion-states-pitch-above-limit",
+        "domain.event/1/companion-states-reversed",
+        "domain.event/1/companion-states-seed",
+        "domain.event/1/companion-states-zero-identity",
+        "domain.event/1/companion-states-zero-tick",
         "domain.event/1/container-closed-chest",
         "domain.event/1/container-closed-furnace",
         "domain.event/1/container-closed-unknown-kind",
@@ -460,7 +496,29 @@
         "domain.event/1/player-state-oxygen-above-max",
         "domain.event/1/player-state-season-unknown",
         "domain.event/1/player-state-seed",
-        "domain.event/1/player-state-weather-kind-unknown"
+        "domain.event/1/player-state-weather-kind-unknown",
+        "domain.event/1/remote-player-despawn-seed",
+        "domain.event/1/remote-player-despawn-zero-identity",
+        "domain.event/1/remote-player-spawn-depths-dimension",
+        "domain.event/1/remote-player-spawn-dimension-unknown",
+        "domain.event/1/remote-player-spawn-non-finite-position",
+        "domain.event/1/remote-player-spawn-non-finite-rotation",
+        "domain.event/1/remote-player-spawn-pitch-outside-vertical-look-range",
+        "domain.event/1/remote-player-spawn-seed",
+        "domain.event/1/remote-player-spawn-untrimmed-name",
+        "domain.event/1/remote-player-spawn-wrong-version-identity",
+        "domain.event/1/remote-player-spawn-zero-identity",
+        "domain.event/1/remote-player-spawn-zero-server-tick",
+        "domain.event/1/remote-player-states-depths-dimension-and-unbounded-pitch",
+        "domain.event/1/remote-player-states-dimension-unknown",
+        "domain.event/1/remote-player-states-duplicate",
+        "domain.event/1/remote-player-states-empty",
+        "domain.event/1/remote-player-states-non-finite-position",
+        "domain.event/1/remote-player-states-reset-record",
+        "domain.event/1/remote-player-states-reversed",
+        "domain.event/1/remote-player-states-seed",
+        "domain.event/1/remote-player-states-zero-identity",
+        "domain.event/1/remote-player-states-zero-server-tick"
       ]
     },
     {
@@ -12056,6 +12114,880 @@
       "expected": {
         "path": "testdata/runtime-migration/cases/domain/event_inventory/inventory-state-selected-above-hotbar.expected.json",
         "sha256": "sha256:a9bf908dc95940ce80c586c1e7aea51941148e058e6af782f1fd51e438725d9b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-despawn-seed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-despawn-seed.input.json",
+        "sha256": "sha256:438749eecd57ab6a3b955b502270cdbb90f084a9eecf12579fe6f588ab469f57"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-despawn-seed.expected.json",
+        "sha256": "sha256:23ff968bd3b089188c2d6076ab687e3e0647ba65b629ae614c2fd566c405c420"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-despawn-zero-identity",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-despawn-zero-identity.input.json",
+        "sha256": "sha256:65a03af23c358f36312845fc358af1d2abdf0aee5e376cf3e0c53facf5503440"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-despawn-zero-identity.expected.json",
+        "sha256": "sha256:bab3b74104917b68992d6330f3c61ec40116ca1b201359a9e8df93e18c875fee"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-spawn-depths-dimension",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-depths-dimension.input.json",
+        "sha256": "sha256:17fe1b180de248e2e573095d21fbd562adb6021fea3976b071f17893fb5fdb44"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-depths-dimension.expected.json",
+        "sha256": "sha256:a77ab1b06023bfc45333862e1b2022b0ac01f01b2995f6160ad3fd173f62e42a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-spawn-dimension-unknown",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-dimension-unknown.input.json",
+        "sha256": "sha256:53bda897837a2507f4711a7f9517ecda12502841930cf303013ef9d03435521e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-dimension-unknown.expected.json",
+        "sha256": "sha256:b625d9ad423eea617e433d7a2f4e1889c6abe0a43ed9e361304a737c5c9b85e0"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-spawn-non-finite-position",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-non-finite-position.input.json",
+        "sha256": "sha256:9fb9cbf99ab47087578c5de21aa7dec46d519aa6958bf5f8b3e78539a0aa505e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-non-finite-position.expected.json",
+        "sha256": "sha256:b341ddeba0bb760e5fefbc711a6f285af57ffcea1f3ad106706d1c3706f79751"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-spawn-non-finite-rotation",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-non-finite-rotation.input.json",
+        "sha256": "sha256:50af75db16d0ffa66560012814234b235c94316ccc9d9362af6740c05024c699"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-non-finite-rotation.expected.json",
+        "sha256": "sha256:6c3fcf7f3e91f65b1722b45daa4493a645a30b5d3d11ef099fbc7bde044090ec"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-spawn-pitch-above-limit",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-pitch-above-limit.input.json",
+        "sha256": "sha256:5007267979001c91140b8f2739462ade8f2b76dc630b6edff884e57f6f8f12a7"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-pitch-above-limit.expected.json",
+        "sha256": "sha256:a9b7366a225b75ded5d014d38e98328200ee5a28296094126d5f5da650262b3b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-spawn-pitch-at-lower-limit",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-pitch-at-lower-limit.input.json",
+        "sha256": "sha256:3e2df106ce2febaa9b5c97b20b39514c95d56c76696aabe55e346e36c83709f8"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-pitch-at-lower-limit.expected.json",
+        "sha256": "sha256:352800f9e1fa14947f692399181ffd9848339bd5564d6036339a2057251500d3"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-spawn-pitch-at-upper-limit",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-pitch-at-upper-limit.input.json",
+        "sha256": "sha256:250ff0bad15dc129912714e6c2a816aaede1e334a17a8906699d217eacc6034f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-pitch-at-upper-limit.expected.json",
+        "sha256": "sha256:f1352e9b3babcd301f3935cc8dd50d64cd990481f30d77f852ab8e55c41810fc"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-spawn-pitch-below-limit",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-pitch-below-limit.input.json",
+        "sha256": "sha256:d7d9942f87cb5e41ce98bb52f52c604012a991eb193b4c0c79fe4510285f933d"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-pitch-below-limit.expected.json",
+        "sha256": "sha256:dc9e27005e515b4ef24d977477096c41dc2e8d1bed0c5c1e86316ea6b6b656f9"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-spawn-seed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-seed.input.json",
+        "sha256": "sha256:b73639eaab777d98db4a66940573d57f9db46914e3c8893da4c22653316ed74b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-seed.expected.json",
+        "sha256": "sha256:3779e66749621b82d99afaf129c2527d358037b2f3250d6b11445b0275f31e99"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-spawn-spaced-name",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-spaced-name.input.json",
+        "sha256": "sha256:8a34fda77f518147521c279e01480bae332e9dd714c8dc6bf56d5ffa6f098937"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-spaced-name.expected.json",
+        "sha256": "sha256:9f71a310928c128093dd80bc049fcc5e62dad5c60e7dd32e44694e6c9fb09337"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-spawn-wrong-version-identity",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-wrong-version-identity.input.json",
+        "sha256": "sha256:229575e8bd19242fb33497456ce4fee3b36e3ca5b9f6b12a36c2eb521be89aa1"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-wrong-version-identity.expected.json",
+        "sha256": "sha256:ad3b9e564634879a37d71d2b42310829b3a8ff745f991b2f59e90f91c4fa2bd3"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-spawn-zero-identity",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-zero-identity.input.json",
+        "sha256": "sha256:cc94dff56adfa0baf7b15810857d26f4793274cd6006cb4dbceb5e83bb8b45dc"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-zero-identity.expected.json",
+        "sha256": "sha256:536bf837d7d0f601e0f2e08ef2fad94445d1fb79f29fa93a00cb14f1f328cc09"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-spawn-zero-tick",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-zero-tick.input.json",
+        "sha256": "sha256:840a6c0a0e4bc7b91213b6279e5366d1afbe6b3748106200a1951500e3d69487"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-spawn-zero-tick.expected.json",
+        "sha256": "sha256:04274c282d57b3da62b54212511764af3643ec24b51d8198cba075940efa5b4f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-states-depths-dimension",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-states-depths-dimension.input.json",
+        "sha256": "sha256:fc5ccc8556cc5ad6cf8ceac5381e76776d6bf580bbb8cb7cb68a830cd9da5b77"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-states-depths-dimension.expected.json",
+        "sha256": "sha256:cb45fd7c874b9167a6cb6ed43cc9cff4a8302cfee8d7fdc1a332f7f5f5a2abb2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-states-duplicate",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-states-duplicate.input.json",
+        "sha256": "sha256:6b260fb4487bc4b47ecf3ada036d49d0653efa14f2de60d67461b0ae46a4963c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-states-duplicate.expected.json",
+        "sha256": "sha256:5dc432b17134a529a596881f3a69763931cb092440a32a0d8716a4d373f787ca"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-states-empty",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-states-empty.input.json",
+        "sha256": "sha256:84e73e4ee8511a2cea7f1371c7285ba152e47a88c2634db761bc088711d8ac03"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-states-empty.expected.json",
+        "sha256": "sha256:018431d6ee49cad0f90c0afce8a3a4a409a681879ff280a3bb8cda304fe272e9"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-states-non-finite-position",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-states-non-finite-position.input.json",
+        "sha256": "sha256:824ee2055b23e18e333d38d6a7fbf9c4f7ce898a456dfa39de7c6ac9b647a059"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-states-non-finite-position.expected.json",
+        "sha256": "sha256:f75c95d94a8ba60e86cbf7a6f4408c1269907e64573dc516f7769133c1705e38"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-states-pitch-above-limit",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-states-pitch-above-limit.input.json",
+        "sha256": "sha256:34f6c74ab50c6e4a516b813efed5a0dc68f44a11a48913259ca0909b326db3aa"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-states-pitch-above-limit.expected.json",
+        "sha256": "sha256:24e4098578bb87eb306f196d8215422a9b341724cee34f3d513e5da8f84f2b8b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-states-reversed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-states-reversed.input.json",
+        "sha256": "sha256:73b6a43aa26e0dd2dd8cc1c5f88d43e5573cc1bae5c4a7c996c6db30eed39759"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-states-reversed.expected.json",
+        "sha256": "sha256:e4fd7ead5585fbc474cd3fe8bc4e54a8847b52777f65a86aa07c754b85e8a8dd"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-states-seed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-states-seed.input.json",
+        "sha256": "sha256:56cae6b564a1eb00daabaf59c948ee29f14bda9e4ab77c9a54773f299abee119"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-states-seed.expected.json",
+        "sha256": "sha256:7ba2bcfb182b594985e56cc569f493a7c54b0c8d20cd52195d41c80aa2f0cf89"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-states-zero-identity",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-states-zero-identity.input.json",
+        "sha256": "sha256:3ad083b6ec7d3ea083dd2f7ddbbfb8476908a4fc93a6a39004d97bd7276aeb02"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-states-zero-identity.expected.json",
+        "sha256": "sha256:4fddb16d3794f8af6279b97be268774bd81aadd29f9f9d293402ad77474f1374"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/companion-states-zero-tick",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-states-zero-tick.input.json",
+        "sha256": "sha256:0dd09ff5f09f758c98e8f4a9a8f36567bdaa9c54254d7ea704f39f940a4f6a37"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/companion-states-zero-tick.expected.json",
+        "sha256": "sha256:b9331e1b0bee24daef43567c962940870f7a5dd4be03482b6a97e562cc916cb1"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-despawn-seed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-despawn-seed.input.json",
+        "sha256": "sha256:1ed04afa60da56f9ff4335e09f90be7af04e510484c37b8d53dc99257e0b1a80"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-despawn-seed.expected.json",
+        "sha256": "sha256:80e155f05cf74742228e0c523112374e532bdff1e6ea53beb654233b11a99a15"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-despawn-zero-identity",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-despawn-zero-identity.input.json",
+        "sha256": "sha256:82b68d3a341e463fe6c1f573c828c2125aa7217bd6ecf4842798cde4f550c606"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-despawn-zero-identity.expected.json",
+        "sha256": "sha256:a33c98b76e04d2cb0a14ad4e97d2e82f7656ae1a6af031580ceb5cb58f25e121"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-spawn-depths-dimension",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-depths-dimension.input.json",
+        "sha256": "sha256:a6139e64f9217c98087f8d1dd0413f21a3b3aae36a87b3f028af62cd87623ca2"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-depths-dimension.expected.json",
+        "sha256": "sha256:faf96c001f03c8576d94375b112bc94b73e906a7464d3d4b75c0cef950e90653"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-spawn-dimension-unknown",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-dimension-unknown.input.json",
+        "sha256": "sha256:ff2d6b39f24c4d44573df76f2041bf07b05ab2e3cc4bed1b77c6a9ae72bdc16f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-dimension-unknown.expected.json",
+        "sha256": "sha256:0f87b64526eed59f6bf8a752e55b4e6ccf934bd6aeaa7bbda2617e302d276fc0"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-spawn-non-finite-position",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-non-finite-position.input.json",
+        "sha256": "sha256:31de10e4d82e9ca1b4127a267b7bbc21d2233e94d3b02f9511e1a9250367cacf"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-non-finite-position.expected.json",
+        "sha256": "sha256:566c76fe1e38fd24b918f99c22e04f0ba3db297a000d0c063a59aabc543d1110"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-spawn-non-finite-rotation",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-non-finite-rotation.input.json",
+        "sha256": "sha256:9096cae9adef0ccac28c2fc972f9a9de3e6523b7625b868b8375fa2304c787a5"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-non-finite-rotation.expected.json",
+        "sha256": "sha256:df0fddec71d5d8a0af88199f13a66ff75d6eadda1957269c558c9fe2f25217a0"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-spawn-pitch-outside-vertical-look-range",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-pitch-outside-vertical-look-range.input.json",
+        "sha256": "sha256:1234b65a09153fdbb3051fb9e02ed06935f30e85ca29808356d4e3f7f579f0d2"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-pitch-outside-vertical-look-range.expected.json",
+        "sha256": "sha256:f53754d928dc0682952a842b30dc32ca4aeea9909ae8d5f9bad683622d0ae08a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-spawn-seed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-seed.input.json",
+        "sha256": "sha256:32c3547782b4a7727a5f0fc35752d303efe99ee71984e6eddab899d92e5297ce"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-seed.expected.json",
+        "sha256": "sha256:e9eafe9500180c05c90d7bb5a8ea0eb8a5b8faf4b53b85b2ae5109f14c396dd0"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-spawn-untrimmed-name",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-untrimmed-name.input.json",
+        "sha256": "sha256:17ac5da1ade3421b24b6684245117bb74f98c182b774dc52c42b68f859105746"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-untrimmed-name.expected.json",
+        "sha256": "sha256:70ee16f7f595d3d28c1d82c5dae85177da3a5abc929874db005fb0bc9fa3899a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-spawn-wrong-version-identity",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-wrong-version-identity.input.json",
+        "sha256": "sha256:0580d0408fabaa6928acc68e85d12f2d91970ed012b525208b5e3ae95c1404fc"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-wrong-version-identity.expected.json",
+        "sha256": "sha256:b372a27bdcb78c4e26ec80524b12d1c4adc05233791ba2497051682f612d005c"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-spawn-zero-identity",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-zero-identity.input.json",
+        "sha256": "sha256:bc6ec989a73fd8a7099e661ceee815a0bafd06a3ddc9bffe69acd1df6f9cf645"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-zero-identity.expected.json",
+        "sha256": "sha256:648d23a1024cee93cbffd47d80be546b1b7ec7b14d151ee58abf8ff19a3ca65a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-spawn-zero-server-tick",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-zero-server-tick.input.json",
+        "sha256": "sha256:97472405bcbe4c6786907481aa1e63a7537a80bccb16aa73868a53c8feb02132"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-spawn-zero-server-tick.expected.json",
+        "sha256": "sha256:0ad4786eac1137ea43b2110b121f1827fe8701369c17eef00de09c4a5237ecce"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-states-depths-dimension-and-unbounded-pitch",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-depths-dimension-and-unbounded-pitch.input.json",
+        "sha256": "sha256:1519087f68abe727db9994a7158e020f76630510afdefdae57f0b28d36bea3a5"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-depths-dimension-and-unbounded-pitch.expected.json",
+        "sha256": "sha256:bf31dc89131feaf78d06e8002871e8355e989e2a68f13349d28fb592d4fb62c7"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-states-dimension-unknown",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-dimension-unknown.input.json",
+        "sha256": "sha256:f44dc8908b27f9c42e1319a1146e6194dbc3c7d249f63d563d8a962e8d3a7e0d"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-dimension-unknown.expected.json",
+        "sha256": "sha256:71c125d19c42b25223120084155adf6106d5bdfda357b7c3e870cf9357297064"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-states-duplicate",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-duplicate.input.json",
+        "sha256": "sha256:b3bfa3885b5304f4cfd80daf9db31bb2b05d116a86afd0bed035e83697804d63"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-duplicate.expected.json",
+        "sha256": "sha256:8959943aa22362f3e6ad0b3881437a1a73c26bb155aa4d31fe7b1b39b39686af"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-states-empty",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-empty.input.json",
+        "sha256": "sha256:7b50d491945ec0c78986e5b9b363036051d631484a1368af4341cb71eed28f56"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-empty.expected.json",
+        "sha256": "sha256:834e18e8b6bf160453c230bf933e35f4137e8609865965e47cbe6c916d7ea8b9"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-states-non-finite-position",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-non-finite-position.input.json",
+        "sha256": "sha256:064856584dcea518d434a86b20f03f97ac68112cbd62234c013461317ed291c0"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-non-finite-position.expected.json",
+        "sha256": "sha256:49bda80636f50ceab05e966eb6e1fe4b7704a51daca67d7979f29097d61594c1"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-states-reset-record",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-reset-record.input.json",
+        "sha256": "sha256:658377b3ec47d3966bb85d7e2720b07e7544cd91678130a7a33925116399f5cd"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-reset-record.expected.json",
+        "sha256": "sha256:683df16ca35cf88719ba69830a17ffee1301e0689d1da40d23cc896013a49266"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-states-reversed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-reversed.input.json",
+        "sha256": "sha256:dd53200e6d665f1fde2fe43b8320770ef6c8a4d6816db3a225e2270b74c12a7f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-reversed.expected.json",
+        "sha256": "sha256:3b45de0934a02bccbfa7f7edc3b2e0f7c5928ea799648b5d0a2fd5b6d33e82cf"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-states-seed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-seed.input.json",
+        "sha256": "sha256:d0d8d5162903df1f01f4fa6a9d7beecbabfc12391364eb318c2dfbbba76aa512"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-seed.expected.json",
+        "sha256": "sha256:611e38d087e791117d9b16faba5b6003e80e1aee2bffb1bcfe60b71f93b775e2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-states-zero-identity",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-zero-identity.input.json",
+        "sha256": "sha256:e9caa97037b6bf55fe94e58703e57c9f07984d74e93238c1b2f50f584c3a50e5"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-zero-identity.expected.json",
+        "sha256": "sha256:fb88dcbed76bef31800fe5b241b38cd05b42acecdae2e0666146737348989d24"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/remote-player-states-zero-server-tick",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-zero-server-tick.input.json",
+        "sha256": "sha256:dc77c6f833df5b3b9e8590515bebad1ac67fb9e2ffc0fd1c6f9edb61b2d78c4a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_people/remote-player-states-zero-server-tick.expected.json",
+        "sha256": "sha256:edceabdc54823fbb4852ecb52f080f1041c05ea606b482a3c2598cd36b5fecca"
       },
       "checkpoints": [
         "0"
