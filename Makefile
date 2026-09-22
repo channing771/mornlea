@@ -17,11 +17,19 @@ PIXEL_PERFECTION_NOTICE_DIR := packages/client/assets/packs/pixel_perfection
 PIXEL_PERFECTION_NOTICE_DEST := bin/third-party/pixel-perfection
 ARGS ?=
 
+# Artifact identities are explicit inputs shared by local producers and CI consumers.
+CI_CANDIDATE_SHA ?= $(shell git rev-parse HEAD)
+export CI_CANDIDATE_SHA
+CI_LINUX_MANIFEST := build/ci/native-linux.manifest
+CI_MACOS_MANIFEST := build/ci/native-macos.manifest
+CI_VALIDATE_CANDIDATE_SHA = bash -c '[[ "$$CI_CANDIDATE_SHA" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$$ ]] || { printf "invalid candidate SHA\\n" >&2; exit 1; }'
+
 # go.work 下 `go test ./...` 不跨嵌套模块；全部按模块枚举的入口（test 族、
 # dev-check、vet）显式循环该列表，防止新模块成为 ./... 盲区。
 GO_TEST_MODULES := ./packages/contracts ./packages/shared ./packages/server ./packages/client ./packages/tools ./packages/audit
 
 .PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck comment-language-check ci-preflight fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev godot-build godot-check godot-asset-check godot-project-check godot-python-check godot-input-check godot-camera-check godot-target-check godot-entity-check godot-environment-check godot-hud-check godot-disconnect-check godot-smoke godot-terrain-check godot-capability-check godot-playable-smoke godot-visual-evidence godot-visual-compare godot-benchmark
+.PHONY: ci-rust-quality ci-frontend ci-native-linux ci-native-macos ci-verify-linux-artifact ci-verify-macos-artifact ci-linux-quality ci-race-server ci-race-rest ci-race-client ci-integration-server ci-integration-client
 
 run test test-multiplayer bench-multiplayer visual-check visual-update: rust
 build: rust
@@ -39,6 +47,18 @@ help:
 		'  make test-race-changed 只对改动包及其反向依赖跑 race(T1 层;RACE_BASE=ref 换基线)' \
 		'  make dev-check        迭代期快检:gofmt/六模块 vet+短测试与 Rust 静态检查' \
 		'  make ci-preflight     运行平台无关的 CI 前置检查与包分区验证' \
+		'  make ci-rust-quality  Run pinned Rust formatting, lint, and unit gates' \
+		'  make ci-frontend      Run the frozen frontend dependency and validation gates' \
+		'  make ci-native-linux  Build, load-check, and package the Linux server artifact' \
+		'  make ci-native-macos  Build and package the macOS native artifact' \
+		'  make ci-verify-linux-artifact Verify the candidate Linux artifact before use' \
+		'  make ci-verify-macos-artifact Verify the candidate macOS artifact before use' \
+		'  make ci-linux-quality Compile and vet supported Linux packages and run focused gates' \
+		'  make ci-race-server   Verify Linux artifacts and run the server race slice' \
+		'  make ci-race-rest     Verify Linux artifacts and run the neutral race slice' \
+		'  make ci-race-client   Verify macOS artifacts and run the client race slice' \
+		'  make ci-integration-server Run Agent process and server parity contracts' \
+		'  make ci-integration-client Run the independent server probe, reports, and benchmarks' \
 		'  make test-multiplayer 运行 M3C 八玩家与 v6 报告测试' \
 		'  make bench-multiplayer 运行三组 M3C 多人微基准' \
 		'  make archcheck        验证依赖闭包与无图形服务端边界' \
@@ -174,6 +194,60 @@ ci-preflight:
 	$(MAKE) comment-language-check
 	scripts/ci/package-inventory.sh --check
 	$(GO) test ./packages/audit -count=1
+
+ci-rust-quality:
+	scripts/ci/doctor.sh rust
+	$(MAKE) rust-check
+
+ci-frontend:
+	scripts/ci/doctor.sh frontend
+	$(MAKE) frontend-check
+
+ci-native-linux:
+	@$(CI_VALIDATE_CANDIDATE_SHA)
+	scripts/ci/doctor.sh native-linux
+	$(MAKE) build-linux-server
+	$(GO) test ./packages/shared/nativeabi ./packages/shared/core ./packages/shared/physics ./packages/client/mesh -race -count=1
+	scripts/ci/verify-linux-bundle.sh --root "$(CURDIR)"
+	mkdir -p build/ci
+	scripts/ci/package-native-artifact.sh --platform linux-amd64 --sha "$(CI_CANDIDATE_SHA)" --root "$(CURDIR)" --manifest "$(CI_LINUX_MANIFEST)" -- \
+		bin/mornlea-server bin/libmornlea_engine.so packages/engine/target/release/libmornlea_engine.so
+
+ci-native-macos:
+	@$(CI_VALIDATE_CANDIDATE_SHA)
+	scripts/ci/doctor.sh native-macos
+	$(MAKE) rust
+	mkdir -p build/ci
+	@platform=$$(scripts/ci/platform-id.sh) && \
+		case "$$platform" in macos-arm64|macos-x86_64) ;; *) printf 'macOS artifact requires a macOS host\n' >&2; exit 1 ;; esac && \
+		scripts/ci/package-native-artifact.sh --platform "$$platform" --sha "$(CI_CANDIDATE_SHA)" --root "$(CURDIR)" --manifest "$(CI_MACOS_MANIFEST)" -- \
+		packages/engine/target/release/libmornlea_engine.dylib packages/engine/target/release/libmornlea_client.dylib
+
+ci-verify-linux-artifact:
+	scripts/ci/verify-native-artifact.sh --platform linux-amd64 --sha "$(CI_CANDIDATE_SHA)" --root "$(CURDIR)" --manifest "$(CI_LINUX_MANIFEST)"
+
+ci-verify-macos-artifact:
+	@platform=$$(scripts/ci/platform-id.sh) && \
+		case "$$platform" in macos-arm64|macos-x86_64) ;; *) printf 'macOS artifact requires a macOS host\n' >&2; exit 1 ;; esac && \
+		scripts/ci/verify-native-artifact.sh --platform "$$platform" --sha "$(CI_CANDIDATE_SHA)" --root "$(CURDIR)" --manifest "$(CI_MACOS_MANIFEST)"
+
+ci-linux-quality: ci-verify-linux-artifact
+	scripts/ci/run-linux-quality.sh
+
+ci-race-server: ci-verify-linux-artifact
+	scripts/ci/run-go-race.sh server
+
+ci-race-rest: ci-verify-linux-artifact
+	scripts/ci/run-go-race.sh rest
+
+ci-race-client: ci-verify-macos-artifact
+	scripts/ci/run-go-race.sh client
+
+ci-integration-server: ci-verify-linux-artifact
+	scripts/ci/run-integration-server.sh
+
+ci-integration-client: ci-verify-macos-artifact
+	scripts/ci/run-integration-client.sh
 
 # dev-check:迭代期快检——gofmt 检查、vet、全仓短测试(重型测试经 `-short` 跳过)
 # 与 Rust fmt/clippy/单测。完整门禁(test/test-race/visual-check/rust-check)
