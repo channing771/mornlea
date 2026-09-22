@@ -128,7 +128,7 @@ Implementation follows test-driven development at each boundary:
 
 1. Audit tests first reject the old mixed workflow, missing `merge-gate` dependencies, floating runner labels, mutable action references, absent timeouts, and accidental Godot inclusion in the required graph.
 2. Shell regression tests first demonstrate that missing `rg` fails closed and that an overridden `CARGO_TARGET_DIR` is honored end to end.
-3. A Linux build test first demonstrates that the asset generator can consume the atlas pixels without Darwin-only source files.
+3. A platform-neutral audit first demonstrates that the atlas implementation belongs to the Linux source set; on Linux it also compiles the asset generator, while the required Linux quality entry point provides the real compile acceptance for every candidate.
 4. Native artifact tests cover SHA, platform, ordering, path, size, and digest mutations.
 5. Race inventory tests prove that the union of partitions is the complete six-module package universe and that intersections are empty.
 6. Focused package and script tests run during each repair, followed by the repository's proportionate T1/T2 gates.
