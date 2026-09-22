@@ -1034,12 +1034,12 @@ func agentContractSourceCaseCount(records []agentContractRecord, source agentCon
 	return count
 }
 
-// agentContractSyncCorpus writes or verifies the frozen corpus files.
+// `agentContractSyncCorpus` compares committed assets and optionally exports a
+// complete producer candidate for controller review.
 //
-// An ordinary run is read-only: it proves the committed files still match what
-// the validator produces now, so a drifted artifact fails instead of being
-// regenerated. The explicit update flag rewrites them, which is the only way a
-// frozen artifact changes.
+// Ordinary runs compare committed assets read-only against current producer
+// output. Explicit `RUNTIME_ORACLE_EXPORT_DIR` publication writes the complete
+// candidate to a fresh external directory and never mutates tracked assets.
 func agentContractSyncCorpus(t *testing.T, records []agentContractRecord) {
 	t.Helper()
 

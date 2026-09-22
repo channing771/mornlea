@@ -252,14 +252,12 @@ func TestAgentContractOracleDoesNotClaimAgentExecution(t *testing.T) {
 	}
 }
 
-// agentWorkingManifest assembles the manifest this node executes inside a
-// harness-owned temporary directory.
-//
-// The frozen manifest does not yet carry the Agent contract cases, because the
-// controller merges manifest fragments after acceptance. The working manifest is
-// therefore the frozen one with the frozen corpus's Agent cases registered and
-// the two agent families given their merged provenance set, which also proves the
-// proposed provenance reconciles against disk.
+// `agentWorkingManifest` clones the merged committed manifest into a selection
+// scoped to the companion producer and stored in harness-owned temporary storage.
+// `Cases` is narrowed to the Agent contract cases and unrelated family case lists
+// are cleared. Both existing Agent families retain their identities and receive
+// the producer's current cases and provenance before `ReconcileWorking` validates
+// the selection; execution remains package-local to the companion producer.
 func agentWorkingManifest(t *testing.T, root string) Inventory {
 	t.Helper()
 	frozen := loadRealManifest(t, root)

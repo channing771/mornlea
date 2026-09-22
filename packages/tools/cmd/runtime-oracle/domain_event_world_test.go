@@ -1168,12 +1168,12 @@ func domainEventWorldExecute(t *testing.T) []domainEventWorldRecord {
 	return records
 }
 
-// domainEventWorldSyncCorpus writes or verifies the frozen corpus files.
+// `domainEventWorldSyncCorpus` compares committed assets and optionally exports a
+// complete producer candidate for controller review.
 //
-// An ordinary run is read-only: it proves the committed files still match what
-// the protocol DTOs produce now, so a drifted artifact fails instead of being
-// regenerated. The explicit update flag rewrites them, which is the only way a
-// frozen artifact changes.
+// Ordinary runs compare committed assets read-only against current producer
+// output. Explicit `RUNTIME_ORACLE_EXPORT_DIR` publication writes the complete
+// candidate to a fresh external directory and never mutates tracked assets.
 func domainEventWorldSyncCorpus(t *testing.T, records []domainEventWorldRecord) {
 	t.Helper()
 
@@ -1250,20 +1250,12 @@ func domainEventWorldCaseID(label string) string {
 	return domainEventWorldFamily + "/" + domainEventWorldVersion + "/" + label
 }
 
-// domainEventWorldWorkingManifest assembles the manifest this node executes
-// inside a harness-owned temporary directory.
-//
-// The frozen manifest carries the `domain.event` family and its player event
-// cases, because the controller merges manifest fragments after acceptance. The
-// working manifest is therefore a family-scoped selection: `Cases` holds
-// exactly the world observation cases the committed corpus registers, every
-// other family's case list is cleared because `Reconcile` requires each
-// family's list to match the cases this selection registers for it, and the
-// `domain.event` entry keeps its discovered identity — kind, role, versions,
-// source, eventual owner and numeric semantics — while its provenance and case
-// list are replaced with this producer's. Registering the family's merged
-// provenance and case list in the live registry is deliberately left to the
-// manifest merge.
+// `domainEventWorldWorkingManifest` clones the merged committed manifest into
+// a producer-scoped selection stored in harness-owned temporary storage.
+// `Cases` is narrowed to the world observation cases and unrelated family case
+// lists are cleared. The existing `domain.event` identity is retained while its
+// provenance and case list are replaced with this producer's current selection
+// for `ReconcileWorking`.
 func domainEventWorldWorkingManifest(t *testing.T, root string) Inventory {
 	t.Helper()
 	frozen := loadRealManifest(t, root)

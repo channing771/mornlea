@@ -503,8 +503,9 @@ pub fn parse_f32_token(case: &FrozenCase, path: &str, text: &str) -> Result<f32,
                     format!("failed to parse float token at '{path}': '{text}': {e}"),
                 )
             })?;
-            // "only the four explicit spellings may intentionally produce non-finite bits"
-            // "A decimal token that overflows or underflows with a parser error is also hard"
+            // Only the four explicit spellings may intentionally yield non-finite bits.
+            // Finite decimal grammar may underflow to finite zero, but decimal overflow
+            // to infinity is rejected.
             if !val.is_finite() {
                 return Err(invalid_case(
                     case,

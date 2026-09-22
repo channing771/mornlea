@@ -740,12 +740,12 @@ func domainValuesExecute(t *testing.T) []domainValuesRecord {
 	return records
 }
 
-// domainValuesSyncCorpus writes or verifies the frozen corpus files.
+// `domainValuesSyncCorpus` compares committed assets and optionally exports a
+// complete producer candidate for controller review.
 //
-// An ordinary run is read-only: it proves the committed files still match what
-// the validators produce now, so a drifted artifact fails instead of being
-// regenerated. The explicit update flag rewrites them, which is the only way a
-// frozen artifact changes.
+// Ordinary runs compare committed assets read-only against current producer
+// output. Explicit `RUNTIME_ORACLE_EXPORT_DIR` publication writes the complete
+// candidate to a fresh external directory and never mutates tracked assets.
 func domainValuesSyncCorpus(t *testing.T, records []domainValuesRecord) {
 	t.Helper()
 
@@ -821,18 +821,11 @@ func domainValuesCaseID(label string) string {
 	return domainValuesFamily + "/" + domainValuesVersion + "/" + label
 }
 
-// domainValuesWorkingManifest assembles the manifest this node executes inside a
-// harness-owned temporary directory.
-//
-// The frozen manifest does not yet carry this family, because the controller
-// merges manifest fragments after acceptance. The working manifest is therefore
-// a family-scoped selection: `Cases` holds exactly the `domain.values` cases the
-// committed corpus registers, every other family's case list is cleared because
-// `Reconcile` requires each family's list to match the cases this selection
-// registers for it, and the family itself is appended with the provenance the
-// producer reads. Registering the family in the live registry is deliberately
-// left to the manifest merge: adding it here would make the frozen corpus fail
-// reconciliation as an uncovered family before the fragment lands.
+// `domainValuesWorkingManifest` clones the merged committed manifest into a
+// producer-scoped selection stored in harness-owned temporary storage.
+// `Cases` is narrowed to this producer's cases, unrelated family case lists are
+// cleared, and the existing selected family receives its complete identity,
+// current provenance and case list before `ReconcileWorking` validates it.
 func domainValuesWorkingManifest(t *testing.T, root string) Inventory {
 	t.Helper()
 	frozen := loadRealManifest(t, root)
@@ -858,7 +851,7 @@ func domainValuesWorkingManifest(t *testing.T, root string) Inventory {
 		}
 		sources = append(sources, SourceSpec{Path: relative, SHA256: hash})
 	}
-	cloned.Families = append(cloned.Families, Family{
+	selected := Family{
 		ID:                domainValuesFamily,
 		Kind:              "domain",
 		Role:              "input",
@@ -869,13 +862,20 @@ func domainValuesWorkingManifest(t *testing.T, root string) Inventory {
 		NumericSemantics:  domainValuesNumericSemantics,
 		Sources:           sources,
 		Cases:             caseIDs,
-	})
+	}
+	registered := false
 	for index := range cloned.Families {
 		// A family this selection does not execute registers no case, so its
 		// list must be empty for the manifest to describe itself.
 		if cloned.Families[index].ID != domainValuesFamily {
 			cloned.Families[index].Cases = nil
+			continue
 		}
+		cloned.Families[index] = selected
+		registered = true
+	}
+	if !registered {
+		t.Fatalf("working manifest has no %s family", domainValuesFamily)
 	}
 
 	encoded, err := encodeInventory(cloned)
@@ -1073,11 +1073,19 @@ func TestDomainValuesOracleCaseIdentitiesAreTheRustDomainConsumer(t *testing.T) 
 	}
 }
 
-// TestDomainValuesOracleWorkingManifestDescribesItself proves the working
-// manifest is internally consistent without claiming a registry entry that the
-// frozen corpus does not carry yet: every case passes the production case
-// validation, the family's provenance hashes match disk, and the family's case
-// list matches exactly the cases the selection registers.
+func TestDomainValuesOracleWorkingManifestReconciles(t *testing.T) {
+	root := mustRepoRoot(t)
+	manifest := domainValuesWorkingManifest(t, root)
+	_, families, live := discoverLive(t)
+	if _, err := ReconcileWorking(root, manifest, families, live, BaselineConsumerRegistry(), BaselineNegativeCoverageExceptions()); err != nil {
+		t.Fatalf("values working manifest drifted from current registries: %v", err)
+	}
+}
+
+// `TestDomainValuesOracleWorkingManifestDescribesItself` checks the producer-scoped
+// selection from the merged manifest: every case passes production validation,
+// provenance hashes match disk, and the selected family's case list matches the
+// narrowed case index.
 func TestDomainValuesOracleWorkingManifestDescribesItself(t *testing.T) {
 	root := mustRepoRoot(t)
 	manifest := domainValuesWorkingManifest(t, root)
