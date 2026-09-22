@@ -1,5 +1,6 @@
 use crate::identity::DomainError;
 
+mod chat;
 mod inventory;
 mod mobs;
 mod objects;
@@ -8,6 +9,7 @@ mod people;
 mod player;
 mod world;
 
+pub use chat::{ChatBody, ChatEvent, ChatEventParts, CompanionSpeaker, TaskFailure, TaskState};
 pub use inventory::{
     ChestState, ChestStateParts, ContainerClosed, CraftingSize, CraftingState, CraftingStateParts,
     FurnaceState, FurnaceStateParts, InventoryState, InventoryStateParts,

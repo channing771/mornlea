@@ -449,6 +449,41 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   no-clamp rejection, the shared stack rules, the zero tick, and the absent
   authority-only fields).
 
+## Chat event observations (`src/event/chat.rs`, `tests/event_chat.rs`)
+
+- `ChatEvent` (with `ChatEventParts`) is the chat fact an authoritative
+  session confirms for one player: the issuing player's checked identity and
+  name plus the closed `ChatBody` union. `ChatEvent::try_new` rejects only a
+  zero event id (`InvalidIdentity`) and owns the checked player fields and
+  the body without normalization; the event id names the chat
+  acknowledgment itself, not a `CommandEnvelope` sequence, because a chat
+  command travels through its own FIFO with no sequence at all. The value
+  carries no routing recipient, publish tick or raw reason byte.
+- `ChatBody` is the closed semantic union with exactly seven variants
+  (`Accepted`, `InvalidFormat`, `UnknownCompanion`, `QueueFull`,
+  `NotFollowing`, `Task`, `Speech`) unfolding into the sixteen legal branch
+  shapes the Go `protocol.ChatEvent` validator admits (the four rejections,
+  the five plain task facts, the five failure reasons, speech and the
+  accepted command). Every illegal cross-field combination — speech on a
+  non-speech branch, a command on speech or malformed format, a leaked
+  companion identity on malformed format or unknown companion — has no
+  constructible state: the variant field lists are the rule.
+- `TaskState` (`Started`/`Progress`/`Completed`/`TimedOut`/`Stopped`/
+  `Failed(TaskFailure)`) mirrors the Go task fact kinds, and `TaskFailure`
+  the closed `TaskFailReason` 16..=20 set that rides only inside the failed
+  state. `CompanionSpeaker` is total from the checked `CompanionId` and
+  `CompanionName`. Absence is the variant shape, never a zero identity: the
+  malformed-format branch carries nothing and the unknown-companion branch
+  only the target name. Raw invalid kind, reason and text combinations stay
+  corpus-adapter concerns; no type here exposes an enum number or an
+  `Unknown` member.
+- Focused entry: `cargo test -p mornlea_domain --test event_chat --locked`
+  (10 cases: the zero-id rejection, the player field preservation with the
+  `u64::MAX` boundary, the five addressing branches, the five plain task
+  states, the five failure reasons, the speech branch, the sixteen-branch
+  exhaustive classification, the zero-identity absence proof, the
+  command/speech slot separation counts, and the absent envelope fields).
+
 ## Observations (`src/event.rs`, `tests/runtime_contract.rs`)
 
 - `Observation::new` publishes only `domain.input` and `domain.event`
@@ -490,4 +525,5 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_people --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_mobs --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_objects --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_chat --locked
 ```
