@@ -531,3 +531,49 @@ checkbox/status source.
   RED/GREEN, verification and independent-review lifecycle.
 - Architecture skill: no change. The node changes comment governance and its
   debt baseline, not a cross-task runtime boundary.
+
+## 2026-09-22 — Cross-node comment review follow-up
+
+- A wider audit run during node 5.9 exposed three invalid backticked local or
+  builtin names introduced by nodes 5.6–5.7. Review also found that the
+  translated `fillWaterBasin` prose described half-open bounds while its loops
+  are inclusive, and two fixture comments repeated that mismatch.
+- Follow-up `330873c6` (`docs(comments): correct reviewed identifier and range
+  prose`) replaces the local/builtin spellings with unambiguous prose and makes
+  every basin/trench interval match the inclusive implementation.
+- Independent review first reported one Important and one Minor finding, then
+  returned Ready with zero findings after correction. Full audit and focused
+  client/entity race suites passed. This confirms why final review must execute
+  the broad gate even after focused comment-debt acceptance.
+
+## 2026-09-22 — Node 5.9 acceptance
+
+- Implementation: `39530ee3` (`docs(orchestration): harden task acceptance
+  evidence`). The project orchestration skill and worker-planning reference now
+  require one OpenSpec status source, an open node after a failed required gate,
+  explicit pre-archive contract revision, and repository-wide enumeration for
+  absolute requirements. Codex and Claude copies are byte-identical.
+- TDD evidence: exactly
+  `TestProjectOrchestrationRetrospectivePolicy` and
+  `TestProjectOrchestrationRetrospectivePolicyGuardDetectsDrift` were added.
+  After correcting a test-harness delimiter, the tests failed on every missing
+  policy fragment, then passed after the skill/reference update; the mutation
+  guard removes each required fragment independently.
+- No-guidance controls: competing-status P1 was 0/5 and red-gate P2 was 0/5.
+  Absolute-scope P3 initially remained 5/5 through several pressure increases;
+  the final scenario added a spec owner's unversioned verbal narrowing and
+  produced 0/5. Across all control attempts, including escalations, 20 passed
+  and 15 failed; the final comparable RED matrix was P1 0/5, P2 0/5, P3 0/5.
+- Guided samples used 15 new contexts that read the updated skill and reference:
+  P1 5/5, P2 5/5 and P3 5/5, for 15/15 GREEN. Manual scoring required every
+  rubric element, not keyword presence.
+- Validation: both mirror `cmp` gates, the complete
+  `^TestProjectOrchestration` family, full `packages/audit`, formatting and
+  `git diff --check` passed. Independent review was Ready with zero findings
+  and agreed with every score and pressure escalation.
+- Superpowers availability: `writing-skills` was not exposed in the worker's
+  skill surface or installed resources. The worker reported that limitation
+  and executed the complete frozen RED/GREEN pressure protocol from the
+  reviewed node packet without claiming an unavailable invocation.
+- Architecture skill: no change. These are orchestration/evidence rules rather
+  than runtime ownership or dependency decisions.
