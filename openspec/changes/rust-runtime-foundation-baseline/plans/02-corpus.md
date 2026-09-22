@@ -254,7 +254,7 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_protocol --test runtime_contract corpus_frame --locked
 rustup run 1.97.1 cargo clippy --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain -p mornlea_protocol --all-targets --locked -- -D warnings
-rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --check
+rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --all --check
 git diff --exit-code -- testdata/runtime-migration
 ```
 

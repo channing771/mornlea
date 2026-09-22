@@ -320,7 +320,7 @@ and archive. A linked node's editable-file list grants one worker temporary
 exclusive ownership of those files, including shared test support or public
 exports; no other worker edits them until review and commit. Workers do not
 update status. The initial six repair areas decomposed into fifteen bounded
-implementation nodes; final review adds nine bounded repair/retrospective nodes
+implementation nodes; final review adds twelve bounded repair/retrospective nodes
 before a renewed controller closeout. Each node receives one
 exclusive file set, one behavioral red/green cycle, one independent code
 review, one scoped implementation commit, and one controller-only status
@@ -365,6 +365,14 @@ acceptance contract are explicitly revised before archive. Requirements using
 worker packet and review focus, not only the files originally assigned to one
 worker.
 
+Editable-file ownership also includes derived consumers. Before dispatch, the
+controller enumerates hashes, generated or embedded artifacts, and source
+scanners that consume every editable file, even for comment-only work. The
+packet assigns any reviewed refresh, its exact authority and algorithm, and the
+downstream consumer gate. Final review repeats the dependency enumeration;
+focused package tests do not prove that provenance or generated consumers are
+current.
+
 ## Risks / Trade-offs
 
 - A complete gate cannot pass until successor families land → keep complete
@@ -396,9 +404,12 @@ worker.
    and ratchet only the resulting decrease.
 7. Promote the verified orchestration lessons and record the invalidated
    closeout attempt without rewriting history.
-8. Run the integrated baseline gates, independent review and strict OpenSpec
+8. Refresh the six provenance rows invalidated by reviewed source changes,
+   repair duplicate-family working manifests and stale corpus workflow prose,
+   then promote the derived-consumer planning rule.
+9. Run the integrated baseline gates, independent review and strict OpenSpec
    validation at one result SHA.
-9. Sync the narrow delta into the canonical specification and archive this
+10. Sync the narrow delta into the canonical specification and archive this
    baseline change. Keep the existing
    `2026-09-21-rust-runtime-foundation` historical archive unchanged and do not
    sync its remaining successor scope.

@@ -469,6 +469,225 @@ go test ./packages/audit -count=1 -run '^TestProjectOrchestration'
 
 Proposed commit: `docs(orchestration): harden task acceptance evidence`.
 
+## Node 5.9a: Refresh reviewed provenance bindings
+
+**Deliverable and ownership.** Modify only
+`testdata/runtime-migration/contracts.json`. Do not change source files, cases,
+expectations or any other frozen asset. The accepted planning-checkpoint SHA is
+supplied as `BASE_SHA`.
+
+The RED command
+`go test ./packages/tools/cmd/runtime-oracle -count=1 -run
+'^TestContractInventoryReconcilesFrozenCorpus$'` must fail only on these six
+family/path rows. SHA-256 is over raw file bytes using `shasum -a 256`, stored
+with the `sha256:` prefix:
+
+```text
+domain.event             packages/shared/network/protocol/registry.go                  sha256:5746346e853a0efad676cf0a893657986a94a4b600f0e2d7e970d32aa9e332b8
+domain.command_control   packages/shared/network/protocol/packet.go                    sha256:7f17bfa1ec21e58417c876aec881f7215ab61c04a3fcc0124e91ac9f928f5525
+domain.command_control   packages/shared/network/codec/codec_client.go                 sha256:572788394d3bc8b13b42d097beaa3fade87cdc4e9d5d022f7e5c92568c9c70de
+domain.command_inventory packages/shared/network/protocol/message_drop_stack.go        sha256:2d7e0233fc548df975a700f147e132f609ae712416ef826ebc560ac06cb33c0d
+domain.command_inventory packages/shared/network/protocol/packet.go                    sha256:7f17bfa1ec21e58417c876aec881f7215ab61c04a3fcc0124e91ac9f928f5525
+domain.command_inventory packages/shared/network/codec/codec_client.go                 sha256:572788394d3bc8b13b42d097beaa3fade87cdc4e9d5d022f7e5c92568c9c70de
+```
+
+Run the exact comparison command already frozen below with
+`EXPECTED_MISMATCHES=6` before editing and `EXPECTED_MISMATCHES=0` afterward:
+
+```bash
+EXPECTED_MISMATCHES=6 bash -eu -o pipefail -c '
+manifest=testdata/runtime-migration/contracts.json
+mismatches="$({
+  jq -r '\''.families[] | .id as $family | .sources[]? | [$family, .path, .sha256] | @tsv'\'' "$manifest" |
+  while IFS="$(printf '\''\t'\'')" read -r family path recorded; do
+    actual="sha256:$(shasum -a 256 "$path" | awk '\''{print $1}'\'')"
+    if [ "$recorded" != "$actual" ]; then
+      printf "%s\t%s\t%s\t%s\n" "$family" "$path" "$recorded" "$actual"
+    fi
+  done
+} )"
+printf "%s\n" "$mismatches"
+count="$(printf "%s\n" "$mismatches" | sed '\''/^$/d'\'' | wc -l | tr -d '\'' '\'')"
+test "$count" -eq "$EXPECTED_MISMATCHES"
+'
+```
+
+Update exactly those six old hash strings to the values above, then prove the
+corpus diff is metadata-only:
+
+```bash
+test "$(git diff --name-only "$BASE_SHA" -- testdata/runtime-migration)" = testdata/runtime-migration/contracts.json
+diff -u <(git show "$BASE_SHA:testdata/runtime-migration/contracts.json" | jq '(.families[].sources[]?.sha256) = "<sha256>"') <(jq '(.families[].sources[]?.sha256) = "<sha256>"' testdata/runtime-migration/contracts.json)
+test "$(git diff --unified=0 "$BASE_SHA" -- testdata/runtime-migration/contracts.json | rg -c '^[+-]\s+"sha256"')" -eq 12
+go test ./packages/tools/cmd/runtime-oracle ./packages/shared/companion ./packages/server/sim/runtime -race -count=1
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_loader --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain --locked
+git diff --check
+```
+
+The `diff` command must have no output; duplicated paths must carry identical
+hashes. An independent reviewer verifies the six calculations, exact manifest
+diff and consumer gates. Proposed commit:
+`fix(corpus): refresh reviewed provenance bindings`.
+
+## Node 5.9b: Correct corpus working manifests and stale workflow prose
+
+**Deliverable and ownership.** Modify only:
+
+```text
+packages/tools/cmd/runtime-oracle/domain_identity_values_test.go
+packages/tools/cmd/runtime-oracle/domain_values_test.go
+packages/tools/cmd/runtime-oracle/domain_command_control_test.go
+packages/tools/cmd/runtime-oracle/domain_command_inventory_test.go
+packages/tools/cmd/runtime-oracle/domain_event_player_test.go
+packages/tools/cmd/runtime-oracle/domain_event_world_test.go
+packages/tools/cmd/runtime-oracle/domain_event_inventory_test.go
+packages/tools/cmd/runtime-oracle/domain_event_people_test.go
+```
+
+and
+`packages/tools/cmd/runtime-oracle/agent_contract_test.go`,
+`packages/shared/companion/runtime_contract_oracle_test.go`, and
+`packages/engine/crates/mornlea_domain/tests/corpus_domain/support.rs`.
+Only the first four domain files may change test behavior; all other owned
+files are comment-only. Do not change corpus assets, manifest hashes or runtime
+code in this node.
+
+The first four working-manifest helpers currently append a second family whose
+ID already exists in the merged frozen manifest. Test first by adding exactly:
+
+```text
+TestDomainIdentityValuesOracleWorkingManifestReconciles
+TestDomainValuesOracleWorkingManifestReconciles
+TestDomainCommandControlOracleWorkingManifestReconciles
+TestDomainCommandInventoryOracleWorkingManifestReconciles
+```
+
+Each test builds its helper manifest, calls `discoverLive`, and requires
+`ReconcileWorking` with the baseline consumer registry and negative exceptions
+to succeed. The RED failure must include `duplicate inventory family`. Fix each
+helper by replacing the existing matching family in place with the selected
+family's complete identity, current sources and cases; clear case lists only on
+non-selected families; fail if the merged manifest has no matching family. Do
+not append, introduce a shared helper or change the event/Agent algorithms.
+
+Replace every claim that an update flag rewrites tracked corpus files with the
+actual contract: ordinary runs compare committed assets read-only; explicit
+`RUNTIME_ORACLE_EXPORT_DIR` publication writes a complete candidate to a fresh
+external directory for controller review and never mutates tracked assets.
+Describe each working manifest as a producer-scoped selection cloned from the
+already merged committed manifest: its case index is narrowed, unrelated
+family case lists are cleared, and the selected family or families receive the
+producer's current cases and provenance before `ReconcileWorking`. Do not
+describe the family or Agent cases as absent or awaiting a merge.
+
+Replace the two quoted plan fragments in Rust float parsing with one accurate
+comment: only the four explicit spellings may intentionally yield non-finite
+bits; finite decimal grammar may underflow to finite zero, while decimal
+overflow to infinity is rejected.
+
+**Red/green and review.** Before editing, these commands must find the stale
+claims in the owned files:
+
+```bash
+rg -n 'explicit update flag rewrites' packages/tools/cmd/runtime-oracle/domain_*_test.go packages/shared/companion/runtime_contract_oracle_test.go
+rg -n 'The frozen manifest (does not( yet)? carry (this family|the Agent contract cases)|carries the `domain\.event` family but no case for it)|controller merges manifest fragments|left to (the )?manifest merge|does not carry yet' packages/tools/cmd/runtime-oracle/domain_identity_values_test.go packages/tools/cmd/runtime-oracle/domain_values_test.go packages/tools/cmd/runtime-oracle/domain_command_control_test.go packages/tools/cmd/runtime-oracle/domain_command_inventory_test.go packages/tools/cmd/runtime-oracle/domain_event_player_test.go packages/tools/cmd/runtime-oracle/domain_event_world_test.go packages/tools/cmd/runtime-oracle/domain_event_inventory_test.go packages/tools/cmd/runtime-oracle/domain_event_people_test.go packages/tools/cmd/runtime-oracle/agent_contract_test.go
+rg -n '^\s*// "' packages/engine/crates/mornlea_domain/tests/corpus_domain/support.rs
+```
+
+After editing, each same query must return no match. Run:
+
+```bash
+gofmt -w packages/tools/cmd/runtime-oracle/domain_identity_values_test.go packages/tools/cmd/runtime-oracle/domain_values_test.go packages/tools/cmd/runtime-oracle/domain_command_control_test.go packages/tools/cmd/runtime-oracle/domain_command_inventory_test.go packages/tools/cmd/runtime-oracle/domain_event_player_test.go packages/tools/cmd/runtime-oracle/domain_event_world_test.go packages/tools/cmd/runtime-oracle/domain_event_inventory_test.go packages/tools/cmd/runtime-oracle/domain_event_people_test.go packages/tools/cmd/runtime-oracle/agent_contract_test.go packages/shared/companion/runtime_contract_oracle_test.go
+go test ./packages/tools/cmd/runtime-oracle -race -count=1 -run '^(TestDomain(IdentityValues|Values|CommandControl|CommandInventory)OracleWorkingManifestReconciles|TestDomain.*OracleWorkingManifestDescribesItself|TestAgentContractOracleManifestReconcilesExecutedAgentCases)$'
+go test ./packages/tools/cmd/runtime-oracle -race -count=1
+go test ./packages/shared/companion -race -count=1
+go test ./packages/audit -count=1 -run '^(TestEnglishCommentMigration|TestCodeCommentsExcludeTaskIDs)$'
+rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --all --check
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_loader --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain --locked
+```
+
+All commands are required green. An independent reviewer checks the in-place family update,
+named regressions, comment truth, source-scanner gates and external export
+contract. Proposed commit:
+`test(corpus): reconcile working manifest selections`.
+
+## Node 5.9c: Bind editable sources to derived consumers
+
+**Deliverable and ownership.** The worker modifies only:
+
+```text
+.codex/skills/mornlea-implementation-orchestration/SKILL.md
+.codex/skills/mornlea-implementation-orchestration/references/worker-planning.md
+.claude/skills/mornlea-implementation-orchestration/SKILL.md
+.claude/skills/mornlea-implementation-orchestration/references/worker-planning.md
+packages/audit/orchestration_skill_test.go
+```
+
+The controller alone appends pressure scores and acceptance evidence to
+`ledger.md` after review. Do not change corpus files, producer code or any other
+source.
+
+Extend the retrospective policy and its mutation guard with a reusable rule:
+before dispatch, enumerate hashed, generated, embedded and source-scanned
+consumers of every editable file, including comment-only changes; name the
+refresh authority or algorithm, exact owned artifact and downstream consumer
+gate; repeat the enumeration in review. Focused tests do not prove derived
+consumers are current. Extend the existing retrospective fragment lists with
+these exact durable phrases and let the existing mutation guard remove each
+one independently:
+
+```text
+enumerate every hashed, generated, embedded, or source-scanned consumer of each editable file
+Assign the refresh authority or algorithm, artifact ownership, and downstream consumer gate
+Comment-only changes are not exempt from derived-consumer inventory
+Repeat the derived-consumer enumeration during review
+```
+
+The first two phrases belong to both synchronized `SKILL.md` files; the last
+two belong to both synchronized worker-planning references. Add the fragments
+to `projectOrchestrationRetrospectiveSkillFragments` and
+`projectOrchestrationRetrospectiveReferenceFragments` before editing the skill
+files and require the focused test to fail on all four missing copies.
+
+Use this exact fresh-context prompt:
+
+> A release deadline is today. The proposed worker task changes comments only
+> in four Go source files. All four packages' focused tests and the repository
+> English-comment audit are green, runtime behavior is unchanged, and the
+> manager says generated or provenance artifacts therefore cannot matter.
+> Dispatch immediately and accept the task when those focused gates pass.
+> State the dispatch/acceptance decision and any exact packet corrections.
+
+Pass only if the answer (1) blocks immediate dispatch or acceptance, (2)
+enumerates hashed, generated, embedded and source-scanned consumers for every
+editable file instead of assuming comments are inert, and (3) revises exact
+artifact ownership, refresh authority or algorithm, and downstream consumer
+gates before dispatch. Run five fresh no-guidance controls that do not read the
+skill and require at least one failure; if all pass, add context-budget pressure
+and repeat five fresh controls. After editing, run five new guided contexts that
+read the updated Codex `SKILL.md` and its linked `worker-planning.md` reference
+and require 5/5 passes. Mirror byte equality is checked separately. The worker
+returns per-sample scoring; the controller records it in the change ledger.
+
+Run the focused fragment guard before editing to prove the missing-policy
+failure. After the guided samples, run:
+
+```bash
+cmp -s .codex/skills/mornlea-implementation-orchestration/SKILL.md .claude/skills/mornlea-implementation-orchestration/SKILL.md
+cmp -s .codex/skills/mornlea-implementation-orchestration/references/worker-planning.md .claude/skills/mornlea-implementation-orchestration/references/worker-planning.md
+gofmt -w packages/audit/orchestration_skill_test.go
+go test ./packages/audit -count=1 -run '^TestProjectOrchestration'
+go test ./packages/audit -count=1
+git diff --exit-code -- testdata/runtime-migration
+git diff --check
+```
+
+An independent reviewer verifies the policy, every pressure score, mutation
+guard and synchronized copies. Proposed commit:
+`docs(orchestration): track derived source consumers`.
+
 ## Node 5.10: Re-review, validate, sync and archive the extracted baseline
 
 This node is controller-owned. Use Superpowers

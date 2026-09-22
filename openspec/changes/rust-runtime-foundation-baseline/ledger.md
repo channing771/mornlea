@@ -661,3 +661,60 @@ owns any issue that remains actionable after nodes 5.1–5.9.
   creation and recovery. Historical per-command stdout and the first 125/125
   count exist only in the ignored record, so they are explicitly labeled
   recovered evidence rather than current validation.
+
+## 2026-09-22 — Renewed whole-range review round one
+
+- Code verdict: Not Ready with zero Critical, one Important and one Minor.
+  Spec/process verdict: Not Ready with zero Critical, two Important and one
+  Minor. Both reviewers independently reproduced the same blocking failure:
+  comment-only source edits left six provenance rows for four shared-network
+  files stale, so the full runtime-oracle race gate was red.
+- The process Important is causal: nodes 5.6–5.8 enumerated editable files and
+  focused tests but not hashed, generated or source-scanned downstream
+  consumers. The existing orchestration lesson therefore did not cover the
+  planning defect that produced the red gate.
+- Minor code findings cover obsolete update-flag and pre-merge working-manifest
+  comments in the corpus producers plus two inaccurate quoted Rust float-plan
+  fragments. The plan Minor found non-executable virtual-workspace `cargo fmt`
+  commands in historical packets. The recovered record says only that format
+  validation passed and does not identify the exact historical command; this
+  reconciliation corrects the packet prospectively by adding `--all`.
+- Ruling: keep 5.10 open. Nodes 5.9a–5.9c first refresh the six reviewed
+  provenance hashes, repair four duplicate-family working manifests and stale
+  workflow prose, then pressure-test the derived-consumer rule. Each node must
+  pass its consumer gates before the next starts. Repeat whole-range review
+  afterward; no finding is waived.
+- Planning skill availability: Superpowers was not exposed in the current tool
+  surface. The controller reported that limitation and reconciled the existing
+  reviewed packet directly rather than claiming a new plugin invocation.
+- Architecture skill: no change. The new rule governs planning and validation
+  of derived artifacts; runtime ownership and dependency direction are
+  unchanged.
+
+## 2026-09-22 — Final repair packet readiness
+
+- Independent readiness review found four working-manifest helpers still
+  appending an already merged family. The controller froze four named
+  reconciliation regressions and an in-place replacement algorithm; no worker
+  chooses new family ownership or policy.
+- Initial review also required exact consumer gates, editable-file ownership,
+  hash calculations and pressure-test inputs. The next review caught a broken
+  dependency order: working reconciliation cannot turn green until all retained
+  source hashes are current. The final serial order is 5.9a provenance only,
+  5.9b helper behavior and prose, then 5.9c derived-consumer planning policy.
+- Follow-up reviews tightened stale-prose checks to cover trailing merge claims,
+  four pre-merge test descriptions and line-wrapped controller-merge claims.
+  Design, tasks and the packet now use the same order. Historical formatting
+  evidence remains explicitly uncertain; executable commands are corrected
+  prospectively rather than attributed to an unknown historical run.
+- Execution shape: the controller handles the six-line metadata repair directly
+  because its known calculations and diff boundary are tiny. Fresh bounded
+  workers handle the multi-file helper repair and policy pressure exercise to
+  isolate their discovery and validation traces. Independent reviewers check
+  every implementation before its scoped commit and separate acceptance commit.
+- No new directory or ownership boundary is introduced; existing directory
+  guides apply. Superpowers remains unavailable in the current installed skill
+  surface; this is a disclosed fallback continuation of the reviewed packet,
+  not a claim that missing skills were invoked.
+- Final readiness verdict: Ready, zero Critical, Important or Minor findings.
+  `git diff --check` and strict active-change validation both passed.

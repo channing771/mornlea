@@ -250,7 +250,7 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test corpus_domain corpus_structure --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test corpus_domain support:: --locked
-rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --check
+rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --all --check
 git diff --exit-code -- testdata/runtime-migration/cases
 git diff --exit-code -- testdata/runtime-migration/expectations
 ```
@@ -289,7 +289,7 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test corpus_domain identity_text:: --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test identity_values --locked
-rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --check
+rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --all --check
 ```
 
 Exactly 31 unique IDs execute once. Proposed commit:
@@ -319,7 +319,7 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test corpus_domain values:: --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test items_locations --locked
-rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --check
+rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --all --check
 ```
 
 Exactly 99 unique IDs execute once. Proposed commit:
@@ -352,7 +352,7 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test corpus_domain command_control:: --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test command_control --locked
-rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --check
+rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --all --check
 ```
 
 Exactly 28 unique IDs execute once. Proposed commit:
@@ -384,7 +384,7 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test corpus_domain command_inventory:: --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test command_inventory --test command_order --locked
-rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --check
+rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --all --check
 ```
 
 Exactly 54 unique IDs execute once, and the handwritten ordering suite remains
@@ -415,7 +415,7 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test corpus_domain event_player:: --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test event_player --locked
-rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --check
+rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --all --check
 ```
 
 Exactly 47 unique IDs execute once. Proposed commit:
@@ -443,7 +443,7 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test corpus_domain event_world:: --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test event_world --locked
-rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --check
+rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --all --check
 ```
 
 Exactly 38 unique IDs execute once. Proposed commit:
@@ -472,7 +472,7 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test corpus_domain event_inventory:: --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test event_inventory --locked
-rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --check
+rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --all --check
 ```
 
 Exactly 33 unique IDs execute once. Proposed commit:
@@ -502,7 +502,7 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test corpus_domain event_people:: --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test event_people --locked
-rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --check
+rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --all --check
 ```
 
 Exactly 46 unique IDs execute once. Proposed commit:
@@ -538,7 +538,7 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --locked
 rustup run 1.97.1 cargo clippy --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --all-targets --locked -- -D warnings
-rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --check
+rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --all --check
 git diff --exit-code -- testdata/runtime-migration/cases
 git diff --exit-code -- testdata/runtime-migration/expectations
 ```

@@ -142,7 +142,7 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --test corpus_domain --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml \
   -p mornlea_domain --locked
-rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --check
+rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --all --check
 git diff --exit-code -- testdata/runtime-migration
 ```
 
