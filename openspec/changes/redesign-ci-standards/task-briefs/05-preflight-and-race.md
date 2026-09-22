@@ -40,10 +40,10 @@ It checks every command, reports all missing names in lexical order as `missing 
 
 `scripts/ci/package-inventory.sh` supports `--all`, `--slice client|server|rest`, and `--check`:
 
-- `--all` is the sorted union of Linux/amd64 and Darwin/arm64 `go list -e` results for all module directories parsed from `go work edit -json`.
-- `client` uses the Darwin/arm64 client module package set plus `github.com/channing771/mornlea/packages/tools/gfxspike`.
-- `server` uses the Linux/amd64 server module package set.
-- `rest` uses the Linux/amd64 contracts, shared, tools, and audit package sets; Linux excludes the Darwin-only `gfxspike` package.
+- `--all` is the sorted union of Linux/amd64 and Darwin/arm64 `go list -e` results for all module directories parsed from `go work edit -json`. Both supported source-set queries set `CGO_ENABLED=1`; otherwise a cross-platform query from macOS silently omits the established Linux `packages/shared/nativeabi` package before compilation.
+- `client` uses the cgo-enabled Darwin/arm64 client module package set plus `github.com/channing771/mornlea/packages/tools/gfxspike`.
+- `server` uses the cgo-enabled Linux/amd64 server module package set.
+- `rest` uses the cgo-enabled Linux/amd64 contracts, shared, tools, and audit package sets; Linux excludes the Darwin-only `gfxspike` package while retaining `packages/shared/nativeabi`.
 - `--check` materializes those four lists and invokes `check-package-partitions.sh`.
 
 The script verifies that the parsed module directory set is exactly `packages/audit`, `packages/client`, `packages/contracts`, `packages/server`, `packages/shared`, and `packages/tools` before listing packages. It does not keep a second package-count constant. Planning evidence is 57 packages on Darwin and 54 on Linux; counts are informational, not acceptance constants.
@@ -63,7 +63,7 @@ server/rest: go test "${packages[@]}" -race -p=1
 
 2. Add partition fixtures for a valid four-file set and mutations with a duplicate, client/server overlap, missing package, unexpected package, unsorted line, and empty slice. Each mutation asserts its stable diagnostic and nonzero status.
 
-3. Add a repository test that runs `package-inventory.sh --check`, asserts the exact six module directories through `go work edit -json`, and verifies `gfxspike` occurs exactly once in `client` and never in `rest`.
+3. Add a repository test that runs `package-inventory.sh --check`, asserts the exact six module directories through `go work edit -json`, verifies `gfxspike` occurs exactly once in `client` and never in `rest`, and verifies `packages/shared/nativeabi` occurs exactly once in `rest`. Its fake-command/source assertions pin `CGO_ENABLED=1` for both supported platform queries.
 
 4. Run the red suite:
 
