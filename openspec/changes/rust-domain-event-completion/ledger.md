@@ -75,3 +75,33 @@
 - SDD progress ledger for this change initialized at
   `.superpowers/sdd/progress.md` (prior file archived inline for the closed
   `rust-runtime-foundation-baseline` run).
+
+## 2026-09-22 — controller ruling: rejection categories stay in the frozen corpus vocabulary
+
+- Node 1.1 implementer escalated a real conflict before writing code: the
+  packets named rejection categories `invalid-count`, `invalid-order`,
+  `invalid-text` and `invalid-union`, while
+  `TestCorpusOutcomeVocabularyMatchesExecutionContract` walks the whole cases
+  tree and freezes error categories to the baseline set (structural
+  truncated/trailing/invalid-varint/capacity/unsupported-version/
+  invalid-enum/invalid-identity/invalid-value/integrity plus admission and
+  storage sets). Existing same-family same-version `domain.event` cases
+  already classify empty batches and ordering failures as `invalid-value`
+  under `.count_range` / `.strictly_increasing_ids` rules.
+- Ruling: rule names are unchanged; category values fold into the frozen
+  vocabulary — `invalid-value` for empty batch, ordering, text-boundary and
+  illegal cross-field rejections; `invalid-enum` for unknown kinds and
+  reserved/out-of-domain reasons. Rationale: the user-approved proposal,
+  delta spec and design name no categories, so only controller-authored
+  packets are affected; same-version corpus evidence must classify one
+  semantic class identically; extending a frozen gate without approved spec
+  text is out of scope for this change.
+- Secondary ruling: registering the new producer IDs
+  (`runtime-oracle/domain-event-mobs`, later `-objects`, `-chat`) in
+  `validProducerIDs` in `runner_helpers_test.go` is mechanical registration
+  the mandated export path requires; it is an implied editable line for the
+  oracle nodes, not an ownership violation.
+- Artifacts reconciled before implementation resumed:
+  `plans/01-go-oracles.md` category sentences only. Packet 04 needs no edit
+  (its category references are producer-delegating). Accepted-branch subject
+  categories on `kind: "ok"` outcomes remain unrestricted.

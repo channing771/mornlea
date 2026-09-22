@@ -82,12 +82,14 @@ packages/shared/core/health.go
 ```
 
 Accepted fields use category equal to the rule and retain submitted array
-order. Rejections use these categories: `invalid-identity` for zero entity ID,
-`invalid-enum` for dimension/kind/grazing/reason, `invalid-value` for non-finite
-pose or health, `invalid-count` for an empty batch, and `invalid-order` for
-duplicate/reversed IDs. Rule names are `<rule_with_underscores>.<field>`; batch
-records add `.record_<index>` before the field, and the two aggregate rules are
-`.count_range` and `.strictly_increasing_ids`.
+order. Rejection categories stay inside the frozen corpus vocabulary the
+baseline closes: `invalid-identity` for zero entity ID, `invalid-enum` for
+dimension/kind/grazing/reason and every enum-domain value, and `invalid-value`
+for non-finite pose or health, an empty batch, duplicate/reversed IDs, and
+every other illegal field or cross-field value. Rule names are
+`<rule_with_underscores>.<field>`; batch records add `.record_<index>` before
+the field, and the two aggregate rules are `.count_range` and
+`.strictly_increasing_ids`.
 
 The seed values are tick `7`, IDs `1,2`, finite positions `[1.5,64,-3.25]` and
 `[2.5,65,-4.25]`, finite velocity `[0.25,0,-0.5]`, yaw `0.5`, health `10`,
@@ -330,8 +332,11 @@ Rejected fields retain the raw semantic inputs and add exact `rule`.
 Global identity/name failures precede kind dispatch. Non-speech carrying
 speech fails before the kind-specific switch. Inside the switch use the exact
 order in `ChatEvent.Validate`: reason, companion identity/name, then
-command/speech text. Categories are `invalid-identity`, `invalid-text`,
-`invalid-enum` or `invalid-union`. Rule names begin `chat_event.` and name the
+command/speech text. Categories stay inside the frozen corpus vocabulary:
+`invalid-identity` for zero event/player identity, `invalid-enum` for unknown
+kinds and reserved/out-of-domain reasons, and `invalid-value` for every
+text-boundary and illegal cross-field combination. Rule names begin
+`chat_event.` and name the
 failing field or combination; reserved reason 3 is
 `chat_event.rejected.reason`, failure reasons 15/21 are
 `chat_event.task_failed.reason`, and unknown kind is `chat_event.kind`.
