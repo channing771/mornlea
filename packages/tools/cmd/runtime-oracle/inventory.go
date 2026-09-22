@@ -66,8 +66,21 @@ const (
 	ConsumerExternalGo
 )
 
-// ConsumerRegistry maps consumer identity names to their implementation kind.
-type ConsumerRegistry map[string]ConsumerKind
+// `ConsumerRoute` identifies one exact family version and operation a consumer executes.
+type ConsumerRoute struct {
+	FamilyID  string
+	Version   string
+	Operation string
+}
+
+// `ConsumerRegistration` binds one consumer kind to its executable routes.
+type ConsumerRegistration struct {
+	Kind   ConsumerKind
+	Routes map[ConsumerRoute]struct{}
+}
+
+// `ConsumerRegistry` maps consumer identity names to their closed registrations.
+type ConsumerRegistry map[string]ConsumerRegistration
 
 // CoveragePoint identifies one family and supported version pair.
 type CoveragePoint struct {
@@ -88,10 +101,35 @@ type NegativeCoverageExceptions map[CoveragePoint]string
 // BaselineConsumerRegistry returns the closed baseline consumer registry.
 func BaselineConsumerRegistry() ConsumerRegistry {
 	return ConsumerRegistry{
-		"corpus_frame":               ConsumerRust,
-		"mornlea_domain":             ConsumerRust,
-		"external:agent-contract":    ConsumerExternalGo,
-		"external:runtime-authority": ConsumerExternalGo,
+		"corpus_frame": {
+			Kind: ConsumerRust,
+			Routes: map[ConsumerRoute]struct{}{
+				{FamilyID: "protocol.frame", Version: "45", Operation: "decode"}: {},
+			},
+		},
+		"mornlea_domain": {
+			Kind: ConsumerRust,
+			Routes: map[ConsumerRoute]struct{}{
+				{FamilyID: "domain.identity_values", Version: "current", Operation: "admit"}:   {},
+				{FamilyID: "domain.values", Version: "current", Operation: "admit"}:            {},
+				{FamilyID: "domain.command_control", Version: "current", Operation: "admit"}:   {},
+				{FamilyID: "domain.command_inventory", Version: "current", Operation: "admit"}: {},
+				{FamilyID: "domain.event", Version: "1", Operation: "admit"}:                   {},
+			},
+		},
+		"external:agent-contract": {
+			Kind: ConsumerExternalGo,
+			Routes: map[ConsumerRoute]struct{}{
+				{FamilyID: "agent.http", Version: "v1", Operation: "agent-contract"}: {},
+				{FamilyID: "agent.mcp", Version: "v1", Operation: "agent-contract"}:  {},
+			},
+		},
+		"external:runtime-authority": {
+			Kind: ConsumerExternalGo,
+			Routes: map[ConsumerRoute]struct{}{
+				{FamilyID: "domain.input", Version: "45", Operation: "order"}: {},
+			},
+		},
 	}
 }
 
@@ -187,6 +225,9 @@ func LoadInventory(path string) (Inventory, error) {
 	if info.Mode()&os.ModeSymlink != 0 {
 		return Inventory{}, fmt.Errorf("runtime-oracle: inventory cannot be a symlink: %s", path)
 	}
+	if !info.Mode().IsRegular() {
+		return Inventory{}, fmt.Errorf("runtime-oracle: inventory must be a regular file: %s", path)
+	}
 	if info.Size() > MaxManifestBytes {
 		return Inventory{}, fmt.Errorf("runtime-oracle: inventory size %d exceeds max %d", info.Size(), MaxManifestBytes)
 	}
@@ -230,6 +271,23 @@ func reconcileInventory(
 	}
 	if !sourceRevPattern.MatchString(inventory.SourceRevision) {
 		problems = append(problems, fmt.Sprintf("invalid source_revision %q (must be 40 lowercase hex digits)", inventory.SourceRevision))
+	}
+	var registryProblems []string
+	for name, registration := range consumers {
+		if strings.TrimSpace(name) == "" {
+			registryProblems = append(registryProblems, "consumer registry has empty name")
+		}
+		if registration.Kind != ConsumerRust && registration.Kind != ConsumerExternalGo {
+			registryProblems = append(registryProblems, fmt.Sprintf("consumer registry entry %q has invalid kind %d", name, registration.Kind))
+		}
+		if len(registration.Routes) == 0 {
+			registryProblems = append(registryProblems, fmt.Sprintf("consumer registry entry %q has no routes", name))
+		}
+	}
+	if len(registryProblems) > 0 {
+		problems = append(problems, registryProblems...)
+		sort.Strings(problems)
+		return CoverageReport{}, &InventoryError{Problems: problems}
 	}
 
 	inventoryByID := make(map[string]Family, len(inventory.Families))
@@ -303,6 +361,10 @@ func reconcileInventory(
 				} else {
 					problems = append(problems, fmt.Sprintf("family %s source %s has symlink: %v", family.ID, src.Path, err))
 				}
+				continue
+			}
+			if _, err := requireRegularFile(fullPath); err != nil {
+				problems = append(problems, fmt.Sprintf("family %s source %s must be a regular file: %v", family.ID, src.Path, err))
 				continue
 			}
 			hash, err := hashFile(fullPath)
@@ -441,7 +503,8 @@ func validateCaseSpecConsumer(root string, c CaseSpec, families map[string]Famil
 	if strings.TrimSpace(c.RustConsumer) == "" {
 		return "", fmt.Errorf("missing rust_consumer")
 	}
-	if _, ok := consumers[c.RustConsumer]; !ok {
+	registration, ok := consumers[c.RustConsumer]
+	if !ok {
 		return "", fmt.Errorf("unknown consumer %q", c.RustConsumer)
 	}
 
@@ -451,8 +514,20 @@ func validateCaseSpecConsumer(root string, c CaseSpec, families map[string]Famil
 		return "", fmt.Errorf("invalid operation %q", c.Operation)
 	}
 
-	if c.InputFormat != "binary" && c.InputFormat != "json" {
-		return "", fmt.Errorf("invalid input_format %q (must be 'binary' or 'json')", c.InputFormat)
+	route := ConsumerRoute{FamilyID: c.Family, Version: c.Version, Operation: c.Operation}
+	if _, ok := registration.Routes[route]; !ok {
+		return "", fmt.Errorf(
+			"consumer %q has unsupported route %s/%s/%s",
+			c.RustConsumer,
+			route.FamilyID,
+			route.Version,
+			route.Operation,
+		)
+	}
+
+	inputMaxBytes, err := caseInputMaxBytes(c.InputFormat)
+	if err != nil {
+		return "", err
 	}
 	if len(c.Checkpoints) == 0 {
 		return "", fmt.Errorf("empty checkpoints")
@@ -464,7 +539,7 @@ func validateCaseSpecConsumer(root string, c CaseSpec, families map[string]Famil
 	}
 
 	// Validate input asset
-	if err := validateAsset(root, c.Input, c.InputFormat == "json", MaxBinaryBytes); err != nil {
+	if err := validateAsset(root, c.Input, c.InputFormat == "json", inputMaxBytes); err != nil {
 		return "", fmt.Errorf("input asset %s: %w", c.Input.Path, err)
 	}
 	// Validate expected asset (always JSON) and extract kind
@@ -499,6 +574,9 @@ func validateExpectedAsset(root string, asset AssetRef) (string, error) {
 	info, err := os.Stat(fullPath)
 	if err != nil {
 		return "", fmt.Errorf("stat: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("path must identify a regular file: %s", asset.Path)
 	}
 	if info.Size() > MaxCaseJSONBytes {
 		return "", fmt.Errorf("file size %d exceeds budget %d", info.Size(), MaxCaseJSONBytes)
@@ -578,6 +656,9 @@ func validateAsset(root string, asset AssetRef, isJSON bool, maxBytes int64) err
 	if err != nil {
 		return fmt.Errorf("stat: %w", err)
 	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("path must identify a regular file: %s", asset.Path)
+	}
 	if info.Size() > maxBytes {
 		return fmt.Errorf("file size %d exceeds budget %d", info.Size(), maxBytes)
 	}
@@ -598,6 +679,17 @@ func validateAsset(root string, asset AssetRef, isJSON bool, maxBytes int64) err
 		}
 	}
 	return nil
+}
+
+func caseInputMaxBytes(inputFormat string) (int64, error) {
+	switch inputFormat {
+	case "json":
+		return MaxCaseJSONBytes, nil
+	case "binary":
+		return MaxBinaryBytes, nil
+	default:
+		return 0, fmt.Errorf("invalid input_format %q (must be 'binary' or 'json')", inputFormat)
+	}
 }
 
 func validateCorpusPath(p string) error {
@@ -635,12 +727,26 @@ func checkNoSymlinks(root, rel string) error {
 }
 
 func hashFile(path string) (string, error) {
+	if _, err := requireRegularFile(path); err != nil {
+		return "", err
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
 	sum := sha256.Sum256(data)
 	return fmt.Sprintf("sha256:%x", sum), nil
+}
+
+func requireRegularFile(path string) (os.FileInfo, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("path %s is not a regular file", path)
+	}
+	return info, nil
 }
 
 // CanonicalManifestBytes serializes manifest JSON with recursively sorted keys,

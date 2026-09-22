@@ -27,13 +27,26 @@ or Agent process packages. These boundaries are enforced by `packages/audit`
   source provenance, case structural and cryptographic validity, case version
   membership in its family's `supported_versions`, expected outcome `kind: "ok"`
   plus `kind: "error"` (unless covered by a reviewed `NegativeCoverageExceptions`
-  rationale), and consumer membership in the closed `BaselineConsumerRegistry()`
-  (`corpus_frame`, `mornlea_domain`, `external:agent-contract`,
-  `external:runtime-authority`).
+  rationale), and exact family/version/operation membership in the closed
+  `BaselineConsumerRegistry()`. A consumer registration binds its implementation
+  kind to executable routes; empty names, invalid kinds, empty route sets, and
+  known consumers used on unsupported routes fail closed.
+- The baseline routes are `corpus_frame` → `protocol.frame/45/decode`;
+  `mornlea_domain` → `domain.identity_values/current/admit`,
+  `domain.values/current/admit`, `domain.command_control/current/admit`,
+  `domain.command_inventory/current/admit`, and `domain.event/1/admit`;
+  `external:agent-contract` → `agent.http/v1/agent-contract` and
+  `agent.mcp/v1/agent-contract`; and `external:runtime-authority` →
+  `domain.input/45/order`.
 - Enforcement: `TestContractInventoryReconcilesFrozenCorpus`,
   `TestContractInventoryWorkingReportsZeroCaseFamilies`,
   `TestContractInventoryCompleteRejectsZeroCaseFamilies`,
   `TestContractInventoryRejectsUnknownConsumer`,
+  `TestContractInventoryRejectsKnownConsumerOnUnsupportedRoute`,
+  `TestContractInventoryRejectsInvalidConsumerRegistry`,
+  `TestContractInventoryInputAssetBudgets`,
+  `TestContractInventoryRejectsNonRegularAssets`,
+  `TestLoadInventoryRejectsNonRegularFile`,
   `TestContractInventoryRejectsUnsupportedCaseVersion`,
   `TestContractInventoryWorkingAndCompleteCoverage`,
   `TestContractInventoryRejectsMissingFamily`,
@@ -73,7 +86,10 @@ or Agent process packages. These boundaries are enforced by `packages/audit`
 - Corpus assets are validated by the canonical inventory validator during
   reconciliation: every case's input, expected, and encoded asset must be
   reachable without a symlink component, stay inside its byte budget, and
-  match its recorded digest.
+  match its recorded digest. Manifests, provenance sources, inputs,
+  expectations, and encoded assets must be regular files before reads or
+  hashes. JSON inputs and expectations use the 256 KiB JSON budget; binary
+  inputs and encoded assets use the 4 MiB binary budget.
 - Incomplete source revision, missing contract identity, empty corpus digest,
   empty tick schedule, or missing observations fail closed. `LoadTraceAtRoot`
   rejects truncated bytes, non-object JSON, duplicate keys, and unsupported
@@ -101,8 +117,9 @@ and the isolated export helpers (`exportGeneratedAssets`,
   recorded expected outcome is never handed to a producer, so an independent
   execution cannot be shaped by the evidence it is supposed to reproduce.
 - `RunCases` enumerates the manifest selection, resolves each input under the
-  corpus byte budget, proves the input digest matches the manifest, invokes the
-  registered producer once per declared checkpoint, and derives every
+  input-format-specific corpus byte budget shared with reconciliation, proves
+  the input digest matches the manifest, invokes the registered producer once
+  per declared checkpoint, and derives every
   observation from the returned values. An unknown family, an unregistered
   operation, an operation that disagrees with its family's binding, a missing
   checkpoint, or a tampered input digest is a hard error.
@@ -134,6 +151,7 @@ and the isolated export helpers (`exportGeneratedAssets`,
   `TestProtocolOracleFrameRunnerRejects*`,
   `TestProtocolOracleFrameRunnerHandsProducerOnlyCaseAndInput`,
   `TestProtocolOracleFrameRunnerInvokesProducerOncePerCheckpoint`,
+  `TestReadCaseInputUsesFormatBudget`,
   `TestProtocolOracleFrameExport*`.
 
 ## Family producers (`domain_*_test.go`, `agent_contract_test.go`)

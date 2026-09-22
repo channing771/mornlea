@@ -337,7 +337,11 @@ func RunCases(root string, manifest Inventory, operations map[string]GoOperation
 // its digest matches the manifest, so a producer never executes bytes the
 // manifest does not name.
 func readCaseInput(root string, c CaseSpec) ([]byte, error) {
-	if err := validateAsset(root, c.Input, c.InputFormat == "json", MaxBinaryBytes); err != nil {
+	maxBytes, err := caseInputMaxBytes(c.InputFormat)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateAsset(root, c.Input, c.InputFormat == "json", maxBytes); err != nil {
 		return nil, err
 	}
 	full := filepath.Join(root, filepath.FromSlash(c.Input.Path))
@@ -345,10 +349,41 @@ func readCaseInput(root string, c CaseSpec) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if int64(len(data)) > MaxBinaryBytes {
-		return nil, fmt.Errorf("input %d bytes exceeds budget %d", len(data), MaxBinaryBytes)
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("input %d bytes exceeds budget %d", len(data), maxBytes)
 	}
 	return data, nil
+}
+
+func TestReadCaseInputUsesFormatBudget(t *testing.T) {
+	tests := []struct {
+		name        string
+		inputFormat string
+		input       []byte
+		wantErr     string
+	}{
+		{name: "json_exact_limit", inputFormat: "json", input: exactJSONObject(t, MaxCaseJSONBytes)},
+		{name: "json_over_limit", inputFormat: "json", input: exactJSONObject(t, MaxCaseJSONBytes+1), wantErr: "exceeds budget"},
+		{name: "binary_exact_limit", inputFormat: "binary", input: make([]byte, MaxBinaryBytes)},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := newInventoryAssetFixture(t, tc.inputFormat, tc.input, false)
+			got, err := readCaseInput(fixture.root, fixture.inventory.Cases[0])
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("readCaseInput rejected exact input budget: %v", err)
+				}
+				if !bytes.Equal(got, tc.input) {
+					t.Fatalf("readCaseInput returned %d bytes, want %d", len(got), len(tc.input))
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("readCaseInput expected %q, got %v", tc.wantErr, err)
+			}
+		})
+	}
 }
 
 // readExpectedOutcome decodes the normalized outcome one case records, which is

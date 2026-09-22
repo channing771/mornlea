@@ -1,7 +1,9 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -327,6 +329,318 @@ func TestContractInventoryRejectsUnknownConsumer(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "unknown consumer") {
 		t.Fatalf("ReconcileComplete: expected unknown consumer error, got %v", err)
 	}
+}
+
+func TestContractInventoryRejectsKnownConsumerOnUnsupportedRoute(t *testing.T) {
+	root, families, live := discoverLive(t)
+	frozen, err := LoadInventory(filepath.Join(root, filepath.FromSlash(InventoryRelPath)))
+	if err != nil {
+		t.Fatalf("load frozen inventory: %v", err)
+	}
+
+	wantRegistry := ConsumerRegistry{
+		"corpus_frame": {
+			Kind: ConsumerRust,
+			Routes: map[ConsumerRoute]struct{}{
+				{FamilyID: "protocol.frame", Version: "45", Operation: "decode"}: {},
+			},
+		},
+		"mornlea_domain": {
+			Kind: ConsumerRust,
+			Routes: map[ConsumerRoute]struct{}{
+				{FamilyID: "domain.identity_values", Version: "current", Operation: "admit"}:   {},
+				{FamilyID: "domain.values", Version: "current", Operation: "admit"}:            {},
+				{FamilyID: "domain.command_control", Version: "current", Operation: "admit"}:   {},
+				{FamilyID: "domain.command_inventory", Version: "current", Operation: "admit"}: {},
+				{FamilyID: "domain.event", Version: "1", Operation: "admit"}:                   {},
+			},
+		},
+		"external:agent-contract": {
+			Kind: ConsumerExternalGo,
+			Routes: map[ConsumerRoute]struct{}{
+				{FamilyID: "agent.http", Version: "v1", Operation: "agent-contract"}: {},
+				{FamilyID: "agent.mcp", Version: "v1", Operation: "agent-contract"}:  {},
+			},
+		},
+		"external:runtime-authority": {
+			Kind: ConsumerExternalGo,
+			Routes: map[ConsumerRoute]struct{}{
+				{FamilyID: "domain.input", Version: "45", Operation: "order"}: {},
+			},
+		},
+	}
+	if got := BaselineConsumerRegistry(); !reflect.DeepEqual(got, wantRegistry) {
+		t.Fatalf("BaselineConsumerRegistry() = %#v, want %#v", got, wantRegistry)
+	}
+
+	frameIndex := caseIndexByID(t, frozen.Cases, "protocol.frame/45/valid")
+	domainIndex := firstCaseIndexForFamily(t, frozen.Cases, "domain.values")
+	tests := []struct {
+		name      string
+		inventory Inventory
+		registry  ConsumerRegistry
+		wantRoute ConsumerRoute
+	}{
+		{
+			name: "wrong_family",
+			inventory: mutateInventoryCase(frozen, domainIndex, func(c *CaseSpec) {
+				c.RustConsumer = "corpus_frame"
+			}),
+			registry: BaselineConsumerRegistry(),
+			wantRoute: ConsumerRoute{
+				FamilyID: "domain.values", Version: "current", Operation: "admit",
+			},
+		},
+		{
+			name: "wrong_operation",
+			inventory: mutateInventoryCase(frozen, frameIndex, func(c *CaseSpec) {
+				c.Operation = "encode"
+			}),
+			registry: BaselineConsumerRegistry(),
+			wantRoute: ConsumerRoute{
+				FamilyID: "protocol.frame", Version: "45", Operation: "encode",
+			},
+		},
+		{
+			name:      "registry_wrong_version",
+			inventory: frozen,
+			registry: ConsumerRegistry{
+				"corpus_frame": {
+					Kind: ConsumerRust,
+					Routes: map[ConsumerRoute]struct{}{
+						{FamilyID: "protocol.frame", Version: "44", Operation: "decode"}: {},
+					},
+				},
+				"mornlea_domain":             wantRegistry["mornlea_domain"],
+				"external:agent-contract":    wantRegistry["external:agent-contract"],
+				"external:runtime-authority": wantRegistry["external:runtime-authority"],
+			},
+			wantRoute: ConsumerRoute{
+				FamilyID: "protocol.frame", Version: "45", Operation: "decode",
+			},
+		},
+	}
+
+	reconcileModes := []struct {
+		name string
+		run  func(string, Inventory, []Family, Identities, ConsumerRegistry, NegativeCoverageExceptions) (CoverageReport, error)
+	}{
+		{name: "working", run: ReconcileWorking},
+		{name: "complete", run: ReconcileComplete},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			wantDiagnostic := tc.wantRoute.FamilyID + "/" + tc.wantRoute.Version + "/" + tc.wantRoute.Operation
+			for _, mode := range reconcileModes {
+				t.Run(mode.name, func(t *testing.T) {
+					_, err := mode.run(root, tc.inventory, families, live, tc.registry, BaselineNegativeCoverageExceptions())
+					if err == nil || !strings.Contains(err.Error(), "unsupported route "+wantDiagnostic) {
+						t.Fatalf("expected unsupported route %s, got %v", wantDiagnostic, err)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestContractInventoryRejectsInvalidConsumerRegistry(t *testing.T) {
+	root, families, live := discoverLive(t)
+	frozen, err := LoadInventory(filepath.Join(root, filepath.FromSlash(InventoryRelPath)))
+	if err != nil {
+		t.Fatalf("load frozen inventory: %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		mutate  func(ConsumerRegistry)
+		wantErr string
+	}{
+		{
+			name: "empty_consumer_name",
+			mutate: func(registry ConsumerRegistry) {
+				registry[""] = ConsumerRegistration{
+					Kind: ConsumerRust,
+					Routes: map[ConsumerRoute]struct{}{
+						{FamilyID: "protocol.frame", Version: "45", Operation: "decode"}: {},
+					},
+				}
+			},
+			wantErr: "consumer registry has empty name",
+		},
+		{
+			name: "invalid_kind",
+			mutate: func(registry ConsumerRegistry) {
+				registration := registry["corpus_frame"]
+				registration.Kind = ConsumerKind(255)
+				registry["corpus_frame"] = registration
+			},
+			wantErr: "consumer registry entry \"corpus_frame\" has invalid kind",
+		},
+		{
+			name: "empty_routes",
+			mutate: func(registry ConsumerRegistry) {
+				registration := registry["corpus_frame"]
+				registration.Routes = map[ConsumerRoute]struct{}{}
+				registry["corpus_frame"] = registration
+			},
+			wantErr: "consumer registry entry \"corpus_frame\" has no routes",
+		},
+	}
+
+	reconcileModes := []struct {
+		name string
+		run  func(string, Inventory, []Family, Identities, ConsumerRegistry, NegativeCoverageExceptions) (CoverageReport, error)
+	}{
+		{name: "working", run: ReconcileWorking},
+		{name: "complete", run: ReconcileComplete},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, mode := range reconcileModes {
+				t.Run(mode.name, func(t *testing.T) {
+					inventory := mutateInventoryCase(frozen, 0, func(c *CaseSpec) {
+						c.Input.Path = "testdata/runtime-migration/missing-before-registry-validation.bin"
+					})
+					registry := BaselineConsumerRegistry()
+					tc.mutate(registry)
+					report, err := mode.run(root, inventory, families, live, registry, BaselineNegativeCoverageExceptions())
+					if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+						t.Fatalf("expected %q, got %v", tc.wantErr, err)
+					}
+					if strings.Contains(err.Error(), "missing-before-registry-validation") || strings.Contains(err.Error(), "unsupported route") {
+						t.Fatalf("invalid registry reached case validation: %v", err)
+					}
+					if len(report.Covered) != 0 || len(report.Uncovered) != 0 {
+						t.Fatalf("invalid registry reported case coverage: %+v", report)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestContractInventoryInputAssetBudgets(t *testing.T) {
+	tests := []struct {
+		name        string
+		inputFormat string
+		input       []byte
+		wantErr     string
+	}{
+		{name: "json_exact_limit", inputFormat: "json", input: exactJSONObject(t, MaxCaseJSONBytes)},
+		{name: "json_over_limit", inputFormat: "json", input: exactJSONObject(t, MaxCaseJSONBytes+1), wantErr: "exceeds budget"},
+		{name: "binary_exact_limit", inputFormat: "binary", input: make([]byte, MaxBinaryBytes)},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := newInventoryAssetFixture(t, tc.inputFormat, tc.input, true)
+			_, err := ReconcileWorking(
+				fixture.root,
+				fixture.inventory,
+				fixture.families,
+				fixture.live,
+				BaselineConsumerRegistry(),
+				BaselineNegativeCoverageExceptions(),
+			)
+			if tc.wantErr == "" && err != nil {
+				t.Fatalf("ReconcileWorking rejected exact input budget: %v", err)
+			}
+			if tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)) {
+				t.Fatalf("ReconcileWorking expected %q, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestContractInventoryRejectsNonRegularAssets(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*inventoryAssetFixture, string)
+		role   string
+	}{
+		{
+			name: "provenance_source",
+			mutate: func(fixture *inventoryAssetFixture, rel string) {
+				fixture.inventory.Families[0].Sources[0] = assetRefAsSource(rel)
+				fixture.families[0].Sources[0] = assetRefAsSource(rel)
+			},
+			role: "source",
+		},
+		{
+			name: "input",
+			mutate: func(fixture *inventoryAssetFixture, rel string) {
+				fixture.inventory.Cases[0].Input = directoryAssetRef(rel)
+			},
+			role: "input asset",
+		},
+		{
+			name: "expected",
+			mutate: func(fixture *inventoryAssetFixture, rel string) {
+				fixture.inventory.Cases[0].Expected = directoryAssetRef(rel)
+			},
+			role: "expected asset",
+		},
+		{
+			name: "encoded",
+			mutate: func(fixture *inventoryAssetFixture, rel string) {
+				asset := directoryAssetRef(rel)
+				fixture.inventory.Cases[0].Encoded = &asset
+			},
+			role: "encoded asset",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := newInventoryAssetFixture(t, "json", []byte(`{"value":1}`), true)
+			rel := filepath.ToSlash(filepath.Join("assets", "nonregular-"+tc.name+".json"))
+			if tc.name == "encoded" {
+				rel = filepath.ToSlash(filepath.Join("assets", "nonregular-"+tc.name+".bin"))
+			}
+			if err := os.Mkdir(filepath.Join(fixture.root, filepath.FromSlash(rel)), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			tc.mutate(&fixture, rel)
+
+			_, err := ReconcileWorking(
+				fixture.root,
+				fixture.inventory,
+				fixture.families,
+				fixture.live,
+				BaselineConsumerRegistry(),
+				BaselineNegativeCoverageExceptions(),
+			)
+			if err == nil || !strings.Contains(err.Error(), tc.role) || !strings.Contains(err.Error(), "regular file") {
+				t.Fatalf("expected %s regular-file rejection, got %v", tc.role, err)
+			}
+		})
+	}
+}
+
+func mutateInventoryCase(inventory Inventory, index int, mutate func(*CaseSpec)) Inventory {
+	inventory.Cases = append([]CaseSpec(nil), inventory.Cases...)
+	mutate(&inventory.Cases[index])
+	return inventory
+}
+
+func firstCaseIndexForFamily(t *testing.T, cases []CaseSpec, family string) int {
+	t.Helper()
+	for i := range cases {
+		if cases[i].Family == family {
+			return i
+		}
+	}
+	t.Fatalf("no case for family %s", family)
+	return -1
+}
+
+func caseIndexByID(t *testing.T, cases []CaseSpec, id string) int {
+	t.Helper()
+	for i := range cases {
+		if cases[i].ID == id {
+			return i
+		}
+	}
+	t.Fatalf("no case with id %s", id)
+	return -1
 }
 
 func TestContractInventoryRejectsUnsupportedCaseVersion(t *testing.T) {
