@@ -57,3 +57,21 @@
 - Architecture skill: no change. Detailed planning applies the existing
   semantic-boundary, evidence and F1-before-F2 rules; it does not establish a
   new verified cross-task convention.
+
+## 2026-09-22 — execution start (subagent-driven)
+
+- Workflow: user selected Superpowers `subagent-driven-development`. Fresh
+  implementer plus task reviewer per node, controller-owned acceptance and
+  closeout per `plans/05-closeout.md`.
+- Execution baseline: branch `codex/rust-domain-event-completion` created at
+  `af9b8c32ab0c924e5647fb8a62c4095192b5a558` (descends from planning baseline
+  `3401fa7a12c97844791822f185071a3641998773` and merged-main `effd8a24`). The
+  four-point orphan state passed: `tasks.md` shows 12 open/0 complete, ledger
+  frontier is the planning-readiness entry, `git status` is clean, and change
+  artifact mtimes are all within the planning window.
+- Pre-flight plan scan: no packet conflicts found; the serial node order
+  1.1→1.2→1.3→2.1→2.2→2.3→2.4→3.1→4.1→4.2→4.3→5.1 satisfies every declared
+  prerequisite edge.
+- SDD progress ledger for this change initialized at
+  `.superpowers/sdd/progress.md` (prior file archived inline for the closed
+  `rust-runtime-foundation-baseline` run).
