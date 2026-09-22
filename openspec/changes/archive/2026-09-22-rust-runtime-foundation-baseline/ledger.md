@@ -155,3 +155,54 @@ checkbox/status source.
   to record this as adjudicated inherited debt, leave translation to a
   successor change, and proceed with closeout; no exemption variable is set
   and the baseline file is unchanged.
+
+## 2026-09-22 — Node 5.1 stage validation
+
+- Result SHA: a715e175 (`fix(tools): align audit gofmt and refresh pilot report
+  version pin`), tracked tree clean; the only untracked paths are the spec-sync
+  output staged by the final closeout commit.
+- Closeout gate repairs (each a scoped commit outside the implementation nodes):
+  - d8efb4e0 fixed TestDocumentationLinks (links to the parent change broken by
+    this change's own base archive commit) and TestCurrentDocumentationVersions
+    (protocol v44 prose in four documents, now v45).
+  - e19b0926 fixed 14 pre-existing storage clippy errors (12 in the original
+    rust-check abort plus 2 in the crate's test target the abort had masked);
+    behavior-preserving lint-shape fixes only; `make rust-check` exit 0.
+  - b682175e refreshed the godot-pilot transcript corpus from protocol v44 to
+    v45 (v45 is a pure append; only the two hello payload bytes, summaries,
+    description, and the recomputed summary digest changed);
+    `go test ./packages/client/presentation -race` green.
+  - a715e175 fixed the perfcheck report-completeness pin (protocol v44 → v45,
+    matching the doc refresh) and a pre-existing gofmt misalignment in
+    `packages/audit/dependency_test.go`.
+- Gate results at the result SHA:
+  - `git diff --check`: clean.
+  - `make rust`: green (both cdylibs built and deployed).
+  - `make rust-check`: exit 0 (Rust tree byte-identical from e19b0926 through
+    the result SHA; only JSON fixtures changed after it).
+  - `make test-race`: 51 of 52 module groups green across all six Go modules;
+    `packages/audit` (last in the loop) fails only on
+    `TestEnglishCommentMigration`.
+  - `make dev-check`: gofmt and six-module `go vet` green; the `-short` module
+    loop is green through contracts/shared/server/client/tools and red only at
+    `packages/audit` on the same adjudicated test; the trailing rust steps are
+    covered by the green `make rust-check`.
+  - `openspec validate rust-runtime-foundation-baseline --strict
+    --no-interactive`: valid.
+  - `openspec validate --all --strict --no-interactive`: 126 passed, 0 failed.
+  - `git diff --exit-code -- testdata/runtime-migration`: clean.
+- Adjudicated carry-over (user ruling 2026-09-22): the audit gate's sole red is
+  `TestEnglishCommentMigration` — about 548 inherited non-English comments
+  across roughly 35 files, all introduced by merges on 2026-09-15 or earlier,
+  before this change's range began. The sanctioned baseline-update path refuses
+  to increase a baseline by design, so the user ruled to record the debt as
+  adjudicated, defer translation to a successor change, and proceed; no
+  exemption variable is set and the baseline file is unmodified. The same test
+  now also reports a legitimate decrease in `dependency_test.go` (128 → 126
+  comments, caused by the gofmt gate repair); the decrease cannot be ratcheted
+  while the inherited increases persist because the update path refuses mixed
+  updates, so it is recorded here and resolved by the same successor work.
+- Architecture skill: no change. The change applied existing ownership and
+  frozen-contract patterns; no verified new cross-task rule emerged. Both
+  skill copies remain byte-identical (`cmp` verified) and no promotion diff is
+  included.

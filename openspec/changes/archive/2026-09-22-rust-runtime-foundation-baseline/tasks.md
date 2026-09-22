@@ -36,4 +36,4 @@ implementation acceptance.
 
 ## 5. Controller closeout
 
-- [ ] 5.1 [Review, validate, sync and archive the extracted baseline](plans/05-closeout.md#node-51-review-validate-sync-and-archive-the-extracted-baseline). Direct prerequisites: 1.2, 2.1, 2.2, 3.10, 4.1. Run `make rust-check`, `make test-race`, `make dev-check`, `openspec validate rust-runtime-foundation-baseline --strict --no-interactive`, and `openspec validate --all --strict --no-interactive` at one result SHA before sync or archive.
+- [x] 5.1 [Review, validate, sync and archive the extracted baseline](plans/05-closeout.md#node-51-review-validate-sync-and-archive-the-extracted-baseline). Direct prerequisites: 1.2, 2.1, 2.2, 3.10, 4.1. Run `make rust-check`, `make test-race`, `make dev-check`, `openspec validate rust-runtime-foundation-baseline --strict --no-interactive`, and `openspec validate --all --strict --no-interactive` at one result SHA before sync or archive.
