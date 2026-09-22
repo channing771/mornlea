@@ -54,7 +54,7 @@
 
 ## 5. Workflow topology
 
-- [ ] 5.1 Replace the required workflow with the pinned layered job graph and stable fail-closed `merge-gate` (`task-briefs/07-required-workflow.md`).
+- [x] 5.1 Replace the required workflow with the pinned layered job graph and stable fail-closed `merge-gate` (`task-briefs/07-required-workflow.md`).
 - [ ] 5.2 Move complete Godot validation into a path-scoped optional workflow with no merge authority (`task-briefs/08-optional-godot-workflow.md`).
 
 ## 6. Documentation and acceptance
