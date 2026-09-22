@@ -81,10 +81,19 @@ Both jobs record duration and runner identity. Neither job uses `continue-on-err
 
    `make godot-smoke` is not required locally when it would download or run the full Godot runtime; the exact optional workflow run on the PR is its acceptance environment.
 
+7. Restore the paired transition gates and prove the required/optional split is green together:
+
+   ```bash
+   go test ./packages/audit -count=1
+   make test-race-changed RACE_BASE="<Node-5.1-task-base>"
+   ```
+
+   Use the immutable base recorded by Node 5.1 so changed-scope validation covers both workflow commits and all migrated audit/rollback consumers.
+
 ## Closure
 
 - Re-enumerate every Godot/GDExtension/Python/asset consumer with `rg -n 'godot-|scripts/godot|mornlea_godot|mornlea-godot' .github Makefile scripts packages apps docs`; confirm every source input is either in the path list or has a documented non-effect.
-- Run `make test-race-changed RACE_BASE="$task_base"`.
+- The paired changed-scope command above replaces a Node-5.2-only base; it must cover both Nodes 5.1 and 5.2.
 - Commit only owned files with `chore(godot): isolate optional migration validation`.
 - Rollback unit: this commit plus Node 5.1. Recombining Godot into required CI violates the approved design; rollback means restoring the prior pair only as a coordinated emergency revert.
 - Report path inventory, mutation evidence, repaired-script evidence, and commit SHA. The controller updates `tasks.md` and `ledger.md`.

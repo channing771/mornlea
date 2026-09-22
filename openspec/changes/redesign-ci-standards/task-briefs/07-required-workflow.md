@@ -93,16 +93,14 @@ Each non-aggregator job records elapsed seconds and `${RUNNER_OS}/$(uname -m)` t
 
    ```bash
    go test ./packages/audit -run 'Test(RequiredCIWorkflow|CompanionAgentCI|EnglishCommentGateIntegration|MornleaCurrentIdentity)' -count=1
-   go test ./packages/audit -count=1
-   scripts/godot/rollback-check.sh
    ```
 
-   The rollback check must still pass because required CI contains no Godot dependency.
+   Also run `TestGodotIsOptionalForLegacyBuild` and `scripts/godot/rollback-check.sh` to record the expected transition failures: both old gates still require the in-file Godot job until Node 5.2 atomically creates the optional workflow and migrates those consumers. Do not weaken or edit those gates in this node. Full audit, rollback, and changed-scope race acceptance are deferred only across this one ordered commit boundary and become mandatory in Node 5.2.
 
 ## Closure
 
 - Inventory all `.github/workflows/ci.yml` readers with `rg -n '\.github/workflows/ci\.yml|ci\.yml' . --glob '!openspec/changes/archive/**'`; every live consumer must either be updated here, explicitly assigned to Node 5.2, or shown to be path-only and still correct.
-- Run `make test-race-changed RACE_BASE="$task_base"`.
+- Do not claim full-audit or changed-scope-race green at this transient boundary. Node 5.2 immediately consumes this commit, replaces the missing optional workflow, and runs full audit plus `make test-race-changed` from this node's pre-change base so the pair is accepted together.
 - Commit only owned files with `feat(ci): layer required validation by platform`.
 - Rollback unit: this commit together with Nodes 3.1/4.1/4.2. Reverting only the workflow after removing the legacy verifier interface is invalid.
 - Report all policy mutation results, updated consumers, workflow parse evidence, and commit SHA. The controller updates `tasks.md` and `ledger.md`.
