@@ -577,3 +577,87 @@ checkbox/status source.
   reviewed node packet without claiming an unavailable invocation.
 - Architecture skill: no change. These are orchestration/evidence rules rather
   than runtime ownership or dependency decisions.
+
+## 2026-09-22 — Recovered historical evidence for nodes 3.1–4.1
+
+The following evidence was recovered from the ignored historical progress
+record and checked against Git before final review. It records past runs; it is
+not a continuing status source and does not replace the renewed closeout gates.
+
+- 3.1 (`861c2e4c`, `ddc86fe9`, controller lint fix `92fcb6b9`): first review
+  found two Important, one related issue and seven Minor findings. Fixes covered
+  non-ASCII UUID slicing, numeric overflow pins, `InvalidCase` instead of an
+  assertion, and clippy. Re-review had zero Critical/Important. Final suites:
+  `corpus_structure`, 10 `support::`, 11 domain with 8 ignored, 10 loader and 9
+  runtime-contract tests; fmt/clippy passed and frozen assets were unchanged.
+- 3.2 (`a4180395`): review Approved with zero Critical/Important and three
+  Minor findings. Identity text/value tests, the 13-pass domain slice, full
+  domain 13 pass/7 ignored, fmt, clippy and task-ID comment audit passed.
+- 3.3 (`6b804683`): review Approved with zero Critical/Important and four
+  Minor findings. Values/items-location focused suites, domain 15 pass/6
+  ignored, fmt and clippy passed; 99 cases and Go producer precedence were
+  reviewed.
+- 3.4 (`104fed29`): review Approved with zero Critical/Important and three
+  Minor findings. The reported u64 contract conflict was disproved: inputs are
+  JSON numbers and normalized outputs decimal strings. Focused and eight
+  command-control tests, domain 17 pass/5 ignored, fmt and clippy passed.
+- 3.5 (`4b9df757`): review Approved with zero Critical/Important and three
+  Minor findings. Focused command-inventory, 11 handwritten inventory, 12
+  command-order and domain 19 pass/4 ignored suites plus fmt/clippy passed.
+- 3.6 (`481130a9`): review Approved with zero Critical/Important and three
+  Minor findings. Focused event-player, 13 handwritten and domain 21 pass/3
+  ignored suites plus fmt/clippy passed; 47 cases and fail-closed behavior were
+  checked.
+- 3.7 (`4f63f8a9`): review Approved with zero Critical/Important and three
+  Minor findings. A reviewer report of uncommitted changes was disproved by the
+  clean commit tree. Focused event-world, 17 handwritten and domain 23 pass/2
+  ignored suites plus fmt/clippy passed.
+- 3.8 (`a0110206`): review Approved with zero Critical/Important and two Minor
+  findings. Focused event-inventory, 17 handwritten and domain 25 pass/1
+  ignored suites plus fmt/clippy passed; 33 cases and constructor ordering were
+  checked.
+- 3.9 (`fd622586`, repair `c51e2663`): first review found one Important because
+  remote-spawn rejection checked identity before display name, contrary to Go.
+  The classifier/construction order was fixed without changing 46 frozen
+  outcomes; re-review had no blocking finding. Focused event-people, 29
+  handwritten and domain 27-pass suites covered eight topics/376 cases;
+  fmt/clippy passed. Two Minor findings remained.
+- 3.10 (`4e1a7a90`): review Approved with zero Critical/Important and three
+  Minor findings. Integrated mutations, authority exclusions and all 30 domain
+  tests passed; the full domain crate, fmt and clippy passed, 376 IDs were
+  unique and frozen assets were unchanged.
+- 4.1 (`7964298e`): review Approved with zero Critical/Important and three
+  Minor findings. Five resource-bound tests, allocation/display-name filters,
+  all 30 corpus tests, all 15 domain test targets, fmt and clippy passed; frozen
+  assets were unchanged. The worker used the equivalent approved
+  `plans/04-domain-bounds.md` packet because no extracted task brief existed.
+
+The recovered Minor total is 36, matching the first whole-range review triage.
+They were non-blocking at their node reviews; the renewed whole-range review
+owns any issue that remains actionable after nodes 5.1–5.9.
+
+### Recovered acceptance and first archive deviation
+
+- Commit `37727cca` retroactively checked nodes 3.1–3.10 together after
+  `4e1a7a90`, instead of recording per-node controller acceptance and durable
+  evidence before the next node. Node 4.1 was later checked separately by
+  `e2976856`. The batch did not invalidate implementation/review evidence, but
+  it was a process deviation and is not the normal workflow now encoded in the
+  orchestration skill.
+- The first result/gate SHA was `a715e175`. Sync created
+  `openspec/specs/rust-runtime-foundation/spec.md`; strict change/all validation
+  passed while active, with 126/126 changes in the all run.
+- Commit `c049f8d0` moved the change to
+  `openspec/changes/archive/2026-09-22-rust-runtime-foundation-baseline` and
+  included the canonical spec. Historical post-archive evidence records a clean
+  diff check, absent active path, present archive/spec paths, and strict all
+  validation 125/125.
+- That archive was invalid despite the OpenSpec structural checks because the
+  required stage acceptance was still red. Commit `73578b3e` restored the
+  archive to the active path and deleted the premature canonical spec without
+  rewriting history. Nodes 5.1–5.9 repair the implementation, evidence and
+  orchestration failures before this renewed closeout.
+- Git directly proves the commits, batch checkbox diff, archive rename/spec
+  creation and recovery. Historical per-command stdout and the first 125/125
+  count exist only in the ignored record, so they are explicitly labeled
+  recovered evidence rather than current validation.
