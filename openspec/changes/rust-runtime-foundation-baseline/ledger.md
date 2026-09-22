@@ -497,3 +497,37 @@ checkbox/status source.
   packet's RED, minimal edit, verification and independent-review stages.
 - Architecture skill: no change. This is comment-governance repair and adds no
   stable runtime ownership rule.
+
+## 2026-09-22 — Node 5.8 acceptance
+
+- Implementation: `46bbaedc` (`docs(shared): translate new comments and ratchet
+  debt`). Exactly ten shared-network source files and the owned audit baseline
+  changed; source diffs are comment-only and use the post-`752d138b` selection
+  rule.
+- TDD evidence: the initial audit reported growth, new debt or same-count drift
+  across all ten shared paths. Before ratchet, the repository-wide diagnostic
+  contained exactly 17 entries and every one was `decreased`; there was no
+  growth, new debt or same-count replacement and total comments moved from
+  38636 to 38586.
+- The sanctioned update command ran exactly once. Baseline review found schema
+  version 1 and `total_files` 1243 unchanged, 17 entries strictly decreased,
+  zero added or removed entries, zero growth, zero unchanged-count digest
+  drift, and an aggregate reduction of 50 comments. The audit then passed
+  without an environment override.
+- Validation: the controller reran the no-override audit and the complete
+  `packages/shared/network/...` race suite; all passed (network 1.765s, codec
+  2.114s, protocol 2.082s, TCP 2.822s). Exact scope, comment-only scanning,
+  no-added-Han scanning, `gofmt` and `git diff --check` passed.
+- Independent review found one Minor: a translated continuation duplicated the
+  value “19/20” already present in a grandfathered line. The worker corrected
+  the paragraph and reran the shared suite; re-review was Ready with zero
+  findings.
+- Acceptance lessons: audit exit status must be interpreted with its per-path
+  diagnostics before the controlled ratchet; partial comment translations must
+  be reread as complete paragraphs; and commands that change module working
+  directory must adjust their file paths before formatting or validation.
+- Superpowers availability: the worker surface did not expose skill entry
+  points. It reported that limitation and followed the frozen task packet's
+  RED/GREEN, verification and independent-review lifecycle.
+- Architecture skill: no change. The node changes comment governance and its
+  debt baseline, not a cross-task runtime boundary.
