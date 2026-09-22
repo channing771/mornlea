@@ -11,7 +11,7 @@ expected_modules=$'packages/audit\npackages/client\npackages/contracts\npackages
 
 workspace_modules() {
 	go work edit -json |
-		sed -nE 's/^[[:space:]]*"DiskPath":[[:space:]]*"([^" ]+)".*/\1/p' |
+		sed -nE 's/^[[:space:]]*"DiskPath":[[:space:]]*"(.*)"[,]?$/\1/p' |
 		sed 's#^\./##' |
 		LC_ALL=C sort -u
 }
@@ -19,42 +19,46 @@ workspace_modules() {
 modules=$(cd "$root" && workspace_modules) || fail 'cannot parse go.work module directories'
 [[ "$modules" == "$expected_modules" ]] || fail "unexpected go.work module directories: ${modules//$'\n'/,}"
 
+# This inventory owns package loading validation, rather than treating `-e` output as usable by default.
 list_module() {
-	local goos=$1 goarch=$2 module=$3
-	(
-		cd "$root/$module"
-		CGO_ENABLED=1 GOOS="$goos" GOARCH="$goarch" go list -e -f '{{.ImportPath}}' ./...
-	)
+	local goos=$1 goarch=$2 module=$3 output package loading
+	shift 3
+	output=$(cd "$root/$module" && CGO_ENABLED=1 GOOS="$goos" GOARCH="$goarch" go list -e -f '{{.ImportPath}}|{{if .Error}}direct{{end}}{{if .DepsErrors}}dependency{{end}}' "$@") || fail "cannot list packages for $module"
+	while IFS='|' read -r package loading; do
+		[[ -n "$package" ]] || fail "package loading error: empty import path in $module"
+		[[ -z "$loading" ]] || fail "package loading error: $package"
+		printf '%s\n' "$package"
+	done <<< "$output"
 }
 
 all_packages() {
-	local goos goarch module
-	for goos in linux darwin; do
-		if [[ "$goos" == linux ]]; then goarch=amd64; else goarch=arm64; fi
+	local module
+	# Linux owns server/rest coverage; Darwin owns the client source set whose native capture dependency is Darwin-only.
+	{
+		for module in packages/audit packages/contracts packages/server packages/shared packages/tools; do
+			list_module linux amd64 "$module" ./...
+		done
 		while IFS= read -r module; do
-			list_module "$goos" "$goarch" "$module"
+			list_module darwin arm64 "$module" ./...
 		done <<< "$modules"
-	done | LC_ALL=C sort -u
+	} | LC_ALL=C sort -u
 }
 
 client_packages() {
 	{
-		list_module darwin arm64 packages/client
-		(
-			cd "$root/packages/tools"
-			CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go list -e -f '{{.ImportPath}}' ./gfxspike
-		)
+		list_module darwin arm64 packages/client ./...
+		list_module darwin arm64 packages/tools ./gfxspike
 	} | LC_ALL=C sort -u
 }
 
 server_packages() {
-	list_module linux amd64 packages/server | LC_ALL=C sort -u
+	list_module linux amd64 packages/server ./... | LC_ALL=C sort -u
 }
 
 rest_packages() {
 	local module
 	for module in packages/contracts packages/shared packages/tools packages/audit; do
-		list_module linux amd64 "$module"
+		list_module linux amd64 "$module" ./...
 	done | LC_ALL=C sort -u
 }
 

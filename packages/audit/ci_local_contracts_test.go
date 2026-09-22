@@ -96,6 +96,73 @@ func TestCIPackagePartitionsRejectMutations(t *testing.T) {
 	}
 }
 
+func TestCIPackagePartitionsAcceptColonPathsAndRejectComparisonFailure(t *testing.T) {
+	root := repositoryRoot(t)
+	script := filepath.Join(root, "scripts", "ci", "check-package-partitions.sh")
+	fixture := newCIPartitionFixture(t)
+	colonDir := filepath.Join(fixture.dir, "colon:package-lists")
+	if err := os.Mkdir(colonDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	colonPaths := make([]string, 0, 4)
+	for _, name := range []string{"all", "client", "server", "rest"} {
+		path := filepath.Join(colonDir, name+":input")
+		contents := string(readFile(t, filepath.Join(fixture.dir, name)))
+		writeFile(t, path, []byte(contents))
+		colonPaths = append(colonPaths, path)
+	}
+	if output, err := ciRun(root, os.Getenv("PATH"), script, colonPaths...); err != nil {
+		t.Fatalf("colon path partition failed: %v\n%s", err, output)
+	}
+
+	bin := t.TempDir()
+	writeExecutable(t, filepath.Join(bin, "comm"), "#!/usr/bin/env bash\nexit 42\n")
+	output, err := ciRun(root, bin+":"+os.Getenv("PATH"), script, fixture.paths()...)
+	if err == nil {
+		t.Fatalf("comparison tool failure unexpectedly succeeded: %s", output)
+	}
+	if !strings.Contains(output, "package partition comparison failed") {
+		t.Fatalf("comparison tool failure output = %q", output)
+	}
+}
+
+func TestCIPackageInventoryRejectsUnexpectedWorkspacePathAndLoadErrors(t *testing.T) {
+	root := repositoryRoot(t)
+	script := filepath.Join(root, "scripts", "ci", "package-inventory.sh")
+	realGo, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name   string
+		fakeGo string
+		want   string
+	}{
+		{
+			name:   "workspace path with spaces",
+			fakeGo: fmt.Sprintf("#!/usr/bin/env bash\nif [[ \"${1:-}\" == work && \"${2:-}\" == edit ]]; then\n\tprintf '%%s\\n' '{' '  \"Use\": [' '    {' '      \"DiskPath\": \"./packages/audit\"' '    },' '    {' '      \"DiskPath\": \"./packages/client\"' '    },' '    {' '      \"DiskPath\": \"./packages/contracts\"' '    },' '    {' '      \"DiskPath\": \"./packages/server\"' '    },' '    {' '      \"DiskPath\": \"./packages/shared\"' '    },' '    {' '      \"DiskPath\": \"./packages/tools\"' '    },' '    {' '      \"DiskPath\": \"./packages/extra path\"' '    }' '  ]' '}'\n\texit 0\nfi\nexec %q \"$@\"\n", realGo),
+			want:   "unexpected go.work module directories",
+		},
+		{
+			name:   "package loading error",
+			fakeGo: fmt.Sprintf("#!/usr/bin/env bash\nif [[ \"${1:-}\" == list ]]; then\n\tif [[ \"$*\" == *'.Error'* ]]; then printf 'example/bad|error\\n'; else printf 'example/bad\\n'; fi\n\texit 0\nfi\nexec %q \"$@\"\n", realGo),
+			want:   "package loading error",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			bin := t.TempDir()
+			writeExecutable(t, filepath.Join(bin, "go"), test.fakeGo)
+			output, err := ciRun(root, bin+":"+os.Getenv("PATH"), script, "--slice", "server")
+			if err == nil {
+				t.Fatalf("inventory mutation unexpectedly succeeded: %s", output)
+			}
+			if !strings.Contains(output, test.want) {
+				t.Fatalf("inventory mutation output = %q, want %q", output, test.want)
+			}
+		})
+	}
+}
+
 func TestCIRepositoryPackageInventory(t *testing.T) {
 	root := repositoryRoot(t)
 	script := filepath.Join(root, "scripts", "ci", "package-inventory.sh")
@@ -121,8 +188,10 @@ func TestCIRepositoryPackageInventory(t *testing.T) {
 		t.Fatalf("rest nativeabi occurrences = %d, want 1: %s", got, rest)
 	}
 	inventorySource := string(readFile(t, script))
-	if got := strings.Count(inventorySource, "CGO_ENABLED=1"); got < 2 {
-		t.Fatalf("inventory must set CGO_ENABLED=1 for both supported platform queries: %q", inventorySource)
+	for _, required := range []string{"CGO_ENABLED=1", "list_module linux amd64", "list_module darwin arm64"} {
+		if !strings.Contains(inventorySource, required) {
+			t.Fatalf("inventory is missing supported platform selection %q: %q", required, inventorySource)
+		}
 	}
 	for slice, contents := range map[string]string{"client": client, "server": ciPackageInventory(t, root, script, "server"), "rest": rest} {
 		lines := strings.Fields(contents)
@@ -185,6 +254,25 @@ func TestCIRaceEntrypointArguments(t *testing.T) {
 	}
 }
 
+func TestCIRaceEntrypointRejectsEmptyInventoryBeforeGoTest(t *testing.T) {
+	fixtureRoot := t.TempDir()
+	script := filepath.Join(fixtureRoot, "scripts", "ci", "run-go-race.sh")
+	writeExecutable(t, script, string(readFile(t, filepath.Join(repositoryRoot(t), "scripts", "ci", "run-go-race.sh"))))
+	writeExecutable(t, filepath.Join(fixtureRoot, "scripts", "ci", "package-inventory.sh"), "#!/usr/bin/env bash\nexit 0\n")
+	bin := ciFixtureBin(t, []string{"bash"})
+	argv := filepath.Join(t.TempDir(), "argv")
+	bashEnvironment := filepath.Join(t.TempDir(), "mapfile.sh")
+	writeFile(t, bashEnvironment, []byte("mapfile() { eval \"$2=('')\"; }\n"))
+	writeExecutable(t, filepath.Join(strings.Split(bin, ":")[0], "go"), "#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > \"$MORNLEA_CI_GO_ARGV\"\n")
+	output, err := ciRunWithEnv(fixtureRoot, bin, []string{"BASH_ENV=" + bashEnvironment, "MORNLEA_CI_GO_ARGV=" + argv}, script, "server")
+	if err == nil {
+		t.Fatalf("empty inventory unexpectedly succeeded: %s", output)
+	}
+	if _, statErr := os.Stat(argv); !os.IsNotExist(statErr) {
+		t.Fatalf("empty inventory invoked go test: %v", statErr)
+	}
+}
+
 func TestCIPreflightRecipeOrderAndBoundary(t *testing.T) {
 	makefile := string(readFile(t, filepath.Join(repositoryRoot(t), "Makefile")))
 	recipe := makeTargetRecipe(t, makefile, "ci-preflight")
@@ -216,6 +304,26 @@ func TestCIPreflightRecipeOrderAndBoundary(t *testing.T) {
 	}
 }
 
+func TestCIPreflightStopsBeforeNextCommandWhenGofmtFails(t *testing.T) {
+	root := repositoryRoot(t)
+	bin := ciFixtureBin(t, []string{"bash", "git", "go", "gofmt", "node", "npx", "rg"})
+	binDir := strings.Split(bin, ":")[0]
+	next := filepath.Join(t.TempDir(), "next-command-ran")
+	writeExecutable(t, filepath.Join(binDir, "git"), "#!/usr/bin/env bash\nprintf 'name with spaces.go\\000'\n")
+	writeExecutable(t, filepath.Join(binDir, "gofmt"), "#!/usr/bin/env bash\nexit 42\n")
+	writeExecutable(t, filepath.Join(binDir, "npx"), "#!/usr/bin/env bash\nprintf x > \"$MORNLEA_CI_NEXT\"\n")
+	command := exec.Command("make", "-f", "Makefile", "ci-preflight")
+	command.Dir = root
+	command.Env = ciEnvironment(bin, []string{"MORNLEA_CI_NEXT=" + next})
+	output, err := command.CombinedOutput()
+	if err == nil {
+		t.Fatalf("gofmt failure unexpectedly succeeded: %s", output)
+	}
+	if _, statErr := os.Stat(next); !os.IsNotExist(statErr) {
+		t.Fatalf("preflight ran its next command after gofmt failure: %v", statErr)
+	}
+}
+
 func ciFixtureBin(t *testing.T, commands []string) string {
 	t.Helper()
 	bin := t.TempDir()
@@ -229,7 +337,10 @@ func ciFixtureBin(t *testing.T, commands []string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return bin + ":" + filepath.Dir(bash)
+	if err := os.Symlink(bash, filepath.Join(bin, "bash")); err != nil {
+		t.Fatal(err)
+	}
+	return bin
 }
 
 func ciRun(root, path, script string, arguments ...string) (string, error) {
@@ -239,16 +350,20 @@ func ciRun(root, path, script string, arguments ...string) (string, error) {
 func ciRunWithEnv(root, path string, extraEnvironment []string, script string, arguments ...string) (string, error) {
 	command := exec.Command(script, arguments...)
 	command.Dir = root
+	command.Env = ciEnvironment(path, extraEnvironment)
+	output, err := command.CombinedOutput()
+	return string(output), err
+}
+
+func ciEnvironment(path string, extraEnvironment []string) []string {
 	environment := make([]string, 0, len(os.Environ())+len(extraEnvironment)+1)
 	for _, variable := range os.Environ() {
 		if !strings.HasPrefix(variable, "PATH=") {
 			environment = append(environment, variable)
 		}
 	}
-	command.Env = append(environment, "PATH="+path)
-	command.Env = append(command.Env, extraEnvironment...)
-	output, err := command.CombinedOutput()
-	return string(output), err
+	environment = append(environment, "PATH="+path)
+	return append(environment, extraEnvironment...)
 }
 
 func ciPackageInventory(t *testing.T, root, script, slice string) string {

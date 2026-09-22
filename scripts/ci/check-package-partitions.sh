@@ -27,30 +27,42 @@ validate_slice() {
 	done < "$file"
 }
 
-for spec in "all:$all" "client:$client" "server:$server" "rest:$rest"; do
-	name=${spec%%:*}
-	file=${spec#*:}
-	validate_slice "$name" "$file"
-done
+validate_slice all "$all"
+validate_slice client "$client"
+validate_slice server "$server"
+validate_slice rest "$rest"
 
-for pair in "$client:$server" "$client:$rest" "$server:$rest"; do
-	left=${pair%%:*}
-	right=${pair#*:}
-	if overlap=$(LC_ALL=C comm -12 "$left" "$right") && [[ -n "$overlap" ]]; then
+# `comm` reads sorted lists, so every comparison failure is a fail-closed input error.
+for_overlap() {
+	local left=$1 right=$2 overlap
+	if ! overlap=$(LC_ALL=C comm -12 "$left" "$right"); then
+		fail 'package partition comparison failed'
+	fi
+	if [[ -n "$overlap" ]]; then
 		first=${overlap%%$'\n'*}
 		fail "overlapping package: $first"
 	fi
-done
+}
+
+for_overlap "$client" "$server"
+for_overlap "$client" "$rest"
+for_overlap "$server" "$rest"
 
 union=$(mktemp "${TMPDIR:-/tmp}/mornlea-package-partitions.XXXXXX")
 trap 'rm -f "$union"' EXIT
 cat "$client" "$server" "$rest" | LC_ALL=C sort -u > "$union"
 
-if missing=$(LC_ALL=C comm -23 "$all" "$union") && [[ -n "$missing" ]]; then
+if ! missing=$(LC_ALL=C comm -23 "$all" "$union"); then
+	fail 'package partition comparison failed'
+fi
+if [[ -n "$missing" ]]; then
 	first=${missing%%$'\n'*}
 	fail "missing package: $first"
 fi
-if unexpected=$(LC_ALL=C comm -13 "$all" "$union") && [[ -n "$unexpected" ]]; then
+if ! unexpected=$(LC_ALL=C comm -13 "$all" "$union"); then
+	fail 'package partition comparison failed'
+fi
+if [[ -n "$unexpected" ]]; then
 	first=${unexpected%%$'\n'*}
 	fail "unexpected package: $first"
 fi
