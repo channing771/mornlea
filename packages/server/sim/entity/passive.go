@@ -32,14 +32,13 @@ const (
 	// 追逐连续换向的目标即原地打转——段长权衡观感（太短仍显抽搐）与转向多
 	// 样性（太长近乎直线巡逻）。
 	passiveWanderSegmentTicks uint64 = 40
-	// passiveWaterLookaheadBlocks 是避水止步规则沿航向的前瞻距离（格）：
-	// 约 1.5 格让止步发生在脚踏流体之前一步——更近则止步后的残余滑行（地面
-	// 减速从行走速度刹停约 0.19 格）可能把身体推进水格，更远则岸边的可达活
-	// 动范围被无谓压缩。
+	// `passiveWaterLookaheadBlocks` stops motion before the body enters fluid.
+	// Roughly 1.5 blocks covers the 0.19-block residual ground slide without
+	// unnecessarily shrinking the reachable shoreline.
 	passiveWaterLookaheadBlocks = float32(1.5)
-	// passiveDryProbeOffsetBlocks 是干燥方位探测的水平偏移（格）：取足格起
-	// 的第 2 格而不是第 1 格——贴岸第 1 格往往仍是岸线水格，第 2 格探测到的
-	// 「干燥」才是真正可以落脚的陆地，也给止步滑行留出裕度。
+	// `passiveDryProbeOffsetBlocks` checks the second horizontal block from the
+	// feet. The first block is often shoreline water; the second identifies
+	// walkable land and leaves room for residual stopping motion.
 	passiveDryProbeOffsetBlocks = 2
 )
 
@@ -245,9 +244,9 @@ func (engine *engineContext) advancePassives(pending *pendingChunkChanges) {
 }
 
 // advancePassiveMovement 把全部被动牛汇入与玩家/夜行者相同的 `Rust`
-// `physics.Step` 积分出口：每个个体用本 `tick` 的漫游、逃跑或水规则输入步
-// 进恰好一次，位移完全由权威物理决定，不新写任何 `Go` 积分。处理顺序即切
-// 片顺序（`id` 升序）。
+// `physics.Step` integration exit: each passive advances exactly once per tick
+// using wander, flee, or water-safety input. Authoritative physics owns all
+// displacement, and slice order remains ascending `id` order.
 //
 // 本 `tick` 刚生成的个体（`fresh`）跳过并清除标记：生成判定发生在 `tick` 边
 // 界、先于物理，但新生个体的第一次位移从下一 `tick` 开始。坠出世界或状态失
@@ -263,21 +262,21 @@ func (engine *engineContext) advancePassiveMovement() {
 			index++
 			continue
 		}
-		// 浸没标志先于输入推导计算（顺序与旧实现刻意对调）：输入层的两级
-		// 水规则需要读同一拍的浸没事实，而 `physics.Step` 也要这份标志——先
-		// 算一次再向下传递，避免每牛每 tick 重复扫描身体 AABB 的流体格。
+		// Compute submersion before deriving input because water-safety rules and
+		// `physics.Step` consume the same tick fact. Passing one result avoids a
+		// second per-passive scan of fluid blocks around the body AABB.
 		source := dimensionCollisionSource{dimension: engine.dimension(entry.dimension)}
 		bodyInFluid, eyeInFluid := physics.SubmersionFlagsWithTunables(
 			entry.state.Position, source, engine.physicsTunables,
 		)
-		// 身体浸没时立即终结吃草事件（与有效伤害同语义）：被倒水淹没的牛
-		// 不允许在水下呆站到事件结束；只清瞬态事件态、不写块。
+		// Body submersion cancels grazing like effective damage. Only transient
+		// event state changes; no block is written.
 		if bodyInFluid {
 			entry.grazeTicks = 0
 		}
 		// 吃草事件期间牛静止（与漫游/逃跑输入无仲裁：冻结即中断了位移来
-		// 源，有效伤害与浸没则已先行终结事件），因此跳过积分、朝向更新与
-		// 邻域回滚，位置逐位冻结。
+		// sources. Effective damage and submersion have already cancelled the event,
+		// so this path skips integration, facing updates, and neighborhood rollback.
 		if entry.grazeTicks > 0 {
 			entry.input = physics.Input{Yaw: entry.yaw}
 			index++
@@ -308,29 +307,28 @@ func (engine *engineContext) advancePassiveMovement() {
 	}
 }
 
-// passiveStepInput 决定单个个体本 `tick` 的控制意图，优先级两级水规则（浸
-// 没逃离＞避水止步）＞逃跑＞引诱＞闲时看人＞漫游：身体浸没流体的个体以持续
-// 上浮加朝首个干燥方位的有界转向前进逃离水体；未浸没但前沿将为流体、或贴身
-// 水格仍在航向闭合前向半平面内的个体，停止朝水推进并沿首个近/远两点均干燥
-// 的方位行进（四方位全无效时反转航向离开水缘）。水安全是生理约束，置于逃
-// 跑/引诱之前——受击逃跑或持麦引诱把牛引进池塘与「水底牛」直接冲突，代价
-// 是被追打至岸边的牛会沿岸改道，可接受。逃跑剩余时长内沿远离伤害来源方向
-// 前进（与夜行者追击同款的世界轴到朝向折算）；吃草事件中只给中性输入（事件
-// 个体的位移已由
+// `passiveStepInput` prioritizes submerged escape, shoreline avoidance, flee,
+// lure, idle look, then wander. Submerged passives rise and move toward the first
+// dry direction. Dry passives facing nearby fluid follow the first direction
+// whose near and far probes are dry, or reverse if none qualify. Water safety is
+// physiological and therefore overrides flee and lure, accepting shoreline
+// detours instead of allowing submerged cattle. Flee input otherwise moves away
+// from the damage source, while grazing emits neutral input because movement is
+// already frozen by
 // `advancePassiveMovement` 冻结，这里是输入层的防御性表态，防未来调用方绕
 // 过冻结直调本函数）；否则有引诱目标就转向目标、无目标但有 6 格内闲时目标
 // 就原地有界转向面向玩家（只看不靠近，靠近玩家的唯一途径是引诱）、两者皆无
 // 才以世界种子、漫游段序号与 `id` 确定性派生的分段朝向漫游（段内恒定、段间
-// 有界过渡）。全部输入为纯函数派生，不读全局随机数、不遍历 `map`；水体探测
-// 只读已就绪 chunk，是行为确定性的世界输入。
+// bounded transitions). Inputs remain pure derivations without global randomness
+// or map iteration. Water probes read only ready chunks as deterministic world input.
 func (engine *engineContext) passiveStepInput(
 	entry *passiveState, bodyInFluid bool,
 ) physics.Input {
 	if bodyInFluid {
-		// 浸没逃离：`Jump` 在水中积分里是持续上浮，配合朝首个干燥方位的
-		// 有界转向前进离开水体。四个探测方位全潮湿或未就绪时保持当前航向
-		// 前进而非原地漂浮——探测半径之外的水域中央会成为永久滞留点，保
-		// 持航向才能把探测窗推进到岸边，个体仍在有限 tick 内回到干燥陆地。
+		// In water, `Jump` supplies continuous lift while bounded turning aims at
+		// the first dry direction. If every probe is wet or unavailable, continuing
+		// the current heading advances the probe window toward shore instead of
+		// leaving the passive floating indefinitely.
 		engine.passiveTurnTowardDry(entry)
 		return physics.Input{MoveZ: 1, Jump: true, Yaw: entry.yaw}
 	}
@@ -382,15 +380,13 @@ func (engine *engineContext) passiveStepInput(
 	return physics.Input{MoveZ: 1, Yaw: entry.yaw}
 }
 
-// passiveDryProbeOffsets 是干燥方位探测的固定序（+Z、+X、−Z、−X）：固定序
-// 让探测结果是世界与个体状态的确定性函数，相同重放逐位一致；全序枚举也保证
-// 只要任何一个方位干燥就必有命中。
+// `passiveDryProbeOffsets` fixes probe order to +Z, +X, -Z, -X. Full ordered
+// enumeration makes selection deterministic and finds any available dry direction.
 var passiveDryProbeOffsets = [4][2]int32{{0, 1}, {1, 0}, {0, -1}, {-1, 0}}
 
-// passiveTurnTowardDry 把朝向按有界步长转向首个干燥方位（足格水平第 2 格探
-// 测，无命中时不转向），返回是否存在干燥方位：浸没逃离专用——个体已经在水
-// 里，跨过窄渠到对岸不成问题，因此不带近点约束。方位折算与逃跑/引诱同式
-// （世界轴到朝向）。
+// `passiveTurnTowardDry` turns by a bounded step toward the first dry second-block
+// probe and reports whether one exists. Submerged escape needs no near-point
+// constraint because crossing a narrow channel is already unavoidable.
 func (engine *engineContext) passiveTurnTowardDry(entry *passiveState) bool {
 	dx, dz, ok := engine.passiveFirstDryDirection(entry)
 	if ok {
@@ -400,9 +396,9 @@ func (engine *engineContext) passiveTurnTowardDry(entry *passiveState) bool {
 	return ok
 }
 
-// passiveFirstDryDirection 以固定序（+Z、+X、−Z、−X）探测足格水平第 2 格，
-// 返回首个非流体方位的轴向分量。未就绪区块按干燥处理——权威侧宁可漏判也不
-// 能凭空造水或触发同步加载；至多 4 次已就绪区块的方块读，命中即短路。
+// `passiveFirstDryDirection` returns the axis components of the first non-fluid
+// second-block probe. Unready chunks count as dry so authority neither invents
+// water nor triggers synchronous loading. Selection short-circuits within four reads.
 func (engine *engineContext) passiveFirstDryDirection(entry *passiveState) (int32, int32, bool) {
 	dimension := engine.dimension(entry.dimension)
 	if dimension == nil {
@@ -423,16 +419,15 @@ func (engine *engineContext) passiveFirstDryDirection(entry *passiveState) (int3
 	return 0, 0, false
 }
 
-// passiveForward 返回当前朝向的单位前向向量（与逃跑/引诱的世界轴折算同式：
-// `dx=−sin(yaw)`、`dz=−cos(yaw)`）。
+// `passiveForward` returns the facing unit vector using the same world-axis
+// conversion as flee and lure: `dx=-sin(yaw)` and `dz=-cos(yaw)`.
 func passiveForward(entry *passiveState) (float32, float32) {
 	return -float32(math.Sin(float64(entry.yaw))), -float32(math.Cos(float64(entry.yaw)))
 }
 
-// passiveAdjacentFluidFlags 探测足格四方位第 1 格（近点）是否为流体，返回与
-// `passiveDryProbeOffsets` 同序的标志数组：止步条件与转向候选共用这一份读
-// 取，恰好 4 次方块读；未就绪区块按干燥处理（权威侧宁可漏判也不触发同步加
-// 载）。
+// `passiveAdjacentFluidFlags` probes the first block in all four directions and
+// returns flags in `passiveDryProbeOffsets` order. Stop detection and direction
+// selection share these four reads. Unready chunks count as dry without loading.
 func (engine *engineContext) passiveAdjacentFluidFlags(entry *passiveState) [4]bool {
 	var flags [4]bool
 	dimension := engine.dimension(entry.dimension)
@@ -451,14 +446,12 @@ func (engine *engineContext) passiveAdjacentFluidFlags(entry *passiveState) [4]b
 	return flags
 }
 
-// passiveShoreStops 报告避水止步分支本拍是否接管，并带出近点水格标志供转向
-// 候选复用（不重复读方块）：前沿前瞻（约 1.5 格的足格）为流体，或贴身四方
-// 位中任一水格落在航向的闭合前向半平面（点积 ≥ 0）。后者是前瞻的必要补
-// 充——前向垂直分量小于身体半宽 0.3 时，身体侧缘会先于中线前瞻触水，只探前
-// 瞻的止步会在漫游/引诱的逐拍有界转向下以每拍一小步的速率缓慢切水；把「仍
-// 朝贴身水格方向」的每一拍都扣下位移，切水路径才真正封死。含正平行（=0）
-// 是刻意选择：平行贴岸的行走交给止步分支自己的安全方位（见
-// `passiveShoreInput`），放行给漫游链会在其转向驱动下重新切入水缘。
+// `passiveShoreStops` reports whether shoreline avoidance owns this tick and
+// returns adjacent-fluid flags for reuse. It stops for fluid at the 1.5-block
+// lookahead or for adjacent fluid in the closed forward half-plane. The latter
+// catches diagonal body-edge entry that a centerline probe misses. Zero dot
+// product is intentional: parallel shoreline motion must use the safe direction
+// selected by `passiveShoreInput`, not wander back toward water.
 func (engine *engineContext) passiveShoreStops(entry *passiveState) ([4]bool, bool) {
 	nearFluid := engine.passiveAdjacentFluidFlags(entry)
 	if engine.passiveHeadingEntersFluid(entry) {
@@ -474,17 +467,13 @@ func (engine *engineContext) passiveShoreStops(entry *passiveState) ([4]bool, bo
 	return nearFluid, false
 }
 
-// passiveShoreInput 产出避水止步分支的本拍输入：朝固定序首个「近点与远点均
-// 非流体」的方位有界转向。远点（足格+方位×2）落在渠对岸的「干燥」会把正对
-// 1 格宽水渠的牛锁死在正对渠线的朝向上（前瞻恒为渠水、每拍零位移的永久雕
-// 像），所以候选必须近点也非流体——踏入的第一格不涉水才叫可走。方位处于
-// 当前航向前半（含正交）时边转边沿它前进：纯止步（MoveZ 0）把位移放行给
-// 逃跑/引诱/漫游链后，链会把航向一步步拉回水缘、缓慢切水直至涉水穿越（这
-// 正是雕像修复初版实测出的失败链），止步分支必须用自己的安全方位承载位
-// 移；方位在背后时原地转向（有界 ≤16 拍），转到位再走。四个方位全部无效
-// 时确定性回退：航向反转 180° 并前进，沿来路离开水缘（真涉水由浸没逃离接
-// 管），绝不原地冻结。读预算最坏 1（前瞻）+4（近点）+4（远点，仅对近点干
-// 燥的方位探测）= 9 次方块读。
+// `passiveShoreInput` turns toward the first direction whose near and far probes
+// are both dry. Requiring the near point prevents a dry opposite bank from
+// trapping a passive facing a one-block channel. A candidate in the closed
+// forward half-plane carries movement while turning; candidates behind the body
+// turn in place first. If all directions fail, the passive reverses and walks
+// away rather than freezing. The worst-case budget is nine reads: one lookahead,
+// four adjacent probes, and four far probes for dry adjacent directions.
 func (engine *engineContext) passiveShoreInput(
 	entry *passiveState, nearFluid [4]bool,
 ) physics.Input {
@@ -503,10 +492,9 @@ func (engine *engineContext) passiveShoreInput(
 	return physics.Input{Yaw: entry.yaw}
 }
 
-// passiveWalkableDirection 在固定序中找首个「近点（足格+方位×1）与远点（足
-// 格+方位×2）均非流体」的方位：近点非流体才不需要立刻涉水，远点非流体才是
-// 可以落脚的陆地。近点标志复用 `passiveAdjacentFluidFlags` 的读取，远点仅对
-// 近点干燥的方位探测（短路），最坏 4 次方块读；未就绪区块一律按干燥处理。
+// `passiveWalkableDirection` returns the first ordered direction whose adjacent
+// and second blocks are both dry. It reuses adjacent flags and probes far only
+// for dry near points, bounding additional reads to four. Unready counts as dry.
 func (engine *engineContext) passiveWalkableDirection(
 	entry *passiveState, nearFluid [4]bool,
 ) (int32, int32, bool) {
@@ -532,8 +520,8 @@ func (engine *engineContext) passiveWalkableDirection(
 	return 0, 0, false
 }
 
-// passiveHeadingEntersFluid 探测沿当前航向前方约 1.5 格的足格是否为流体（恰
-// 好 1 次方块读）：未就绪区块按干燥处理，绝不触发同步加载。
+// `passiveHeadingEntersFluid` spends one read on the foot block about 1.5 blocks
+// ahead. An unready chunk counts as dry and is never loaded synchronously.
 func (engine *engineContext) passiveHeadingEntersFluid(entry *passiveState) bool {
 	dimension := engine.dimension(entry.dimension)
 	if dimension == nil {

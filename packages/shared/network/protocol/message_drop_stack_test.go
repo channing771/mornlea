@@ -6,9 +6,9 @@ import (
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-// TestDropStackPacketIDIsFrozen 钉死整组丢弃命令的最终编号：C→S
-// `DropStack=21`，由协议 v45 承载；「下一个仍未分配」上界写成「末项 +1」，
-// 下次追加 packet 时它会跟着末项走，不会静默退化成「测一个已合法的 ID」。
+// TestDropStackPacketIDIsFrozen freezes `DropStack=21` for v45 C-to-S traffic.
+// Expressing the next-unassigned boundary relative to the last ID keeps a later
+// append from silently turning the assertion into a check of an assigned ID.
 func TestDropStackPacketIDIsFrozen(t *testing.T) {
 	assertClientRegistry(t, []struct {
 		state  State
@@ -25,16 +25,17 @@ func TestDropStackPacketIDIsFrozen(t *testing.T) {
 	}
 }
 
-// TestDropStackValidateAcceptsAllViewDomains 覆盖三个视图域的合法边界：各域
-// 最后一个统一索引必须放行；零序号与 `MoveStackPartial`/`QuickMoveStack`
-// 同一惯例放行（丢弃不参与取出确认协议）。
+// TestDropStackValidateAcceptsAllViewDomains covers each view's final valid
+// unified index. A zero sequence follows `MoveStackPartial` and
+// `QuickMoveStack` because drops do not participate in take confirmation.
 func TestDropStackValidateAcceptsAllViewDomains(t *testing.T) {
 	valid := []ClientPacket{
 		DropStack{Sequence: 1, View: StackViewInventory, Slot: core.InventorySlots - 1},
 		DropStack{Sequence: 1, View: StackViewCrafting, Slot: GridCraftingViewSlots - 1},
 		DropStack{Sequence: 1, Container: testChestRef(), View: StackViewContainer, Slot: core.ChestViewSlots - 1},
 		DropStack{Sequence: 1, Container: stackSplittingFurnaceRef(), View: StackViewContainer, Slot: core.FurnaceViewSlots - 1},
-		// 零序号跟随分堆命令族惯例：丢弃命令不做「过期序列不重复效果」确认。
+		// Zero follows the stack-splitting convention because drops have no
+		// stale-sequence acknowledgement.
 		DropStack{View: StackViewInventory, Slot: 0},
 	}
 	for _, packet := range valid {
@@ -44,34 +45,34 @@ func TestDropStackValidateAcceptsAllViewDomains(t *testing.T) {
 	}
 }
 
-// TestDropStackValidateRejectionMatrix 覆盖整组丢弃的整包拒绝矩阵：非法
-// 视图域、容器视图零值/未知种类引用、非容器视图非零引用与按视图分派的
-// 索引越界——每一条都在协议校验层整单拒绝，与 `MoveStackPartial` 的静态
-// 值域判定完全同界。
+// TestDropStackValidateRejectionMatrix rejects the whole command for invalid
+// views, invalid or mismatched references, and view-specific slot overflow.
+// These static domains intentionally match `MoveStackPartial`.
 func TestDropStackValidateRejectionMatrix(t *testing.T) {
 	chest := testChestRef()
 	furnace := stackSplittingFurnaceRef()
 	invalid := []ClientPacket{
-		// 视图域非法：3 与饱和字节都不是 {背包, 合成, 容器}。
+		// Neither 3 nor the saturated byte identifies an inventory, crafting,
+		// or container view.
 		DropStack{Container: chest, View: 3, Slot: 0},
 		DropStack{View: 255, Slot: 0},
-		// 容器视图携带零值引用。
+		// A container view cannot use the zero reference.
 		DropStack{View: StackViewContainer, Slot: 0},
-		// 容器视图携带未知种类引用。
+		// A container view cannot use an unknown container kind.
 		DropStack{
 			Container: core.ContainerRef{Dimension: core.Overworld, Kind: core.ContainerKind(9), Generation: 1},
 			View:      StackViewContainer, Slot: 0,
 		},
-		// 非容器视图携带非零引用。
+		// Non-container views cannot carry a container reference.
 		DropStack{Container: chest, View: StackViewInventory, Slot: 0},
 		DropStack{Container: chest, View: StackViewCrafting, Slot: 0},
-		// 背包视图索引越界（0..35）。
+		// Inventory slots are bounded to 0..35.
 		DropStack{View: StackViewInventory, Slot: core.InventorySlots},
-		// 合成视图索引越界（0..44）。
+		// Crafting slots are bounded to 0..44.
 		DropStack{View: StackViewCrafting, Slot: GridCraftingViewSlots},
-		// 熔炉视图索引越界（0..38）。
+		// Furnace slots are bounded to 0..38.
 		DropStack{Container: furnace, View: StackViewContainer, Slot: core.FurnaceViewSlots},
-		// 箱子视图索引越界（0..62）。
+		// Chest slots are bounded to 0..62.
 		DropStack{Container: chest, View: StackViewContainer, Slot: core.ChestViewSlots},
 	}
 	for _, packet := range invalid {

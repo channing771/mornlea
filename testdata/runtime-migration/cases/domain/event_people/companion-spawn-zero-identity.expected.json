@@ -1,0 +1,20 @@
+{
+  "kind": "error",
+  "category": "invalid-identity",
+  "fields": {
+    "dimension": 0,
+    "id": "00000000000000000000000000000000",
+    "look": {
+      "pitch": "bf000000",
+      "yaw": "40400000"
+    },
+    "name": "Buddy",
+    "position": [
+      "c1080000",
+      "428c0000",
+      "41440000"
+    ],
+    "rule": "companion_spawn.player_id.nonzero",
+    "server_tick": "41"
+  }
+}

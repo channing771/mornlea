@@ -1,0 +1,20 @@
+{
+  "kind": "error",
+  "category": "invalid-enum",
+  "fields": {
+    "dimension": 2,
+    "id": "2233445546674889aabbccddeeff00ff",
+    "look": {
+      "pitch": "bf000000",
+      "yaw": "40400000"
+    },
+    "name": "Buddy",
+    "position": [
+      "c1080000",
+      "428c0000",
+      "41440000"
+    ],
+    "rule": "companion_spawn.dimension",
+    "server_tick": "41"
+  }
+}

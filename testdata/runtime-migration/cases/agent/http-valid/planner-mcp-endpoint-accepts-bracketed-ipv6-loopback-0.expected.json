@@ -1,0 +1,8 @@
+{
+  "kind": "ok",
+  "category": "mcp_endpoint",
+  "fields": {
+    "keys": [],
+    "schema": "mcp_endpoint"
+  }
+}

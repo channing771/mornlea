@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "minimum",
+    "path": "$.new_memory_epoch",
+    "schema": "memory_delete_request"
+  }
+}

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "total_files": 1243,
-  "total_comments": 38636,
+  "total_comments": 38586,
   "files": [
     {
       "path": "packages/audit/armor_domain_test.go",
@@ -30,8 +30,8 @@
     },
     {
       "path": "packages/audit/dependency_test.go",
-      "count": 128,
-      "digest": "838d851011407f70c45eea6b71150b90cf682adcf4e82ca6d0026e4da2601128"
+      "count": 126,
+      "digest": "da8a9391128982b5809f722be1ec87332d2c133a1cccbac96445fecba9d8e89b"
     },
     {
       "path": "packages/audit/difficulty_domain_test.go",
@@ -340,8 +340,8 @@
     },
     {
       "path": "packages/client/client/mesher.go",
-      "count": 20,
-      "digest": "cc39005cbd8cb0a3e8b30c5f53afb9c95468e913a20edf30bbdaeb67c52435cb"
+      "count": 19,
+      "digest": "55268d4dae52ddde5f7386306bdbe2eff032f62c926ab37aa18f72cdcb42e8ab"
     },
     {
       "path": "packages/client/client/mesher_backpressure_test.go",
@@ -530,8 +530,8 @@
     },
     {
       "path": "packages/client/client/ui_game_bridge.go",
-      "count": 3,
-      "digest": "f2a181702bb47e11d62c5610a99bb857a589b1d277216542c97fc429981e3a7a"
+      "count": 2,
+      "digest": "f236f31dc4bf9587139e403885eb5ea58bd61bb1281a105ebc14ef24d3552073"
     },
     {
       "path": "packages/client/client/ui_game_bridge_test.go",
@@ -670,8 +670,8 @@
     },
     {
       "path": "packages/client/cmd/mornlea/app/app_frame.go",
-      "count": 104,
-      "digest": "e4609276ea8cb1b52bfbfd29ccbc1566eec4ff8da5aba5f03c4902add8d7743c"
+      "count": 101,
+      "digest": "15d528feb06a8619ca01ac666596cdc9ff3e6315adbfcb33cbc4c35bb8936068"
     },
     {
       "path": "packages/client/cmd/mornlea/app/app_furnace_ui_test.go",
@@ -760,13 +760,13 @@
     },
     {
       "path": "packages/client/cmd/mornlea/app/app_menu_vista.go",
-      "count": 92,
-      "digest": "25b334484ce3e7039fa3782fc6da7dbdb5c3b3401b0d4f6ac84b987abfc827ed"
+      "count": 90,
+      "digest": "a8e8c250b67e5868e17b92c401c7ba911a33b7359e3338299e6732ea882c3ea6"
     },
     {
       "path": "packages/client/cmd/mornlea/app/app_menu_vista_test.go",
-      "count": 40,
-      "digest": "d7b05780a925c73d05cb1cd895a366c2f84e9d6784eb046a68894db03980fed4"
+      "count": 37,
+      "digest": "2a51134f7ae5bdf886ea9ca0374be10fd4da1c0189112a2726dcb3344a65e445"
     },
     {
       "path": "packages/client/cmd/mornlea/app/app_messages.go",
@@ -2510,8 +2510,8 @@
     },
     {
       "path": "packages/server/cmd/mornlea-server/main_test.go",
-      "count": 6,
-      "digest": "1b63f8644a0d3ce9a936b81d683aa930fcc4fbc428cfd34fe0c40f7073db0785"
+      "count": 4,
+      "digest": "78f3bc9d8d0e2171f5b112d20de4b36668998467316bf0c3d343393074c84c2a"
     },
     {
       "path": "packages/server/cmd/mornlea-server/material_migration.go",
@@ -3615,8 +3615,8 @@
     },
     {
       "path": "packages/server/sim/entity/container.go",
-      "count": 58,
-      "digest": "f362536e525a0beadc2896f6c73c9e95aa812316ca679f00554c23396024de48"
+      "count": 53,
+      "digest": "469e4ae63a4ee66458ea1cb4ad91151da6af77feb65fea5deadcd97d80cf2897"
     },
     {
       "path": "packages/server/sim/entity/crafting.go",
@@ -3845,8 +3845,8 @@
     },
     {
       "path": "packages/server/sim/entity/passive.go",
-      "count": 101,
-      "digest": "a6ef366db33311484cdbfd8e9bed7a332c92c9c3029bc163485f18389e039a19"
+      "count": 92,
+      "digest": "c3551e4f98803434b9973ae85ba346f17fa218dabf59aaea22a168597a31ed9d"
     },
     {
       "path": "packages/server/sim/entity/passive_death_set_test.go",
@@ -4155,8 +4155,8 @@
     },
     {
       "path": "packages/server/sim/realm/environment.go",
-      "count": 202,
-      "digest": "0bb0f5b22c806de2075d85d89f1c37add845ca7a805501cfbcc2a1a596149cae"
+      "count": 198,
+      "digest": "041cb20933ea994b076dd151c120e26b7cbf7d6e10075c950ef52d6cfcdf4e50"
     },
     {
       "path": "packages/server/sim/realm/environment_oracle_test.go",
@@ -4315,8 +4315,8 @@
     },
     {
       "path": "packages/server/sim/runtime/crop_perf_test.go",
-      "count": 60,
-      "digest": "dfa937efc2fcd7c2389f22ed2e6aa8d33f9d4ab1214173b564353174c725cba8"
+      "count": 55,
+      "digest": "fd12ea48f3923d5f56d7efa5e470aa57648023ec0c2edede79a36908b0b1b08a"
     },
     {
       "path": "packages/server/sim/runtime/death_test.go",
@@ -4900,8 +4900,8 @@
     },
     {
       "path": "packages/server/updates/sampler_test.go",
-      "count": 31,
-      "digest": "317be557505d837257178d62d86f6dbd453d9489a0924ee0e24493409835040e"
+      "count": 28,
+      "digest": "2db449e78201827b66e38c151eb8a1d38eadf9fcfdee0be1af3d6359960c88c0"
     },
     {
       "path": "packages/shared/companion/agent_client.go",
@@ -5605,8 +5605,8 @@
     },
     {
       "path": "packages/shared/network/protocol/message_companion_test.go",
-      "count": 14,
-      "digest": "c58a16ed785af32a84da857428323abd1c8be42cb5e2679b73eac510781c78e4"
+      "count": 13,
+      "digest": "b65d4980afd4fd8427528c4ad188c32194146fbbd54f1f8baa840e610729eaba"
     },
     {
       "path": "packages/shared/network/protocol/message_container.go",
@@ -5665,8 +5665,8 @@
     },
     {
       "path": "packages/shared/network/protocol/message_stack_splitting_test.go",
-      "count": 25,
-      "digest": "1d46a4a9d91685c47930badacad9e7b85aaf17e50cd752f572220d896b17513e"
+      "count": 22,
+      "digest": "6aa6323aad943ade0ffde907fc5581a48bfba3473123bdb724cc2dd9ddecead6"
     },
     {
       "path": "packages/shared/network/protocol/message_test.go",
@@ -5675,8 +5675,8 @@
     },
     {
       "path": "packages/shared/network/protocol/packet.go",
-      "count": 138,
-      "digest": "691b6596ec1d77db7c653ee440265c37b15479d8ba39883e7394b407bb598739"
+      "count": 137,
+      "digest": "450017bab8acc25082a86b80d4f05d1c363efd2ea3045680192dcd1277e70d4c"
     },
     {
       "path": "packages/shared/network/protocol/packet_test.go",
@@ -5685,13 +5685,13 @@
     },
     {
       "path": "packages/shared/network/protocol/registry.go",
-      "count": 25,
-      "digest": "70278e6b0a1a42b6c79e7f67711d81c65dab7d8ea315027ef9111f38f5093ccb"
+      "count": 23,
+      "digest": "b591e82a31f6516305f52476f9ed4bc7c7fafb11748feb7946ae47936462c3fe"
     },
     {
       "path": "packages/shared/network/protocol/registry_test.go",
-      "count": 19,
-      "digest": "5ae6c71685960f707fbdc7d7132f4cfe907378df4615236e7916b2d9d0675d22"
+      "count": 16,
+      "digest": "e52a30d64bbff147b057c994de04fdfd20ec1477b87bdc0fad25a50b15e38f08"
     },
     {
       "path": "packages/shared/network/protocol/snapshot.go",

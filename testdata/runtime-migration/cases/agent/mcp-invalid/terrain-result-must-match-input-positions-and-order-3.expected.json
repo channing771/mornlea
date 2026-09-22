@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "x-mornlea-rules",
+    "path": "$.terrain[0].position",
+    "rule": "positions_match_context",
+    "schema": "query_terrain_success_result"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "kind": "ok",
+  "category": "task_status_text",
+  "fields": {
+    "keys": [],
+    "schema": "task_status_text"
+  }
+}

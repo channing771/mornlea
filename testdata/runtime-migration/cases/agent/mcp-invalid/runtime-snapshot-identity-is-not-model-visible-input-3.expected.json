@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "additionalProperties",
+    "path": "$.snapshot_id",
+    "schema": "get_planning_context_input"
+  }
+}

@@ -1,6 +1,6 @@
 ---
 doc_id: architecture-target
-doc_revision: 2026-09-19.2
+doc_revision: 2026-09-20.1
 language: zh-CN
 counterpart: architecture-target.md
 status: target-not-current
@@ -161,15 +161,19 @@ P7 只批准远程 TCP pilot 为 Go。该决定不授权切换默认客户端，
 
 | Stage | Owner | Prerequisite | Exit condition | Rollback |
 |---|---|---|---|---|
-| F1 | Rust domain、protocol、storage contract 与 numerical kernel | P7 Go | 与 Go 的 replay/oracle 一致；没有第二个在线写者 | 保留 Go 生产路径 |
-| F2 | Rust authoritative server | F1 | 确定性 replay、存档迁移、故障路径 parity、共享 Memory/TCP 语义 | 保留 Go 权威；禁止 dual-write |
-| F3 | Rust client-core 与 typed Godot bridge | F1；F2 protocol | Transcript parity、correction/replay、有界 bridge、重复生命周期 | 保留 pilot Go core 且不再扩展 feature |
-| P8 | 生产地形呈现 | F3 | 独立 world feature 消费 Rust semantic family | 禁用 catalog 项；旧客户端保持默认 |
-| P9 | 完整实体与效果 | F3 | 可独立禁用的 actor feature | 按 catalog 禁用 |
-| P10 | UI 迁移 | F3 | Godot Control 加 embedded Python；无生产 GDScript 或新 WebView 所有权 | 保留旧 UI 客户端 |
-| P11 | 音频与桌面设备 | F3 | Semantic cue；无头路径不触设备 | 禁用 adapter |
-| P12 | 工具链 | 按需 F1–F3 | 离线 replay 与呈现测试；无双在线权威 | 继续使用旧工具链 |
-| P13 | 本地游玩与桌面发行 | F2–F3 | 本地/远程共用一条 Rust 路径；仅桌面 closure | 回到仅远程或旧客户端 |
-| P14 | 默认切换与退役 | F1–P13 完成 | 两个发行周期和可用 rollback package | 恢复上一发行；禁止部分删除 |
+| [F1](../openspec/changes/archive/2026-09-21-rust-runtime-foundation/proposal.md) | Rust domain、protocol、storage contract 与 numerical kernel | P7 Go | 与 Go 的 replay/oracle 一致；没有第二个在线写者 | 保留 Go 生产路径 |
+| [F2](../openspec/changes/rust-authoritative-server/proposal.md) | Rust authoritative server | [F1](../openspec/changes/archive/2026-09-21-rust-runtime-foundation/proposal.md) | 确定性 replay、存档迁移、故障路径 parity、共享 Memory/TCP 语义 | 保留 Go 权威；禁止 dual-write |
+| [F3](../openspec/changes/rust-client-core/proposal.md) | Rust client-core 与 typed Godot bridge | F1；F2 protocol | Transcript parity、correction/replay、有界 bridge、重复生命周期 | 保留 pilot Go core 且不再扩展 feature |
+| [P8](../openspec/changes/godot-production-terrain/proposal.md) | 生产地形呈现 | [F3](../openspec/changes/rust-client-core/proposal.md) | 独立 world feature 消费 Rust semantic family | 禁用 catalog 项；旧客户端保持默认 |
+| [P9](../openspec/changes/godot-complete-actors/proposal.md) | 完整实体与效果 | [F3](../openspec/changes/rust-client-core/proposal.md) | 可独立禁用的 actor feature | 按 catalog 禁用 |
+| [P10](../openspec/changes/godot-ui-migration/proposal.md) | UI 迁移 | [F3](../openspec/changes/rust-client-core/proposal.md) | Godot Control 加 embedded Python；无生产 GDScript 或新 WebView 所有权 | 保留旧 UI 客户端 |
+| [P11](../openspec/changes/godot-desktop-audio/proposal.md) | 音频与桌面设备 | [F3](../openspec/changes/rust-client-core/proposal.md) | Semantic cue；无头路径不触设备 | 禁用 adapter |
+| [P12](../openspec/changes/godot-production-tooling/proposal.md) | 工具链 | 按需 F1–F3 | 离线 replay 与呈现测试；无双在线权威 | 继续使用旧工具链 |
+| [P13](../openspec/changes/godot-desktop-packaging/proposal.md) | 本地游玩与桌面发行 | F2–F3 | 本地/远程共用一条 Rust 路径；仅桌面 closure | 回到仅远程或旧客户端 |
+| [P14](../openspec/changes/godot-default-client-switch/proposal.md) | 默认切换与退役 | F1–P13 完成 | 两个发行周期和可用 rollback package | 恢复上一发行；禁止部分删除 |
+
+这些链接指向当前规划变更，不表示实现已经完成。F1 冻结并验证共享契约；F2 建立 Rust 权威；F3 消费已经验收的 F2 协议/会话契约，并在自身验收前通过 Rust 服务端集成验证。每个前置阶段都必须在 ledger 中提供实现 SHA、语料覆盖、非空且实际执行的测试、故障路径及回滚证据。OpenSpec 产物状态或文本搜索不能证明阶段完成。
+
+P12 先提供 P8–P11 所需的采集、身份和覆盖率基础设施，再在各 feature 的证据就绪后逐项验收生产者交接，从而避免工具与 feature 互相等待。一次交接只变更明确列出的语义场景；其余场景继续使用原生产者和回归检查。P13 验证桌面导出包证据；P14 在切换默认入口或退役迁移组件前，需要两个完整发行周期和可用回滚包。Bootstrap 退役不删除稳定项目根，且必须先由合格的原生诊断入口替代迁移 Bootstrap。
 
 当前 pilot 的 No-Go rollback 仍是加法：删除 `apps/mornlea-godot/`、两个 GDExtension、捆绑 Python runtime、Go client-core ABI 以及可选的 `scripts/godot` 入口后，应恢复 pilot 之前的生产行为。pilot 失败不得改写存档或默认配置。P7 为 Go 之后，后续 feature 必须可独立回退，且不得删除稳定项目根。Rust 迁移使用 offline replay，而不是 dual online writer，也绝不运行两个在线权威。

@@ -1,0 +1,7 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "collect-water",
+  "sequence": 10,
+  "yaw": "Inf",
+  "pitch": "0"
+}

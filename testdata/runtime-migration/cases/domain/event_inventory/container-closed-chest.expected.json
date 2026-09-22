@@ -1,0 +1,15 @@
+{
+  "kind": "ok",
+  "category": "container-closed",
+  "fields": {
+    "container": {
+      "chunk": [
+        -4,
+        5
+      ],
+      "generation": 4,
+      "kind": "chest",
+      "slot": 15
+    }
+  }
+}

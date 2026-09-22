@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "x-mornlea-rules",
+    "path": "$",
+    "rule": "text.non_blank",
+    "schema": "bounded_name"
+  }
+}

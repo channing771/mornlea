@@ -1,0 +1,10 @@
+{
+  "kind": "ok",
+  "category": "move-crafting",
+  "fields": {
+    "from": 8,
+    "sequence": "7",
+    "to": 44,
+    "wire": "0700000000000000082c"
+  }
+}

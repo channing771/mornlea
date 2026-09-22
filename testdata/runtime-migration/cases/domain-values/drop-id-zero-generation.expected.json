@@ -1,0 +1,12 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "chunk_x": 3,
+    "chunk_z": -4,
+    "dimension": 0,
+    "generation": 0,
+    "rule": "drop_id.generation_nonzero",
+    "slot": 0
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "kind": "ok",
+  "category": "find_visible_blocks_input",
+  "fields": {
+    "keys": [
+      "block_names",
+      "limit"
+    ],
+    "schema": "find_visible_blocks_input"
+  }
+}

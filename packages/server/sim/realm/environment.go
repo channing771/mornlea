@@ -1051,10 +1051,11 @@ func (state *State) AdvanceCrops(active []core.ChunkKey, mutation *Mutation) {
 }
 
 // advanceCropCell 是随机 tick 抽中一格后的判定分发器：作物生长、树苗生长、
-// 干耕地退化、草蔓延、积雪/消融共用同一抽样与预算，各分支互斥（作物、树苗、
-// 耕地与蔓延写入命中后直接返回；蔓延未写入的泥土格交还积雪兜底——泥土本就在
-// 积雪白名单里，每格每 tick 仍至多一次写入）。作物、耕地与蔓延分支至多写
-// 1 格；树苗生长按树形几何整棵写入（见 `advanceSaplingCell`）。
+// Dry-farmland reversion, grass spread, snow, and melt share one sample and
+// budget. Crop, sapling, farmland, and successful spread branches return early;
+// an unchanged dirt cell falls through to the existing snow allowlist. Each cell
+// is still written at most once per tick. Crop, farmland, and spread write at most
+// one block; sapling growth writes its complete tree geometry.
 func (state *State) advanceCropCell(
 	dimension *Dimension,
 	dimensionID core.DimensionID,
@@ -1114,8 +1115,9 @@ func (state *State) advanceCropCell(
 	if block == core.DirtID && state.advanceGrassSpread(dimension, dimensionID, position, tick, mutation) {
 		return
 	}
-	// 既非作物也非干耕地（含蔓延判定未写入的泥土）：按白名单地表交给积雪/消融
-	// 判定（内部再拒非白名单与非空气上方，多数命中到此为止零额外读取）。
+	// Everything else, including dirt left unchanged by spread, reaches the
+	// allowlisted snow/melt fallback. The fallback rejects other surfaces and
+	// occupied overhead blocks internally.
 	state.advanceSnowCover(dimension, dimensionID, chunk, position, block, mutation)
 }
 
@@ -1228,29 +1230,28 @@ func (state *State) advanceSaplingCell(
 	}
 }
 
-// grassSpreadNeighborOffsets 是草蔓延判定的四个水平邻格偏移。蔓延源只看水平
-// 四邻——对角与上方草不作源（上方判定已要求空气/雪层），「表面蔓延」的直觉与
-// 读取预算（每格至多 4 次邻居读取）都由此钉死。
+// `grassSpreadNeighborOffsets` fixes source discovery to the four horizontal
+// neighbors. Diagonal and overhead grass never qualify, bounding neighbor reads
+// to four per sampled dirt cell.
 var grassSpreadNeighborOffsets = [4]core.BlockPos{{X: 1}, {X: -1}, {Z: 1}, {Z: -1}}
 
-// advanceGrassSpread 尝试把随机 tick 抽中的表面泥土转为草方块，写入成功返回
-// true；写入失败或条件不符返回 false，该格交还积雪/消融兜底，后续 tick 可重试。
+// `advanceGrassSpread` attempts to convert sampled surface dirt to grass. It
+// returns true only after recording a write; false leaves the cell for the
+// snow/melt fallback and permits later ticks to retry.
 //
-// 判定序（全部满足才写入）：
+// Checks run in this order and all must pass:
 //
-//  1. 独立冻结盐值的 1/4 骰子 `sampler.GrassSpreadRoll` 命中——骰子先行与
-//     `advanceSaplingCell` 同例：未命中时一个邻居也不读，泥土格的读取保持在
-//     「格自身加积雪兜底上方」的既有 2 次基线；
-//  2. 正上方为 `AirID` 或季节雪层（`core.SnowLayer1BlockID..SnowLayer4BlockID`，
-//     即 `advanceSnowCover` 落在地表之上的方块——雪是季节性降水事实而非实体
-//     遮蔽，冬季蔓延不得停摆；整块雪 `SnowBlockID` 是可放置的实心方块，不算）；
-//  3. 四个水平邻格中至少一个为 `GrassID`。邻格经 `dimension.BlockAt` 读取，
-//     未就绪区块按「无草邻」处理、不触发同步加载（与树苗跨区块中止语义同族：
-//     宁可本 tick 不蔓延，也不为一次 1/4 判定拉起邻居）。
+//  1. `sampler.GrassSpreadRoll` hits its independent frozen 1/4 stream. Running
+//     this first avoids all neighbor reads on a miss and preserves the existing
+//     two-read dirt baseline after the snow fallback.
+//  2. The overhead block is air or a seasonal snow layer. Thin snow is weather,
+//     not solid cover; a placeable `SnowBlockID` remains solid cover.
+//  3. At least one horizontal neighbor is `GrassID`. Unready neighbors count as
+//     absent without synchronous loading, matching cross-chunk sapling behavior.
 //
-// 写入遵守「先 `SetBlock` 后 `Mutation.Record`、单 tick 单 `Commit`」纪律：本格
-// 本 tick 至多写 1 格，写入后不再落积雪兜底（互斥链语义——新草格的积雪留给
-// 后续 tick）。读取预算：骰子命中时至多「上方 1 加水平 4」共 5 次增量读取。
+// Mutation follows `SetBlock` then `Mutation.Record` under the single-commit tick
+// contract. A successful spread skips snow until a later tick. A roll hit adds at
+// most five reads: one overhead and four horizontal neighbors.
 func (state *State) advanceGrassSpread(
 	dimension *Dimension,
 	dimensionID core.DimensionID,
@@ -1264,8 +1265,8 @@ func (state *State) advanceGrassSpread(
 	above := core.BlockPos{X: position.X, Y: position.Y + 1, Z: position.Z}
 	aboveBlock, aboveReady := dimension.BlockAt(above)
 	state.environment.cropBlockReads++
-	// 上方与本格同列同区块，抽样入口已过滤未就绪区块，这里恒就绪；世界高度外
-	// 读作空气（顶格露天），天然通过实体遮蔽判定。
+	// Sampling already proved the cell's chunk ready. The block above shares that
+	// column; above-world coordinates read as air for exposed top cells.
 	if !aboveReady || (aboveBlock != core.AirID && !core.IsSnowLayer(aboveBlock)) {
 		return false
 	}
@@ -1285,7 +1286,7 @@ func (state *State) advanceGrassSpread(
 	if !hasGrassNeighbor {
 		return false
 	}
-	// 先写入区块，成功后再登记变更，避免幽灵变更
+	// Record only after the chunk write succeeds to avoid phantom changes.
 	if _, changed, err := dimension.SetBlock(position, core.GrassID); err != nil || !changed {
 		return false
 	}

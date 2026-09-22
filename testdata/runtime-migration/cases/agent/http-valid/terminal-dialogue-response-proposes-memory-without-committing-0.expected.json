@@ -1,0 +1,20 @@
+{
+  "kind": "ok",
+  "category": "dialogue_response",
+  "fields": {
+    "keys": [
+      "client_instance_id",
+      "companion_id",
+      "contract_version",
+      "generation",
+      "lease_id",
+      "line",
+      "memory_epoch",
+      "memory_proposal",
+      "namespace_id",
+      "request_id",
+      "run_id"
+    ],
+    "schema": "dialogue_response"
+  }
+}

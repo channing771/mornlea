@@ -1,0 +1,11 @@
+{
+  "kind": "ok",
+  "category": "mine",
+  "fields": {
+    "block_id": 11,
+    "block_symbol": "ChestID",
+    "has_block_drop": true,
+    "mine_semantics": "container_batch",
+    "mineable": true
+  }
+}

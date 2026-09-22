@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "x-mornlea-rules",
+    "path": "$.line",
+    "rule": "text.max_utf8_bytes",
+    "schema": "dialogue_nonterminal_response"
+  }
+}

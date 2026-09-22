@@ -3,6 +3,9 @@ members = [
     "crates/mornlea_engine",
     "crates/mornlea_client",
     "crates/mornlea_godot",
+    "crates/mornlea_domain",
+    "crates/mornlea_protocol",
+    "crates/mornlea_storage",
 ]
 resolver = "3"
 

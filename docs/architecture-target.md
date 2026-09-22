@@ -1,6 +1,6 @@
 ---
 doc_id: architecture-target
-doc_revision: 2026-09-19.2
+doc_revision: 2026-09-20.1
 language: en
 counterpart: architecture-target.zh.md
 status: target-not-current
@@ -161,15 +161,19 @@ P7 decided Go for the remote-TCP pilot only. That decision does not authorize a 
 
 | Stage | Owner | Prerequisite | Exit condition | Rollback |
 |---|---|---|---|---|
-| F1 | Rust domain, protocol, storage contracts, and numerical kernels | P7 Go | Replay/oracle agreement with Go; no second online writer | Keep the Go production path |
-| F2 | Rust authoritative server | F1 | Deterministic replay, save migration, failure-path parity, shared Memory/TCP semantics | Keep Go authority; never dual-write |
-| F3 | Rust client-core and typed Godot bridge | F1; F2 protocol | Transcript parity, correction/replay, bounded bridge, repeated lifecycle | Keep the pilot Go core without adding features |
-| P8 | Production terrain presentation | F3 | Independent world feature against Rust semantic families | Disable the catalog entry; keep the old client default |
-| P9 | Complete entities and effects | F3 | Independently disableable actor features | Disable by catalog |
-| P10 | UI migration | F3 | Godot Control plus embedded Python; no production GDScript or new WebView ownership | Keep the old UI client |
-| P11 | Audio and desktop devices | F3 | Semantic cues; headless touches no device | Disable the adapter |
-| P12 | Tooling | F1–F3 as applicable | Offline replay and presentation tests; no dual online authority | Continue the old toolchain |
-| P13 | Local play and desktop release | F2–F3 | Local/remote share one Rust path; desktop-only closure | Return to remote-only or the old client |
-| P14 | Default switch and retirement | F1–P13 complete | Two release cycles and a usable rollback package | Restore the previous release; prohibit partial deletion |
+| [F1](../openspec/changes/archive/2026-09-21-rust-runtime-foundation/proposal.md) | Rust domain, protocol, storage contracts, and numerical kernels | P7 Go | Replay/oracle agreement with Go; no second online writer | Keep the Go production path |
+| [F2](../openspec/changes/rust-authoritative-server/proposal.md) | Rust authoritative server | [F1](../openspec/changes/archive/2026-09-21-rust-runtime-foundation/proposal.md) | Deterministic replay, save migration, failure-path parity, shared Memory/TCP semantics | Keep Go authority; never dual-write |
+| [F3](../openspec/changes/rust-client-core/proposal.md) | Rust client-core and typed Godot bridge | F1; F2 protocol | Transcript parity, correction/replay, bounded bridge, repeated lifecycle | Keep the pilot Go core without adding features |
+| [P8](../openspec/changes/godot-production-terrain/proposal.md) | Production terrain presentation | [F3](../openspec/changes/rust-client-core/proposal.md) | Independent world feature against Rust semantic families | Disable the catalog entry; keep the old client default |
+| [P9](../openspec/changes/godot-complete-actors/proposal.md) | Complete entities and effects | [F3](../openspec/changes/rust-client-core/proposal.md) | Independently disableable actor features | Disable by catalog |
+| [P10](../openspec/changes/godot-ui-migration/proposal.md) | UI migration | [F3](../openspec/changes/rust-client-core/proposal.md) | Godot Control plus embedded Python; no production GDScript or new WebView ownership | Keep the old UI client |
+| [P11](../openspec/changes/godot-desktop-audio/proposal.md) | Audio and desktop devices | [F3](../openspec/changes/rust-client-core/proposal.md) | Semantic cues; headless touches no device | Disable the adapter |
+| [P12](../openspec/changes/godot-production-tooling/proposal.md) | Tooling | F1–F3 as applicable | Offline replay and presentation tests; no dual online authority | Continue the old toolchain |
+| [P13](../openspec/changes/godot-desktop-packaging/proposal.md) | Local play and desktop release | F2–F3 | Local/remote share one Rust path; desktop-only closure | Return to remote-only or the old client |
+| [P14](../openspec/changes/godot-default-client-switch/proposal.md) | Default switch and retirement | F1–P13 complete | Two release cycles and a usable rollback package | Restore the previous release; prohibit partial deletion |
+
+These links identify active planning changes, not completed implementations. F1 freezes and validates shared contracts; F2 establishes Rust authority; F3 consumes the accepted F2 protocol/session contract and must pass Rust-server integration before its own acceptance. Every prerequisite needs implementation-SHA, corpus coverage, non-empty executed tests, failure-path and rollback evidence in its ledger. OpenSpec artifact status and text searches cannot prove completion.
+
+P12 first supplies the capture/identity/coverage infrastructure needed by P8–P11, then accepts individual producer handoffs after their feature evidence exists. This ordering avoids a tooling/feature dependency cycle. A handoff changes only named semantic cases; remaining cases keep their old producer and regression checks. P13 qualifies exported desktop evidence; P14 consumes two complete release cycles and the rollback package before switching defaults or retiring transition components. The stable project root survives Bootstrap retirement; qualified native diagnostics must replace the migration Bootstrap first.
 
 No-Go rollback for the current pilot remains additive: removing `apps/mornlea-godot/`, both GDExtensions, the bundled Python runtime, the Go client-core ABI, and optional `scripts/godot` entry points restores pre-pilot production behavior. Pilot failure must not rewrite saves or default configuration. After a P7 Go, later features stay independently reversible without deleting the stable project root. Rust migration uses offline replay rather than a dual online writer; it never runs two online authorities.

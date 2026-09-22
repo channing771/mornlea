@@ -1,0 +1,12 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "block_id": 44,
+    "block_symbol": "WheatStage7ID",
+    "code": "unmineable_target",
+    "has_block_drop": true,
+    "mine_semantics": "undelivered_multi_drop",
+    "mineable": false
+  }
+}

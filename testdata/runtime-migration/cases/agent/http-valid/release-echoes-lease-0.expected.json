@@ -1,0 +1,15 @@
+{
+  "kind": "ok",
+  "category": "release_response",
+  "fields": {
+    "keys": [
+      "client_instance_id",
+      "contract_version",
+      "lease_id",
+      "namespace_id",
+      "released",
+      "request_id"
+    ],
+    "schema": "release_response"
+  }
+}

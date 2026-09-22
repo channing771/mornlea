@@ -1,0 +1,9 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "move-partial",
+  "sequence": 19,
+  "from": 0,
+  "to": 1,
+  "view": 0,
+  "single": false
+}

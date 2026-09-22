@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-enum",
+  "fields": {
+    "keyword": "enum",
+    "path": "$.reason",
+    "schema": "dialogue_terminal_failed_fact_node"
+  }
+}

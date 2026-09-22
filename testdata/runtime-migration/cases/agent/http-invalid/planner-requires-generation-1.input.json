@@ -1,0 +1,24 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/http-v1/golden/invalid.json",
+  "source_index": 1,
+  "fixture": "planner requires generation",
+  "document": "http-v1/schema.json",
+  "schema": "plan_request",
+  "value": {
+    "contract_version": "v1",
+    "request_id": "11111111-1111-4111-8111-111111111111",
+    "client_instance_id": "22222222-2222-4222-8222-222222222222",
+    "namespace_id": "33333333-3333-4333-8333-333333333333",
+    "lease_id": "44444444-4444-4444-8444-444444444444",
+    "run_id": "55555555-5555-4555-8555-555555555555",
+    "companion_id": "66666666-6666-4666-8666-666666666666",
+    "snapshot_id": "77777777-7777-4777-8777-777777777777",
+    "snapshot_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "deadline_unix_ms": 1800000000000,
+    "mcp_endpoint": "http://127.0.0.1:45831/mcp",
+    "mcp_capability": "test-capability-not-a-production-secret",
+    "instruction": "去石墙边"
+  }
+}

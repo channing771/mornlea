@@ -1,0 +1,8 @@
+{
+  "kind": "ok",
+  "category": "command-rejected",
+  "fields": {
+    "reason": "bucket_mismatch",
+    "sequence": "7"
+  }
+}

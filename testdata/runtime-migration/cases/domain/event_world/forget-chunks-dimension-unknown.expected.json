@@ -1,0 +1,18 @@
+{
+  "kind": "error",
+  "category": "invalid-enum",
+  "fields": {
+    "chunks": [
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        -2
+      ]
+    ],
+    "dimension": 2,
+    "rule": "forget_chunks.dimension"
+  }
+}

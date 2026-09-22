@@ -1,0 +1,13 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/invalid.json",
+  "source_index": 3,
+  "fixture": "terrain domain failure rejects wrong code",
+  "document": "mcp-v1/schema.json",
+  "schema": "query_terrain_result",
+  "value": {
+    "code": "unknown_block",
+    "hint": "wrong code for this tool"
+  }
+}

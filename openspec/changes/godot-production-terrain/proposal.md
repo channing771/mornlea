@@ -1,31 +1,32 @@
 ## Why
 
-The Godot pilot P7 review recorded Decision: GO in `docs/notes/godot-client-pilot-report.md`. P8 is a later, independently reviewable production step: productionize Godot near-ring terrain into replaceable world features with LOD, water, cutout, fog, lighting, and resource pools. This candidate change exists so later work does not restart inside the pilot change. It MUST NOT be implemented as part of `pilot-godot-client-migration`.
-
-## Target architecture gate
-
-This candidate is a terrain presentation slice, not permission to expand the pilot's Go client-core. It MUST wait for the Rust foundation stages F1–F3 in [`docs/architecture-target.md`](../../../../docs/architecture-target.md): Rust owns terrain data, bulk preparation, mesh scheduling, and semantic world publication; Godot's embedded Python owns the presentation feature and resource lifecycle. No new terrain rule, protocol, prediction, or numerical fallback may be added to Go, Python, or GDScript. The candidate remains independently reversible until a producer handoff is approved.
+The remote pilot proves only a small near-ring loop. Production terrain needs bounded full-distance presentation after Rust owns world interpretation and client preparation.
 
 ## What Changes
 
-- Authorize a later OpenSpec apply for P8 after the pilot remains additive.
-- Keep `apps/mornlea-godot/` as the stable project root.
-- Keep the existing Rust `mornlea` client as the default entry until an explicit later switch.
-- Productionize Godot near-ring terrain into replaceable world features with LOD, water, cutout, fog, lighting, and resource pools.
+- Consume Rust semantic terrain publications for near/far rings, LOD, water, cutout, fog, and lighting.
+- Add bounded Godot resource pools, reset cancellation, and independent catalog disable.
+- Produce reviewed world evidence before any per-case producer handoff.
+
+## Scope and prerequisites
+
+This is a planned, independently reversible production slice. Non-goals are new gameplay rules, expansion of Go real-time ownership, production GDScript, mobile/Web/console support, and unreviewed baseline updates. [F1](../rust-runtime-foundation/proposal.md), [F2](../rust-authoritative-server/proposal.md), and [F3](../rust-client-core/proposal.md) provide the Rust contracts, sole authoritative server, and typed client-core bridge it consumes; their accepted ledger evidence is required before dependent implementation. Python remains Godot's feature language. This planning revision authorizes no runtime cutover, tracked baseline update, or version bump.
+
+
 
 ## Capabilities
 
 ### New Capabilities
 
-- `godot-production-terrain`: Productionize Godot near-ring terrain into replaceable world features with LOD, water, cutout, fog, lighting, and resource pools.
+- `godot-production-terrain`: Present production terrain from Rust semantic publications with bounded resources and reversible visual ownership.
 
 ### Modified Capabilities
 
-None in this candidate. The live `godot-client-pilot` contract remains the pilot boundary until this change is independently applied.
+None. The current pilot contract remains scoped to the pilot; this new capability does not rewrite it.
 
 ## Impact
 
-- Compatibility: no protocol, save, or ABI change is authorized by creating this candidate.
-- Default startup remains the existing Rust client.
-- Rollback is to leave this change unimplemented; the pilot and old client stay as they are.
-- Performance and concurrency contracts are unchanged until implementation is separately applied.
+- Affected: `packages/engine/crates/mornlea_client_core`, existing `mornlea_engine` and `mornlea_godot`, `apps/mornlea-godot/features/world/`, and terrain evidence/harness files.
+- Compatibility: consume F1/F3 versions; no new network/save schema or legacy client ABI change is planned. An incompatible semantic-family extension requires explicit contract revision before implementation.
+- Concurrency/performance: bounded immutable publications and upload queues; thresholds remain unchanged and measurements are informational.
+- Rollback: disable this feature or restore its previous catalog entry and producer; existing default startup remains available.

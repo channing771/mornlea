@@ -1,0 +1,11 @@
+{
+  "kind": "ok",
+  "category": "query_terrain_result",
+  "fields": {
+    "keys": [
+      "code",
+      "hint"
+    ],
+    "schema": "query_terrain_result"
+  }
+}

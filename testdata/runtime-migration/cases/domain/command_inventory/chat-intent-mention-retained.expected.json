@@ -1,0 +1,8 @@
+{
+  "kind": "ok",
+  "category": "chat-intent",
+  "fields": {
+    "text": "@Bob 停止",
+    "wire": "0b40426f6220e5819ce6ada2"
+  }
+}

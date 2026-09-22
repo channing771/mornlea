@@ -182,9 +182,9 @@ func TestSamplerSaplingGrowthRollKAT(t *testing.T) {
 	}
 }
 
-// TestSamplerGrassSpreadRollKAT 把草蔓延判定钉在固定输入的实测输出上：锚点取
-// 自 `hash&3 == 0` 掩码与独立盐值链在基线上的实测值，任何搅拌顺序、掩码宽度
-// 或盐值漂移都会让这里的逐位比对变红。
+// `TestSamplerGrassSpreadRollKAT` pins measured outputs for fixed inputs. Its
+// anchors capture the `hash&3 == 0` mask and independent salt chain, so mixing
+// order, mask width, or salt drift changes the bitwise comparison.
 func TestSamplerGrassSpreadRollKAT(t *testing.T) {
 	sampler := Sampler{}
 	for _, v := range []struct {
@@ -236,9 +236,9 @@ func TestSamplerSaltConstants(t *testing.T) {
 	}
 }
 
-// TestSamplerSaltsPairwiseDistinct 钉住「全量盐值两两互异」：随机面当前共 14
-// 个域盐值（realm 家族 8 个 + entity 家族 3 个 + 投射物 ID 派生 1 个与掷骨者
-// 判定 2 个，另有非盐值的分母/概率常量）。
+// `TestSamplerSaltsPairwiseDistinct` pins all 14 salts as pairwise distinct:
+// eight realm streams, three entity streams, one projectile-ID derivation, and
+// two hostile-hurler decisions. Denominators and probability constants are not salts.
 // 各判定流只靠盐值区分身份，未来追加新盐值若与既有任何一个撞值，两条流会在
 // 相同 `(种子, tick, 维度, 位置)` 输入下系统性同源——这条两两互异断言让撞盐
 // 在新增当刻变红，无须等到分布级测试以统计方式偶然暴露。

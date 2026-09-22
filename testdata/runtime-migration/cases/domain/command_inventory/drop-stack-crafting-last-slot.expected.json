@@ -1,0 +1,16 @@
+{
+  "kind": "ok",
+  "category": "drop-stack",
+  "fields": {
+    "chunk_x": 0,
+    "chunk_z": 0,
+    "container_slot": 0,
+    "dimension": 0,
+    "generation": 0,
+    "kind": "furnace",
+    "sequence": "21",
+    "slot": 44,
+    "view": 1,
+    "wire": "1500000000000000000000000000000000000000000000000000012c"
+  }
+}

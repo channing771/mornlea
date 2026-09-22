@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "x-mornlea-rules",
+    "path": "$.visible_blocks[1].position",
+    "rule": "sorted_positions",
+    "schema": "list_affordances_result"
+  }
+}

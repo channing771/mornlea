@@ -118,8 +118,9 @@ func encodeClientPacketPayload(state protocol.State, packet protocol.ClientPacke
 			e.u8(message.View)
 			e.u8(message.From)
 		case protocol.DropStack:
-			// v45：u64 序号 + 18 字节容器引用 + u8 视图 + u8 统一索引，固定
-			// 28 字节；投放位置与整组数量由服务端从权威状态推导，wire 上不携带。
+			// v45 encodes a u64 sequence, an 18-byte container reference, a u8 view,
+			// and a u8 unified slot in 28 bytes. The server derives position and count;
+			// the wire carries neither.
 			e.u64(message.Sequence)
 			encodeContainerRef(&e, message.Container)
 			e.u8(message.View)
@@ -396,8 +397,8 @@ func decodeClientPacketPayload(state protocol.State, packetID uint32, payload []
 			}
 			packet = quick
 		case 21:
-			// v45：整组丢弃，固定 28 字节；域校验由本函数尾部的
-			// `ValidateDecodedClientWirePacket` 统一入口执行，此处只搬运字节。
+			// v45 uses 28 bytes for a full-stack drop. The shared
+			// `ValidateDecodedClientWirePacket` boundary validates the decoded fields.
 			var drop protocol.DropStack
 			drop.Sequence, err = d.u64()
 			if err == nil {

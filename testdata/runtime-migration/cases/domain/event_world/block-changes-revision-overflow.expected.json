@@ -1,0 +1,24 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "base_revision": "18446744073709551615",
+    "changes": [
+      {
+        "block": 2,
+        "position": [
+          0,
+          64,
+          0
+        ]
+      }
+    ],
+    "chunk": [
+      0,
+      0
+    ],
+    "dimension": 0,
+    "new_revision": "0",
+    "rule": "block_changes.revision_transition"
+  }
+}

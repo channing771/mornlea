@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "additionalProperties",
+    "path": "$.namespace_id",
+    "schema": "error_response"
+  }
+}

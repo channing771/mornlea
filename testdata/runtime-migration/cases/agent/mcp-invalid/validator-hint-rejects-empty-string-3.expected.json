@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "minLength",
+    "path": "$",
+    "schema": "validator_hint"
+  }
+}

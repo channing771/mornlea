@@ -1,0 +1,9 @@
+{
+  "category": "frame",
+  "fields": {
+    "packet_id": 0,
+    "payload": "2d",
+    "payload_len": 1
+  },
+  "kind": "ok"
+}

@@ -1,0 +1,7 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "combat-hit",
+  "server_tick": 7,
+  "damage": 1,
+  "target_kind": 2
+}

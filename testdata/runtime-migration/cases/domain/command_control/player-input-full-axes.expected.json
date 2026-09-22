@@ -1,0 +1,17 @@
+{
+  "kind": "ok",
+  "category": "player-input",
+  "fields": {
+    "eating": false,
+    "jump": false,
+    "mining": false,
+    "move_x": -128,
+    "move_z": 127,
+    "pitch": "40800000",
+    "sequence": "1",
+    "sneaking": false,
+    "sprinting": false,
+    "wire": "0100000000000000807f00000000000000804000000000",
+    "yaw": "00000000"
+  }
+}

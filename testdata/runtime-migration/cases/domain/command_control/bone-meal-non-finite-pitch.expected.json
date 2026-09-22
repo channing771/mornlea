@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "pitch": "ff800000",
+    "rule": "bone-meal.finite_rotation",
+    "sequence": "9",
+    "yaw": "00000000"
+  }
+}

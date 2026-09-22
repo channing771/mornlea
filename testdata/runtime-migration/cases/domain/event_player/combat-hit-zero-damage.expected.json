@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "damage": 0,
+    "rule": "combat_hit.damage_range",
+    "server_tick": "7",
+    "target_kind": 1
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "minItems",
+    "path": "$.plan.steps",
+    "schema": "validate_plan_input"
+  }
+}

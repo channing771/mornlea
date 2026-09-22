@@ -1,0 +1,12 @@
+{
+  "kind": "ok",
+  "category": "container-ref",
+  "fields": {
+    "chunk_x": -2,
+    "chunk_z": 5,
+    "dimension": 0,
+    "generation": 1,
+    "kind": "furnace",
+    "slot": 31
+  }
+}

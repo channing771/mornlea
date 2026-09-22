@@ -1,0 +1,16 @@
+{
+  "kind": "ok",
+  "category": "move-container",
+  "fields": {
+    "chunk_x": -2,
+    "chunk_z": 5,
+    "container_slot": 7,
+    "dimension": 0,
+    "from": 38,
+    "generation": 3,
+    "kind": "furnace",
+    "sequence": "9",
+    "to": 0,
+    "wire": "090000000000000000000000feffffff050000000007030000002600"
+  }
+}

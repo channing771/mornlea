@@ -1,0 +1,8 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "rule": "take_crafting_output.zero_sequence",
+    "sequence": "0"
+  }
+}

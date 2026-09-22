@@ -1,0 +1,14 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "player-input",
+  "sequence": 3,
+  "move_x": 0,
+  "move_z": 0,
+  "jump": false,
+  "yaw": "0",
+  "pitch": "0",
+  "mining": false,
+  "eating": true,
+  "sprinting": false,
+  "sneaking": false
+}

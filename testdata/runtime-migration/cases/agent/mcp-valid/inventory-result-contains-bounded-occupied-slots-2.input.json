@@ -1,0 +1,23 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/valid.json",
+  "source_index": 2,
+  "fixture": "inventory result contains bounded occupied slots",
+  "document": "mcp-v1/schema.json",
+  "schema": "inspect_inventory_result",
+  "value": {
+    "slots": [
+      {
+        "slot": 0,
+        "item": "stone",
+        "count": 64
+      },
+      {
+        "slot": 4,
+        "item": "chest",
+        "count": 1
+      }
+    ]
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/valid.json",
+  "source_index": 2,
+  "fixture": "validator accepted result echoes digest and canonical plan",
+  "document": "mcp-v1/schema.json",
+  "schema": "validate_plan_result",
+  "value": {
+    "accepted": true,
+    "snapshot_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "plan": {
+      "summary": "采一块石头",
+      "steps": [
+        {
+          "kind": "mine",
+          "x": 8,
+          "y": 63,
+          "z": -2
+        }
+      ]
+    }
+  }
+}

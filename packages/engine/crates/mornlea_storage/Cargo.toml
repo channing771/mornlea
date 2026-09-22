@@ -1,0 +1,20 @@
+[package]
+name = "mornlea_storage"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+mornlea_domain = { path = "../mornlea_domain" }
+# The save.chunk envelope is a zstd frame carrying an xxhash-64 content
+# checksum, so the codec needs a real encoder and decoder rather than a
+# decode-only crate. This crate is the only place that compression dependency
+# is allowed.
+zstd = "0.13"
+
+[dev-dependencies]
+serde_json = "=1.0.151"
+sha2 = "0.10"

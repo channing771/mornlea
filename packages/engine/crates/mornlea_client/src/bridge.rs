@@ -174,7 +174,7 @@ fn valid_game_action(event: &serde_json::Value) -> bool {
                 _ => return false,
             }
         }
-        // 拖出面板整组丢弃:单端寻址与槽位点击同界,无按键语义字段。
+        // A whole-stack drop uses the slot-click bounds for its single endpoint and has no button fields.
         Some("drop") => {
             keys.push("area");
             match event.get("area").and_then(|v| v.as_str()) {
@@ -185,7 +185,7 @@ fn valid_game_action(event: &serde_json::Value) -> bool {
                 _ => return false,
             }
         }
-        // 拖拽落槽:源/目标双端各自独立校验区域与索引域,跨区域合法。
+        // A drag move validates both endpoint areas and indices independently and permits cross-area moves.
         Some("dragMove") => {
             keys.push("fromArea");
             keys.push("fromIndex");
@@ -488,12 +488,12 @@ mod game_action_tests {
             serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"inventory","index":0,"shift":false}),
             serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"inventory","index":0,"button":"middle","shift":false}),
             serde_json::json!({"type":"game-action","token":1,"op":"slot","area":"inventory","index":0,"button":"left","shift":"false"}),
-            // 拖出丢弃:缺字段、未知区域与区域索引越界。
+            // Drops reject missing fields, unknown areas, and area-specific index overflow.
             serde_json::json!({"type":"game-action","token":1,"op":"drop","area":"inventory"}),
             serde_json::json!({"type":"game-action","token":1,"op":"drop","area":"output","index":0}),
             serde_json::json!({"type":"game-action","token":1,"op":"drop","area":"inventory","index":36}),
             serde_json::json!({"type":"game-action","token":1,"op":"drop","area":"inventory","index":0,"button":"left"}),
-            // 拖拽落槽:任一端缺失、未知区域与按区域分派的索引越界。
+            // Drag moves reject missing endpoints, unknown areas, and area-specific index overflow.
             serde_json::json!({"type":"game-action","token":1,"op":"dragMove","fromArea":"inventory","fromIndex":0,"toArea":"inventory"}),
             serde_json::json!({"type":"game-action","token":1,"op":"dragMove","fromArea":"output","fromIndex":0,"toArea":"inventory","toIndex":0}),
             serde_json::json!({"type":"game-action","token":1,"op":"dragMove","fromArea":"inventory","fromIndex":36,"toArea":"inventory","toIndex":0}),
@@ -508,7 +508,7 @@ mod game_action_tests {
 
     /// 槽位事件的按键语义字段（`button`/`shift`）必须能过原生桥浅校验进入
     /// 队列——否则分堆/快捷搬运的合法载荷会在半路被吞，Go 永远收不到。
-    /// 拖拽两操作（`drop`/`dragMove`）同理:拒绝即整批信封作废。
+    /// The same rule covers `drop` and `dragMove`: rejection invalidates the entire envelope.
     #[test]
     fn slot_pointer_semantics_enter_queue() {
         for event in [

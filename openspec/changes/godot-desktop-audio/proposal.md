@@ -1,31 +1,32 @@
 ## Why
 
-The Godot pilot P7 review recorded Decision: GO in `docs/notes/godot-client-pilot-report.md`. P11 is a later, independently reviewable production step: enable desktop audio cues and optional controller input through replaceable platform adapters. This candidate change exists so later work does not restart inside the pilot change. It MUST NOT be implemented as part of `pilot-godot-client-migration`.
-
-## Target architecture gate
-
-Rust client-core emits validated semantic cue and input events; Godot's embedded Python and desktop APIs own audio playback, device adaptation, and resource lifecycle. This candidate MUST wait for F3, must not add Go client-core behavior, and must not place authoritative or numerical logic in Python or GDScript. The standalone Python Agent remains unrelated and cannot be imported. See [`docs/architecture-target.md`](../../../../docs/architecture-target.md).
+The pilot intentionally excludes desktop audio and complete device handling. Production adapters need confirmed cue identity, focus behavior, and no-device guarantees over Rust semantic events.
 
 ## What Changes
 
-- Authorize a later OpenSpec apply for P11 after the pilot remains additive.
-- Keep `apps/mornlea-godot/` as the stable project root.
-- Keep the existing Rust `mornlea` client as the default entry until an explicit later switch.
-- Enable desktop audio cues and optional controller input through replaceable platform adapters.
+- Add bounded cue playback and desktop input adaptation using embedded Python and Godot device APIs.
+- Preserve confirmed-event de-duplication, no-device execution, and repeated teardown.
+- Qualify only implemented desktop targets and retain independent adapter disable.
+
+## Scope and prerequisites
+
+This is a planned, independently reversible production slice. Non-goals are new gameplay rules, expansion of Go real-time ownership, production GDScript, mobile/Web/console support, and unreviewed baseline updates. [F1](../rust-runtime-foundation/proposal.md), [F2](../rust-authoritative-server/proposal.md), and [F3](../rust-client-core/proposal.md) provide the Rust contracts, sole authoritative server, and typed client-core bridge it consumes; their accepted ledger evidence is required before dependent implementation. Python remains Godot's feature language. This planning revision authorizes no runtime cutover, tracked baseline update, or version bump.
+
+
 
 ## Capabilities
 
 ### New Capabilities
 
-- `godot-desktop-audio`: Enable desktop audio cues and optional controller input through replaceable platform adapters.
+- `godot-desktop-audio`: Provide bounded desktop audio and device adapters with confirmed cue identity and device-free automated execution.
 
 ### Modified Capabilities
 
-None in this candidate. The live `godot-client-pilot` contract remains the pilot boundary until this change is independently applied.
+None. The current pilot contract remains scoped to the pilot; this new capability does not rewrite it.
 
 ## Impact
 
-- Compatibility: no protocol, save, or ABI change is authorized by creating this candidate.
-- Default startup remains the existing Rust client.
-- Rollback is to leave this change unimplemented; the pilot and old client stay as they are.
-- Performance and concurrency contracts are unchanged until implementation is separately applied.
+- Affected: Rust client-core/bridge event families, `apps/mornlea-godot/platform/desktop/`, audio resources, input/audio harnesses.
+- Compatibility: no protocol/save schema or legacy ABI change is planned; current cue identities and configuration semantics are characterized offline.
+- Concurrency/performance: bounded queues; no main-thread device retry or unbounded callback loop.
+- Rollback: disable audio/controller adapters; silent playback preserves confirmed gameplay and other presentation.

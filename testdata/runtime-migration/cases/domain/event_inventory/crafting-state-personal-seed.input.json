@@ -1,0 +1,60 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "crafting-state",
+  "hotbar": [],
+  "backpack": [],
+  "size": 2,
+  "slots": [
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    }
+  ],
+  "output": {
+    "item": 0,
+    "count": 0,
+    "durability": 0
+  },
+  "items": []
+}

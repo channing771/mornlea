@@ -1,0 +1,14 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/invalid.json",
+  "source_index": 3,
+  "fixture": "visible block domain failure rejects unknown field",
+  "document": "mcp-v1/schema.json",
+  "schema": "find_visible_blocks_result",
+  "value": {
+    "code": "unknown_block",
+    "hint": "unknown name",
+    "retry": false
+  }
+}

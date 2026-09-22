@@ -1,0 +1,20 @@
+{
+  "kind": "error",
+  "category": "invalid-identity",
+  "fields": {
+    "dimension": 0,
+    "display_name": "Alice",
+    "look": {
+      "pitch": "be800000",
+      "yaw": "3f000000"
+    },
+    "player_id": "00112233445536778899aabbccddeeff",
+    "position": [
+      "3fc00000",
+      "42800000",
+      "c0500000"
+    ],
+    "rule": "remote_player_spawn.player_id.version_v4",
+    "server_tick": "41"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/valid.json",
+  "source_index": 2,
+  "fixture": "terrain outside projection is a normal domain failure",
+  "document": "mcp-v1/schema.json",
+  "schema": "query_terrain_result",
+  "value": {
+    "code": "out_of_bounds",
+    "hint": "position is outside the frozen projection"
+  }
+}

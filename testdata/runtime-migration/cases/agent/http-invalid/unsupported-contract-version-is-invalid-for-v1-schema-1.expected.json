@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "unsupported-version",
+  "fields": {
+    "keyword": "const",
+    "path": "$.contract_version",
+    "schema": "acquire_request"
+  }
+}

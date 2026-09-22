@@ -16,12 +16,12 @@ describe("游戏桥拒绝边界", () => {
         { type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, shift: false },
         { type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, button: "middle", shift: false },
         { type: "game-action", token: 1, op: "slot", area: "inventory", index: 0, button: "left", shift: "false" },
-        // 拖出丢弃：缺字段、未知区域与索引越界。
+        // Drops reject missing fields, unknown areas, and out-of-range indices.
         { type: "game-action", token: 1, op: "drop", area: "inventory" },
         { type: "game-action", token: 1, op: "drop", area: "output", index: 0 },
         { type: "game-action", token: 1, op: "drop", area: "inventory", index: 36 },
         { type: "game-action", token: 1, op: "drop", area: "inventory", index: 0, button: "left" },
-        // 拖拽落槽：任一端缺失、未知区域与按区域分派的索引越界。
+        // Drag moves reject missing endpoints, unknown areas, and area-specific index overflow.
         { type: "game-action", token: 1, op: "dragMove", fromArea: "inventory", fromIndex: 0, toArea: "inventory" },
         { type: "game-action", token: 1, op: "dragMove", fromArea: "output", fromIndex: 0, toArea: "inventory", toIndex: 0 },
         { type: "game-action", token: 1, op: "dragMove", fromArea: "inventory", fromIndex: 36, toArea: "inventory", toIndex: 0 },

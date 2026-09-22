@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "type",
+    "path": "$.operation_id",
+    "rule": "null",
+    "schema": "memory_state_zero"
+  }
+}

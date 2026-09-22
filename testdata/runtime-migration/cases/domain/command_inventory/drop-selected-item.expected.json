@@ -1,0 +1,8 @@
+{
+  "kind": "ok",
+  "category": "drop-selected-item",
+  "fields": {
+    "sequence": "11",
+    "wire": "0b00000000000000"
+  }
+}

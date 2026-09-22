@@ -1,0 +1,7 @@
+{
+  "kind": "ok",
+  "category": "remote-player-despawn",
+  "fields": {
+    "player_id": "00112233445546778899aabbccddeefe"
+  }
+}

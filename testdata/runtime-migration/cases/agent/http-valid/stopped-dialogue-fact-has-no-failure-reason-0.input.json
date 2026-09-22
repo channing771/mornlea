@@ -1,0 +1,14 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/http-v1/golden/valid.json",
+  "source_index": 0,
+  "fixture": "stopped dialogue fact has no failure reason",
+  "document": "http-v1/schema.json",
+  "schema": "dialogue_terminal_fact_node",
+  "value": {
+    "kind": "terminal",
+    "state": "stopped",
+    "reason": "none"
+  }
+}

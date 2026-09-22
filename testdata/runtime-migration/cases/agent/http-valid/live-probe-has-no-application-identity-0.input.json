@@ -1,0 +1,12 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/http-v1/golden/valid.json",
+  "source_index": 0,
+  "fixture": "live probe has no application identity",
+  "document": "http-v1/schema.json",
+  "schema": "live_response",
+  "value": {
+    "status": "live"
+  }
+}

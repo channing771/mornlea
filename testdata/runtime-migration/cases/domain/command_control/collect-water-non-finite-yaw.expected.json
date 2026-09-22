@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "pitch": "00000000",
+    "rule": "collect-water.finite_rotation",
+    "sequence": "10",
+    "yaw": "7f800000"
+  }
+}

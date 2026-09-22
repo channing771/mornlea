@@ -1,0 +1,38 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "rule": "remote_player_states.strictly_increasing_ids",
+    "server_tick": "7",
+    "states": [
+      {
+        "dimension": 0,
+        "look": {
+          "pitch": "3f400000",
+          "yaw": "bf800000"
+        },
+        "player_id": "00112233445546778899aabbccddeeff",
+        "position": [
+          "40200000",
+          "42820000",
+          "c0880000"
+        ],
+        "reset": false
+      },
+      {
+        "dimension": 0,
+        "look": {
+          "pitch": "3f400000",
+          "yaw": "bf800000"
+        },
+        "player_id": "00112233445546778899aabbccddeefe",
+        "position": [
+          "40200000",
+          "42820000",
+          "c0880000"
+        ],
+        "reset": false
+      }
+    ]
+  }
+}

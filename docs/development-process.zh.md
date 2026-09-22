@@ -1,6 +1,6 @@
 ---
 doc_id: development-process
-doc_revision: 2026-09-19.1
+doc_revision: 2026-09-20.1
 language: zh-CN
 counterpart: development-process.md
 ---
@@ -13,6 +13,14 @@ counterpart: development-process.md
 OpenAI 原生编排采用隔离优先策略。经验证的 OpenAI ChatGPT/Codex 控制器拥有选择直接、委派或混合执行的授权。对于有边界的仓库探索、多文件推理、专项评审，或会让主上下文长期保留大量过程信息的任务，若主上下文保留成本高于交接成本，应优先使用全新代理；只有微小、与控制器当前编辑紧密耦合，或完成成本低于描述和集成成本的工作才留在控制器中。不得仅为并行速度或填满空闲槽位而委派，最多同时运行三个子代理。每个代理只接收简洁任务 brief 和全新或最小上下文。非 OpenAI 或未知提供方必须严格使用 `subagent-driven-development`，包括独立实现和评审。所有模式都必须保留范围、所有权、测试优先、验证和授权边界。
 
 每轮实现结束时，仅将稳定、可跨任务复用的架构约定提升到 `mornlea-architecture`；否则记录 `Architecture skill: no change`。
+
+## 主 Agent 负责设计与 worker 任务计划
+
+每次新建或实质修订多步骤实施计划时，主 Agent 使用已安装的 Superpowers `brainstorming` 和 `writing-plans`。派发前由主 Agent 确定架构与功能行为：模块归属、精确接口和字段类型、数据流、生命周期与状态转换、兼容性、失败策略、算法及资源上限。可以委派事实收集和评审，但设计裁决与集成责任始终属于主 Agent。迁移应保持可观察行为，同时由主 Agent 设计目标语言的数据归属与数据结构。
+
+每个 worker 必须收到精确的可编辑/只读文件、前置接口、具体实现步骤及代码或算法示例、带预期结果的失败测试、验证命令、禁止范围，以及回滚和集成责任。主 Agent 检查需求覆盖、类型一致性和无环依赖图。宽泛里程碑必须拆成实际可独立验收的节点；缺少设计决策的任务不能标为可开工。worker 发现契约冲突时向主 Agent 提供证据，不自行发明策略。
+
+设计写入活跃 OpenSpec 的 `design.md`，状态只保存在 `tasks.md`，详细任务说明链接到同一 change 内。遵循项目 `mornlea-implementation-orchestration` skill 的开工检查表。发现并读取本机安装的 Superpowers，不固化某台机器的缓存路径。已有用户授权和更高优先级运行规则始终有效；规划 skill 不得额外制造审批流程、对外通信或自动启动运行时实现。
 
 ## 阶段
 

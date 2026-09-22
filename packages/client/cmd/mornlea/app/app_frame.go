@@ -181,14 +181,14 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		a.hudPush.Mark()
 	}
 
-	// 菜单全景：主菜单/设置页相位返回惰性构建的全景管线并推进一帧装配
-	// （游戏相位 nil，与引入全景前逐字节一致）。装配未收敛（pending>0）
-	// 时揭示门同样返回 nil——本帧走与构建失败降级相同的「仅天空清屏」
-	// 出口，不提交任何全景几何，自转时钟也只在揭示帧推进（见渲染后的
-	// tick 自增）；收敛后的首帧从 tick 0 揭示，收敛段帧序列与既有「全景
-	// 背景确定性」契约逐帧一致（spec webview-menu-ui「全景在装配收敛前
-	// 不揭示」）。全景接管本帧的世界内容与相机；游戏调度器与远环带在其
-	// 间完全冻结，呈现状态互不渗透。
+	// Menu and settings phases return the lazily built vista and advance one
+	// assembly frame; the game phase returns nil exactly as it did before the
+	// vista existed. While `pending` is nonzero, the reveal gate also returns nil,
+	// using the same sky-only fallback as a build failure and submitting no vista
+	// geometry. The rotation clock advances only after a revealed render, so the
+	// first converged frame reveals tick zero and preserves deterministic vista
+	// frames. The vista owns this frame's world content and camera; game meshing
+	// and the far ring stay frozen so presentation state cannot leak between them.
 	vista := a.revealMenuVista(workMax)
 	activeScheduler := a.scheduler
 	a.scheduler.BeginFrame()

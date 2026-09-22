@@ -1,0 +1,11 @@
+{
+  "kind": "ok",
+  "category": "drop-id",
+  "fields": {
+    "chunk_x": 3,
+    "chunk_z": -4,
+    "dimension": 0,
+    "generation": 4294967295,
+    "slot": 0
+  }
+}

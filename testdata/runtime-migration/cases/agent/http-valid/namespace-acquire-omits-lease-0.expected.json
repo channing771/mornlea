@@ -1,0 +1,13 @@
+{
+  "kind": "ok",
+  "category": "acquire_request",
+  "fields": {
+    "keys": [
+      "client_instance_id",
+      "contract_version",
+      "namespace_id",
+      "request_id"
+    ],
+    "schema": "acquire_request"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "command-rejected",
+  "sequence": 7,
+  "reason": "hotbar_full"
+}

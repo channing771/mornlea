@@ -1,6 +1,6 @@
 ---
 doc_id: visual-verification-guide
-doc_revision: 2026-09-15.1
+doc_revision: 2026-09-20.1
 language: en
 counterpart: visual-verification.zh.md
 ---
@@ -44,9 +44,21 @@ Subset updates still run the existing LOD on/off near-ring control before writin
 
 ## Godot pilot evidence
 
-The Godot pilot writes identity-complete captures to `build/visual/godot-pilot/<run-id>/`. `godot-visual-evidence` produces captures, and `godot-visual-compare` produces comparison/diff reports. Neither command may write `testdata/visual-golden/`, create a renderer-specific tracked class, or relax thresholds.
+The Godot pilot writes identity-complete captures to `build/visual/godot-pilot/<run-id>/`. `godot-visual-evidence` produces captures, and `godot-visual-compare` produces a classification report. The current pilot comparator does not generate diff images or invoke the identity validator itself; validate the selected run separately and retain supplementary diffs when meaningful. Neither command may write `testdata/visual-golden/`, create a renderer-specific tracked class, or relax thresholds.
 
 A future producer handoff must name the existing UI/world/motion identity, old and new producers, expected differences, affected files, review evidence, and rollback. Tracked evidence changes only after explicit approval and human inspection through the existing update discipline.
+
+## Rust/Godot migration evidence
+
+The [target architecture](../architecture-target.md) separates semantic correctness from presentation. F1/F2 own wire/save/replay and authoritative outcomes; F3 owns client mirror, prediction and typed frame parity. Godot/Python owns bounded presentation and scene lifecycle. PNGs and GIFs do not prove server authority, save correctness or audio playback.
+
+The current pilot mapping file is `testdata/godot-pilot/visual-semantics.json`. Missing mappings are reported as not covered, and command success is not full parity. Use an explicit run directory with `scripts/godot/visual-compare.sh --run-dir <run-directory>` to avoid its implicit latest-run selection or capture. Identity validation uses `python3 scripts/godot/visual_evidence_contract.py --identity <run-directory>/identity.json --run-dir <run-directory>`. Record actual environment, fixture/input, camera, viewport, assets, readiness and output identity before claiming comparability.
+
+The current capture script uses the macOS display driver with Metal. Godot's dummy `--headless` renderer does not produce GPU pixel evidence; an environment without qualified non-foreground capture must report pixels unavailable while continuing semantic and lifecycle checks. Automated testing must not launch or focus a foreground game window.
+
+The active [production tooling plan](../../openspec/changes/godot-production-tooling/proposal.md) will introduce strict required-case coverage and reviewed producer ownership. Those production gates are not implemented by the pilot commands. Tooling infrastructure can precede feature handoffs; each feature then transfers only reviewed cases in `ui/`, `world/` or `motion/`. Until transfer, its existing producer remains canonical. Same-producer pixel regression and cross-producer semantic review are separate evidence: renderer differences require review, not weakened thresholds.
+
+The [visual-baseline skill](../../.codex/skills/visual-baseline/SKILL.md) and its handoff reference specify the working process, metadata and rollback record. Planning changes do not alter current goldens or their owners.
 
 ## Historical re-attribution note
 
@@ -56,4 +68,6 @@ The natural-short-grass rollout originally re-attributed a 24-scene world baseli
 
 Run an update only for an intentional visual change after opening and approving every affected candidate. Never overwrite baselines merely to clear a red comparison. Inspect actual and diff artifacts first, then decide whether implementation or evidence is wrong. Unaffected evidence must remain byte-identical, and thresholds change only through a separately measured and approved contract change.
 
-Visual capture is a local GPU/manual-review workflow. It is not part of ordinary Go tests or CI.
+The current world/UI pixel baseline workflow is local GPU/manual review and is not part of ordinary Go tests or required CI. Planned production capture gates must qualify each supported environment before promotion.
+
+`make visual-update SCENES=...` still generates the registered passive GIFs, and `VISUAL_OUT` does not redirect tracked baseline writes. For a narrower authorized update, stage the exact source in isolation, retain all capture guards, publish only reviewed authorized files, and verify unrelated baseline hashes against the pre-task state.

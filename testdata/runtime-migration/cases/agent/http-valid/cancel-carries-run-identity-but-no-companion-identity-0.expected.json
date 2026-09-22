@@ -1,0 +1,15 @@
+{
+  "kind": "ok",
+  "category": "cancel_request",
+  "fields": {
+    "keys": [
+      "client_instance_id",
+      "contract_version",
+      "lease_id",
+      "namespace_id",
+      "request_id",
+      "run_id"
+    ],
+    "schema": "cancel_request"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "maxItems",
+    "path": "$.chunk_revisions",
+    "schema": "get_planning_context_result"
+  }
+}

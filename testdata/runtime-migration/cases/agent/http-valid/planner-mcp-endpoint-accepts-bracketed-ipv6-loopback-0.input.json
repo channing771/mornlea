@@ -1,0 +1,10 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/http-v1/golden/valid.json",
+  "source_index": 0,
+  "fixture": "planner MCP endpoint accepts bracketed IPv6 loopback",
+  "document": "http-v1/schema.json",
+  "schema": "mcp_endpoint",
+  "value": "http://[::1]:45831/mcp"
+}

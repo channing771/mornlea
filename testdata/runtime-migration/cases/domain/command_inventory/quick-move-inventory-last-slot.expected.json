@@ -1,0 +1,16 @@
+{
+  "kind": "ok",
+  "category": "quick-move",
+  "fields": {
+    "chunk_x": 0,
+    "chunk_z": 0,
+    "container_slot": 0,
+    "dimension": 0,
+    "generation": 0,
+    "kind": "furnace",
+    "sequence": "20",
+    "slot": 35,
+    "view": 0,
+    "wire": "14000000000000000000000000000000000000000000000000000023"
+  }
+}

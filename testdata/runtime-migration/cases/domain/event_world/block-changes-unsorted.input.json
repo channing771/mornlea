@@ -1,0 +1,29 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "block-changes",
+  "dimension": 0,
+  "chunk": [
+    -1,
+    -1
+  ],
+  "base_revision": 1,
+  "new_revision": 2,
+  "changes": [
+    {
+      "position": [
+        -1,
+        -64,
+        -1
+      ],
+      "block": 2
+    },
+    {
+      "position": [
+        -16,
+        -64,
+        -16
+      ],
+      "block": 3
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "move-container",
+  "sequence": 9,
+  "from": 0,
+  "to": 1,
+  "kind": "crate",
+  "chunk_x": 0,
+  "chunk_z": 0,
+  "container_slot": 0,
+  "generation": 7
+}

@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "oneOf",
+    "path": "$.fact_node",
+    "schema": "dialogue_terminal_request"
+  }
+}

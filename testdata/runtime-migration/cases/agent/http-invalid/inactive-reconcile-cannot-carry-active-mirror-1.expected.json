@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "type",
+    "path": "$.mirror",
+    "rule": "null",
+    "schema": "memory_reconcile_inactive_request"
+  }
+}

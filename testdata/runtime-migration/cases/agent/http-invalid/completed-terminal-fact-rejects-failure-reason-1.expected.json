@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "const",
+    "path": "$.reason",
+    "schema": "dialogue_terminal_nonfailed_fact_node"
+  }
+}

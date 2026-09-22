@@ -1,0 +1,13 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/http-v1/golden/valid.json",
+  "source_index": 0,
+  "fixture": "place progress dialogue fact is nonterminal",
+  "document": "http-v1/schema.json",
+  "schema": "dialogue_nonterminal_fact_node",
+  "value": {
+    "kind": "progress",
+    "step_kind": "place"
+  }
+}

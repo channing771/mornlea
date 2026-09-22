@@ -1,0 +1,38 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/invalid.json",
+  "source_index": 3,
+  "fixture": "planning context cannot expose persona",
+  "document": "mcp-v1/schema.json",
+  "schema": "get_planning_context_result",
+  "value": {
+    "snapshot_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "instruction": "向前走",
+    "issuer": {
+      "player_id": "99999999-9999-4999-8999-999999999999",
+      "position": [
+        4.5,
+        64,
+        -1.5
+      ],
+      "yaw": 90,
+      "pitch": 0,
+      "look_hit": null
+    },
+    "companion": {
+      "companion_id": "66666666-6666-4666-8666-666666666666",
+      "position": [
+        5.5,
+        64,
+        -1.5
+      ],
+      "yaw": 0,
+      "pitch": 0,
+      "task_status": "规划中"
+    },
+    "world_time_ticks": 1200,
+    "chunk_revisions": [],
+    "persona": "must-not-enter-planner"
+  }
+}

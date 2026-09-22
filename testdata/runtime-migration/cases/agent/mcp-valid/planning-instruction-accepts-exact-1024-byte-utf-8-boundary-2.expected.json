@@ -1,0 +1,8 @@
+{
+  "kind": "ok",
+  "category": "instruction_text",
+  "fields": {
+    "keys": [],
+    "schema": "instruction_text"
+  }
+}

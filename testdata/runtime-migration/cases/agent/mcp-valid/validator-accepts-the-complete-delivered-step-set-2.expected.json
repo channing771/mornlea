@@ -1,0 +1,10 @@
+{
+  "kind": "ok",
+  "category": "validate_plan_input",
+  "fields": {
+    "keys": [
+      "plan"
+    ],
+    "schema": "validate_plan_input"
+  }
+}

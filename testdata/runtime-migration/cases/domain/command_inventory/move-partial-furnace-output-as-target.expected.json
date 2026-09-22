@@ -1,0 +1,18 @@
+{
+  "kind": "ok",
+  "category": "move-partial",
+  "fields": {
+    "chunk_x": -2,
+    "chunk_z": 5,
+    "container_slot": 7,
+    "dimension": 0,
+    "from": 0,
+    "generation": 3,
+    "kind": "furnace",
+    "sequence": "19",
+    "single": true,
+    "to": 38,
+    "view": 2,
+    "wire": "130000000000000000000000feffffff0500000000070300000002002601"
+  }
+}

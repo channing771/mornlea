@@ -1,0 +1,34 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "furnace-state",
+  "hotbar": [],
+  "backpack": [],
+  "slots": [],
+  "output": {
+    "item": 7,
+    "count": 1,
+    "durability": 0
+  },
+  "container": {
+    "kind": 0,
+    "chunk": [
+      2,
+      -3
+    ],
+    "slot": 31,
+    "generation": 9
+  },
+  "input": {
+    "item": 27,
+    "count": 1,
+    "durability": 0
+  },
+  "fuel": {
+    "item": 5,
+    "count": 1,
+    "durability": 0
+  },
+  "progress_ticks": 199,
+  "burn_ticks": 1600,
+  "items": []
+}

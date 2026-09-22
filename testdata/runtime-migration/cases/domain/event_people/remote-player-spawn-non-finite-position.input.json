@@ -1,0 +1,17 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "remote-player-spawn",
+  "player_id": "00112233445546778899aabbccddeeff",
+  "display_name": "Alice",
+  "server_tick": 41,
+  "dimension": 0,
+  "position": [
+    "NaN",
+    "0",
+    "0"
+  ],
+  "yaw": "0.5",
+  "pitch": "-0.25",
+  "players": [],
+  "states": []
+}

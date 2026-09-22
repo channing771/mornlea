@@ -1,0 +1,10 @@
+{
+  "kind": "ok",
+  "category": "item-table",
+  "fields": {
+    "item": 23,
+    "registered": true,
+    "smelting_product": true,
+    "stack_limit": 64
+  }
+}

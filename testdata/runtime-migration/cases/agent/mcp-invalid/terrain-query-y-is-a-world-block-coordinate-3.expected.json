@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "maximum",
+    "path": "$.positions[0].y",
+    "schema": "query_terrain_input"
+  }
+}

@@ -39,6 +39,7 @@ Use this skill as a compact decision aid, not as a replacement for repository tr
 - The final Godot feature language is Python. Production GDScript is not a target feature language; the current pure-GDScript Bootstrap is a migration-only openability and diagnostics exception and must not receive gameplay behavior.
 - Python in Godot consumes typed semantic values and submits typed intent. It must not parse protocol bytes, own authoritative mirrors, implement prediction, read saves, call raw ABIs, or perform unbounded numerical work. The independent Agent Python service has separate process, dependencies, and contracts.
 - Rust migration work uses offline replay/differential comparison against Go; Go and Rust must never be concurrent online authorities.
+- Foundation contract crates split as `mornlea_domain` (identifiers, values, semantic input/event records), `mornlea_protocol` (framing and packet codecs), and `mornlea_storage` (save records and migrations). Protocol and storage may depend on domain. None of the three may depend on `mornlea_engine`, `mornlea_client`, `mornlea_godot`, or an online authority in production; each crate's `runtime_contract` target enforces that direction.
 
 ## Godot client direction during migration
 
@@ -61,6 +62,7 @@ Use this skill as a compact decision aid, not as a replacement for repository tr
 
 ## Visual and documentation direction
 
+- Keep runtime correctness evidence with its target owner: Rust replay/contract tests establish authority and client-state parity; Godot/Python tests establish presentation behavior. Rendered evidence cannot substitute for either. For per-case producer handoffs, capture identity, reviewed updates and rollback, use the project `visual-baseline` skill and the canonical `visual-verification` contract.
 - Route visual evidence by observable semantics, not renderer identity: UI fixtures use `ui/`, stable headless world frames use `world/`, and cross-tick human-review GIFs use `motion/` without automated pixel comparison.
 - Godot pilot captures are untracked evidence under `build/visual/godot-pilot/`. A tracked producer changes only through an approved handoff; never add a renderer-specific golden class or relax thresholds to make a pilot pass. Godot 4.7 `--display-driver headless` / `--headless` only exposes the dummy renderer, so pixel capture and GPU timestamps require a no-focus desktop display driver rather than dummy textures.
 - English is canonical for active/new OpenSpec prose, plans, machine governance, and all new or substantively rewritten source comments. Existing non-English comments and unchanged canonical-spec prose are grandfathered behind non-growth inventories. New or substantively revised explanatory and architectural documents use English `*.md` plus synchronized Chinese `*.zh.md`; unchanged pre-policy documents may remain manifest-classified `legacy` until revision.

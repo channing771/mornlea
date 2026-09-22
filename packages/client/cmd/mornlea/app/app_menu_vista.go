@@ -55,10 +55,11 @@ const (
 	// 192 block，覆盖固定相机俯仰下的近景地形带，更远处由远环壳接手。
 	menuVistaRadiusChunks = 12
 	// menuVistaChunksPerFrame 是每帧生成的区块预算：惰性/后台生成在帧循环
-	// 内分摊，不阻塞渲染热路径。收敛前不揭示部分装配的几何（见
-	// `revealMenuVista` 的揭示门），等待期只有装配泵与天空清屏，把预算从
-	// 4 提高到 12 以缩短等待窗口；生成顺序仍是确定性环序，收敛后的内容
-	// 与逐帧相机轨迹不因泵速改变。
+	// Work is amortized across frames without blocking the render hot path. The
+	// `revealMenuVista` gate hides partially assembled geometry, leaving only the
+	// assembly pump and sky clear while waiting. Raising the budget from 4 to 12
+	// shortens that window; generation order remains deterministic, and neither
+	// converged content nor the per-frame camera path depends on pump speed.
 	menuVistaChunksPerFrame = 12
 	// menuVistaCameraLift 是相机在地面之上的固定抬升（block）。取值让画面
 	// 同容纳天空与地形，且相机保持在远环壳带最高点之下（与 far-horizon 场景
@@ -219,8 +220,9 @@ func (v *menuVista) pump(workMax int) {
 		}
 		v.mesher.MarkDirty(update.Dirty...)
 	}
-	// 全景中心恒为锚点区块，烘焙就绪堆按到锚点的近处优先排序；排序只影响
-	// 先后，收敛内容与揭示后的画面不变（上传顺序不影响图像）。
+	// The vista center is always the anchor chunk, so the bake-ready heap orders
+	// nearest to that anchor. Ordering affects only timing; converged content and
+	// revealed pixels are unchanged because upload order does not affect the image.
 	v.mesher.Schedule(v.mirror, client.ViewCenter{
 		Dimension: core.Overworld,
 		Chunk:     v.center,
@@ -280,7 +282,7 @@ func (v *menuVista) release() {
 	v.lodScheduler.Close()
 }
 
-// menuVistaForFrame 返回本帧所属的全景管线（或 nil 表示无全景可推进）：
+// `menuVistaForFrame` returns this frame's vista pipeline, or nil when no vista can advance:
 // 只有主菜单与设置页相位参与；首次进入惰性构建，相位切换把自转 tick 归零，
 // 保证每次进入菜单的第一帧姿态一致。装配失败只降级为暗色天空背景（记
 // 警告日志），绝不阻塞菜单可用性。
@@ -288,8 +290,9 @@ func (a *Application) menuVistaForFrame() *menuVista {
 	if a.menu.phase != MenuPhaseMenu && a.menu.phase != MenuPhaseSettings {
 		return nil
 	}
-	// 渲染器与材质目录只约束首次构建：已构建的全景必然持有这两者，检查
-	// 收进构建分支后，注入既有全景的帧入口测试无需 GPU。
+	// The renderer and material registry constrain only initial construction. An
+	// existing vista already owns both, so keeping the checks in the construction
+	// branch lets frame-entry tests inject a vista without a GPU.
 	if a.menuVista == nil {
 		if a.renderer == nil || a.registry == nil {
 			return nil
@@ -314,14 +317,14 @@ func (a *Application) menuVistaForFrame() *menuVista {
 	return a.menuVista
 }
 
-// revealMenuVista 推进一帧全景装配并应用揭示门：装配泵先照常推进（等待期
-// 持续出图，收敛才有可能），随后以 `pending` 归零——capture 收敛判据
-// （`MenuVistaPending`）的同一口径——判定本帧是否揭示完整全景。返回 nil
-// 表示本帧不提交任何全景几何：游戏相位、构建失败与未收敛共用这一返回
-// 值，调用方走与构建失败降级相同的「仅天空清屏」出口，相机自转时钟
-// 随之冻结（`RenderFrame` 只对非 nil 返回值在渲染后推进 tick），收敛后
-// 的首帧因此从 tick 0 开始揭示，收敛段帧序列与既有「全景背景确定性」
-// 契约逐帧一致。收敛后的泵是确定性空转（预算照常重置），揭示持续打开。
+// `revealMenuVista` advances one assembly frame and applies the reveal gate. The
+// pump runs first so waiting can make progress, then zero `pending` work—the same
+// criterion exposed by `MenuVistaPending` for capture—allows the complete vista
+// to appear. Nil means this frame submits no vista geometry; game phase, build
+// failure, and incomplete assembly all use the same sky-only fallback. Because
+// `RenderFrame` advances the rotation tick only after a non-nil result, the first
+// converged frame reveals tick zero and preserves deterministic vista frames.
+// Once converged, pumping is a deterministic no-op and the reveal stays open.
 func (a *Application) revealMenuVista(workMax int) *menuVista {
 	vista := a.menuVistaForFrame()
 	if vista == nil {

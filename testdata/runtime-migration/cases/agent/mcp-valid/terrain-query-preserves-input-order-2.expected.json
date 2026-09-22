@@ -1,0 +1,10 @@
+{
+  "kind": "ok",
+  "category": "query_terrain_input",
+  "fields": {
+    "keys": [
+      "positions"
+    ],
+    "schema": "query_terrain_input"
+  }
+}

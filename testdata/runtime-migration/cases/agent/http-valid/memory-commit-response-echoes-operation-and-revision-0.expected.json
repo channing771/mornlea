@@ -1,0 +1,18 @@
+{
+  "kind": "ok",
+  "category": "memory_commit_response",
+  "fields": {
+    "keys": [
+      "client_instance_id",
+      "committed_revision",
+      "companion_id",
+      "contract_version",
+      "lease_id",
+      "memory_epoch",
+      "namespace_id",
+      "operation_id",
+      "request_id"
+    ],
+    "schema": "memory_commit_response"
+  }
+}

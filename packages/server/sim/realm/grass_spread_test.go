@@ -1,15 +1,14 @@
 package realm
 
-// grass_spread_test.go：随机 tick 的草蔓延。覆盖 spec「表面泥土经随机 tick
-// 蔓延为草」的五组 Scenario：邻草蔓延并登记进当 tick 批次、无草邻/被实体方块
-// 覆盖不蔓延、唯一草邻在未就绪区块不蔓延且不同步加载、双引擎重放逐位一致、
-// 读取预算有界。
+// grass_spread_test.go covers five random-tick grass-spread scenarios: adjacent
+// grass converts surface dirt and records a batch; no neighbor or solid cover
+// blocks spread; unready cross-chunk grass neither spreads nor loads; independent
+// engines replay bitwise; and read work remains bounded.
 //
-// 用例一律驱动生产入口 `AdvanceCrops`（读取预算的每格钉子例外：它直接调用
-// 分发器 `advanceCropCell` 以隔离单格的读取增量），抽样与骰子都在真实路径上。
-// 测试只负责把夹具与 tick 选到「该观察的那一步」——`grassSpreadHittingTicks`
-// 用包内同一条抽样与判定函数找出「抽样命中且骰子等于期望」的 tick，因此不复制
-// 任何生产逻辑。
+// Tests drive production `AdvanceCrops`; the per-cell read-budget pin calls
+// `advanceCropCell` only to isolate incremental reads. Sampling and rolls stay on
+// the real path. `grassSpreadHittingTicks` selects observable ticks through the
+// same package-local pure functions without reproducing production logic.
 
 import (
 	"slices"
@@ -20,15 +19,15 @@ import (
 	"github.com/channing771/mornlea/packages/shared/world"
 )
 
-// grassSpreadSeed 是蔓延用例的世界种子：固定值让命中 tick 能在用例内现算。
+// `grassSpreadSeed` makes selected hit ticks reproducible within each test.
 const grassSpreadSeed = int64(0x6ea11c0ffee)
 
-// grassSpreadSamples 是蔓延用例的每区段抽样数：取 64（tunables 上限）让单格
-// 每 tick 被抽中的概率足够高，用例在几十个 tick 内就能观察到蔓延。
+// `grassSpreadSamples` uses the tunable maximum of 64 so a cell is selected
+// often enough for tests to observe spread within tens of ticks.
 const grassSpreadSamples = 64
 
-// grassSpreadConfig 返回蔓延用例的环境参数快照：零值气候（晴、春分黎明）下
-// 积雪兜底不写任何方块，夹具里唯一的随机 tick 写入者就是草蔓延。
+// `grassSpreadConfig` uses clear spring-dawn climate so the snow fallback does
+// not write and grass spread is the fixture's only random-tick writer.
 func grassSpreadConfig() EnvironmentConfig {
 	return EnvironmentConfig{
 		RandomTicksPerSection: grassSpreadSamples,
@@ -36,11 +35,11 @@ func grassSpreadConfig() EnvironmentConfig {
 	}
 }
 
-// grassSpreadKey 是蔓延用例唯一的活动区块键。
+// `grassSpreadKey` is the fixture's only active chunk.
 var grassSpreadKey = core.ChunkKey{Dimension: core.Overworld}
 
-// stepGrassSpread 以给定 tick 驱动一次随机 tick 阶段并提交事务，返回本次提交
-// 的区块变更批次；未产生任何写入时批次为空。
+// `stepGrassSpread` drives and commits one random-tick phase, returning its
+// published chunk batches or an empty slice when nothing changed.
 func stepGrassSpread(t *testing.T, state *State, tick uint64) []ChunkChangeBatch {
 	t.Helper()
 	state.SetEnvironmentTick(tick, grassSpreadSeed, grassSpreadConfig())
@@ -49,10 +48,10 @@ func stepGrassSpread(t *testing.T, state *State, tick uint64) []ChunkChangeBatch
 	return mutation.Commit()
 }
 
-// grassSpreadHittingTicks 预解前 count 个「随机 tick 抽样命中 position 且
-// `sampler.GrassSpreadRoll` 等于 hit」的 tick。与 `AdvanceCrops` 用同一条
-// `sampler.SampleCells` 纯函数（同种子、同区块键、同区段、同样本数），推进这些
-// tick 必然命中夹具格——「不发生」类用例因此能证明格子被看过、只是被规则拒绝。
+// `grassSpreadHittingTicks` finds the first `count` ticks where sampling selects
+// `position` and `sampler.GrassSpreadRoll` equals `hit`. It uses the same pure
+// sampler inputs as `AdvanceCrops`, so negative tests prove the cell was examined
+// and rejected by the intended rule.
 func grassSpreadHittingTicks(t *testing.T, position core.BlockPos, hit bool, count int) []uint64 {
 	t.Helper()
 	key := core.ChunkKey{Dimension: core.Overworld, Pos: position.Chunk()}
@@ -80,11 +79,11 @@ func grassSpreadHittingTicks(t *testing.T, position core.BlockPos, hit bool, cou
 	return nil
 }
 
-// —— Scenario：邻接草的表面泥土最终成草 ——
+// Scenario: surface dirt next to grass becomes grass.
 
-// TestGrassSpreadConvertsSurfaceDirtNextToGrass 覆盖正面路径：抽样与骰子同时
-// 命中的邻草表面泥土被写成草方块，变更登记进当 tick 的区块变更批次（流式同步
-// 的载体）、受影响区块 revision 恰好推进一次，草源格保持草。
+// `TestGrassSpreadConvertsSurfaceDirtNextToGrass` proves a sampled roll hit beside
+// grass writes the dirt, publishes it in the tick batch, advances revision once,
+// and preserves the source grass.
 func TestGrassSpreadConvertsSurfaceDirtNextToGrass(t *testing.T) {
 	dirt := core.BlockPos{X: 8, Y: 1, Z: 8}
 	source := core.BlockPos{X: 9, Y: 1, Z: 8}
@@ -116,10 +115,9 @@ func TestGrassSpreadConvertsSurfaceDirtNextToGrass(t *testing.T) {
 	}
 }
 
-// TestGrassSpreadUnderSnowCover 钉住「上方为季节雪覆盖仍蔓延」的设计裁决：雪层
-// 方块 ID 以 `snow_cover.go` 现行为准——`advanceSnowCover` 只在白名单地表上方写
-// `core.SnowLayer1BlockID..SnowLayer4BlockID`（四档雪层，见 `core.IsSnowLayer`），
-// 雪落在地表之上、视作非实体遮蔽；蔓延写的是地表格自身，上方雪层原样保留。
+// `TestGrassSpreadUnderSnowCover` pins seasonal snow as non-solid cover. The
+// four `core.IsSnowLayer` levels remain above the surface while spread changes
+// only the dirt block beneath them.
 func TestGrassSpreadUnderSnowCover(t *testing.T) {
 	dirt := core.BlockPos{X: 8, Y: 1, Z: 8}
 	source := core.BlockPos{X: 9, Y: 1, Z: 8}
@@ -145,17 +143,16 @@ func TestGrassSpreadUnderSnowCover(t *testing.T) {
 	}
 }
 
-// —— Scenario：无草邻或被实体方块覆盖不蔓延 ——
+// Scenario: no grass neighbor or solid cover prevents spread.
 
-// TestGrassSpreadSkipsWithoutGrassNeighborOrUnderSolidCover 覆盖两条拒绝路径：
-// 四个水平邻格均为泥土（无草源）、上方被实体方块（石头）覆盖。两种夹具都推进
-// 「抽样命中且骰子命中」的 tick——被看过且只被规则拒绝，泥土与遮挡物保持原样、
-// 零写入。
+// `TestGrassSpreadSkipsWithoutGrassNeighborOrUnderSolidCover` selects real sample
+// and roll hits for two rejection paths: four dirt neighbors without a source,
+// and stone overhead. Both preserve their blocks and publish no writes.
 func TestGrassSpreadSkipsWithoutGrassNeighborOrUnderSolidCover(t *testing.T) {
 	isolated := core.BlockPos{X: 4, Y: 1, Z: 4}
 	noNeighbor := map[core.BlockPos]core.BlockID{isolated: core.DirtID}
-	// 四邻全泥土：与「四邻全空气」同样无草，用泥土排除「邻居是空气才不查」的
-	// 退化解。
+	// Four dirt neighbors exclude a degenerate implementation that inspects only
+	// air neighbors while still providing no grass source.
 	for _, offset := range []core.BlockPos{{X: 1}, {X: -1}, {Z: 1}, {Z: -1}} {
 		noNeighbor[core.BlockPos{
 			X: isolated.X + offset.X, Y: isolated.Y, Z: isolated.Z + offset.Z,
@@ -193,13 +190,12 @@ func TestGrassSpreadSkipsWithoutGrassNeighborOrUnderSolidCover(t *testing.T) {
 	}
 }
 
-// —— Scenario：邻接 chunk 未就绪不蔓延且不同步加载 ——
+// Scenario: an unready adjacent chunk neither spreads nor loads synchronously.
 
-// TestGrassSpreadCrossChunkUnreadyNeighborAborts 覆盖跨区块就绪闸门：泥土贴着
-// 区块东界、唯一的草源位于邻区块 (1,0) 的边沿对面。邻区块未生成（Absent）时，
-// 骰子命中的 tick 也不蔓延——邻格经 `dimension.BlockAt` 读作未就绪并按「无草邻」
-// 处理，且不得触发任何同步加载（邻区块保持未就绪）；把邻区块生成好、放入草源
-// 后，同一 tick 重试即蔓延，写入只落在泥土所在区块。
+// `TestGrassSpreadCrossChunkUnreadyNeighborAborts` places dirt at the east edge
+// and its only grass source across the boundary. While that chunk is absent, a
+// roll hit must neither spread nor load it. Once ready, retrying the same tick
+// spreads and records only the dirt's chunk.
 func TestGrassSpreadCrossChunkUnreadyNeighborAborts(t *testing.T) {
 	dirt := core.BlockPos{X: core.SectionSize - 1, Y: 1, Z: 8}
 	neighborChunk := core.ChunkPos{X: 1}
@@ -237,22 +233,22 @@ func TestGrassSpreadCrossChunkUnreadyNeighborAborts(t *testing.T) {
 	}
 }
 
-// —— Scenario：重放一致 ——
+// Scenario: replay is deterministic.
 
-// grassSpreadChange 是重放比对的最小单元：位置加写入后的方块。
+// `grassSpreadChange` is the minimal replay observation: position and new block.
 type grassSpreadChange struct {
 	position core.BlockPos
 	block    core.BlockID
 }
 
-// TestGrassSpreadReplaysIdentically 覆盖「相同世界种子与初始世界、两个独立引擎
-// 推进相同 tick 数」：逐 tick 的变更序列与最终区块 Hash 逐位一致，且世界确实
-// 发生了蔓延（否则两个什么都没发生的世界也会一致，断言恒真）。
+// `TestGrassSpreadReplaysIdentically` compares per-tick changes and final chunk
+// hashes from two independent engines with identical initial state. It also
+// requires actual spread so an inert pair cannot pass vacuously.
 func TestGrassSpreadReplaysIdentically(t *testing.T) {
 	const ticks = 256
 	blocks := func() map[core.BlockPos]core.BlockID {
-		// y=1 整层泥土，只留对角两粒草种：大片泥土在 256 tick 内逐步被两处
-		// 草源吃掉，逐 tick 序列里才有实质内容可比。
+		// Fill y=1 with dirt except for two diagonal grass seeds, producing enough
+		// changes over 256 ticks for a meaningful replay comparison.
 		layer := make(map[core.BlockPos]core.BlockID, core.SectionSize*core.SectionSize)
 		for x := range int32(core.SectionSize) {
 			for z := range int32(core.SectionSize) {
@@ -300,11 +296,11 @@ func TestGrassSpreadReplaysIdentically(t *testing.T) {
 	}
 }
 
-// —— Scenario：读预算有界 ——
+// Scenario: read work is bounded.
 
-// TestGrassSpreadReadsNeighborsOnlyOnRollHit 锁定读取预算的诚实性：骰子未命中
-// 时一个邻居也不读（自读之外只剩积雪兜底的上方 1 次，共 2 次）；骰子命中且蔓延
-// 完成时恰好读上方 1 加水平 4（草源放在扫描序最后一位，逼出全部 4 次邻居读取）。
+// `TestGrassSpreadReadsNeighborsOnlyOnRollHit` proves a miss reads no neighbors,
+// leaving the cell plus snow-overhead baseline of two reads. A successful hit
+// reads overhead and all four neighbors by placing grass last in probe order.
 func TestGrassSpreadReadsNeighborsOnlyOnRollHit(t *testing.T) {
 	dirt := core.BlockPos{X: 8, Y: 1, Z: 8}
 	source := core.BlockPos{X: 8, Y: 1, Z: 7}
@@ -332,11 +328,10 @@ func TestGrassSpreadReadsNeighborsOnlyOnRollHit(t *testing.T) {
 	}
 }
 
-// TestGrassSpreadReadBudgetBoundedByExaminedCells 覆盖「读次数不超过被检查格数
-// 的固定小常数倍」：两个同构世界（一个纯草皮表面、一个 y=1 整层泥土加一格草
-// 源）推进同一 tick，读取都不得超过考察格数的 7 倍——上界组成是「格自身 1 +
-// 蔓延判定至多 5（上方 1 加水平 4）+ 积雪兜底的上方 1」，且泥土世界的读数必须
-// 严格大于草皮世界，证明邻居读取确实计入了预算。
+// `TestGrassSpreadReadBudgetBoundedByExaminedCells` compares an all-grass surface
+// with a dirt layer containing one grass source. Reads stay within seven per
+// examined cell: one self read, up to five spread reads, and one snow fallback.
+// The dirt world must read more, proving neighbor reads count toward the budget.
 func TestGrassSpreadReadBudgetBoundedByExaminedCells(t *testing.T) {
 	barren, _ := wildPlantFixture(nil)
 	spreadableBlocks := make(map[core.BlockPos]core.BlockID, core.SectionSize*core.SectionSize)
@@ -348,8 +343,8 @@ func TestGrassSpreadReadBudgetBoundedByExaminedCells(t *testing.T) {
 	spreadableBlocks[core.BlockPos{X: 0, Y: 1, Z: 0}] = core.GrassID
 	spreadable, _ := wildPlantFixture(spreadableBlocks)
 
-	// 选一个「泥土格被抽样且骰子命中」的 tick：两个世界推进同一 tick，泥土
-	// 世界的邻居读取必然被计入。
+	// Select a tick where a dirt cell is sampled and its roll hits, then advance
+	// both worlds at that same tick so neighbor reads must be counted.
 	probe := core.BlockPos{X: 8, Y: 1, Z: 8}
 	tick := grassSpreadHittingTicks(t, probe, true, 1)[0]
 	stepGrassSpread(t, barren, tick)
@@ -375,11 +370,10 @@ func TestGrassSpreadReadBudgetBoundedByExaminedCells(t *testing.T) {
 	}
 }
 
-// —— 判定流的确定性与独立性 ——
+// Scenario: the decision stream is deterministic and independent.
 
-// TestGrassSpreadRollIsIndependentAndDeterministic 钉住蔓延骰子的三条性质：
-// 可复现、命中率约 1/4、盐值与既有各条判定流两两不同（否则「同一格既通过蔓延
-// 判定又通过生长/退化判定」会成为系统性的同源偏差）。
+// `TestGrassSpreadRollIsIndependentAndDeterministic` pins replay, an approximate
+// 1/4 hit rate, and a salt distinct from every existing decision stream.
 func TestGrassSpreadRollIsIndependentAndDeterministic(t *testing.T) {
 	position := core.BlockPos{X: 8, Y: 1, Z: 8}
 	first := sampler.GrassSpreadRoll(grassSpreadSeed, 12345, core.Overworld, position)
@@ -407,7 +401,7 @@ func TestGrassSpreadRollIsIndependentAndDeterministic(t *testing.T) {
 	if total != 8192*4 {
 		t.Fatalf("样本数=%d，想要 %d", total, 8192*4)
 	}
-	// 理论命中率 1/4；区间取 1/8..1/2，足以否掉恒真、恒假与 1/8 等错误掩码。
+	// The broad 1/8..1/2 interval rejects constant outputs and common wrong masks.
 	if hits < total/8 || hits > total/2 {
 		t.Fatalf("1/4 判定命中 %d/%d，比例异常", hits, total)
 	}

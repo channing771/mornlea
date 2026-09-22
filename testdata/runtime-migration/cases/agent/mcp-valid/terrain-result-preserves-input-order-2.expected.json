@@ -1,0 +1,10 @@
+{
+  "kind": "ok",
+  "category": "query_terrain_result",
+  "fields": {
+    "keys": [
+      "terrain"
+    ],
+    "schema": "query_terrain_result"
+  }
+}

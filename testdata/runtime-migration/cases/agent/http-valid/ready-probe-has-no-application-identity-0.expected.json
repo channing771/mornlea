@@ -1,0 +1,10 @@
+{
+  "kind": "ok",
+  "category": "ready_response",
+  "fields": {
+    "keys": [
+      "status"
+    ],
+    "schema": "ready_response"
+  }
+}

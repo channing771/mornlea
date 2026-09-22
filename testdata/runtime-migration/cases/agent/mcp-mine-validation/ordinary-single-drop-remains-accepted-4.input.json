@@ -1,0 +1,11 @@
+{
+  "case_kind": "mine",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/mine-validation.json",
+  "source_index": 4,
+  "fixture": "ordinary single drop remains accepted",
+  "document": "mcp-v1/schema.json",
+  "block_symbol": "StoneID",
+  "block_id": 2,
+  "mine_semantics": "single_drop"
+}

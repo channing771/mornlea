@@ -1,0 +1,19 @@
+{
+  "kind": "ok",
+  "category": "memory_commit_request",
+  "fields": {
+    "keys": [
+      "base_revision",
+      "client_instance_id",
+      "companion_id",
+      "contract_version",
+      "lease_id",
+      "memory_epoch",
+      "namespace_id",
+      "operation_id",
+      "request_id",
+      "summary"
+    ],
+    "schema": "memory_commit_request"
+  }
+}

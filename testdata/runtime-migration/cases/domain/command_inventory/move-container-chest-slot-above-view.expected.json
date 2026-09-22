@@ -1,0 +1,16 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "chunk_x": 4,
+    "chunk_z": -9,
+    "container_slot": 5,
+    "dimension": 0,
+    "from": 63,
+    "generation": 11,
+    "kind": "chest",
+    "rule": "move_container.slot_range",
+    "sequence": "9",
+    "to": 0
+  }
+}

@@ -1,6 +1,6 @@
 ---
 doc_id: development-process
-doc_revision: 2026-09-19.1
+doc_revision: 2026-09-20.1
 language: en
 counterpart: development-process.zh.md
 ---
@@ -13,6 +13,14 @@ This is the single current process document. `docs/feature-backlog.md`, role car
 OpenAI-native orchestration is isolation-first. A verified OpenAI ChatGPT/Codex controller has standing authorization to choose direct, delegated, or mixed execution. Prefer a fresh agent for bounded repository discovery, multi-file reasoning, specialized review, or a long trace whose main-context retention cost exceeds its handoff cost; keep only tiny, tightly coupled, or cheaper-to-finish work in the controller. Parallel speed and unused capacity are not sufficient by themselves, and no more than three subagents may run concurrently. Give each worker a concise task brief and a fresh or minimal context. A non-OpenAI or unknown-provider controller must use strict `subagent-driven-development`, including independent implementation and review. Every mode preserves scope, ownership, test-first work, validation, and authorization boundaries.
 
 At the end of each implementation round, promote only stable cross-task architectural conventions into `mornlea-architecture`; otherwise record `Architecture skill: no change`.
+
+## Controller-owned design and worker plans
+
+For every new or materially revised multi-step implementation plan, the main Agent uses the installed Superpowers `brainstorming` and `writing-plans` skills. It settles architectural and functional behavior before dispatch: module ownership, exact APIs and field types, data flow, lifecycle/state transitions, compatibility, failure policy, algorithms and resource limits. Evidence gathering and review may be delegated; design decisions and integration remain with the main Agent. A migration preserves observable behavior while the main Agent designs the target-language ownership and data structures.
+
+Each worker receives exact editable/read-only files, predecessor interfaces, concrete implementation steps and code/algorithm examples, failing tests with expected results, validation commands, exclusions and rollback/integration ownership. The main Agent checks requirement coverage, matching types and an acyclic dependency graph. Broad milestones must become actual independently testable nodes; a missing design decision is not a ready task. A worker returns a contract discrepancy to the main Agent rather than inventing a policy.
+
+Keep decisions in the active OpenSpec `design.md`, status in `tasks.md`, and detailed linked briefs inside that change. Follow the readiness checklist in the project `mornlea-implementation-orchestration` skill. Discover the installed Superpowers resources instead of pinning machine-specific cache paths. Existing user authorization and higher-priority runtime rules control; planning skills do not create another approval flow, external communication or automatic runtime implementation.
 
 ## Stages
 

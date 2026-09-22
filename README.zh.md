@@ -10,7 +10,7 @@ counterpart: README.md
   <img src="https://img.shields.io/badge/Go-1.26-00ADD8" alt="Go 1.26">
   <img src="https://img.shields.io/badge/Rust-1.97.1-f74c00" alt="Rust 1.97.1">
   <img src="https://img.shields.io/badge/platform-macOS-9cf" alt="macOS">
-  <img src="https://img.shields.io/badge/protocol-v44-blue" alt="协议 v44">
+  <img src="https://img.shields.io/badge/protocol-v45-blue" alt="协议 v45">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
   <img src="https://github.com/channing771/mornlea/actions/workflows/ci.yml/badge.svg" alt="CI">
   <img src="https://img.shields.io/github/v/release/channing771/mornlea" alt="release">
@@ -24,7 +24,7 @@ counterpart: README.md
 
 项目仍处于早期开发阶段，已具备程序化地形、GPU 地形渲染、玩家移动与碰撞、客户端预测、方块挖掘与放置、内置权威服务端、世界持久化、有界二进制协议、TCP 直连与无图形专用服务端。已交付里程碑与版本演进见[实现进度](docs/notes/progress.md)。
 
-当前基线使用协议 v44、玩家 schema v9、区块 schema v9、世界 metadata v6、`companions.ai` schema v5、`hostile_mobs` v2、engine ABI v11、client ABI v19 与 benchmark scenario v23。生存循环包含水、农业（小麦/马铃薯/胡萝卜与骨粉催熟；第一颗小麦种子来自采除自然生成的短草，按确定性 `1/8` 判定掉落，新玩家初始背包为空、不附带任何种子）、饥饿/饱和/疲劳、氧气、三级剑与玩家/夜行者统一权威近战、工具耐久、木门、火把、工作台合成、床与睡眠（夜间入睡、全员跳夜与个人重生点）、夜间夜行者（追逐近战、白昼灼烧、跨重启持久）与疾跑；最多四名具名伙伴由 Go 服务端权威执行 `go_to`/`follow`/`mine`/`place` 队列任务，独立 Python 伙伴 Agent 只运行有界规划、台词与 compact memory。普通本地客户端从进程内 WebView（React）主菜单进入游戏，提供设置页与游戏内暂停覆盖层（单机暂停会冻结权威 tick，远程会话不宣称暂停）。完整玩法细节见[玩家手册](docs/notes/gameplay.md)。
+当前基线使用协议 v45、玩家 schema v9、区块 schema v9、世界 metadata v6、`companions.ai` schema v5、`hostile_mobs` v2、engine ABI v11、client ABI v19 与 benchmark scenario v23。生存循环包含水、农业（小麦/马铃薯/胡萝卜与骨粉催熟；第一颗小麦种子来自采除自然生成的短草，按确定性 `1/8` 判定掉落，新玩家初始背包为空、不附带任何种子）、饥饿/饱和/疲劳、氧气、三级剑与玩家/夜行者统一权威近战、工具耐久、木门、火把、工作台合成、床与睡眠（夜间入睡、全员跳夜与个人重生点）、夜间夜行者（追逐近战、白昼灼烧、跨重启持久）与疾跑；最多四名具名伙伴由 Go 服务端权威执行 `go_to`/`follow`/`mine`/`place` 队列任务，独立 Python 伙伴 Agent 只运行有界规划、台词与 compact memory。普通本地客户端从进程内 WebView（React）主菜单进入游戏，提供设置页与游戏内暂停覆盖层（单机暂停会冻结权威 tick，远程会话不宣称暂停）。完整玩法细节见[玩家手册](docs/notes/gameplay.md)。
 
 独立实体存档当前使用 `hostile_mobs` schema v2 与 `passive_mobs` schema v1。
 

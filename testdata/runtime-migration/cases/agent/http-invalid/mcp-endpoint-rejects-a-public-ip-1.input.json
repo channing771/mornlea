@@ -1,0 +1,10 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/http-v1/golden/invalid.json",
+  "source_index": 1,
+  "fixture": "MCP endpoint rejects a public IP",
+  "document": "http-v1/schema.json",
+  "schema": "mcp_endpoint",
+  "value": "http://203.0.113.10:45831/mcp"
+}

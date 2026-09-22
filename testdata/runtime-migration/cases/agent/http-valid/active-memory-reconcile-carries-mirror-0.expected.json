@@ -1,0 +1,19 @@
+{
+  "kind": "ok",
+  "category": "memory_reconcile_request",
+  "fields": {
+    "keys": [
+      "active",
+      "client_instance_id",
+      "companion_id",
+      "contract_version",
+      "lease_id",
+      "memory_epoch",
+      "mirror",
+      "namespace_id",
+      "request_id",
+      "tombstone_operation_id"
+    ],
+    "schema": "memory_reconcile_request"
+  }
+}

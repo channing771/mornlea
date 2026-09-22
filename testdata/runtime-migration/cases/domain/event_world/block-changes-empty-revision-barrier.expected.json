@@ -1,0 +1,14 @@
+{
+  "kind": "ok",
+  "category": "block-changes",
+  "fields": {
+    "base_revision": "5",
+    "changes": [],
+    "chunk": [
+      0,
+      0
+    ],
+    "dimension": 0,
+    "new_revision": "6"
+  }
+}

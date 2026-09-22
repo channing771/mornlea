@@ -1,0 +1,39 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/valid.json",
+  "source_index": 2,
+  "fixture": "validator accepts the complete delivered step set",
+  "document": "mcp-v1/schema.json",
+  "schema": "validate_plan_input",
+  "value": {
+    "plan": {
+      "summary": "走近目标，采集石头，放置箱子并跟随玩家",
+      "steps": [
+        {
+          "kind": "go_to",
+          "x": 8,
+          "y": 64,
+          "z": -2
+        },
+        {
+          "kind": "mine",
+          "x": 8,
+          "y": 63,
+          "z": -2
+        },
+        {
+          "kind": "place",
+          "x": 7,
+          "y": 64,
+          "z": -2,
+          "block": "chest"
+        },
+        {
+          "kind": "follow",
+          "player_id": "99999999-9999-4999-8999-999999999999"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "case_kind": "mine",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/mine-validation.json",
+  "source_index": 4,
+  "fixture": "farmland remains rejected despite a registered drop",
+  "document": "mcp-v1/schema.json",
+  "block_symbol": "FarmlandDryID",
+  "block_id": 35,
+  "mine_semantics": "forbidden_farming"
+}

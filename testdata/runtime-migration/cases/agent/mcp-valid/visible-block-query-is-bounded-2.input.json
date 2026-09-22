@@ -1,0 +1,16 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/valid.json",
+  "source_index": 2,
+  "fixture": "visible block query is bounded",
+  "document": "mcp-v1/schema.json",
+  "schema": "find_visible_blocks_input",
+  "value": {
+    "block_names": [
+      "chest",
+      "furnace"
+    ],
+    "limit": 64
+  }
+}

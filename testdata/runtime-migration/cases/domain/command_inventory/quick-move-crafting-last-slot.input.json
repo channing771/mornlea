@@ -1,0 +1,7 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "quick-move",
+  "sequence": 20,
+  "from": 44,
+  "view": 1
+}

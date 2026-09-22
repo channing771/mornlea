@@ -1,0 +1,11 @@
+{
+  "kind": "ok",
+  "category": "mine",
+  "fields": {
+    "block_id": 9,
+    "block_symbol": "FurnaceID",
+    "has_block_drop": true,
+    "mine_semantics": "container_batch",
+    "mineable": true
+  }
+}

@@ -197,9 +197,10 @@ func translateClientMessage(
 			Slot:      message.From,
 		}, true
 	case network.DropStack:
-		// 面板拖出丢弃与分堆命令族共用同一寻址面（视图域 + 统一索引 + 容器
-		// 引用），但语义是「整组取出脚下投放」：投放位置与数量都由 sim 从权威
-		// 状态推导，这里只搬运寻址字段；Memory 与 TCP 共用这一入口。
+		// Panel-drop and stack-splitting commands share the same addressing surface:
+		// view domain, unified index, and container reference. The simulation derives
+		// the whole-stack amount and drop position from authority; this shared Memory
+		// and TCP ingress only carries the address fields.
 		view, ok := translateStackSplitView(message.View)
 		if !ok {
 			return contract.Command{}, false

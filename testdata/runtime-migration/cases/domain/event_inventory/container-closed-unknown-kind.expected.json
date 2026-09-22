@@ -1,0 +1,16 @@
+{
+  "kind": "error",
+  "category": "invalid-enum",
+  "fields": {
+    "container": {
+      "chunk": [
+        0,
+        0
+      ],
+      "generation": 3,
+      "kind": "unknown",
+      "slot": 0
+    },
+    "rule": "container_closed.ref_kind"
+  }
+}

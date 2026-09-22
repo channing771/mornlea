@@ -1,0 +1,12 @@
+{
+  "kind": "ok",
+  "category": "error_response",
+  "fields": {
+    "keys": [
+      "contract_version",
+      "error",
+      "request_id"
+    ],
+    "schema": "error_response"
+  }
+}

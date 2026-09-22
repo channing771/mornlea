@@ -1,0 +1,15 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/invalid.json",
+  "source_index": 3,
+  "fixture": "plan rejects unknown step kind",
+  "document": "mcp-v1/schema.json",
+  "schema": "go_to_step",
+  "value": {
+    "kind": "attack",
+    "x": 1,
+    "y": 64,
+    "z": 0
+  }
+}

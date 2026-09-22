@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "count": 0,
+    "durability": 0,
+    "item": 1,
+    "rule": "item_stack.count_range"
+  }
+}

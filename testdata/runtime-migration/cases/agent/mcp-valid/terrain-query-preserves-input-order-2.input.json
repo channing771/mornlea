@@ -1,0 +1,23 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/valid.json",
+  "source_index": 2,
+  "fixture": "terrain query preserves input order",
+  "document": "mcp-v1/schema.json",
+  "schema": "query_terrain_input",
+  "value": {
+    "positions": [
+      {
+        "x": 4,
+        "y": 64,
+        "z": -1
+      },
+      {
+        "x": 8,
+        "y": 64,
+        "z": -2
+      }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/invalid.json",
+  "source_index": 3,
+  "fixture": "step rejects explicit null exclusive field",
+  "document": "mcp-v1/schema.json",
+  "schema": "follow_step",
+  "value": {
+    "kind": "follow",
+    "player_id": "99999999-9999-4999-8999-999999999999",
+    "x": null
+  }
+}

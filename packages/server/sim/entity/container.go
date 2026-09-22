@@ -444,12 +444,12 @@ func setChestViewSlot(
 }
 
 // applyContainerMove 处理跨容器移动命令（整堆 `CommandMoveFurnaceStack`、
-// 容器视图半组/单件 `CommandMoveStackPartial`、容器视图快捷搬运
-// `CommandQuickMoveStack` 与容器视图整组丢弃 `CommandDropStack`），成功时
-// 同时提交玩家物品与区块中的容器；按引用的 Kind 分派到熔炉或箱子各自独立
-// 的边界与约束检查。四族命令共享查看关系校验、区域路由、回收预演与提交
-// 路径，只有合并语义（整堆交换 vs 部分拒绝 vs 固定目标序整堆转移 vs 整组
-// 取出脚下投放）不同。
+// container-view `CommandMoveStackPartial`, container-view
+// `CommandQuickMoveStack`, and container-view `CommandDropStack`. Success commits
+// both the player's inventory and the chunk-owned container. The reference kind
+// selects the furnace or chest bounds and constraints. All four command families
+// share view validation, region routing, repack preview, and commit paths; only
+// their transfer semantics differ.
 func (engine *engineContext) applyContainerMove(
 	id SessionID,
 	command Command,
@@ -478,8 +478,8 @@ func (engine *engineContext) applyContainerMove(
 		var nextChest world.ChestSlot
 		switch {
 		case drop:
-			// 面板拖出丢弃：来源格整组取出经共享出口脚下投放，来源清空；
-			// 槽位值域（箱子域 0..62）由协议校验层保证。
+			// A panel drop removes the complete source stack through the shared
+			// feet-drop path. Protocol validation guarantees the chest slot range.
 			if command.Slot >= core.ChestViewSlots {
 				return RejectInvalidSlot, true
 			}
@@ -538,9 +538,9 @@ func (engine *engineContext) applyContainerMove(
 		var nextFurnace world.FurnaceSlot
 		switch {
 		case drop:
-			// 与箱子分支同形：来源格整组取出脚下投放、来源清空。输出格作为
-			// 丢弃来源是允许的——清空写回经 `setFurnaceViewSlot` 的输出
-			// 白名单（空值恒可写），取出本身不做产物类型限制。
+			// As with chests, a panel drop removes the complete source stack and
+			// publishes it at the player's feet. Furnace output may be removed because
+			// `setFurnaceViewSlot` always permits writing an empty output slot.
 			if command.Slot >= core.FurnaceViewSlots {
 				return RejectInvalidSlot, true
 			}

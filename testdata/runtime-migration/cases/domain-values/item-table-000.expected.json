@@ -1,0 +1,9 @@
+{
+  "kind": "ok",
+  "category": "item-table",
+  "fields": {
+    "item": 0,
+    "registered": false,
+    "smelting_product": false
+  }
+}

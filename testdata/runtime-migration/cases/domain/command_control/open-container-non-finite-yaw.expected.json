@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "pitch": "00000000",
+    "rule": "open-container.finite_rotation",
+    "sequence": "12",
+    "yaw": "7fc00000"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "case_kind": "schema",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/invalid.json",
+  "source_index": 3,
+  "fixture": "terrain success rejects non-array collection",
+  "document": "mcp-v1/schema.json",
+  "schema": "query_terrain_result",
+  "value": {
+    "terrain": {}
+  }
+}

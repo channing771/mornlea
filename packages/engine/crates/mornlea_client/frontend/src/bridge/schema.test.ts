@@ -648,7 +648,7 @@ describe("schema：上行 uplinkEnvelope 非法用例一律拒绝", () => {
   });
 
   it("game-action drop/dragMove 缺字段、未知区域或索引越界拒绝", () => {
-    // drop：缺 index、未知区域、区域索引越界与携带多余字段。
+    // `drop` rejects a missing index, unknown area, area-specific overflow, and extra fields.
     expect(
       validateEnvelope({ v: 1, events: [{ type: "game-action", token: 1, op: "drop", area: "inventory" }] }),
     ).toBe(false);
@@ -667,7 +667,7 @@ describe("schema：上行 uplinkEnvelope 非法用例一律拒绝", () => {
         events: [{ type: "game-action", token: 1, op: "drop", area: "inventory", index: 0, button: "left" }],
       }),
     ).toBe(false);
-    // dragMove：任一端缺失、未知区域、按区域分派的索引越界与携带多余字段。
+    // `dragMove` rejects missing endpoints, unknown areas, area-specific overflow, and extra fields.
     expect(
       validateEnvelope({
         v: 1,

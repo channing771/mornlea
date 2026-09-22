@@ -1,0 +1,9 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "drop-id",
+  "dimension": -2147483648,
+  "chunk_x": 0,
+  "chunk_z": 0,
+  "slot": 0,
+  "generation": 1
+}

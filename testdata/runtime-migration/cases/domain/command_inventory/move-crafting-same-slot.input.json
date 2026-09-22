@@ -1,0 +1,7 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "move-crafting",
+  "sequence": 7,
+  "from": 3,
+  "to": 3
+}

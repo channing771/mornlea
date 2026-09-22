@@ -119,9 +119,8 @@ func TestProtocolV27BoneMealPacketIDIsFrozen(t *testing.T) {
 	if _, isBone := packet.(BoneMeal); !isBone {
 		t.Fatalf("Play client packet ID 14 = %T，想要 BoneMeal", packet)
 	}
-	// 18 已由装备互换命令占用（v42）、19/20 已由分堆双命令占用（v44）、
-	// 21 已由整组丢弃命令占用（v45）；「相邻编号不被静默占用」的门禁语义
-	// 随之推进到 22。
+	// v42 uses 18, v44 uses 19/20, and v45 uses 21, so the adjacent-unassigned
+	// boundary advances to 22.
 	if _, ok := ClientPacketForID(StatePlay, 21+1); ok {
 		t.Fatal("Play client packet ID 22 必须保持未分配")
 	}
@@ -146,8 +145,8 @@ func TestProtocolV42EquipArmorPacketIDIsFrozen(t *testing.T) {
 	if _, ok := ClientPacketForID(StatePlay, 1); ok {
 		t.Fatal("Play client packet ID 1 必须保持未分配")
 	}
-	// v44 把 19/20 分配给分堆双命令、v45 把 21 分配给整组丢弃命令之后，
-	// 「下一个仍未分配」上界推进到 22。
+	// After v44 assigns 19/20 and v45 assigns 21, the next-unassigned boundary
+	// is 22.
 	if _, ok := ClientPacketForID(StatePlay, 21+1); ok {
 		t.Fatal("Play client packet ID 22 必须保持未分配")
 	}

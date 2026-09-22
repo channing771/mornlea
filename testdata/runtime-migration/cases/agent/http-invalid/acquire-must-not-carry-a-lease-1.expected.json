@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "additionalProperties",
+    "path": "$.lease_id",
+    "schema": "acquire_request"
+  }
+}

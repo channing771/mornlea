@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "const",
+    "path": "$.step_kinds[1]",
+    "schema": "list_affordances_result"
+  }
+}

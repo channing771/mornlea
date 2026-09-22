@@ -1,0 +1,52 @@
+Every checkbox is a Superpowers task. Before editing, the assigned worker reads
+the linked packet and invokes `using-superpowers` plus the packet's named
+workflow skills. Behavioral nodes use `test-driven-development`; delegated
+nodes use `subagent-driven-development`; unexpected failures use
+`systematic-debugging`; every handoff uses `verification-before-completion` and
+independent `requesting-code-review`. The controller uses
+`receiving-code-review`, owns status, and never treats planning validation as
+implementation acceptance.
+
+## 1. Go evidence truthfulness
+
+- [x] 1.1 [Separate working and complete inventory reconciliation](plans/01-evidence.md#node-11-separate-working-and-complete-inventory-reconciliation). Direct prerequisites: none. Run `go test ./packages/tools/cmd/runtime-oracle -race -count=1 -run 'TestContractInventory(Working|Complete|RejectsUnknownConsumer|RejectsUnsupportedCaseVersion)'`.
+- [x] 1.2 [Build traces only from executed observations](plans/01-evidence.md#node-12-build-traces-only-from-executed-observations). Direct prerequisites: 1.1. Run `go test ./packages/tools/cmd/runtime-oracle -race -count=1 -run 'TestTrace|TestProtocolOracleFrame|TestExecutedObservation'`.
+
+## 2. Corpus publication and loading
+
+- [x] 2.1 [Remove tracked-corpus rewrite paths](plans/02-corpus.md#node-21-remove-tracked-corpus-rewrite-paths). Direct prerequisites: 1.2. Run `go test ./packages/tools/cmd/runtime-oracle ./packages/shared/companion -race -count=1` and `git diff --exit-code -- testdata/runtime-migration`.
+- [x] 2.2 [Make the Rust corpus loader fail closed](plans/02-corpus.md#node-22-make-the-rust-corpus-loader-fail-closed). Direct prerequisites: 1.1. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_loader --locked` and `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract corpus_frame --locked`.
+
+## 3. Executable Rust domain corpus
+
+- [x] 3.1 [Create the closed domain corpus dispatcher skeleton](plans/03-domain-corpus.md#node-31-create-the-closed-domain-corpus-dispatcher-skeleton). Direct prerequisites: 2.2. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain corpus_structure --locked`.
+- [x] 3.2 [Execute identity and text corpus cases](plans/03-domain-corpus.md#node-32-execute-identity-and-text-corpus-cases). Direct prerequisites: 3.1. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain identity_text:: --locked`.
+- [x] 3.3 [Execute value and location corpus cases](plans/03-domain-corpus.md#node-33-execute-value-and-location-corpus-cases). Direct prerequisites: 3.2. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain values:: --locked`.
+- [x] 3.4 [Execute control command corpus cases](plans/03-domain-corpus.md#node-34-execute-control-command-corpus-cases). Direct prerequisites: 3.3. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain command_control:: --locked`.
+- [x] 3.5 [Execute inventory and chat command corpus cases](plans/03-domain-corpus.md#node-35-execute-inventory-and-chat-command-corpus-cases). Direct prerequisites: 3.4. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain command_inventory:: --locked`.
+- [x] 3.6 [Execute player event corpus cases](plans/03-domain-corpus.md#node-36-execute-player-event-corpus-cases). Direct prerequisites: 3.5. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain event_player:: --locked`.
+- [x] 3.7 [Execute world event corpus cases](plans/03-domain-corpus.md#node-37-execute-world-event-corpus-cases). Direct prerequisites: 3.6. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain event_world:: --locked`.
+- [x] 3.8 [Execute inventory event corpus cases](plans/03-domain-corpus.md#node-38-execute-inventory-event-corpus-cases). Direct prerequisites: 3.7. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain event_inventory:: --locked`.
+- [x] 3.9 [Execute people event corpus cases](plans/03-domain-corpus.md#node-39-execute-people-event-corpus-cases). Direct prerequisites: 3.8. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain event_people:: --locked`.
+- [x] 3.10 [Close domain coverage and mutation detection](plans/03-domain-corpus.md#node-310-close-domain-coverage-and-mutation-detection). Direct prerequisites: 3.9. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain --locked` and require exactly 376 unique executed IDs.
+
+## 4. Bounded domain construction
+
+- [x] 4.1 [Bound text and semantic batches before work](plans/04-domain-bounds.md#node-41-bound-text-and-semantic-batches-before-work). Direct prerequisites: 3.10. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test resource_bounds --locked` and `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --locked`.
+
+## 5. Final-review repairs and renewed closeout
+
+- [x] 5.1 [Bind consumers to executable routes and align Go asset validation](plans/06-review-repairs.md#node-51-bind-consumers-to-executable-routes-and-align-go-asset-validation). Direct prerequisites: 1.1. Run the six exact `TestContractInventory*`/`TestReadCaseInput*` tests named in the packet, then the full runtime-oracle package under `-race`.
+- [x] 5.2 [Remove false Agent traces and every tracked-corpus update flag](plans/06-review-repairs.md#node-52-remove-false-agent-traces-and-every-tracked-corpus-update-flag). Direct prerequisites: 1.2, 2.1, 5.1. Run full runtime-oracle/server runtime race suites, the focused audit corpus-writer/dependency gates, and `git diff --exit-code -- testdata/runtime-migration`; full audit closes after node 5.8 clears its known comment debt.
+- [x] 5.3 [Reject producer-prefix symlinks before any export write](plans/06-review-repairs.md#node-53-reject-producer-prefix-symlinks-before-any-export-write). Direct prerequisites: 2.1, 5.2. Run `go test ./packages/tools/cmd/runtime-oracle ./packages/shared/companion -race -count=1 -run 'Test(ExportGeneratedAssets|CompanionExport)'`.
+- [x] 5.4 [Enforce the Rust input consumer and decimal exponent grammar](plans/06-review-repairs.md#node-54-enforce-the-rust-input-consumer-and-decimal-exponent-grammar). Direct prerequisites: 3.10, 5.3. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain --locked` and require exactly 376 executed domain cases.
+- [x] 5.5 [Restore the measured Godot pilot identity](plans/06-review-repairs.md#node-55-restore-the-measured-godot-pilot-identity). Direct prerequisites: 5.4. Run `go test ./packages/tools/perfcheck ./packages/audit -count=1 -run 'Test(GodotPilotReportCompleteness|CurrentDocumentationVersions|DocumentationManifest)'`.
+- [x] 5.6 [Translate newly introduced client and frontend comments](plans/06-review-repairs.md#node-56-translate-newly-introduced-client-and-frontend-comments). Direct prerequisites: 5.5. Run the named client, frontend and Rust focused tests plus `go test ./packages/audit -run '^TestEnglishCommentMigration$' -count=1`; owned paths may report decreases only.
+- [x] 5.7 [Translate newly introduced server comments](plans/06-review-repairs.md#node-57-translate-newly-introduced-server-comments). Direct prerequisites: 5.6. Run `go test ./packages/server/... -race -count=1` and the English-comment gate; completed client/server paths may report decreases only, while shared debt remains to repair.
+- [x] 5.8 [Translate newly introduced shared comments and ratchet the debt baseline](plans/06-review-repairs.md#node-58-translate-newly-introduced-shared-comments-and-ratchet-the-debt-baseline). Direct prerequisites: 5.7. Run the named shared package tests, update the decreasing baseline once, and require `go test ./packages/audit -run '^TestEnglishCommentMigration$' -count=1` to pass without an environment override.
+- [x] 5.9 [Promote verified orchestration lessons](plans/06-review-repairs.md#node-59-promote-verified-orchestration-lessons). Direct prerequisites: 5.8. Run the three Superpowers pressure scenarios plus `go test ./packages/audit -count=1 -run '^TestProjectOrchestration'`, and require the Codex/Claude skill copies to be byte-identical.
+- [x] 5.9a [Refresh reviewed provenance bindings](plans/06-review-repairs.md#node-59a-refresh-reviewed-provenance-bindings). Direct prerequisites: 5.9. Refresh exactly six stale source-hash rows and require the complete runtime-oracle consumer gate to pass.
+- [x] 5.9b [Correct corpus working manifests and stale workflow prose](plans/06-review-repairs.md#node-59b-correct-corpus-working-manifests-and-stale-workflow-prose). Direct prerequisites: 5.9a. Replace four duplicate-family helpers in place, correct read-only/export and working-manifest comments plus the Rust float comment, then run the exact focused/full producer, source-scanner and Rust corpus gates.
+- [x] 5.9c [Bind editable sources to derived consumers](plans/06-review-repairs.md#node-59c-bind-editable-sources-to-derived-consumers). Direct prerequisites: 5.9b. Pressure-test and promote the derived-consumer planning rule, then require synchronized skills and full audit gates.
+- [x] 5.9d [Isolate mining parity and close failed harnesses](plans/06-review-repairs.md#node-59d-isolate-mining-parity-and-close-failed-harnesses). Direct prerequisites: 5.9c. Prove dirt-only ground with all three stone targets, real host cleanup after normal return and Goexit, repeated strict parity, and unchanged corpus/source-audit gates.
+- [x] 5.10 [Re-review, validate, sync and archive the extracted baseline](plans/06-review-repairs.md#node-510-re-review-validate-sync-and-archive-the-extracted-baseline). Direct prerequisites: 5.9d. Run full stage gates at the clean repair SHA, then post-archive gates at the final archive commit SHA; archive only to `openspec/changes/archive/2026-09-22-rust-runtime-foundation-baseline`.

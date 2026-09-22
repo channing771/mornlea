@@ -1,0 +1,32 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "base_revision": "1",
+    "changes": [
+      {
+        "block": 2,
+        "position": [
+          -1,
+          -64,
+          -1
+        ]
+      },
+      {
+        "block": 3,
+        "position": [
+          -16,
+          -64,
+          -16
+        ]
+      }
+    ],
+    "chunk": [
+      -1,
+      -1
+    ],
+    "dimension": 0,
+    "new_revision": "2",
+    "rule": "block_changes.strictly_increasing_index"
+  }
+}

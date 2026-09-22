@@ -1,6 +1,7 @@
 package archcheck_test
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -33,18 +34,16 @@ func TestNativeEngineBridgeBoundary(t *testing.T) {
 	}
 
 	// engine C ABI 只允许 packages/shared/nativeabi 接触。
-	for _, token := range []string{
-		"mornlea_engine.h",
-		"-lmornlea_engine",
-	} {
-		for _, path := range files {
-			contents, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("读取 %s: %v", path, err)
-			}
-			if strings.Contains(string(contents), token) && !inDir(path, bridge) {
-				t.Errorf("%s 只允许 packages/shared/nativeabi 接触，发现于 %s", token, path)
-			}
+	for _, path := range files {
+		if inDir(path, bridge) {
+			continue
+		}
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("读取 %s: %v", path, err)
+		}
+		if err := classifyNativeEngineUsage(string(contents)); err != nil {
+			t.Errorf("只允许 packages/shared/nativeabi 接触 engine C ABI，发现于 %s: %v", path, err)
 		}
 	}
 
@@ -247,5 +246,90 @@ func TestCoreUsesOnlyNativeRaycast(t *testing.T) {
 	}
 	if !foundNativeABI || nativeCalls != 1 {
 		t.Error("packages/shared/core.RaycastBlocks 必须直接调用 packages/shared/nativeabi.RaycastBatch")
+	}
+}
+
+func classifyNativeEngineUsage(src string) error {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "source.go", src, parser.ParseComments)
+	if err != nil {
+		return fmt.Errorf("parse error: %w", err)
+	}
+
+	for _, imp := range f.Imports {
+		path := strings.Trim(imp.Path.Value, `"`)
+		if path == "C" && imp.Doc != nil {
+			for _, comment := range imp.Doc.List {
+				text := comment.Text
+				if strings.Contains(text, "mornlea_engine.h") {
+					return fmt.Errorf("cgo preamble includes mornlea_engine.h")
+				}
+				if strings.Contains(text, "-lmornlea_engine") {
+					return fmt.Errorf("cgo preamble links -lmornlea_engine")
+				}
+			}
+		}
+	}
+
+	for _, cg := range f.Comments {
+		for _, comment := range cg.List {
+			text := comment.Text
+			if strings.Contains(text, "-lmornlea_engine") {
+				return fmt.Errorf("comment contains engine link directive -lmornlea_engine")
+			}
+			if strings.Contains(text, "#include") && strings.Contains(text, "mornlea_engine.h") {
+				return fmt.Errorf("comment contains #include mornlea_engine.h")
+			}
+			if strings.Contains(text, "cgo_ldflag") && strings.Contains(text, "mornlea_engine") {
+				return fmt.Errorf("build directive links engine")
+			}
+		}
+	}
+
+	var literalErr error
+	ast.Inspect(f, func(n ast.Node) bool {
+		if lit, ok := n.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+			val := strings.Trim(lit.Value, `"`+"`")
+			if strings.Contains(val, "-lmornlea_engine") {
+				literalErr = fmt.Errorf("string literal contains engine link flag: %s", val)
+				return false
+			}
+		}
+		return true
+	})
+	if literalErr != nil {
+		return literalErr
+	}
+
+	return nil
+}
+
+func TestNativeEngineBoundaryRedMatrix(t *testing.T) {
+	// 1. accepted read-only path
+	srcReadOnly := `package foo
+const header = "packages/engine/include/mornlea_engine.h"
+`
+	if err := classifyNativeEngineUsage(srcReadOnly); err != nil {
+		t.Fatalf("read-only path should be accepted, got: %v", err)
+	}
+
+	// 2. rejected same file with cgo include
+	srcCgoInclude := `package foo
+/*
+#include "mornlea_engine.h"
+*/
+import "C"
+`
+	if err := classifyNativeEngineUsage(srcCgoInclude); err == nil {
+		t.Fatal("cgo include must be rejected")
+	}
+
+	// 3. rejected external link directive
+	srcLinkDirective := `package foo
+// #cgo LDFLAGS: -lmornlea_engine
+import "C"
+`
+	if err := classifyNativeEngineUsage(srcLinkDirective); err == nil {
+		t.Fatal("link directive must be rejected")
 	}
 }

@@ -1,0 +1,38 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "rule": "companion_states.state_0.pitch_vertical_look_range",
+    "server_tick": "7",
+    "states": [
+      {
+        "dimension": 0,
+        "id": "2233445546674889aabbccddeeff00fe",
+        "look": {
+          "pitch": "3fc90fdc",
+          "yaw": "c0400000"
+        },
+        "position": [
+          "c0f00000",
+          "428c0000",
+          "41340000"
+        ],
+        "reset": false
+      },
+      {
+        "dimension": 0,
+        "id": "2233445546674889aabbccddeeff00ff",
+        "look": {
+          "pitch": "3f000000",
+          "yaw": "c0400000"
+        },
+        "position": [
+          "c0f00000",
+          "428c0000",
+          "41340000"
+        ],
+        "reset": false
+      }
+    ]
+  }
+}

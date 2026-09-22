@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "from": 9,
+    "rule": "move_crafting.both_ends_in_inventory",
+    "sequence": "7",
+    "to": 10
+  }
+}

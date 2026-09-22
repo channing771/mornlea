@@ -1,0 +1,8 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "name": "A B",
+    "rule": "companion_name.embedded_whitespace"
+  }
+}

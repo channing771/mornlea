@@ -1,0 +1,5 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "close-container",
+  "sequence": 10
+}

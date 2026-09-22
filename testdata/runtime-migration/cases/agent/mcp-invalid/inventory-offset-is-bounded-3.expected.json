@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "maximum",
+    "path": "$.offset",
+    "schema": "inspect_inventory_input"
+  }
+}

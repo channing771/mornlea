@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "pitch": "00000000",
+    "rule": "till-soil.finite_rotation",
+    "sequence": "8",
+    "yaw": "7fc00000"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-enum",
+  "fields": {
+    "damage": 1,
+    "rule": "combat_hit.target_kind",
+    "server_tick": "7",
+    "target_kind": 4
+  }
+}

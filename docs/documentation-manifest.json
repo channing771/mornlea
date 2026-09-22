@@ -119,7 +119,7 @@
       ],
       "english_path": "docs/architecture-target.md",
       "chinese_path": "docs/architecture-target.zh.md",
-      "revision": "2026-09-19.2"
+      "revision": "2026-09-20.1"
     },
     {
       "id": "development-process",
@@ -130,7 +130,7 @@
       ],
       "english_path": "docs/development-process.md",
       "chinese_path": "docs/development-process.zh.md",
-      "revision": "2026-09-19.1"
+      "revision": "2026-09-20.1"
     },
     {
       "id": "feature-backlog",
@@ -148,14 +148,11 @@
     },
     {
       "id": "godot-client-pilot-report",
-      "classification": "bilingual",
+      "classification": "historical",
       "paths": [
         "docs/notes/godot-client-pilot-report.md",
         "docs/notes/godot-client-pilot-report.zh.md"
-      ],
-      "english_path": "docs/notes/godot-client-pilot-report.md",
-      "chinese_path": "docs/notes/godot-client-pilot-report.zh.md",
-      "revision": "2026-09-19.1"
+      ]
     },
     {
       "id": "agent-dashboard-guide",
@@ -292,7 +289,7 @@
       ],
       "english_path": "docs/notes/visual-verification.md",
       "chinese_path": "docs/notes/visual-verification.zh.md",
-      "revision": "2026-09-15.1"
+      "revision": "2026-09-20.1"
     },
     {
       "id": "webgpu-api-reference",
@@ -310,7 +307,7 @@
       ],
       "english_path": "docs/openspec.md",
       "chinese_path": "docs/openspec.zh.md",
-      "revision": "2026-09-19.1"
+      "revision": "2026-09-20.1"
     },
     {
       "id": "test-organization",

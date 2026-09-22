@@ -1,0 +1,13 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "chunk_x": -2,
+    "chunk_z": 5,
+    "dimension": 0,
+    "generation": 1,
+    "kind": "chest",
+    "rule": "container_ref.chest_slot_range",
+    "slot": 31
+  }
+}

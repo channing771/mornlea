@@ -1,0 +1,21 @@
+{
+  "kind": "ok",
+  "category": "forget-chunks",
+  "fields": {
+    "chunks": [
+      [
+        5,
+        5
+      ],
+      [
+        -1,
+        -1
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "dimension": 0
+  }
+}

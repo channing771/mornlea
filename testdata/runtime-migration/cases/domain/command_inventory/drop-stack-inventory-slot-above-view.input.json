@@ -1,0 +1,7 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "drop-stack",
+  "sequence": 21,
+  "slot": 36,
+  "view": 0
+}

@@ -1,0 +1,8 @@
+{
+  "kind": "ok",
+  "category": "command-rejected",
+  "fields": {
+    "reason": "hotbar_full",
+    "sequence": "7"
+  }
+}

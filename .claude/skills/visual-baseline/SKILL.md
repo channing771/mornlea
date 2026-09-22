@@ -1,32 +1,56 @@
 ---
 name: visual-baseline
-description: Route Mornlea visual evidence by observable semantics and enforce explicit, reviewed baseline updates across Rust, WebView, and Godot producers. Use before adding, moving, or updating visual baselines.
+description: Design, review, and migrate Mornlea visual evidence across the Rust core and Godot/Python presentation stack. Use for visual regression, capture contracts, baseline updates, or producer handoffs; not for gameplay correctness or image generation.
 ---
 
-# Visual Baseline Routing
+# Visual evidence and baseline migration
 
-Tracked visual evidence lives under `testdata/visual-golden/`. Read that directory's English canonical `README.md` before changing a baseline; it owns the current registries and routing details. Do not copy scene lists, counts, or comparison thresholds into this skill.
+Read [`docs/architecture-target.md`](../../../docs/architecture-target.md) for final ownership and the active change for its migration boundary. Read [`testdata/visual-golden/README.md`](../../../testdata/visual-golden/README.md) for current registries and [`openspec/specs/visual-verification/spec.md`](../../../openspec/specs/visual-verification/spec.md) for live contracts. A plan or skill does not make a future producer available. Do not copy scene counts or threshold values into this skill.
+
+## Select the work
+
+- **Regression:** resolve the case's current producer and run its comparison-only path. Inspect actual and diff artifacts on failure; do not update evidence to clear a failure.
+- **Intentional visual change:** capture candidates outside tracked evidence, inspect every affected case, then use the explicit update path within the authorized change. Re-run comparison and verify unrelated baselines are byte-identical.
+- **Migration or new producer:** read [the handoff guide](references/producer-handoff.md). First establish semantic parity and capture comparability, then qualify the candidate, then transfer individual case ownership. A pilot report is not a handoff.
+- **Harness design:** specify identity, readiness, bounded work, failure behavior, and update isolation in OpenSpec before implementing a new capture/comparison path. The active `godot-production-tooling` change owns the planned production evidence contract; do not claim that contract is already enforced.
+
+## Separate the evidence layers
+
+1. **Semantic correctness:** Rust server/domain/protocol/storage tests prove authority and compatibility; Rust client-core replay proves mirrors, prediction, corrections, revisions, and typed presentation values. During migration, Go is an offline oracle. Pixels cannot prove these contracts.
+2. **Presentation behavior:** Godot and qualified embedded Python tests prove typed-value mapping, scene lifecycle, input/UI behavior, resource cleanup, and bounded application. Python never decodes packets, reads saves, reproduces numerical kernels, or becomes a second mirror. Use headless tests here when pixels are unnecessary.
+3. **Rendered evidence:** capture through the production presentation path with frozen input and environment. Same-producer PNG regression uses the existing comparator; cross-producer parity requires explicit semantic mapping and reviewed differences. Motion remains bounded human-review evidence without automated GIF comparison.
+
+Failure in an earlier layer cannot be repaired by accepting new pixels. Audio and device correctness need event/lifecycle tests; a screenshot or silent GIF is not audio evidence.
 
 ## Semantic routes
 
-- Window or UI component fixtures belong to `ui/`. The current producer is the local Chrome frontend harness and its registry is `fixture-names.ts`.
-- Stable headless world frames belong to `world/`. The current producer is the offscreen client capture path and its registry is `captureScenes` in `capture/capture.go`.
-- Cross-tick state transitions belong to `motion/` as bounded full-process GIFs that include the pre-trigger, outcome, and settled phases. They are human-review evidence and do not participate in automated pixel comparison.
+Route by the observable subject, never by renderer identity.
 
-Route by the observable subject, never by renderer identity. Do not create renderer-specific tracked classes such as `testdata/visual-golden/godot/`. World frames must not contain window chrome, UI fixtures must not recreate world pixels, and one behavior must not have both PNG and GIF evidence unless the visual README records distinct responsibilities.
+| Observable subject | Tracked class | Acceptance |
+|---|---|---|
+| Isolated UI component or window chrome | `ui/` | Stable PNG comparison and interaction tests |
+| Settled world state, without UI chrome | `world/` | Stable PNG comparison and semantic readiness |
+| A complete transition across ticks | `motion/` | Bounded GIF showing pre-trigger, outcome, and settled phases; human review |
 
-## Pilot and producer handoff
+Do not create `testdata/visual-golden/godot/` or another renderer-specific tracked class. UI fixtures do not recreate world pixels. Integrated world-plus-HUD screenshots may support untracked end-to-end review but must not silently become a fourth golden class. Keep one canonical producer per case; a migration may compare multiple candidates without duplicating tracked ownership. A PNG/GIF pair needs distinct documented responsibilities in the visual index.
 
-Godot pilot captures are untracked evidence under `build/visual/godot-pilot/<run-id>/`. Pilot commands may compare against current evidence and produce diffs, but must not write tracked goldens or relax thresholds.
+## Capture and comparison contract
 
-Moving a scene, fixture, or motion producer to Godot requires an approved feature change that names the semantic class, old and new producers, affected files, expected differences, review evidence, and rollback. Only after that handoff is approved may the existing explicit update path write tracked evidence.
+Before interpreting pixels, establish the case/fixture identity, semantic input or replay revision, source and asset provenance, producer/core/bridge/runtime versions, selected catalog, viewport and scale, camera and clock/tick, locale/fonts, graphics backend, and comparison policy. Reuse implemented metadata; record missing fields explicitly instead of inventing values or treating absence as agreement.
 
-## Current entry points
+Use a fixed seed/input, embedded canonical assets, bounded settling condition, and explicit capture tick. Reject timeout, stale or mixed snapshot revisions, incomplete uploads, missing output, invalid identity, and I/O failure. Do not use an arbitrary sleep as readiness or rebuild a mock renderer solely for capture.
 
-- World comparison: `make visual-check`; explicit update: `make visual-update`. Use `SCENES=` for a focused edit loop when appropriate, but keep the full comparison for stage boundaries.
-- UI comparison/update: `make frontend-visual-check` and `make frontend-visual-update`, or the corresponding frozen pnpm commands inside the frontend directory.
-- Motion evidence: use the registered `--motion-demo`/`--motion-scene` path or `GIFS=1` where the current capture flow supports it. Motion GIFs are generated for human review, not compared automatically.
+For each required case distinguish **comparable**, **not comparable**, and **failed**. Empty mappings, unsupported features, absent frames, and skipped cases are not passing coverage. A cross-producer difference classification is review evidence; it is not an automatic regression pass. Preserve actual images, diffs when meaningful, metrics, and reasons. Never scale, crop, mask, recolor, or increase tolerance merely to make results agree.
 
-## Update discipline
+Godot dummy `--headless` rendering cannot supply real GPU pixels. Pixel evidence requires a qualified non-foreground graphics path with no focus stealing; otherwise report it unavailable and continue semantic/lifecycle checks. Never launch or focus a foreground game window without the user's explicit manual-acceptance request. Record the actual display driver and GPU, not a misleading “headless” label.
 
-Inspect every expected visual change before an explicit update. Ordinary checks compare only and never accept changes. If comparison fails, inspect actual and diff outputs before deciding whether code or evidence is wrong. Missing baselines must fail rather than being created silently. Comparison behavior and thresholds are owned by the current comparison implementations, not this skill.
+## Current tools and update safety
+
+- World: `make visual-check`; intentional update: `make visual-update`. `SCENES=` narrows PNG selection but does not bypass the LOD near-ring control. The current update path also generates registered motion GIFs: inspect its full write set before running it. `VISUAL_OUT` does not redirect tracked writes. If that write set exceeds the authorized scope, run the updater in an isolated snapshot of the exact intended source, retain its guards, and publish only reviewed authorized files; compare all other files against their pre-task hashes. Never broadly update the shared checkout and restore unrelated files from `HEAD`.
+- UI: `make frontend-visual-check`; intentional update: `make frontend-visual-update`. The current local Chrome harness is not a CI gate.
+- Motion: use registered `--motion-demo`/`--motion-scene` outputs, or `GIFS=1` on the current comparison path. Review the entire process and timing, not only the final pose.
+- Godot pilot: `make godot-visual-evidence` writes untracked `build/visual/godot-pilot/<run-id>/`. For reproducible comparison, use `scripts/godot/visual-compare.sh --run-dir <verified-run-directory>`; the convenience Make target can select the latest run or capture implicitly. Pilot commands must not write tracked goldens or relax thresholds. The pilot comparator does not itself invoke the identity validator or generate diff images: separately run `python3 scripts/godot/visual_evidence_contract.py --identity <run-directory>/identity.json --run-dir <run-directory>` against the actual identity filename and retain supplementary diffs where meaningful. Read the report and mapping coverage; exit zero alone is not parity.
+
+Moving any case to a new producer requires an approved feature change and an explicit update request, with reviewed candidates, affected files, and rollback. Reuse authorization already given for that concrete scope; do not add repeated permission questions. Ordinary checks never accept changes, and a missing golden fails closed. A separately measured comparator-policy change needs its own contract review; migration is not permission to weaken existing limits.
+
+Report the case coverage, semantic tests, capture environment, comparison or review outcome, unresolved differences, and whether ownership actually transferred. Keep Codex and Claude copies, including references, byte-identical.

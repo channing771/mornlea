@@ -1,0 +1,111 @@
+{
+  "kind": "error",
+  "category": "invalid-enum",
+  "fields": {
+    "chunk": [
+      3,
+      -5
+    ],
+    "dimension": 0,
+    "revision": "7",
+    "rule": "chunk_snapshot.section_single_registered",
+    "sections": [
+      {
+        "single": 90,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      },
+      {
+        "single": 0,
+        "storage": "single"
+      }
+    ]
+  }
+}

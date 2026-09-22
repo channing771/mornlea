@@ -1,0 +1,33 @@
+[package]
+name = "mornlea_protocol"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+mornlea_domain = { path = "../mornlea_domain" }
+# The ChunkSnapshot envelope is a zstd frame carrying an xxhash-64 content
+# checksum, so the codec needs a real encoder and decoder rather than a
+# decode-only crate. This is the crate's only compression dependency.
+zstd = "=0.13.3"
+
+[dev-dependencies]
+serde = "=1.0.229"
+serde_json = "=1.0.151"
+sha2 = "0.10"
+
+[lints.rust]
+dead_code = "allow"
+unused_imports = "allow"
+
+[lints.clippy]
+empty_line_after_doc_comments = "allow"
+manual_div_ceil = "allow"
+manual_range_contains = "allow"
+manual_contains = "allow"
+match_like_matches_macro = "allow"
+too_many_arguments = "allow"
+type_complexity = "allow"

@@ -1,0 +1,8 @@
+{
+  "kind": "ok",
+  "category": "validator_hint",
+  "fields": {
+    "keys": [],
+    "schema": "validator_hint"
+  }
+}

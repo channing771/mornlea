@@ -1,0 +1,8 @@
+{
+  "kind": "ok",
+  "category": "take-crafting-output",
+  "fields": {
+    "sequence": "15",
+    "wire": "0f00000000000000"
+  }
+}

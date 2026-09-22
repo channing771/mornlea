@@ -1,0 +1,14 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "move-partial",
+  "sequence": 19,
+  "from": 0,
+  "to": 1,
+  "view": 2,
+  "single": false,
+  "kind": "chest",
+  "chunk_x": 0,
+  "chunk_z": 0,
+  "container_slot": 16,
+  "generation": 7
+}

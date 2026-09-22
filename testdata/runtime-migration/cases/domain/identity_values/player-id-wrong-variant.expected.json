@@ -1,0 +1,8 @@
+{
+  "kind": "error",
+  "category": "invalid-identity",
+  "fields": {
+    "rule": "player_id.variant_rfc4122",
+    "uuid": "00112233445546770099aabbccddeeff"
+  }
+}

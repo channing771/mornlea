@@ -1,0 +1,11 @@
+{
+  "case_kind": "mine",
+  "consumer": "external:agent-contract",
+  "source": "packages/contracts/companion-agent/mcp-v1/golden/mine-validation.json",
+  "source_index": 4,
+  "fixture": "undelivered multi-drop crop remains rejected",
+  "document": "mcp-v1/schema.json",
+  "block_symbol": "WheatStage7ID",
+  "block_id": 44,
+  "mine_semantics": "undelivered_multi_drop"
+}

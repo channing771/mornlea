@@ -1,0 +1,10 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "required",
+    "path": "$.operation_id",
+    "rule": "operation_id",
+    "schema": "memory_commit_request"
+  }
+}

@@ -182,17 +182,15 @@ func BenchmarkCropAdvanceFullInterestDense(b *testing.B) {
 }
 
 // BenchmarkCropAdvanceAllFarmland 锁定随机作物阶段不再扫描耕地湿润邻域。
-// 单个区块的 24 个区段中，顶层 y=MaxY-1 铺石头，其余全部填满干耕地；退化规则
-// 让每样本额外读取正上方是否为 `core.AirID`（干+无作物才退），因此读取为每样本
-// 两次；benchmark 同时守卫并报告 Ready 区块、耕地与作物数，以解析式读取等式
-// 作为正确性门禁。
+// One chunk fills every section with dry farmland except for a stone layer at
+// y=MaxY-1. Reversion reads `core.AirID` above every sample, so the benchmark
+// reports and guards ready chunks, farmland, crops, and exactly two reads per
+// examined cell.
 //
-// 顶层刻意铺石头而不是干耕地：顶层上方是世界外空气，干耕地会被退化分支写成
-// 泥土，此后随机 tick 命中这些泥土格且草蔓延骰子命中时会多读「上方 1 加水平
-// 4」共 5 格，把 reads==2*examined 的精确等式退化成概率性门禁（夹具饱和后约
-// 4% 的推进打破等式）。石头退化不出泥土，泥土格不出现则蔓延分支永不进入；
-// 石头格自身的读取恰好也是 2 次（格自身加积雪兜底的上方判定），精确等式与
-// 门禁强度原样保留。
+// The top layer is deliberately stone rather than dry farmland. Farmland below
+// world-exterior air would revert to dirt, after which grass-spread hits add five
+// probabilistic reads and weaken the exact equality. Stone cannot become dirt,
+// keeps that branch unreachable, and still incurs the same two baseline reads.
 func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 	const wantFarmland = core.SectionsPerChunk*core.BlocksPerSection - core.SectionSize*core.SectionSize
 	b.Cleanup(func() { tuning.SetTunables(tuning.DefaultTunables()) })
@@ -214,8 +212,8 @@ func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 	if player, ok := engine.Player(1); !ok || !player.Ready {
 		b.Fatalf("玩家未 Ready: %+v", player)
 	}
-	// 耕地只填到 MaxY-2，顶层留给石头（理由见函数头注释）：隔断「上方为空气」，
-	// 让退化分支结构性不可达。
+	// Farmland ends at MaxY-2; the stone cap keeps the air-triggered reversion
+	// branch structurally unreachable.
 	for y := int32(core.MinY); y < int32(core.MaxY)-1; y++ {
 		for x := range int32(core.SectionSize) {
 			for z := range int32(core.SectionSize) {
@@ -280,8 +278,8 @@ func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 	b.ReportMetric(float64(readyChunks), "chunks")
 	b.ReportMetric(float64(farmland), "farmland")
 	b.ReportMetric(float64(crops), "crops")
-	// 顶层铺石头后全世界的干耕地上方都不是空气，退化分支结构性不可达——
-	// 任何写入都意味着夹具或随机面被改动，直接失败。
+	// The stone cap leaves no dry farmland below air. Any write therefore means
+	// the fixture or random-work surface changed.
 	if pending.Len() != 0 {
 		b.Fatalf("全耕地夹具产生了 %d 个区块的方块变更，工作负载必须零写入", pending.Len())
 	}

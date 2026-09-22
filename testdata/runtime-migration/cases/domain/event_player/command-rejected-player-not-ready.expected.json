@@ -1,0 +1,8 @@
+{
+  "kind": "ok",
+  "category": "command-rejected",
+  "fields": {
+    "reason": "player_not_ready",
+    "sequence": "7"
+  }
+}

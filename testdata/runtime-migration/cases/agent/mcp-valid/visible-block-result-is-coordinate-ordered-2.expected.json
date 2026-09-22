@@ -1,0 +1,10 @@
+{
+  "kind": "ok",
+  "category": "find_visible_blocks_result",
+  "fields": {
+    "keys": [
+      "matches"
+    ],
+    "schema": "find_visible_blocks_result"
+  }
+}

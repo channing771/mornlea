@@ -7,9 +7,9 @@ import (
 	"github.com/channing771/mornlea/packages/shared/world"
 )
 
-// dropStackCommand 构造一条整组丢弃命令：view 是 StackView* 视图域，slot 是
-// 该域的来源统一索引；容器视图携带 ref，其余视图传零值引用。投放位置与
-// 数量都由服务端从权威状态推导。
+// `dropStackCommand` builds a whole-stack drop. `view` selects the `StackView*`
+// domain, `slot` is its unified source index, and only container views carry
+// `ref`. Authority derives the amount and drop position.
 func dropStackCommand(
 	session SessionID,
 	sequence uint64,
@@ -26,8 +26,8 @@ func dropStackCommand(
 	}
 }
 
-// dropStackFootDrop 返回玩家脚底方块上当前登记的掉落物（按槽位顺序找到
-// 首个落在脚底索引上的活动掉落物），没有则返回 false。
+// `dropStackFootDrop` returns the first active drop registered at the player's
+// foot block in slot order.
 func dropStackFootDrop(t *testing.T, engine *Engine, session SessionID) (world.DropSlot, bool) {
 	t.Helper()
 	state := engine.sessions[session]
@@ -45,9 +45,9 @@ func dropStackFootDrop(t *testing.T, engine *Engine, session SessionID) (world.D
 	return world.DropSlot{}, false
 }
 
-// TestDropStackInventoryViewDropsWholeStackAtFeet 验收 spec 场景「拖出面板
-// 出现整组掉落物」的背包域形态：来源格 12 个石头整组取出，掉落物按脚底
-// 方块登记且数量保持 12，来源格清空，无拒绝。
+// `TestDropStackInventoryViewDropsWholeStackAtFeet` covers the inventory-view
+// panel-drop scenario: all 12 stones leave the source slot and appear unchanged
+// at the foot block without rejection.
 func TestDropStackInventoryViewDropsWholeStackAtFeet(t *testing.T) {
 	var inventory core.Inventory
 	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 12}
@@ -69,16 +69,16 @@ func TestDropStackInventoryViewDropsWholeStackAtFeet(t *testing.T) {
 	if drop.Stack != (core.ItemStack{Item: core.ItemStone, Count: 12}) {
 		t.Fatalf("掉落物 = %+v，想要整组 12 个石头", drop.Stack)
 	}
-	// 与 Q 键单件丢弃同一投放出口：拾取延迟取同一 tunable，且同 tick 的
-	// `advanceDrops` 已把它推进一格（40 → 39），防止捡回抢跑。
+	// Q drops and panel drops share publication and pickup delay. `advanceDrops`
+	// has already advanced the delay once in this tick, from 40 to 39.
 	wantDelay := engine.tunables.PlayerDropPickupDelayTicks - 1
 	if drop.PickupDelayTicks != wantDelay {
 		t.Fatalf("拾取延迟 = %d，想要 %d", drop.PickupDelayTicks, wantDelay)
 	}
 }
 
-// TestDropStackCraftingViewCoversGridAndBackpackRegions 验收合成域两种来源：
-// 网格统一格 0..8 与背包统一格 9..44 都能整组拖出，网格来源同时清网格脏位。
+// `TestDropStackCraftingViewCoversGridAndBackpackRegions` covers both crafting
+// grid indices 0..8 and inventory indices 9..44, including grid dirty state.
 func TestDropStackCraftingViewCoversGridAndBackpackRegions(t *testing.T) {
 	t.Run("网格来源", func(t *testing.T) {
 		grid := CraftingGrid{Size: CraftingGridSizePersonal}
@@ -103,7 +103,7 @@ func TestDropStackCraftingViewCoversGridAndBackpackRegions(t *testing.T) {
 	t.Run("背包来源", func(t *testing.T) {
 		var inventory core.Inventory
 		inventory.Backpack[2] = core.ItemStack{Item: core.ItemDirt, Count: 5}
-		// 统一视图 9+11 = 背包格 11（Backpack[2]）。
+		// Unified index 9+11 selects inventory slot 11, or `Backpack[2]`.
 		engine, session := stackSplitReadyPlayer(t, inventory, CraftingGrid{Size: CraftingGridSizePersonal})
 
 		result := settlePlayerInteractionsTick(engine, []Command{
@@ -122,8 +122,8 @@ func TestDropStackCraftingViewCoversGridAndBackpackRegions(t *testing.T) {
 	})
 }
 
-// TestDropStackChestViewDropsWholeStack 验收容器域（箱子）：箱子来源格整组
-// 取出脚下投放、来源格清空，经 containerMoves 延迟通道在区块写相位结算。
+// `TestDropStackChestViewDropsWholeStack` covers chest settlement through the
+// deferred `containerMoves` chunk-write phase.
 func TestDropStackChestViewDropsWholeStack(t *testing.T) {
 	var inventory core.Inventory
 	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemDirt, Count: 8}
@@ -133,7 +133,7 @@ func TestDropStackChestViewDropsWholeStack(t *testing.T) {
 	openStackSplitChest(t, engine, session)
 	command := dropStackCommand(session, 3, StackViewContainer, core.ChestFirstSlot, ref)
 
-	// 命令阶段只入队：容器域丢弃既不结算也不拒绝。
+	// Command handling only queues container drops; it neither settles nor rejects.
 	preliminary := applyPlayerCommandsTick(engine, []Command{command})
 	if len(preliminary.Rejected) != 0 {
 		t.Fatalf("命令阶段不应拒绝容器域丢弃: %+v", preliminary.Rejected)
@@ -158,8 +158,8 @@ func TestDropStackChestViewDropsWholeStack(t *testing.T) {
 	}
 }
 
-// TestDropStackFurnaceViewDropsFuelAndOutput 验收容器域（熔炉）：燃料格与
-// 输出格都可整组拖出（输出格只限制写入物品类型，取出丢弃不受限）。
+// `TestDropStackFurnaceViewDropsFuelAndOutput` proves both fuel and output may
+// be removed as whole stacks; output type restrictions apply only to insertion.
 func TestDropStackFurnaceViewDropsFuelAndOutput(t *testing.T) {
 	t.Run("燃料格", func(t *testing.T) {
 		furnace := world.FurnaceSlot{}
@@ -203,8 +203,8 @@ func TestDropStackFurnaceViewDropsFuelAndOutput(t *testing.T) {
 	})
 }
 
-// TestDropStackRejectsEmptySlot 验收 spec 场景「空槽拖出不产生掉落」：结算
-// 时点来源已空整单拒绝，背包与掉落状态零变化。
+// `TestDropStackRejectsEmptySlot` proves an empty source rejects atomically at
+// settlement without changing inventory or drops.
 func TestDropStackRejectsEmptySlot(t *testing.T) {
 	engine, session := stackSplitReadyPlayer(t, core.Inventory{}, CraftingGrid{Size: CraftingGridSizePersonal})
 	before := engine.sessions[session].player.inventory
@@ -223,8 +223,8 @@ func TestDropStackRejectsEmptySlot(t *testing.T) {
 	}
 }
 
-// TestDropStackRejectsDropCapacityAtomically 锁定容量拒绝的原子性：脚底掉落
-// 容量占满时整单拒绝，来源格与区块掉落零变化。
+// `TestDropStackRejectsDropCapacityAtomically` proves exhausted drop capacity
+// rejects without changing the source slot or chunk drops.
 func TestDropStackRejectsDropCapacityAtomically(t *testing.T) {
 	var inventory core.Inventory
 	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 3}
@@ -253,9 +253,9 @@ func TestDropStackRejectsDropCapacityAtomically(t *testing.T) {
 	}
 }
 
-// TestDropStackValueDomainRejects 锁定值域与查看关系拒绝：未知视图、非容器
-// 视图携带引用、索引越界、个人网格扩展格、未建立查看关系与容器空源都按
-// 既有拒绝语义整单拒绝且状态零变化。
+// `TestDropStackValueDomainRejects` pins atomic rejection for unknown views,
+// references on non-container views, out-of-range or inactive grid slots,
+// missing view relationships, and empty container sources.
 func TestDropStackValueDomainRejects(t *testing.T) {
 	var inventory core.Inventory
 	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 4}
@@ -285,8 +285,8 @@ func TestDropStackValueDomainRejects(t *testing.T) {
 		})
 	}
 
-	// 容器域走 containerMoves 延迟通道，拒绝在区块写相位（FinishWorld）产生；
-	// 未建立查看关系与空源分别验收。
+	// Container rejection occurs in the deferred `containerMoves` chunk-write
+	// phase; missing view relationships and empty sources are checked separately.
 	var chestInventory core.Inventory
 	chestEngine, chestSession, ref := stackSplitChestFixture(t, chestInventory, world.ChestSlot{}, CraftingGrid{})
 	unviewed := finishPlayerWorldTick(chestEngine, []Command{

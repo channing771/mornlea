@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "maxLength",
+    "path": "$.hint",
+    "schema": "validate_plan_failure_result"
+  }
+}

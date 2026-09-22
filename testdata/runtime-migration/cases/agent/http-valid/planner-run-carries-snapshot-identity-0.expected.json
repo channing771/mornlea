@@ -1,0 +1,23 @@
+{
+  "kind": "ok",
+  "category": "plan_request",
+  "fields": {
+    "keys": [
+      "client_instance_id",
+      "companion_id",
+      "contract_version",
+      "deadline_unix_ms",
+      "generation",
+      "instruction",
+      "lease_id",
+      "mcp_capability",
+      "mcp_endpoint",
+      "namespace_id",
+      "request_id",
+      "run_id",
+      "snapshot_digest",
+      "snapshot_id"
+    ],
+    "schema": "plan_request"
+  }
+}

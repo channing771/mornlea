@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "keyword": "additionalProperties",
+    "path": "$.plan.tool",
+    "schema": "validate_plan_input"
+  }
+}

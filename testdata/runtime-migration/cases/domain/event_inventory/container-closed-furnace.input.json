@@ -1,0 +1,17 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "container-closed",
+  "hotbar": [],
+  "backpack": [],
+  "slots": [],
+  "container": {
+    "kind": 0,
+    "chunk": [
+      2,
+      -3
+    ],
+    "slot": 31,
+    "generation": 9
+  },
+  "items": []
+}

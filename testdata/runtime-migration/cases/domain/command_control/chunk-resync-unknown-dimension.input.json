@@ -1,0 +1,9 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "chunk-resync",
+  "sequence": 6,
+  "dimension": 2,
+  "chunk_x": -3,
+  "chunk_z": 7,
+  "have_revision": 0
+}

@@ -1,31 +1,27 @@
-## Context
+## Planning status and prerequisites
 
-See `docs/notes/godot-client-pilot-report.md` and `openspec/changes/pilot-godot-client-migration/design.md` matrix row P11. This candidate is planning-only.
+This revision changes planning artifacts only. Runtime behavior, version identities, current producers, tracked images, and default startup do not change. The current Go server and Go pilot client-core remain transition implementations; final ownership follows the [target architecture](../../../docs/architecture-target.md). The [archived pilot design](../archive/2026-09-20-pilot-godot-client-migration/design.md) is historical evidence, not authority for new runtime ownership.
 
-## Target-boundary decision
+Implementation requires the relevant accepted F1, F2, and F3 exit evidence in their ledgers, including exact source SHA, fixture identities, command output, test discovery, and rollback decision. An existing proposal, checked planning status, text search, or optional-entry audit is not completion evidence. After a prerequisite is archived, resolve its ledger through its archive location and retain the accepted SHA. No task is complete merely because a test filter selected zero tests.
 
-Rust client-core produces validated semantic cue and device-intent events. Embedded Godot Python and Godot desktop APIs own playback, controller mapping, focus behavior, and resource lifecycle. The independent Agent Python runtime is not a dependency. The change must wait for F3 and must not add Go real-time logic, Python authority, numerical loops, or GDScript features.
+## Ownership and design decisions
 
-## Goals / Non-Goals
+Rust client-core owns confirmation identities, session de-duplication, accepted input ordering, and semantic cue selection. Embedded Python and Godot AudioServer/Input own playback, device mapping, focus adaptation, and resource lifecycle. Device failure is presentation degradation, never a lost server outcome. Standalone Agent Python is not imported.
 
-**Goals:**
+Use semantic event logs and a fake/no-device adapter for deterministic tests. Qualify real device behavior separately per desktop target without foreground automated game windows. Reject Python derivation of gameplay cue triggers because it duplicates confirmed-event logic; reject opening devices during capture because evidence must be reproducible without hardware.
 
-- Record the P11 production route so later work can apply it independently.
-- Preserve catalog replaceability and the stable Godot project root.
+## Risks and migration
 
-**Non-Goals:**
+Driver callbacks may arrive after teardown: generation checks and subscription accounting must prevent stale delivery. A missing device must not cause queued cues to burst later. Pin volume/resource behavior to recorded current contracts without copying old protocol version numbers from historical specs. Enable each adapter only after target qualification; disable it independently on failure. The existing Go audio implementation is an offline oracle, not an extension point.
 
-- Implementing P11 inside the pilot change.
-- Switching the default `mornlea` entry point.
-- Relaxing visual thresholds or writing renderer-specific goldens.
+### Visual evidence dependency
 
-## Decisions
+The visual task consumes the capture/report contract delivered by phase 2 of [production tooling](../godot-production-tooling/tasks.md), after F3. It does not wait for all tooling producer handoffs: tooling establishes the contract first, features provide parity evidence next, and each case is handed off afterward. This avoids a P8/P9/P10/P12 dependency cycle.
 
-### Candidate only
+Evidence has three ordered layers: semantic replay, untracked candidate capture, and explicitly approved canonical handoff. Each case names its semantic class, current and candidate producer, source SHA, scenario/input identity, asset/runtime/platform identity, capture boundary, and limits. Same-producer pixel regression retains its existing thresholds; cross-producer parity requires semantic evidence and human review of declared differences. Missing, stale, empty, failed, or non-comparable required cases block handoff. A dummy headless renderer cannot provide GPU pixel evidence; GPU capture uses a qualified non-foreground, no-focus path or requires explicit manual acceptance. No renderer-specific tracked class is created.
 
-Creating this change authorizes later apply work. It does not modify runtime code, the default client, or tracked visual producers.
+## Validation and rollback discipline
 
-### Rejected alternatives
+Named new test targets and scripts in `tasks.md` are prospective interfaces, not claims that they exist today. Their first implementation task creates them, records nonzero discovery, and runs a failing behavioral case before implementation. Reuse passing evidence only for the same tested SHA. Performance values are informational; invalid identity, incomplete coverage, real overflow, data loss, and I/O failures are hard errors. Automated validation must not launch or focus a foreground game window.
 
-- Implementing P11 immediately in the pilot change: rejected because P7 only authorizes the split.
-- Recreating a second Godot project root: rejected; `apps/mornlea-godot/` stays stable.
+Commit each independently verified implementation node with its scoped evidence before starting the next node. Update affected directory `AGENTS.md` when ownership changes; otherwise record inherited guidance. Closeout includes formatting, Rust checks, six-module vet, all six Go modules under `make test-race`, and strict OpenSpec validation. Review durable architecture findings at the end of each round; record `Architecture skill: no change` when no new verified rule qualifies.
