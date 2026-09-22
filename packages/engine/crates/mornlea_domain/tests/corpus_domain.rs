@@ -33,6 +33,9 @@ pub mod event_people;
 #[path = "corpus_domain/event_mobs.rs"]
 pub mod event_mobs;
 
+#[path = "corpus_domain/event_objects.rs"]
+pub mod event_objects;
+
 use runtime_corpus::{CorpusConsumer, FrozenCase, try_load_cases_from_root};
 use std::collections::HashSet;
 use support::{
@@ -45,8 +48,8 @@ use support::{
 /// `command_order` tests remain the domain ordering proof.
 const EXTERNAL_AUTHORITY_CASE_ID: &str = "domain.input/45/session-sequence-arrival";
 
-/// Exact integrated total across the nine closed topics.
-const TOTAL_DOMAIN_CASES: usize = 444;
+/// Exact integrated total across the ten closed topics.
+const TOTAL_DOMAIN_CASES: usize = 489;
 
 /// One closed topic adapter: its frozen count, ownership predicate, and
 /// executor. Counts are consumed from each topic's own frozen constant so the
@@ -114,6 +117,12 @@ const TOPICS: &[TopicAdapter] = &[
         exact_count: event_mobs::EXPECTED_COUNT,
         owns: event_mobs::owns,
         execute: event_mobs::execute,
+    },
+    TopicAdapter {
+        name: "event_objects",
+        exact_count: event_objects::EXPECTED_COUNT,
+        owns: event_objects::owns,
+        execute: event_objects::execute,
     },
 ];
 
@@ -338,8 +347,8 @@ fn corpus_structure() {
         try_load_cases_from_root(&root, CorpusConsumer::Domain).expect("load domain cases");
     assert_eq!(
         domain_cases.len(),
-        444,
-        "expected exactly 444 mornlea_domain cases"
+        489,
+        "expected exactly 489 mornlea_domain cases"
     );
 
     let authority_cases = try_load_cases_from_root(&root, CorpusConsumer::ExternalRuntimeAuthority)
@@ -396,6 +405,7 @@ fn corpus_structure() {
     assert!(!event_inventory::owns(authority_case));
     assert!(!event_people::owns(authority_case));
     assert!(!event_mobs::owns(authority_case));
+    assert!(!event_objects::owns(authority_case));
 
     // 4. Exact single ownership of every domain case
     let mut seen_ids = HashSet::new();
@@ -408,6 +418,7 @@ fn corpus_structure() {
     let mut event_inventory_count = 0;
     let mut event_people_count = 0;
     let mut event_mobs_count = 0;
+    let mut event_objects_count = 0;
 
     for case in &domain_cases {
         assert!(
@@ -453,6 +464,10 @@ fn corpus_structure() {
             matches += 1;
             event_mobs_count += 1;
         }
+        if event_objects::owns(case) {
+            matches += 1;
+            event_objects_count += 1;
+        }
 
         assert_eq!(
             matches, 1,
@@ -473,4 +488,5 @@ fn corpus_structure() {
     assert_eq!(event_inventory_count, 33, "event_inventory count mismatch");
     assert_eq!(event_people_count, 46, "event_people count mismatch");
     assert_eq!(event_mobs_count, 68, "event_mobs count mismatch");
+    assert_eq!(event_objects_count, 45, "event_objects count mismatch");
 }

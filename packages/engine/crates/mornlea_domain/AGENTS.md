@@ -516,10 +516,10 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
 ## Domain corpus dispatch (`tests/corpus_domain.rs`, `tests/corpus_domain/`)
 
 - Integration test `corpus_domain.rs` loads `testdata/runtime-migration/contracts.json`
-  and routes all 444 `mornlea_domain` cases into nine closed topic modules:
+  and routes all 489 `mornlea_domain` cases into ten closed topic modules:
   `identity_text` (31), `values` (99), `command_control` (28), `command_inventory` (54),
   `event_player` (47), `event_world` (38), `event_inventory` (33), `event_people` (46),
-  and `event_mobs` (68).
+  `event_mobs` (68), and `event_objects` (45).
 - Every domain case is JSON-formatted and specifies operation `admit`. Single ownership
   is enforced across the closed partition; catch-all predicates are prohibited.
 - `event_mobs.rs` owns the six hostile/passive mob rules (`hostile-spawn`,
@@ -532,6 +532,18 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   An unknown hostile kind, grazing or despawn-reason byte cannot enter a
   closed Rust type, so those branches stay classifier-only and no `Unknown`
   variant is invented; submitted record order is never sorted.
+- `event_objects.rs` owns the five projectile and item-drop rules
+  (`projectile-spawn`, `projectile-state`, `projectile-despawn`,
+  `item-drop-upserts`, `item-drop-removes`) with the same classifier /
+  constructor / normalizer discipline. The raw count above the shared 4,096
+  semantic cap classifies first, then each record walks its Go field order
+  (projectile identity, kind, dimension, finite pose and velocity; drop
+  slot, generation, block index, then the shared stack precedence), then
+  the strict batch order compares the full `DropId` key with the raw
+  dimension first. An unknown projectile kind or dimension byte stays
+  classifier-only, the raw drop dimension `-1` and `ItemStack::EMPTY`
+  construct and publish back losslessly, and submitted record order is
+  never sorted.
 - `domain.input/45/session-sequence-arrival` is assigned to `external:runtime-authority`
   because its expectation carries authoritative admission, deduplication, and world effects.
 - `support.rs` provides shared strict JSON parsing, primitive type readers, exact-array

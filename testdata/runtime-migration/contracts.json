@@ -464,6 +464,10 @@
           "sha256": "sha256:0e024d5753cbfd30d8a676d68a3fb3a571b62e9dfe742a4eec8b97055a1dccfc"
         },
         {
+          "path": "packages/shared/core/drop.go",
+          "sha256": "sha256:53be4374c38365674fa9ffe2bef542cf6497270b0dbfa18bf7a1b4e071759b38"
+        },
+        {
           "path": "packages/shared/core/furnace.go",
           "sha256": "sha256:799d4808eee0bab4548fa78e80147772d9929af1b0b8af1fd197d171f535133d"
         },
@@ -520,6 +524,10 @@
           "sha256": "sha256:b12db722f43c2ff6877fe33445ad3b204a56e1d946a592da7764591e0a650ad2"
         },
         {
+          "path": "packages/shared/network/protocol/message_drop.go",
+          "sha256": "sha256:f19242d3394aa3ba04dc90af3dcf3c567bf63a9881169968d4e74e54e0208d7f"
+        },
+        {
           "path": "packages/shared/network/protocol/message_hostile.go",
           "sha256": "sha256:0ca1bc81083475c12349c4b73ae0ae80a0143355fd333df4f9161f0c172bd0bb"
         },
@@ -534,6 +542,10 @@
         {
           "path": "packages/shared/network/protocol/message_player.go",
           "sha256": "sha256:097f4a8e062eaaeed57b42f3ae9d86c5e94c7b9ccf62ed78cd9a958bddb7f485"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_projectile.go",
+          "sha256": "sha256:1afe1670226f5c5e1800f9f34a1fd9a8019c8dfcef095ae5557aa21d898d8d87"
         },
         {
           "path": "packages/shared/network/protocol/registry.go",
@@ -698,6 +710,28 @@
         "domain.event/1/inventory-state-populated-slots",
         "domain.event/1/inventory-state-seed",
         "domain.event/1/inventory-state-selected-above-hotbar",
+        "domain.event/1/item-drop-removes-duplicate",
+        "domain.event/1/item-drop-removes-empty",
+        "domain.event/1/item-drop-removes-raw-dimension-negative-one",
+        "domain.event/1/item-drop-removes-reversed",
+        "domain.event/1/item-drop-removes-seed",
+        "domain.event/1/item-drop-removes-slot-32",
+        "domain.event/1/item-drop-removes-zero-generation",
+        "domain.event/1/item-drop-removes-zero-tick",
+        "domain.event/1/item-drop-upserts-block-index-98303",
+        "domain.event/1/item-drop-upserts-block-index-98304",
+        "domain.event/1/item-drop-upserts-duplicate",
+        "domain.event/1/item-drop-upserts-empty",
+        "domain.event/1/item-drop-upserts-empty-stack",
+        "domain.event/1/item-drop-upserts-nondurable-with-durability",
+        "domain.event/1/item-drop-upserts-raw-dimension-negative-one",
+        "domain.event/1/item-drop-upserts-reversed",
+        "domain.event/1/item-drop-upserts-seed",
+        "domain.event/1/item-drop-upserts-slot-32",
+        "domain.event/1/item-drop-upserts-unregistered-item-66",
+        "domain.event/1/item-drop-upserts-zero-count",
+        "domain.event/1/item-drop-upserts-zero-generation",
+        "domain.event/1/item-drop-upserts-zero-tick",
         "domain.event/1/passive-despawn-duplicate",
         "domain.event/1/passive-despawn-empty",
         "domain.event/1/passive-despawn-reversed",
@@ -755,6 +789,29 @@
         "domain.event/1/player-state-season-unknown",
         "domain.event/1/player-state-seed",
         "domain.event/1/player-state-weather-kind-unknown",
+        "domain.event/1/projectile-despawn-duplicate",
+        "domain.event/1/projectile-despawn-empty",
+        "domain.event/1/projectile-despawn-reversed",
+        "domain.event/1/projectile-despawn-seed",
+        "domain.event/1/projectile-despawn-zero-id",
+        "domain.event/1/projectile-despawn-zero-tick",
+        "domain.event/1/projectile-spawn-all-kind-dimension-combinations",
+        "domain.event/1/projectile-spawn-duplicate",
+        "domain.event/1/projectile-spawn-empty",
+        "domain.event/1/projectile-spawn-non-finite-position",
+        "domain.event/1/projectile-spawn-non-finite-velocity",
+        "domain.event/1/projectile-spawn-reversed",
+        "domain.event/1/projectile-spawn-unknown-dimension",
+        "domain.event/1/projectile-spawn-unknown-kind",
+        "domain.event/1/projectile-spawn-zero-id",
+        "domain.event/1/projectile-spawn-zero-tick",
+        "domain.event/1/projectile-state-duplicate",
+        "domain.event/1/projectile-state-empty",
+        "domain.event/1/projectile-state-non-finite-position",
+        "domain.event/1/projectile-state-reversed",
+        "domain.event/1/projectile-state-seed",
+        "domain.event/1/projectile-state-zero-id",
+        "domain.event/1/projectile-state-zero-tick",
         "domain.event/1/remote-player-despawn-seed",
         "domain.event/1/remote-player-despawn-zero-identity",
         "domain.event/1/remote-player-spawn-depths-dimension",
@@ -10335,6 +10392,424 @@
       "rust_consumer": "mornlea_domain"
     },
     {
+      "id": "domain.event/1/item-drop-removes-duplicate",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-removes-duplicate.input.json",
+        "sha256": "sha256:e0227c345dd2a6a7913da7720e87e2671740e9261ee145c840c61a7d28635d32"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-removes-duplicate.expected.json",
+        "sha256": "sha256:1f16956d5013062d6556f0918b339d371d3609b280822fbd0bae8b1cb577c6c2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-removes-empty",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-removes-empty.input.json",
+        "sha256": "sha256:2e67e188da804408d79d2d49b47177560b22d44912511d240c080fb2b7c96e4a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-removes-empty.expected.json",
+        "sha256": "sha256:f4bea4213a711bf21ac06780251932afdef54491d508872b625f244bda30c9ce"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-removes-raw-dimension-negative-one",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-removes-raw-dimension-negative-one.input.json",
+        "sha256": "sha256:719e79afdb69bbab52ad7d8efc114b51fc20ce6b4760c2b79c5a2a57749b2f56"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-removes-raw-dimension-negative-one.expected.json",
+        "sha256": "sha256:dc604cdaa1eab246be291ed1f0056df8859054b7204441f6b5f2dbf8b55862aa"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-removes-reversed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-removes-reversed.input.json",
+        "sha256": "sha256:8ece87ebd1ca4df2d62af2efe0ebcf321276ef60424c4fa4ba2b60bc2bdd3f6e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-removes-reversed.expected.json",
+        "sha256": "sha256:d394822c1ae83dc973d17593c8898eb2aedc182270dfaa97f3678e671bfc897d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-removes-seed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-removes-seed.input.json",
+        "sha256": "sha256:2917c7ea67821008f1294d61a48f4e15d9281a8dc03d31be138cf83ecbb6564c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-removes-seed.expected.json",
+        "sha256": "sha256:3661ed2033b467b7631f51eca931c9e2980950fcfa15868cacd8fa8e2834e526"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-removes-slot-32",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-removes-slot-32.input.json",
+        "sha256": "sha256:2584e2b7d0ed6cb33bd2c6f3b1782fbf48add246ab68ec96ba11638c03ed6955"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-removes-slot-32.expected.json",
+        "sha256": "sha256:16dd5526629d6659165ef8a726fee7607592b8fda9e5c325fb4e230fcaa21663"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-removes-zero-generation",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-removes-zero-generation.input.json",
+        "sha256": "sha256:91597ea70d7361c3c7da7c6fd816b2bafd26537dbf7acc517d8ae87dd1b2631a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-removes-zero-generation.expected.json",
+        "sha256": "sha256:0bfe7f29e4dc9baa76e2f9e903f6d1cbd83c067bb610c260452557c545666600"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-removes-zero-tick",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-removes-zero-tick.input.json",
+        "sha256": "sha256:c5cd87452729f4cfe2d3544c87fcfb94a89523e017e545dbb7c01d3f5c7e2994"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-removes-zero-tick.expected.json",
+        "sha256": "sha256:82eadd126e432eeb742821455f273cdf59b4218e649a5114630322388b644d1c"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-upserts-block-index-98303",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-block-index-98303.input.json",
+        "sha256": "sha256:32b09cb6d41b27ad446263e490651b42950e6c034979b371576ca6c0b2046748"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-block-index-98303.expected.json",
+        "sha256": "sha256:93072034d2cad75462885d54b5e5b04068a877027ef56bc2baa1eb1d8a2834bf"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-upserts-block-index-98304",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-block-index-98304.input.json",
+        "sha256": "sha256:e870014a7d821c7466687656940258aae1adc07da47f46f8c284feee6ee424b0"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-block-index-98304.expected.json",
+        "sha256": "sha256:ef055a10e63ed83e7754cb742d58aada04146ee20ef2c2593b477ac6cbaa9313"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-upserts-duplicate",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-duplicate.input.json",
+        "sha256": "sha256:2bed7a20aad075d7674e4499507a745b0bef94531cf48ba7f7db1e55a40ccc4e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-duplicate.expected.json",
+        "sha256": "sha256:399d83f5f0a4a5e997374d099a889071648ee0a5a430e3c369e53b3e10bce978"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-upserts-empty",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-empty.input.json",
+        "sha256": "sha256:d04d453234a70042309dded4fd28e7f0391864bc749a333eed1f356afee1acef"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-empty.expected.json",
+        "sha256": "sha256:c748720078f9e82fd132b45e9a58ac0ab32b718889594b283765d13c12247af1"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-upserts-empty-stack",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-empty-stack.input.json",
+        "sha256": "sha256:1016066a28710c14ca7711cdbca48eb9effe940bcf30179d439fbb23e121e300"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-empty-stack.expected.json",
+        "sha256": "sha256:a9401d8d9529c04fdf12a1ada6f54c0086ffec1171d77347cfa970015b3de2ad"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-upserts-nondurable-with-durability",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-nondurable-with-durability.input.json",
+        "sha256": "sha256:d87b61c9ee90ad596675e8e2ee24d82b89c1fff4aedd130f4e73412d83940cc3"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-nondurable-with-durability.expected.json",
+        "sha256": "sha256:fb3f4fc5d4217b8e26ae7a14119014cb092b3017b9a40c3398f1084465150551"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-upserts-raw-dimension-negative-one",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-raw-dimension-negative-one.input.json",
+        "sha256": "sha256:3747cb9ecab5c45cd683e8a13f749ba80cd991665b74420feb521495c9cd2f12"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-raw-dimension-negative-one.expected.json",
+        "sha256": "sha256:93241256afa94cea37bc5b9e0a4a2542a247600ab74f31ffc1d0dc84c8c7e198"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-upserts-reversed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-reversed.input.json",
+        "sha256": "sha256:7bf135f2cf845b19873867c82626cd90e202194b628b1cfbe6a92793dfecd138"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-reversed.expected.json",
+        "sha256": "sha256:2b9e5af4bd94fff9d701e8e1c0e78e43ee9a26ff7544be4e836533d13381f9d6"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-upserts-seed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-seed.input.json",
+        "sha256": "sha256:2bc286d27c169a628ad886e903840ad368de75cbc2ffc0dfd4ad5eb84b7c990c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-seed.expected.json",
+        "sha256": "sha256:b406c4630ebed30eb2f314ad4aedc28d8d83e63f587b6afa3dc1faeab7fe2252"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-upserts-slot-32",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-slot-32.input.json",
+        "sha256": "sha256:3208e14255d71532d82cdc1442670b31cbb4755f66a28ff75cb6adc779037691"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-slot-32.expected.json",
+        "sha256": "sha256:796379c7286d3249303797a14233360767f1cd41f456ccbdeb010bbdb2e608e6"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-upserts-unregistered-item-66",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-unregistered-item-66.input.json",
+        "sha256": "sha256:7fafb1f1fc0e2050339cc8011887bc9f60259c579227e65eacd6edf7e772e896"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-unregistered-item-66.expected.json",
+        "sha256": "sha256:e9926e94fd5d373cb0ea60990b6e9f4a2ac00234f105237d33ed49070c538627"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-upserts-zero-count",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-zero-count.input.json",
+        "sha256": "sha256:0bcfaa86a7ac0d162040863f883c0c7d53650e0524cdc651d807b206bb151efe"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-zero-count.expected.json",
+        "sha256": "sha256:10432a1183e57416422af73fc701a9c44640bfddb6bbe1527abd14b2bf9fc58a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-upserts-zero-generation",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-zero-generation.input.json",
+        "sha256": "sha256:ce37382200e0d6b6954a3e9de1f547ec692dacaccf081f9c6bfc824ce9c64d38"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-zero-generation.expected.json",
+        "sha256": "sha256:4f8b66873df8c8e81441e698045c9ca44f1e2324aa8f36d662dcd383acc541c2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/item-drop-upserts-zero-tick",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-zero-tick.input.json",
+        "sha256": "sha256:feed3cebdc3a80d92a749e7272f62afc5da13cd538a15028dfc2a06cf73eb5e8"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/item-drop-upserts-zero-tick.expected.json",
+        "sha256": "sha256:a21b46e3acde20feaaaa458cae2c80e3892acbbd99185b014d71737bb3dc34b3"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
       "id": "domain.event/1/passive-despawn-duplicate",
       "family": "domain.event",
       "version": "1",
@@ -11411,6 +11886,443 @@
       "expected": {
         "path": "testdata/runtime-migration/cases/domain/event_player/player-state-weather-kind-unknown.expected.json",
         "sha256": "sha256:523eda3cce875ead81aabf80a7c19536cb8c2111931bd941f3b66f2b4b210d21"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-despawn-duplicate",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-despawn-duplicate.input.json",
+        "sha256": "sha256:30a60815f83c9be1f9bd2da1f4e9d3a132d219cfd7bd40051706c11dfe413b1d"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-despawn-duplicate.expected.json",
+        "sha256": "sha256:e33fac85546ef6b6b680c2844c1fc11f11159832240aab4f9b9d47f2f3d266bf"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-despawn-empty",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-despawn-empty.input.json",
+        "sha256": "sha256:34cc2b89c369afb9e6b5d5be3c2e2b183675a0f96db23e5060828eca79802d7c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-despawn-empty.expected.json",
+        "sha256": "sha256:2c7e81b43a1809b53dc25d6f65d54f3b57bb8053fd226a9a281c335865ddc769"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-despawn-reversed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-despawn-reversed.input.json",
+        "sha256": "sha256:08f4a241fbef2a75714b0f8f6da0be9ed275223eb48f17ee7d3975a103f40ead"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-despawn-reversed.expected.json",
+        "sha256": "sha256:bbd2195b14a778ef224ae9f80970a442123fc77af1d28614319b6f60410ae021"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-despawn-seed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-despawn-seed.input.json",
+        "sha256": "sha256:2251ce184768fd0f51f24c804c8a192c776e6cfdab1758f8517dae20afd405fe"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-despawn-seed.expected.json",
+        "sha256": "sha256:ebaa573a774ee295e08c0ef6efbf8c412bd9cf9a56ac05bfc3bcb5b8fd3817d0"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-despawn-zero-id",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-despawn-zero-id.input.json",
+        "sha256": "sha256:3f80bc36a88172cecf55dc9ac81f35f58c2e3dddc2b25d492d74610c456ebcb8"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-despawn-zero-id.expected.json",
+        "sha256": "sha256:da9d731ab138e23471bd4406ab4a7624654211cd56c42797d8c162dd6c4f2073"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-despawn-zero-tick",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-despawn-zero-tick.input.json",
+        "sha256": "sha256:cd1a375a8ca68e7ddc020ab9a4550d50ea643f8c031d78048a7c671c0d30a6c7"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-despawn-zero-tick.expected.json",
+        "sha256": "sha256:b1249d40d59dbc017f319295856c5690f33bdd57db66d00a7e3dfd63033aacd6"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-spawn-all-kind-dimension-combinations",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-all-kind-dimension-combinations.input.json",
+        "sha256": "sha256:d8e7e4f68f5353e4abf6636ac6ab67f577fb65fc5f60825c6e0681d8c4496d9d"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-all-kind-dimension-combinations.expected.json",
+        "sha256": "sha256:937ca837c7775a8c0df59373be873a272ff6b1aa0ab2c997ea1a2304e558c439"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-spawn-duplicate",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-duplicate.input.json",
+        "sha256": "sha256:5fefe83c2fad8931418bf395fb2bedb096ea6e006a4a220f02bc1d63ffe73ebc"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-duplicate.expected.json",
+        "sha256": "sha256:8ff44da4c23efbf660402c46397e81624805fcbdca41309851ffd1bb98b24426"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-spawn-empty",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-empty.input.json",
+        "sha256": "sha256:7e2b36edf12eecf5c0f6b737ee3c4a12b8f497eb276aae682d945206a422be93"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-empty.expected.json",
+        "sha256": "sha256:397a7ee5d178e2e1ee5570aa3c73e732f5811e197728636374a6a8437e8fbfe5"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-spawn-non-finite-position",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-non-finite-position.input.json",
+        "sha256": "sha256:a07ee7050d0927a8b56fad474bcc9f96bc8a318ec72311bd9d79e9e23ee03a64"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-non-finite-position.expected.json",
+        "sha256": "sha256:35edae034dbce0ec1c3e00d0e9605004c87db366b09e391927c214956a4cea7e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-spawn-non-finite-velocity",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-non-finite-velocity.input.json",
+        "sha256": "sha256:6aff83924da3615a963e6b06fa4cd8f3364adb77653555689fe4f0f11d0225d4"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-non-finite-velocity.expected.json",
+        "sha256": "sha256:4e15c942383319c5dbb8760b513c21dc1809c24b2cb4f75d41c689d1fea544a8"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-spawn-reversed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-reversed.input.json",
+        "sha256": "sha256:da5d7d64cad41f61c93e97ab66e7d8e4a7b9d1650259229ff0e223c15d201c6c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-reversed.expected.json",
+        "sha256": "sha256:d34d3532f84c36277f2266c8e494f926503244b5722c49ae36362d4cb1fef84c"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-spawn-unknown-dimension",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-unknown-dimension.input.json",
+        "sha256": "sha256:d783a5508dc1551a9559235036894fe9d673caab1e19dd0faef55d992b82e885"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-unknown-dimension.expected.json",
+        "sha256": "sha256:3ad199600aa5edf2509691f707fd0285d1eb883c8fee61ee122d1beef339abe0"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-spawn-unknown-kind",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-unknown-kind.input.json",
+        "sha256": "sha256:5397d221c09505254bd3995908f5a13f49a0e773dddcb61e75759eddfbeb6489"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-unknown-kind.expected.json",
+        "sha256": "sha256:faf022a413b1ed676d8bfd6188f3c0ce74edaeadb329547da4c61bac5c68828d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-spawn-zero-id",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-zero-id.input.json",
+        "sha256": "sha256:702c820788b5a7c6155e647d7fb00e3ccb70292dce95a4f97d39ec8b1efeff62"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-zero-id.expected.json",
+        "sha256": "sha256:768a07fdc37ed7a86bedcddc181e857efc96e466e3b1fe8f98df5d2957af44c0"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-spawn-zero-tick",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-zero-tick.input.json",
+        "sha256": "sha256:038a5e20486c0ec78aa45459c72ef2ade005789cd0d2c71a32833268ac01161e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-spawn-zero-tick.expected.json",
+        "sha256": "sha256:bbb91708dcd8e8fa5b7318fa035d168c6ec2a5edc5b233b852de49c513fc3335"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-state-duplicate",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-state-duplicate.input.json",
+        "sha256": "sha256:24af11ecf6329137a6166870b35a207de9471fefa7e055860590e8076921d197"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-state-duplicate.expected.json",
+        "sha256": "sha256:b4168f78f5822661d96c7904ce616e86a8438525c3ad1b42ccda8fb54d7f7e4c"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-state-empty",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-state-empty.input.json",
+        "sha256": "sha256:ac085c887f9c3919412146dafb6a3c84fbf41ab81e65165dc4ee59aea695591f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-state-empty.expected.json",
+        "sha256": "sha256:808af5011c46ad216304214c8bb2527d40cb87f23d52b729ecbeecbe2a3b2ef5"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-state-non-finite-position",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-state-non-finite-position.input.json",
+        "sha256": "sha256:79dafc806901af4abfb13fc00ff536133664815553057a817f0858514b9a5d82"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-state-non-finite-position.expected.json",
+        "sha256": "sha256:789eff62ca87e8301d3faeeb62ec410c51ceac1130a15288e322c4be216636e8"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-state-reversed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-state-reversed.input.json",
+        "sha256": "sha256:8c91a6732637dd5eb3f2f0a3f51a12f2ec43693db8b4311211d07f68c20ca883"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-state-reversed.expected.json",
+        "sha256": "sha256:e38997c52f31aaf63d12ff88dd652fa02e0ad47f03f956bb06e55190339561d6"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-state-seed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-state-seed.input.json",
+        "sha256": "sha256:52d496b0fccc85b21be1041c95ebad6a2e8a3d02b3c5befa50cb324c2be75e84"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-state-seed.expected.json",
+        "sha256": "sha256:9597724d6a0f0fa7f802049390352a1e1af10aa9fe3285343e4ecc7dae8cdd56"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-state-zero-id",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-state-zero-id.input.json",
+        "sha256": "sha256:a7381d7a40d13a843872d5cb490003905f768b4458b99c548d5dc28ed6bf9f62"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-state-zero-id.expected.json",
+        "sha256": "sha256:7e9d5b37c30c6a3b1c8e162d5d45b74a963c3489596dcd0e6d2f2e3acc8d3cf3"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/projectile-state-zero-tick",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-state-zero-tick.input.json",
+        "sha256": "sha256:ce96853e5005788298bef4ffc2e159f37a155c2cb5139582fd13d9a5812be9c5"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_objects/projectile-state-zero-tick.expected.json",
+        "sha256": "sha256:7f10bdfb1be816b24ab06f4f79a0c536e2fbd9580af54e9b160257cc320892ed"
       },
       "checkpoints": [
         "0"

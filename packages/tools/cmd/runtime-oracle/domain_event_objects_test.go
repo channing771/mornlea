@@ -2270,6 +2270,134 @@ func TestDomainEventObjectsDropOrderingUsesRawDimensionFirst(t *testing.T) {
 	}
 }
 
+// domainEventObjectsSelection is this producer's exact reviewed registration:
+// the 45 committed case specifications with digests proven against the files
+// on disk, plus the provenance paths those rules are read from. The shared
+// manifest-candidate helper consumes it, so the candidate this node publishes
+// is assembled from the same reviewed `CaseSpec` values the committed corpus
+// freezes rather than from a second rendering.
+func domainEventObjectsSelection(t *testing.T, root string) domainEventSelection {
+	t.Helper()
+	return domainEventSelection{
+		Cases:   domainEventObjectsCorpusCases(t, root),
+		Sources: append([]string(nil), domainEventObjectsFamilySources...),
+	}
+}
+
+// The frozen manifest counts this node's candidate must reach: 489 total
+// `mornlea_domain` cases, 277 of them registered under the shared
+// `domain.event` family, and a family provenance union of 30 paths.
+const (
+	domainEventObjectsMergedDomainTotal = 489
+	domainEventObjectsMergedFamilyTotal = 277
+	domainEventObjectsMergedSourceTotal = 30
+)
+
+// TestDomainEventObjectsManifestCandidateRegistersEveryObjectsCase merges
+// this producer's selection into the tracked manifest and proves the merged
+// candidate reaches the frozen node counts before it is published. A base
+// that already registers the objects corpus accepts an idempotent re-merge
+// of the same reviewed specs, so the same test gate covers both the first
+// publication and every later ordinary run.
+func TestDomainEventObjectsManifestCandidateRegistersEveryObjectsCase(t *testing.T) {
+	root := mustRepoRoot(t)
+	before := computeTrackedCorpusDigest(t, root)
+	defer assertTrackedCorpusUnchanged(t, root, before)
+
+	base := loadRealManifest(t, root)
+	selection := domainEventObjectsSelection(t, root)
+	merged := mergeDomainEventSelections(t, root, base, selection)
+
+	baseIDs := make(map[string]bool, len(base.Cases))
+	for _, c := range base.Cases {
+		baseIDs[c.ID] = true
+	}
+	mergedByID := make(map[string]CaseSpec, len(merged.Cases))
+	for _, c := range merged.Cases {
+		mergedByID[c.ID] = c
+	}
+	added := 0
+	for _, want := range selection.Cases {
+		got, ok := mergedByID[want.ID]
+		if !ok {
+			t.Fatalf("merged manifest drops objects case %s", want.ID)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("merged manifest rewrites objects case %s", want.ID)
+		}
+		if !baseIDs[want.ID] {
+			added++
+		}
+	}
+	if added != 0 && added != domainEventObjectsCaseTotal {
+		t.Fatalf("merged manifest adds %d new objects cases, want 0 (already registered) or %d", added, domainEventObjectsCaseTotal)
+	}
+	if len(merged.Cases) != len(base.Cases)+added {
+		t.Fatalf("merged manifest carries %d cases, want %d", len(merged.Cases), len(base.Cases)+added)
+	}
+
+	domainTotal, familyTopLevel := 0, 0
+	for _, c := range merged.Cases {
+		if c.RustConsumer == domainEventObjectsConsumer {
+			domainTotal++
+		}
+		if c.Family == domainEventObjectsFamily {
+			familyTopLevel++
+		}
+	}
+	if domainTotal != domainEventObjectsMergedDomainTotal {
+		t.Fatalf("merged manifest registers %d mornlea_domain cases, want %d", domainTotal, domainEventObjectsMergedDomainTotal)
+	}
+	if familyTopLevel != domainEventObjectsMergedFamilyTotal {
+		t.Fatalf("merged manifest registers %d domain.event cases, want %d", familyTopLevel, domainEventObjectsMergedFamilyTotal)
+	}
+	family, ok := domainEventFamilySpec(merged)
+	if !ok {
+		t.Fatalf("merged manifest has no %s family", domainEventObjectsFamily)
+	}
+	if len(family.Cases) != domainEventObjectsMergedFamilyTotal {
+		t.Fatalf("%s lists %d cases, want %d", domainEventObjectsFamily, len(family.Cases), domainEventObjectsMergedFamilyTotal)
+	}
+	if len(family.Sources) != domainEventObjectsMergedSourceTotal {
+		t.Fatalf("%s records %d provenance sources, want %d", domainEventObjectsFamily, len(family.Sources), domainEventObjectsMergedSourceTotal)
+	}
+	basePaths := make(map[string]bool, len(family.Sources))
+	baseFamily, baseFamilyOK := domainEventFamilySpec(base)
+	if !baseFamilyOK {
+		t.Fatalf("tracked manifest has no %s family", domainEventObjectsFamily)
+	}
+	for _, source := range baseFamily.Sources {
+		basePaths[source.Path] = true
+	}
+	paths := make(map[string]bool, len(family.Sources))
+	for _, source := range family.Sources {
+		paths[source.Path] = true
+	}
+	for _, source := range baseFamily.Sources {
+		if !paths[source.Path] {
+			t.Fatalf("%s provenance drops the previously present path %s", domainEventObjectsFamily, source.Path)
+		}
+	}
+	for _, required := range []string{
+		"packages/shared/core/drop.go",
+		"packages/shared/network/protocol/message_drop.go",
+		"packages/shared/network/protocol/message_projectile.go",
+	} {
+		if !paths[required] {
+			t.Fatalf("%s provenance misses the object path %s", domainEventObjectsFamily, required)
+		}
+	}
+	if merged.SourceRevision != base.SourceRevision {
+		t.Fatalf("merged manifest changes source_revision from %s to %s", base.SourceRevision, merged.SourceRevision)
+	}
+
+	exportRoot := strings.TrimSpace(os.Getenv(runtimeOracleExportDirEnv))
+	candidate := writeDomainEventManifestCandidate(t, root, exportRoot, merged)
+	if exportRoot != "" && candidate == "" {
+		t.Fatalf("manifest candidate export was rejected for %s", exportRoot)
+	}
+}
+
 // TestDomainOracle_event_objects is the topic-named entry point the domain
 // plan names for this node. It delegates to the same executed table, so the
 // two filters select one source of expected results rather than two.

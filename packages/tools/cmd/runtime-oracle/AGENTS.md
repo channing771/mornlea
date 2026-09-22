@@ -202,12 +202,12 @@ only discriminator the manifest carries.
   publication rules (`projectile-spawn`, `projectile-state`,
   `projectile-despawn`, `item-drop-upserts`, `item-drop-removes`) through the
   Go `protocol` DTOs. Its 45 frozen cases live under
-  `testdata/runtime-migration/cases/domain/event_objects/` but are not yet
-  registered in the canonical manifest; that registration is a later node's
-  work, so publication is external-only through `RUNTIME_ORACLE_EXPORT_DIR`
-  under the producer ID `runtime-oracle/domain-event-objects`, with the export
-  running before the committed-bytes comparison so an initial export can
-  materialize the full candidate while the tracked directory is still absent.
+  `testdata/runtime-migration/cases/domain/event_objects/` and are registered
+  in the canonical manifest through the shared manifest-candidate helper below,
+  raising the tracked corpus to 489 `mornlea_domain` cases and 277
+  `domain.event` cases; the per-producer asset candidate still publishes
+  external-only through `RUNTIME_ORACLE_EXPORT_DIR` under the producer ID
+  `runtime-oracle/domain-event-objects`.
   Projectile IDs and ticks are decimal strings in the frozen input so the full
   `u64` range stays lossless, a drop identity stays the object of its five
   ordered key fields with the raw i32 dimension first, and a carried stack
@@ -290,16 +290,21 @@ only discriminator the manifest carries.
   unchanged, and the reviewed candidate is copied into
   `testdata/runtime-migration/contracts.json` mechanically, never assembled
   or edited by hand.
-- Node 4.1 registered the 68 mob cases this way: the tracked corpus now
-  carries 444 `mornlea_domain` cases and 232 `domain.event` cases, and the
-  Rust `event_mobs` topic adapter in `mornlea_domain` owns all six rules.
+- Node 4.1 registered the 68 mob cases this way, raising the tracked corpus
+  to 444 `mornlea_domain` cases and 232 `domain.event` cases, with the Rust
+  `event_mobs` topic adapter in `mornlea_domain` owning all six rules.
+- Node 4.2 registered the 45 object cases the same way: the tracked corpus
+  now carries 489 `mornlea_domain` cases and 277 `domain.event` cases with a
+  30-path family provenance union, and the Rust `event_objects` topic
+  adapter in `mornlea_domain` owns all five rules.
 - Enforcement: `TestDomainEventManifestMergeRejectsDuplicateCase`,
   `TestDomainEventManifestMergeRejectsMissingFamilyCase`,
   `TestDomainEventManifestMergeSortsCasesSourcesAndFamilyCases`,
   `TestDomainEventManifestMergePreservesUnrelatedFamilies`,
   `TestDomainEventManifestCandidateRejectsRepositoryAndSymlinkTargets`,
-  `TestDomainEventManifestCandidateReloadsAndReconciles`, and
-  `TestDomainEventMobsManifestCandidateRegistersEveryMobsCase`.
+  `TestDomainEventManifestCandidateReloadsAndReconciles`,
+  `TestDomainEventMobsManifestCandidateRegistersEveryMobsCase`, and
+  `TestDomainEventObjectsManifestCandidateRegistersEveryObjectsCase`.
 
 - Expected outcomes come from executing the real Go validator or codec, never
   from a hand-written value or a Rust result. Every test run compares generated
