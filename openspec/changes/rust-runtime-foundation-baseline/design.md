@@ -375,6 +375,29 @@ current.
 
 ## Risks / Trade-offs
 
+### Final-gate mining harness repair
+
+The final non-race short suite exposed a latent mining fixture defect: the
+grass surface admits passive spawning and grazing, so different login-ready
+tick windows can add an unrelated authoritative dirt update to the strict
+mining completion frame. Keep that four-message assertion unchanged. The
+mining generator retains `integrationChunk` and its central stone target, but
+replaces every y=0 surface cell with dirt before adding the two side targets.
+Do not filter extra block updates, disable production simulation, or retry a
+failed gate until it happens to pass.
+
+The same harness only shuts down its host on the success path. Introduce a
+file-private host constructor that registers bounded `t.Cleanup` immediately
+after creation; keep the explicit successful shutdown and persistence checks.
+Register endpoint closure after login. Exercise normal return and `SkipNow`
+(the same `Goexit` cleanup path used by `Fatal`) in nested subtests, requiring
+the actual host runtime and closed channels to be closed after the child ends.
+The existing global shutdown-goroutine assertion stays unchanged.
+
+This is test-only acceptance repair, not a new runtime boundary. Root and
+`packages/server/AGENTS.md` govern the existing directory; no new guide or
+architecture skill rule is required.
+
 - A complete gate cannot pass until successor families land → keep complete
   acceptance separate and test its failures now; do not call it from the
   baseline CLI.
@@ -407,9 +430,11 @@ current.
 8. Refresh the six provenance rows invalidated by reviewed source changes,
    repair duplicate-family working manifests and stale corpus workflow prose,
    then promote the derived-consumer planning rule.
-9. Run the integrated baseline gates, independent review and strict OpenSpec
+9. Repair final-gate mining fixture isolation and failure-path host cleanup,
+   preserving strict transcript and shutdown oracles.
+10. Run the integrated baseline gates, independent review and strict OpenSpec
    validation at one result SHA.
-10. Sync the narrow delta into the canonical specification and archive this
+11. Sync the narrow delta into the canonical specification and archive this
    baseline change. Keep the existing
    `2026-09-21-rust-runtime-foundation` historical archive unchanged and do not
    sync its remaining successor scope.

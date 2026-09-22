@@ -688,6 +688,91 @@ An independent reviewer verifies the policy, every pressure score, mutation
 guard and synchronized copies. Proposed commit:
 `docs(orchestration): track derived source consumers`.
 
+## Node 5.9d: Isolate mining parity and close failed harnesses
+
+**Baseline, ownership and deliverable.** Direct predecessor: 5.9c. Use the
+controller-supplied planning checkpoint after `31a32773`. Modify only
+`packages/server/server/transport_parity_integration_test.go`. Produce a
+deterministic mining-only fixture and failure-safe ownership of its host;
+all completion-frame, mirror, inventory, disconnect and shutdown assertions
+remain strict. The controller owns integration, artifact status and rollback.
+
+**Read-only contracts.** Read `packages/server/AGENTS.md`,
+`host_test_helpers_test.go` (`mustNewHost`, `hostTestConfig`),
+`tcp_integration_helpers_test.go` (`integrationChunk`), `host_shutdown.go`,
+`server.go`, `persistence_integration_test.go`, and
+`packages/server/sim/entity/passive_spawn.go` / `passive_graze.go`.
+`integrationChunk` already creates the central `(0,1,-6)` stone target;
+the mining generator adds `(-1,1,-6)` and `(1,1,-6)`. Preserve all three.
+
+**Test first.** Add `TestMiningParityGeneratorExcludesBackgroundGrazing`:
+generate each chunk in `[-1,1] x [-1,1]`, require every local x/z ground cell
+at y=0 to equal `core.DirtID`, and require all three named targets to equal
+`core.StoneID` in their correct chunks. On the baseline it fails on grass.
+
+Add file-private
+`newMiningParityHost(t *testing.T, config Config, store storage.WorldStore) *Host`.
+Initially it delegates unchanged to
+`mustNewHost(t, config, miningParityGenerator{}, store)` and the script uses
+it; this is the behavior-preserving RED scaffold. Add
+`TestMiningParityHostClosesOnScopeExit`, with outer cases `return` and `goexit`.
+Each creates the actual host in a nested `t.Run("scope", ...)` through the
+new helper, using `hostTestConfig()` and `newHostTestStore()`. The second
+nested scope calls `t.SkipNow()` to exercise `runtime.Goexit` without making
+the intentional abort a suite failure. After the child returns, nonblocking
+selects must observe both `host.world.runtimeDone` and `host.world.closedDone`
+closed. Register a parent fallback cleanup before entering the child so RED
+does not itself leak resources; that fallback runs only after the assertions
+and uses a fresh `waitDeadline` context with errors reported. This test fails
+on the live host channels before the helper gains cleanup.
+
+**Implementation.** After `integrationChunk(position, core.StoneID)`, set all
+y=0 local cells to dirt with bounded nested loops over `core.SectionSize`;
+leave bedrock, subsurface and all mining targets intact. Add a concise English
+comment explaining isolation from absolute-tick background grazing. The helper
+registers `t.Cleanup` immediately after `mustNewHost`: create a fresh context
+with `waitDeadline`, defer cancel, call `host.Shutdown(ctx)`, and report any
+error with `t.Errorf`. Return the host. Immediately after successful
+`openParityTransport`, defer `endpoint.Close()` in addition to existing
+transport closure. Retain the script's explicit successful shutdown,
+accept-worker join, disconnect and persisted-inventory verification.
+
+**Derived consumers.** This file is neither a manifest provenance source nor
+a generator/embed input: the reviewed manifest and repository references have
+no matching path or generation directive. Its Go test compiler and repository
+source scanners consume it. No artifact or hash refresh is authorized; the
+worker owns only this test source, the controller owns acceptance artifacts.
+Use existing source-language, dependency and corpus-writer audit gates plus
+the final full audit. New comments use English; do not rewrite existing
+unrelated comments or change the historical comment-debt baseline.
+
+**Validation.** Record deterministic RED for both new named tests, then:
+
+```bash
+gofmt -w packages/server/server/transport_parity_integration_test.go
+go test ./packages/server/server -list '^TestMiningParity(GeneratorExcludesBackgroundGrazing|HostClosesOnScopeExit)$'
+go test ./packages/server/server -race -count=1 -run '^TestMiningParity(GeneratorExcludesBackgroundGrazing|HostClosesOnScopeExit)$'
+go test ./packages/server/server -short -count=30 -run '^TestMemoryTCPMiningConvergence$'
+go test ./packages/server/server -race -count=3 -run '^(TestMemoryTCPMiningConvergence|TestMiningCompletionOraclesRejectOrderDuplicatesAndMirrorDivergence|TestPersistentShutdownReturnsAllGoroutinesWithinSharedDeadline)$'
+go test ./packages/audit -count=1
+git diff --exit-code -- testdata/runtime-migration
+git diff --check
+```
+
+Require both new tests to be discovered and both return/Goexit cleanup cases
+to pass; only the deliberate nested `scope` is skipped. All strict parity
+iterations must pass. The full clean-SHA stage sequence remains node 5.10's
+responsibility and must restart after this source change.
+
+**Exclusions and closure.** No production code, runtime simulation policy,
+fixture corpus, version, timeout, message filtering or shutdown-oracle changes.
+Do not modify the generic `mustNewHost` and thereby alter unrelated tests.
+Do not replace the generator with the barren fixture and accidentally lose
+the central mining target. Independent review checks fixture semantics,
+cleanup even on early exit, and no softened assertion. Proposed scoped commit:
+`test(server): isolate mining parity and guarantee cleanup`. Roll back this
+test-only node independently; a failed required gate leaves 5.10 open.
+
 ## Node 5.10: Re-review, validate, sync and archive the extracted baseline
 
 This node is controller-owned. Use Superpowers

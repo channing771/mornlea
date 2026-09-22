@@ -23,6 +23,9 @@ plan with overstated completion.
   through Rust.
 - Bound public domain text and semantic-batch validation before proportional
   work or fallible allocation.
+- Repair the mining parity test's background-world isolation and failure-path
+  cleanup exposed by the required final gates, without changing gameplay or
+  weakening the transport and shutdown assertions.
 - Publish only this narrow baseline as a canonical capability. Hostile/passive,
   projectile/drop and chat events, complete packet/save coverage, numerical
   APIs, pathfinding and final F1 acceptance remain separate successor changes.

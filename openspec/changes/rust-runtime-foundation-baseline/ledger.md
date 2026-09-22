@@ -877,3 +877,36 @@ owns any issue that remains actionable after nodes 5.1–5.9.
   gates are green. They are not an uncorrected repository behavior defect.
 - Architecture skill: no change. The durable lesson belongs to dispatch and
   acceptance governance, not a new runtime ownership rule.
+
+## 2026-09-22 — Final stage gate exposed mining harness isolation
+
+- Clean repair SHA: `31a32773e8df5684346e38a397718b4fe5f663b1`.
+  Both whole-range reviewers reported Ready with zero Critical, Important or
+  Minor findings. `git diff --check`, `make rust`, `make rust-check` and the
+  six-module `make test-race` passed. Server race took 281.593s, oracle race
+  55.347s and audit race 86.669s.
+- `make dev-check` passed all six `go vet` invocations, then failed (exit 2)
+  in the server short suite. `TestMemoryTCPMiningConvergence` received five
+  messages instead of four: the extra delta set `(3,0,28)` to `DirtID` at tick
+  88. The subsequent global shutdown-goroutine assertion failed after 90s.
+  Later stage commands were not run; no canonical spec or archive was written.
+- Systematic debugging reproduced the exact mining failure twice in
+  `go test ./packages/server/server -short -count=30 -run '^TestMemoryTCPMiningConvergence$'`
+  (exit 1, 3.392s). The standalone shutdown test passed three runs (1.049s).
+  Independent source diagnosis traced grass-based passive spawning and normal
+  grazing publication; transport-ready tick counts differ. The failed mining
+  assertion skips its success-only host shutdown, leaving unrelated live
+  world/save workers for the subsequent global leak check.
+- These fixture/lifecycle paths predate the reviewed baseline. That fact does
+  not waive the failing gate. Node 5.9d repairs the test boundary without
+  changing production behavior, filtering legitimate updates or extending
+  deadlines. Node 5.10 remains open and its full clean-SHA gate sequence will
+  restart after the repair.
+- Superpowers brainstorming selected bounded fixture isolation plus immediate
+  cleanup ownership; writing-plans freezes the exact one-file node, all three
+  targets, deterministic RED cases, consumer inventory, exclusions and gates.
+  Existing user authorization covers fixing discovered acceptance problems;
+  no additional product scope or redundant approval is introduced.
+- Read-only mining diagnosis was delegated to the independent code reviewer;
+  the controller independently traced cleanup and reproduced both tests. The
+  controller owns design and integration. Architecture skill: no change.
