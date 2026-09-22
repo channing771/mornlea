@@ -2,9 +2,10 @@
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-repository_root="$(cd -- "${script_dir}/../.." && pwd -P)"
+repository_root="${MORNLEA_REPOSITORY_ROOT:-$(cd -- "${script_dir}/../.." && pwd -P)}"
+repository_root="$(cd -- "${repository_root}" && pwd -P)"
 engine_root="${repository_root}/packages/engine"
-project_root="${repository_root}/apps/mornlea-godot"
+project_root="${MORNLEA_GODOT_PROJECT_ROOT:-${repository_root}/apps/mornlea-godot}"
 profile="debug"
 verify="false"
 
@@ -67,6 +68,27 @@ host_target="$(rustup run 1.97.1 rustc -vV | awk '/^host:/ {print $2}')"
   exit 1
 }
 
+# Cargo and the packaging consumer share this exported root so an inherited
+# override cannot make the produced library invisible to the distribution step.
+if [[ -z "${CARGO_TARGET_DIR:-}" ]]; then
+  cargo_target_dir="${engine_root}/target"
+elif [[ "${CARGO_TARGET_DIR}" == /* ]]; then
+  cargo_target_parent="$(dirname -- "${CARGO_TARGET_DIR}")"
+  mkdir -p -- "${cargo_target_parent}"
+  cargo_target_dir="$(cd -- "${cargo_target_parent}" && pwd -P)/$(basename -- "${CARGO_TARGET_DIR}")"
+else
+  # Relative overrides remain under the repository; traversal is rejected
+  # before Cargo can create an output outside that ownership boundary.
+  case "/${CARGO_TARGET_DIR}/" in
+    */../*)
+      printf "%s\n" "relative CARGO_TARGET_DIR must not contain '..'" >&2
+      exit 2
+      ;;
+  esac
+  cargo_target_dir="${repository_root}/${CARGO_TARGET_DIR}"
+fi
+export CARGO_TARGET_DIR="${cargo_target_dir}"
+
 source_profile_dir="debug"
 if [[ "${profile}" == "release" ]]; then
   source_profile_dir="release"
@@ -84,7 +106,7 @@ else
     --target "${target}"
 fi
 
-source_library="${engine_root}/target/${target}/${source_profile_dir}/${library_name}"
+source_library="${CARGO_TARGET_DIR}/${target}/${source_profile_dir}/${library_name}"
 destination_dir="${project_root}/addons/mornlea_bridge/bin/${platform_dir}/${profile}"
 destination_library="${destination_dir}/${library_name}"
 [[ -f "${source_library}" ]] || { printf 'built GDExtension is missing: %s\n' "${source_library}" >&2; exit 1; }
