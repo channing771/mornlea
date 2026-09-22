@@ -948,3 +948,59 @@ owns any issue that remains actionable after nodes 5.1–5.9.
   well as explicit successful-path checks. Retrying until a latent failure
   disappears would not establish acceptance. Existing lifecycle discipline
   already covers this rule; Architecture skill: no change.
+
+## 2026-09-22 — Node 5.10 clean repair-SHA acceptance
+
+- Exact repair SHA: `fb4a82bac4ad2abc76de70f6b4d4ff3e75637620`.
+  The tracked and untracked worktree was clean before and after the complete
+  sequence; no source or artifact changed during validation.
+- The two whole-range reviews closed every original and renewed finding;
+  independent review of the final mining increment preserved that verdict.
+  Final unresolved counts are zero Critical, Important and Minor. Historical
+  evidence recovery and interim failures remain recorded above rather than
+  being replaced by this successful run.
+
+  | Required command, in execution order | Actual result |
+  | --- | --- |
+  | `git diff --check` | Exit 0; no whitespace errors. |
+  | `make rust` | Exit 0; pinned release build and library deployment passed. |
+  | `make rust-check` | Exit 0; formatting, workspace/all-target clippy and locked workspace tests passed. |
+  | `make test-race` | Exit 0; all six Go modules passed; server/server reran in 281.694s. |
+  | `make dev-check` | Exit 0; gofmt, six-module vet/short tests and Rust gates passed; server/server 89.731s, oracle 10.026s, audit 21.040s. |
+  | `openspec validate rust-runtime-foundation-baseline --strict --no-interactive` | Exit 0; active change valid. |
+  | `openspec validate --all --strict --no-interactive` | Exit 0; 125 passed, 0 failed. |
+  | `git diff --exit-code -- testdata/runtime-migration` | Exit 0; no corpus mutation. |
+  | `cmp -s .codex/skills/mornlea-implementation-orchestration/SKILL.md .claude/skills/mornlea-implementation-orchestration/SKILL.md` | Exit 0; skill mirrors identical. |
+  | `cmp -s .codex/skills/mornlea-implementation-orchestration/references/worker-planning.md .claude/skills/mornlea-implementation-orchestration/references/worker-planning.md` | Exit 0; planning-reference mirrors identical. |
+
+- Go reused valid package-cache results where applicable; this entry reports
+  the actual standard gate results, not a claim that every cached package ran
+  uncached. Both Rust workspace outputs were captured without truncation and
+  reported zero failures. No failing gate was waived or made informational.
+- The prior `c049f8d0` archive was invalid and restored by `73578b3e`.
+  The later `31a32773` attempt stopped at its failing dev-check without sync.
+  This renewed publication is based only on the green repair SHA above.
+- Pre-publication state is verified: active change present; canonical spec and
+  exact dated archive absent. Task 5.10 remains open until the narrow sync and
+  its active-path strict validations finish. No successor F1, protocol, save,
+  numerical, pathfinding or Godot-runtime completion is asserted.
+
+## 2026-09-22 — Narrow specification sync and archive preparation
+
+- OpenSpec status resolves the repository-local spec-driven change and exactly
+  one delta: `specs/rust-runtime-foundation/spec.md`. All planning artifacts are
+  done. The archive inputs and project constraints were considered; no runtime
+  or compatibility version changed, so no version-matrix update is needed.
+- Reused the successful current specs-instruction rules snapshot for the inline
+  sync. The new canonical `openspec/specs/rust-runtime-foundation/spec.md`
+  preserves the Purpose verbatim and all eight reviewed requirements/scenarios;
+  only the canonical title and Requirements heading differ from the delta.
+  Exact content comparison passed. No successor claims were added.
+- While the change was still active, strict change validation passed and
+  `openspec validate --all --strict --no-interactive` passed 126/126. The task
+  checklist is now completed in the active path as prescribed before moving it.
+- Exact archive target:
+  `openspec/changes/archive/2026-09-22-rust-runtime-foundation-baseline`.
+  Preserve `.openspec.yaml` and all linked packets; the historical broad
+  `2026-09-21-rust-runtime-foundation` archive remains unchanged. The following
+  archive commit and separate post-archive evidence commit complete publication.
