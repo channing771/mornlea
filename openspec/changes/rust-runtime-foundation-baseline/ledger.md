@@ -811,3 +811,69 @@ owns any issue that remains actionable after nodes 5.1–5.9.
   acceptance or create an alternate status store.
 - Architecture skill: no change; current corpus ownership and publication
   boundaries are preserved.
+
+## 2026-09-22 — Node 5.9c acceptance
+
+- Baseline `32f5df67`; implementation `449bf8ae` (`docs(orchestration): track
+  derived source consumers`). Exactly five owned files changed: both skill
+  mirrors, both linked references and the existing policy-fragment guard.
+  The reusable correction requires every editable file's hashed, generated,
+  embedded and source-scanned consumers, assigned refresh authority/algorithm,
+  artifact ownership and downstream gates, including comment-only changes and
+  repeat enumeration during review.
+- Superpowers `writing-skills` and its testing reference governed the behavioral
+  RED/GREEN experiment; `skill-creator` governed narrow authoring and validation.
+  The four new guard fragments were added first: the focused test failed on
+  all four missing policy copies, then passed after the minimal rule additions.
+  Each fragment is independently removed by the existing mutation guard.
+- Native fresh-context creation hit the thread limit. Ruling: use isolated
+  `codex exec --ephemeral` processes in empty external temporary directories,
+  with read-only sandbox, `gpt-5.6-sol` and high reasoning — this preserves the
+  fresh-context experiment without reusing an implementer's history or changing
+  machine configuration. At most two samples ran alongside the worker.
+- Every valid control used a no-tools/no-guidance wrapper. Two earlier
+  unwrapped attempts read global guidance and were excluded as contaminated,
+  not scored as failures. Native/startup failures produced no scored sample.
+  Three supplementary controller samples overlapped the worker handoff; they
+  are retained below instead of selectively discarded.
+- The exact packet scenario combined today's deadline, a manager's assertion
+  and already-green focused gates. Scores require all three criteria: C1 blocks
+  immediate dispatch or acceptance; C2 requires all four consumer classes for
+  every editable file; C3 requires artifact ownership, refresh authority or
+  algorithm, and downstream gates before dispatch.
+
+  | Sample | C1 | C2 | C3 | Observed decision / missing element |
+  | --- | --- | --- | --- | --- |
+  | Primary control 1 | pass | fail | fail | "dispatch now" but block acceptance; generic generation/provenance checks only. |
+  | Primary control 2 | pass | fail | fail | "do not dispatch or accept"; generic repository-policy discovery omits the four-class inventory and refresh assignments. |
+  | Primary control 3 | pass | fail | fail | "Identify any generated-file or provenance requirements"; no exact derived-consumer ownership or refresh contract. |
+  | Primary control 4 | pass | fail | fail | Generic regeneration and final-diff checks omit hashed/embedded/source-scanned consumers. |
+  | Primary control 5 | pass | fail | fail | "dispatch immediately" but block acceptance; compiler/generation markers do not cover the complete consumer/owner/gate inventory. |
+  | Supplementary control 1 | pass | fail | fail | "Verify none are generated files or inputs" omits embedded/source-scanned consumers and refresh responsibility. |
+  | Supplementary control 2 | pass | fail | fail | Source/generator identification does not assign downstream artifacts, refresh authority and consumer gates. |
+  | Supplementary control 3 | pass | fail | fail | "dispatch immediately"; provenance/source-map checks remain incomplete and unassigned before dispatch. |
+  | Guided 1 | pass | pass | pass | Requires four-class per-file enumeration, owner/refresh/gate fields, zero-consumer evidence and repeated review. |
+  | Guided 2 | pass | pass | pass | Requires exact artifact paths, refresh authority, owner and downstream commands before dispatch. |
+  | Guided 3 | pass | pass | pass | Requires repository-wide four-class inventory and owner/refresh/gate assignments; blocks both decisions. |
+  | Guided 4 | pass | pass | pass | Requires exact paths, refresh algorithm and downstream gate, reconciled with final editable-file scope. |
+  | Guided 5 | pass | pass | pass | Requires per-file four-class inventory, ownership/refresh/gate fields, zero-result evidence and repeat enumeration. |
+
+- Controls: primary 0/5 and supplementary 0/3 overall; guided 5/5 overall.
+  All guided samples had distinct session IDs and read the complete current
+  canonical skill and linked reference, not just the two mirror copies. Both
+  controller and independent reviewer read every answer and checked every score.
+  This establishes compliance for the tested scenario, not universal reliability.
+- Required gates passed: gofmt, focused orchestration audit, full audit, both
+  mirror comparisons, frozen-corpus diff and `git diff --check`. The controller
+  independently reran focused audit (0.858s) and full audit (20.493s), plus both
+  mirrors and diff check. Both skill validators passed using an ephemeral
+  PyYAML environment after the existing Python runtimes lacked that dependency;
+  no project or persistent machine dependency changed.
+- Independent review: spec compliant, task quality approved; zero Critical or
+  Important findings. Its sole Minor observation is CLI harness metadata/icon
+  and shell-snapshot cleanup warnings. Ruling: disclose these environmental
+  warnings without editing installed plugins — every scored process exited
+  zero, complete reads and answers were independently verified, and repository
+  gates are green. They are not an uncorrected repository behavior defect.
+- Architecture skill: no change. The durable lesson belongs to dispatch and
+  acceptance governance, not a new runtime ownership rule.
