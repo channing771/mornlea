@@ -910,3 +910,41 @@ owns any issue that remains actionable after nodes 5.1–5.9.
 - Read-only mining diagnosis was delegated to the independent code reviewer;
   the controller independently traced cleanup and reproduced both tests. The
   controller owns design and integration. Architecture skill: no change.
+
+## 2026-09-22 — Node 5.9d acceptance
+
+- Planning checkpoints: `aa3e7039`, `0d64fe7d`, `e9038ee3`. The independent
+  readiness review's two Minor findings (affected-file list and node count)
+  were corrected before acceptance. Source-consumer discovery explicitly
+  includes the existing English-comment migration baseline, which is unchanged.
+- Implementation: `7860d2b9` (`test(server): isolate mining parity and guarantee
+  cleanup`). Exactly one test file changed, with 93 additions and one replaced
+  host-construction call. The fixture preserves all three stone targets and
+  changes only y=0 to dirt; immediate bounded host cleanup and endpoint closure
+  protect early exits while explicit successful-path assertions remain intact.
+- Superpowers TDD, systematic debugging and verification were available and
+  used throughout. Deterministic RED (1.850s) found grass in all nine fixture
+  chunks and both actual host completion channels open after return/Goexit.
+  Parent fallback cleanup prevented the RED tests from leaking workers.
+- Final GREEN: both named tests discovered (0.618s), focused race passed
+  (1.726s), all 30 mining parity repetitions passed (2.930s), three iterations
+  of strict mining/oracle/shutdown race passed (4.202s), and full audit passed
+  (19.332s). Only the deliberate nested Goexit scope is skipped; both outer
+  cleanup cases and every fixture case pass. `make rust` ran first on the
+  clean starting baseline. Gofmt, corpus diff and `git diff --check` passed.
+- Controller verification independently passed the two focused race
+  regressions (1.537s) and inspected the complete final diff. Subsequent changes
+  were explanatory comments only and received the worker's final focused race
+  and full-audit reruns. Two interim audits rejected newly quoted standard
+  library identifiers; plain-English lifecycle explanations fixed the comments
+  without scanner/exemption or existing-comment changes. A sandbox cache denial
+  was rerun unchanged with approved access.
+- Independent final code/spec review: Ready, zero Critical/Important/Minor;
+  prior whole-range findings remain closed. No production, timeout, filtering,
+  corpus, strict completion, mirror, disconnect or global shutdown assertion
+  changed. Full clean-SHA stage gates remain open under 5.10.
+- Lesson retained in this evidence: a parity fixture must isolate orthogonal
+  absolute-tick simulation, and test resources need failure-path ownership as
+  well as explicit successful-path checks. Retrying until a latent failure
+  disappears would not establish acceptance. Existing lifecycle discipline
+  already covers this rule; Architecture skill: no change.
