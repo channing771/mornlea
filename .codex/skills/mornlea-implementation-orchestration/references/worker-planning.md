@@ -58,4 +58,6 @@ A failed required closeout gate keeps the node open. Deadline pressure, prior re
 
 For an absolute requirement such as “every producer” or “no writer,” require repository-wide producer enumeration during planning and repeat the enumeration during review. Revise the packet and file ownership before dispatch when any producer falls outside the proposed boundary; do not treat a verbal scope interpretation or package-local green test as repository-wide evidence.
 
+Comment-only changes are not exempt from derived-consumer inventory. Repeat the derived-consumer enumeration during review, and reject the node when the final editable-file set no longer matches the assigned refresh authority or algorithm, artifact ownership, or downstream consumer gate. Focused tests do not prove derived consumers are current.
+
 Respect user-supplied scope, chosen execution method and existing authorization. A request to revise design and plan authorizes those reversible artifacts, not runtime deployment. Skill defaults must not create repeated approvals, external notifications or model/provider changes. If a required skill truly cannot be found, state which one is missing and which dependent work cannot be truthfully performed.

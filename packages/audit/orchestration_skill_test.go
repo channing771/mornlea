@@ -101,6 +101,8 @@ func projectOrchestrationRetrospectiveSkillFragments() []string {
 		"A failed required closeout gate leaves its node open",
 		"Revise the acceptance contract explicitly before archive",
 		"repository-wide producer enumeration",
+		"enumerate every hashed, generated, embedded, or source-scanned consumer of each editable file",
+		"Assign the refresh authority or algorithm, artifact ownership, and downstream consumer gate",
 	}
 }
 
@@ -112,6 +114,8 @@ func projectOrchestrationRetrospectiveReferenceFragments() []string {
 		"A failed required closeout gate keeps the node open",
 		"explicit acceptance-contract revision before archive",
 		"repository-wide producer enumeration",
+		"Comment-only changes are not exempt from derived-consumer inventory",
+		"Repeat the derived-consumer enumeration during review",
 	}
 }
 

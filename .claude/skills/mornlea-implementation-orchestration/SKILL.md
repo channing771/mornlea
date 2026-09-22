@@ -49,6 +49,8 @@ A failed required closeout gate leaves its node open. Do not archive on the basi
 
 Treat absolute requirements such as “every producer” or “no writer” as repository-wide until the active OpenSpec artifacts explicitly define a narrower boundary. Planning and review require repository-wide producer enumeration before dispatch, followed by exact packet and file ownership for every discovered producer. A verbal or external scope interpretation does not replace a reconciled task packet.
 
+Before dispatch, enumerate every hashed, generated, embedded, or source-scanned consumer of each editable file. Assign the refresh authority or algorithm, artifact ownership, and downstream consumer gate for every derived artifact; focused tests do not prove those consumers are current.
+
 ## Parallel-Controller Handover
 
 Multiple controllers (Codex, Claude Code, ZCode) alternately advance the same change in one worktree. Before starting the next node, run the four-point orphan check: the task checkboxes, the change ledger's ruling/routing/evidence rows for the frontier task, untracked in-flight files, and in-flight file mtimes against the current clock (roughly 2–3 hours stale with no follow-up artifacts means adoptable). Adopt orphan artifacts as the requirement source only after empirical review: an orphan red test may itself carry contract violations, and a coherent orphan implementation still needs contract verification plus an independent review before closeout. Record the adoption ruling, corrections, and routing in the ledger by appending; never rewrite another controller's records, and re-read files that report stale reads after parallel edits.
