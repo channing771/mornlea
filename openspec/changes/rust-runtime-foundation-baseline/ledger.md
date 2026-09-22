@@ -100,3 +100,58 @@ checkbox/status source.
 
 
 
+
+## 2026-09-22 — Node 3.1 through 4.1 acceptance
+
+- Nodes 3.1–3.10 (domain corpus dispatch, execution, and closure) and 4.1
+  (resource bounds) were implemented via Superpowers subagent-driven development
+  with independent per-node review; every round passed with no Critical or
+  Important findings after fix rounds (3.1: one fix round for the UUID panic
+  path, missing overflow pins, and the assert-instead-of-return dispatch; 3.9:
+  one fix round reordering remote-player-spawn classification to the adapter's
+  Go precedence). Controller rulings and per-node Minors are recorded in the
+  working ledger `.superpowers/sdd/progress.md`.
+- Key implementation commits: 861c2e4c/92fcb6b9 (3.1), a4180395 (3.2),
+  6b804683 (3.3), 104fed29 (3.4), 4b9df757 (3.5), 481130a9 (3.6), 4f63f8a9
+  (3.7), a0110206 (3.8), fd622586/c51e2663 (3.9), 4e1a7a90 (3.10),
+  7964298e (4.1). Status commits: 37727cca (domain corpus section),
+  e2976856 (resource bounds).
+- Domain section closes at exactly 31+99+28+54+47+38+33+46 = 376 unique
+  executed IDs with the external authority case excluded and live mutation
+  detection (`corpus_domain` 30 passed / 0 ignored).
+
+## 2026-09-22 — Node 5.1 whole-range review
+
+- Range reviewed: cdf48941 (commit immediately before node 1.1) through
+  7964298e (commit immediately after node 4.1), 24 commits.
+- Independent whole-range review verdicts, all verified with evidence: (1)
+  zero-case/version and unknown-consumer paths fail closed in both reconcile
+  modes; (2) no expectation-derived observations and no fail-open root
+  handling (`RunTrace` deleted; `ValidateTraceAtRoot` records every load
+  error); (3) no tracked-corpus writers or replacement publication (exports
+  create-exclusive outside the repository, guarded red-first); (4) Go/Rust
+  loader agreement on the shared manifest/case subset (Rust strictly
+  additional: rejects empty path components); (5) exactly-once 376-case
+  execution, external-authority exclusion, and live mutation detection; (6)
+  byte/record checks precede scans, copies, sorts, and allocation (node 4.1);
+  (7) protocol v45, save schemas, ABI versions, and the default Go runtime
+  are untouched; serde/sha2 additions are dev-dependencies only.
+- Ledger triage: all 36 accumulated per-node Minors ruled remain-recorded;
+  none blocks closeout. One inherited Minor remains recorded: the agent
+  report trace is corpus-copied while its docs say "executed" (inherited
+  before this range; design-preserved because no executable agent-contract
+  operation exists; fix in a successor change).
+- Closeout blocker resolved: `go test ./packages/audit` was red on
+  TestDocumentationLinks (stale links to the archived parent change, broken
+  by this change's own base archive commit cdf48941) and
+  TestCurrentDocumentationVersions (protocol v44 prose in four docs). Both
+  were fixed in d8efb4e0; the audit suite is otherwise green.
+- User-adjudicated carry-over: `TestEnglishCommentMigration` remains red on
+  inherited debt (about 548 new non-English comments across roughly 35 files,
+  last modified by merges on 2026-09-15 and earlier, before this range
+  started). The controller verified the debt predates the range, and the
+  sanctioned `MORNLEA_UPDATE_ENGLISH_COMMENT_BASELINE=1` update path refuses
+  to increase a baseline by design. The user explicitly ruled on 2026-09-22
+  to record this as adjudicated inherited debt, leave translation to a
+  successor change, and proceed with closeout; no exemption variable is set
+  and the baseline file is unchanged.
