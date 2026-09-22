@@ -338,12 +338,12 @@ func (engine *engineContext) dropSelectedItem(
 	return 0, false
 }
 
-// dropStackAtFeet 把一整组物品按既有 `authoritative-item-dropping` 契约投放在
-// 玩家脚底方块：解析脚下区块后经 `PrepareDropBatch`/`CommitDropBatch` 原子
-// 提交（同方块同类堆合并、超单格上限自动分槽），是单件丢弃（Q 键，count=1）
-// 与按视图槽位的整组丢弃（面板拖出）共享的唯一投放出口。全部预检在任何
-// 写入之前完成：任一失败都不改变掉落物、区块 revision 或 persistence 状态；
-// 投放位置由权威玩家状态推导，调用方保证玩家已 Active。
+// `dropStackAtFeet` is the single publication path for one-item Q drops and
+// whole-stack panel drops. It derives the foot block from authoritative player
+// state and atomically applies `PrepareDropBatch` and `CommitDropBatch`, including
+// same-item merging and overflow slots. Every check precedes mutation, so failure
+// preserves drops, chunk revision, and persistence state. The caller guarantees
+// that the player is active.
 func (engine *engineContext) dropStackAtFeet(
 	session *sessionState,
 	stack core.ItemStack,
@@ -379,12 +379,11 @@ func (engine *engineContext) dropStackAtFeet(
 	return 0, false
 }
 
-// dropStackFromView 把背包/合成视图统一索引槽位上的整组物品取出并经
-// `dropStackAtFeet` 投放（面板拖出丢弃的内联结算入口）。两个视图域的槽位
-// 布局不同：背包视图 0..35 直寻物品栏，合成视图 0..44 是「网格 0..8、背包
-// 9..44」的统一映射；值域与网格有效尺寸已由命令阶段校验，这里只处理权威
-// 语义：来源空按 `RejectInvalidSlot` 整单拒绝；任何失败（含脚下区块不可用、
-// 掉落容量已满）都保持背包、网格与掉落状态逐格不变。
+// `dropStackFromView` settles an inline panel drop from a unified inventory or
+// crafting-view slot through `dropStackAtFeet`. Inventory indices 0..35 address
+// inventory directly; crafting indices 0..44 map grid 0..8 and inventory 9..44.
+// Command validation owns range and grid-size checks. Here an empty source maps
+// to `RejectInvalidSlot`, and any failure preserves inventory, grid, and drops.
 func (engine *engineContext) dropStackFromView(
 	session *sessionState,
 	view uint8,

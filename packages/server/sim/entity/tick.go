@@ -488,11 +488,11 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 				})
 			}
 		case CommandDropStack:
-			// 面板拖出丢弃按视图域分派结算相位，与分堆命令族同族：背包/合成
-			// 视图只做值域与网格尺寸的廉价校验后进 interactions 延迟结算
-			//（投放本身是区块写者，阶段顺序契约要求其位于订阅收敛之后）；
-			// 容器视图额外要读容器所在区块，与跨容器移动共享 containerMoves
-			// 延迟相位。整组数量与脚下位置都由结算时点的权威状态推导。
+			// Panel drops select their settlement phase by view domain. Inventory and
+			// crafting views receive cheap range checks before entering deferred
+			// interactions, because drop publication writes chunks after subscription
+			// convergence. Container views share the later `containerMoves` phase.
+			// Settlement derives the complete amount and foot position from authority.
 			if session.player == nil || session.player.lifecycle != PlayerActive {
 				result.Rejected = append(result.Rejected, Rejection{
 					Session:  command.Session,
@@ -541,8 +541,8 @@ func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickRes
 				}
 				tick.interactions = append(tick.interactions, command)
 			case StackViewContainer:
-				// 容器格的取出会写容器所在区块，查看关系、引用与槽位约束在
-				// `applyContainerMove` 的丢弃分支统一校验，区块写相位结算。
+				// Removing a container slot writes its chunk. `applyContainerMove`
+				// validates the view, reference, and slot in the chunk-write phase.
 				tick.containerMoves = append(tick.containerMoves, command)
 			default:
 				result.Rejected = append(result.Rejected, Rejection{
@@ -786,8 +786,9 @@ func (tick *TickContext) SettleGameplay(result *TickResult) {
 				})
 			}
 		case CommandDropStack:
-			// 背包/合成视图的拖出丢弃：值域已在命令阶段放行，这里做权威语义
-			// 结算（空源拒绝、整组取出、脚下投放）。容器视图不进本循环。
+			// Inventory and crafting ranges were admitted during command handling;
+			// authority now rejects empty sources and publishes the complete stack at
+			// the player's feet. Container views never enter this loop.
 			if reason, rejected := engine.dropStackFromView(
 				engine.sessions[command.Session], command.StackView, command.Slot, pending,
 			); rejected {
