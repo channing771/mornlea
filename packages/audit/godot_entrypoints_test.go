@@ -333,6 +333,8 @@ var godotWorkflowPaths = []string{
 
 const godotGoCache = "go.work.sum\n" + ciGoCache
 
+const godotRustActivation = "cd packages/engine\nrustup show active-toolchain\nrustc --version\ncargo --version"
+
 const godotModulePrefetch = `for module in packages/contracts packages/shared packages/server packages/client packages/tools packages/audit; do
   (cd "$module" && GOWORK=off go mod download)
 done`
@@ -425,7 +427,7 @@ func godotWorkflowEntrypointViolations(required, optional string) []string {
 			wantOrder = append(wantOrder, "sudo apt-get update\nsudo apt-get install --yes ripgrep", "scripts/ci/doctor.sh godot-static", "make godot-project-check")
 		} else {
 			require(reflect.DeepEqual(job.Env, map[string]string{"DEVELOPER_DIR": "/Applications/Xcode_26.5.app/Contents/Developer"}), name+": runtime must select the qualified Xcode environment")
-			wantOrder = append(wantOrder, "brew install ripgrep", "scripts/ci/doctor.sh godot-runtime", godotModulePrefetch, "make rust", "make godot-asset-check", "scripts/godot/fetch.sh", "scripts/godot/build-python-runtime.sh --verify", "make godot-python-check", "make godot-smoke")
+			wantOrder = append(wantOrder, "brew install ripgrep", godotRustActivation, "scripts/ci/doctor.sh godot-runtime", godotModulePrefetch, "make rust", "make godot-asset-check", "scripts/godot/fetch.sh", "scripts/godot/build-python-runtime.sh --verify", "make godot-python-check", "make godot-smoke")
 		}
 		wantOrder = append(wantOrder, ciSummary(name))
 		var order []string
@@ -545,6 +547,7 @@ func testGodotEntrypointMutations(t *testing.T, makefile, workflow, optional str
 		{"missing module prefetch", "packages/tools packages/audit; do", "packages/tools; do"},
 		{"prefetch mutates workspace", "GOWORK=off go mod download", "go mod download"},
 		{"missing native build", "run: make rust", "run: true"},
+		{"missing Rust activation", "      - name: Activate repository-pinned Rust toolchain\n        run: |\n          cd packages/engine\n          rustup show active-toolchain\n          rustc --version\n          cargo --version\n", ""},
 		{"missing workspace cache input", "            go.work.sum\n", ""},
 		{"allow failure", "    timeout-minutes: 90", "    timeout-minutes: 90\n    continue-on-error: true"},
 		{"optional needs merge gate", "needs: godot-static", "needs: [godot-static, merge-gate]"},

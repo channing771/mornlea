@@ -123,6 +123,12 @@ jobs:
           version: '0.12.5'
       - name: Install runtime dependencies
         run: brew install ripgrep
+      - name: Activate repository-pinned Rust toolchain
+        run: |
+          cd packages/engine
+          rustup show active-toolchain
+          rustc --version
+          cargo --version
       - name: Check runtime dependencies
         run: scripts/ci/doctor.sh godot-runtime
       - name: Download workspace module dependencies
