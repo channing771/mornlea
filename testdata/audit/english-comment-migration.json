@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "total_files": 1243,
-  "total_comments": 38586,
+  "total_comments": 38581,
   "files": [
     {
       "path": "packages/audit/armor_domain_test.go",
@@ -75,8 +75,8 @@
     },
     {
       "path": "packages/client/assets/atlas.go",
-      "count": 7,
-      "digest": "8d45d50a734750f497439a68fe2a3c46ce3118dfbda51a2d74a4e857c85aa72a"
+      "count": 2,
+      "digest": "57b68d32b3c8a50d84c487bea1b7f0819e6c8849e2fb60433319c3e0d4a0a151"
     },
     {
       "path": "packages/client/assets/atlas_test.go",
