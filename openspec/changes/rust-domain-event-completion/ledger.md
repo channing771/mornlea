@@ -134,3 +134,31 @@
   from the first accepted record instead of naming it per rule.
 - Architecture skill: no change. The producer mirrors established
   corpus conventions; no new cross-task convention qualified.
+
+## 2026-09-22 — node 1.2 acceptance
+
+- Implementation commit: `6d97b1f5` (`test(runtime-oracle): add object event
+  evidence`, 94 files). Red evidence verified: routing regression failed with
+  `unknown rule "projectile-spawn"` on the node 1.1 baseline, matching the
+  intended behavioral red.
+- Controller gates at `6d97b1f5`: `go test ./packages/tools/cmd/runtime-oracle
+  -race -count=1 -run '^(TestDomainEventObjects|TestDomainOracle_event_objects)'`
+  ok (`GOCACHE=/tmp/mornlea-gocache`); the four audit guards ok;
+  `git diff --exit-code -- testdata/runtime-migration/contracts.json` clean;
+  `git diff --check` clean. Implementer proved 90 external files and an empty
+  `diff -ru`, and the whole runtime-oracle package green.
+- Review ruling: spec compliant, quality Approved, 0 Critical, 0 Important.
+  Reviewer independently verified the five validators' check order and the
+  zero-tick admission against the read-only authority files.
+- Controller adjudication of the reviewer's observation: removes rule names
+  use `id_<index>.{slot,generation}` rather than mob-style `record_<index>`.
+  Accepted — the brief blesses subject-specific prefixes via its explicit
+  `drop_<index>` examples, removes records are bare IDs, the naming is pinned
+  by the outcomes test and documented in the runtime-oracle guide.
+- Minors recorded for the final whole-branch review: (1) the
+  `domainEventObjectsDecodeRecords` doc comment claims absent-key vs
+  empty-list stay distinguishable on the typed field, which is inaccurate
+  (both decode to an empty slice; only JSON `null` errors); (2) case labels
+  hard-code 98303/98304 while the mutation derives the bound from core
+  geometry constants (theoretical coupling to a frozen contract).
+- Architecture skill: no change.

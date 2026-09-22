@@ -72,7 +72,7 @@ and the existing runtime-oracle corpus harness.
 ## 1. Independently executed Go evidence
 
 - [x] 1.1 [Produce the 68-case hostile/passive event oracle](plans/01-go-oracles.md#node-11-produce-the-68-case-hostilepassive-event-oracle). Direct prerequisites: none. Run `go test ./packages/tools/cmd/runtime-oracle -race -count=1 -run '^(TestDomainEventMobs|TestDomainOracle_event_mobs)'` and the packet's external-export/read-only checks.
-- [ ] 1.2 [Produce the 45-case projectile/drop event oracle](plans/01-go-oracles.md#node-12-produce-the-45-case-projectiledrop-event-oracle). Direct prerequisites: 1.1. Run `go test ./packages/tools/cmd/runtime-oracle -race -count=1 -run '^(TestDomainEventObjects|TestDomainOracle_event_objects)'` and the packet's external-export/read-only checks.
+- [x] 1.2 [Produce the 45-case projectile/drop event oracle](plans/01-go-oracles.md#node-12-produce-the-45-case-projectiledrop-event-oracle). Direct prerequisites: 1.1. Run `go test ./packages/tools/cmd/runtime-oracle -race -count=1 -run '^(TestDomainEventObjects|TestDomainOracle_event_objects)'` and the packet's external-export/read-only checks.
 - [ ] 1.3 [Produce the 44-case closed-chat event oracle](plans/01-go-oracles.md#node-13-produce-the-44-case-closed-chat-event-oracle). Direct prerequisites: 1.2. Run `go test ./packages/tools/cmd/runtime-oracle -race -count=1 -run '^(TestDomainEventChat|TestDomainOracle_event_chat)'`, then the full runtime-oracle and focused audit gates in the packet.
 
 ## 2. Checked Rust event values and bounds
