@@ -34,7 +34,7 @@ func TestGodotPilotReportCompleteness(t *testing.T) {
 		"## Run identity",
 		"Py4Godot",
 		"CPython",
-		"protocol v44",
+		"protocol v45",
 		"engine ABI v11",
 		"benchmark scenario v23",
 		"testdata/godot-pilot/godot-pilot-v23.json",
