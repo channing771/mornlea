@@ -185,9 +185,26 @@ func assertFrameCasesAreFrozen(t *testing.T, manifest Inventory) {
 // selection, so the working manifest reproduces the frozen manifest's framing
 // family list exactly rather than re-deriving a different one.
 func frameCases(manifest Inventory) []CaseSpec {
-	cases := make([]CaseSpec, 0, len(manifest.Cases))
+	// The selection follows the family's declared case list rather than the
+	// manifest's top-level order, so the manifest-candidate merge sorting the
+	// top-level list by ID cannot change which case a multi-checkpoint
+	// fixture sees first.
+	var order []string
+	for _, family := range manifest.Families {
+		if family.ID == frameFamily {
+			order = family.Cases
+			break
+		}
+	}
+	byID := make(map[string]CaseSpec, len(manifest.Cases))
 	for _, c := range manifest.Cases {
 		if c.Family == frameFamily {
+			byID[c.ID] = c
+		}
+	}
+	cases := make([]CaseSpec, 0, len(order))
+	for _, id := range order {
+		if c, ok := byID[id]; ok {
 			cases = append(cases, c)
 		}
 	}

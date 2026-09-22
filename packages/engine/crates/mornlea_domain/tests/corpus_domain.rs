@@ -30,6 +30,9 @@ pub mod event_inventory;
 #[path = "corpus_domain/event_people.rs"]
 pub mod event_people;
 
+#[path = "corpus_domain/event_mobs.rs"]
+pub mod event_mobs;
+
 use runtime_corpus::{CorpusConsumer, FrozenCase, try_load_cases_from_root};
 use std::collections::HashSet;
 use support::{
@@ -42,8 +45,8 @@ use support::{
 /// `command_order` tests remain the domain ordering proof.
 const EXTERNAL_AUTHORITY_CASE_ID: &str = "domain.input/45/session-sequence-arrival";
 
-/// Exact integrated total across the eight closed topics.
-const TOTAL_DOMAIN_CASES: usize = 376;
+/// Exact integrated total across the nine closed topics.
+const TOTAL_DOMAIN_CASES: usize = 444;
 
 /// One closed topic adapter: its frozen count, ownership predicate, and
 /// executor. Counts are consumed from each topic's own frozen constant so the
@@ -105,6 +108,12 @@ const TOPICS: &[TopicAdapter] = &[
         exact_count: event_people::EXPECTED_COUNT,
         owns: event_people::owns,
         execute: event_people::execute,
+    },
+    TopicAdapter {
+        name: "event_mobs",
+        exact_count: event_mobs::EXPECTED_COUNT,
+        owns: event_mobs::owns,
+        execute: event_mobs::execute,
     },
 ];
 
@@ -190,7 +199,7 @@ fn dispatch_domain_cases(cases: &[FrozenCase]) -> Result<Vec<ExecutedCase>, Disp
 }
 
 #[test]
-fn corpus_domain_executes_376_unique_cases() {
+fn corpus_domain_executes_exact_unique_partition() {
     let executed = dispatch_domain_partition().expect("dispatch domain partition");
 
     let mut unique_executed_ids = HashSet::new();
@@ -329,8 +338,8 @@ fn corpus_structure() {
         try_load_cases_from_root(&root, CorpusConsumer::Domain).expect("load domain cases");
     assert_eq!(
         domain_cases.len(),
-        376,
-        "expected exactly 376 mornlea_domain cases"
+        444,
+        "expected exactly 444 mornlea_domain cases"
     );
 
     let authority_cases = try_load_cases_from_root(&root, CorpusConsumer::ExternalRuntimeAuthority)
@@ -386,6 +395,7 @@ fn corpus_structure() {
     assert!(!event_world::owns(authority_case));
     assert!(!event_inventory::owns(authority_case));
     assert!(!event_people::owns(authority_case));
+    assert!(!event_mobs::owns(authority_case));
 
     // 4. Exact single ownership of every domain case
     let mut seen_ids = HashSet::new();
@@ -397,6 +407,7 @@ fn corpus_structure() {
     let mut event_world_count = 0;
     let mut event_inventory_count = 0;
     let mut event_people_count = 0;
+    let mut event_mobs_count = 0;
 
     for case in &domain_cases {
         assert!(
@@ -438,6 +449,10 @@ fn corpus_structure() {
             matches += 1;
             event_people_count += 1;
         }
+        if event_mobs::owns(case) {
+            matches += 1;
+            event_mobs_count += 1;
+        }
 
         assert_eq!(
             matches, 1,
@@ -457,4 +472,5 @@ fn corpus_structure() {
     assert_eq!(event_world_count, 38, "event_world count mismatch");
     assert_eq!(event_inventory_count, 33, "event_inventory count mismatch");
     assert_eq!(event_people_count, 46, "event_people count mismatch");
+    assert_eq!(event_mobs_count, 68, "event_mobs count mismatch");
 }

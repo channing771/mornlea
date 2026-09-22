@@ -671,17 +671,31 @@ func manifestWithTwoCases(manifest Inventory) Inventory {
 }
 
 func manifestWithTwoCasesAt1And2(manifest Inventory) Inventory {
-	clone := manifest
-	c1 := manifest.Cases[0]
+	frame := frameValidCaseFixture(manifest)
+	c1 := frame
 	c1.ID = "protocol.frame/45/case-one"
 	c1.Checkpoints = []string{"1"}
 
-	c2 := manifest.Cases[0]
+	c2 := frame
 	c2.ID = "protocol.frame/45/case-two"
 	c2.Checkpoints = []string{"2"}
 
+	clone := manifest
 	clone.Cases = []CaseSpec{c1, c2}
 	return clone
+}
+
+// frameValidCaseFixture returns the real framing case whose recorded
+// expectation matches the framing outcome the synthetic traces carry. The
+// manifest's top-level case order is the candidate merge's ID sort, so the
+// fixture must select the framing case by identity rather than by position.
+func frameValidCaseFixture(manifest Inventory) CaseSpec {
+	for _, c := range manifest.Cases {
+		if c.ID == frameValidCaseID {
+			return c
+		}
+	}
+	panic(fmt.Sprintf("runtime-oracle: frozen manifest registers no %s case", frameValidCaseID))
 }
 
 func validTraceForManifestAt1And2(manifest Inventory) Trace {

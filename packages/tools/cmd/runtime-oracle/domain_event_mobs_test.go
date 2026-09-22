@@ -2398,6 +2398,104 @@ func TestDomainEventMobsExportRejectsRepositoryAndSymlinkTargets(t *testing.T) {
 	}
 }
 
+// domainEventMobsSelection exposes this producer's exact reviewed corpus
+// registration: the 68 committed case specifications with digests proven
+// against the files on disk, plus the provenance paths those rules are read
+// from. The shared manifest-candidate helper consumes it, so the candidate
+// this node publishes is assembled from the same reviewed `CaseSpec` values
+// the committed corpus freezes rather than from a second rendering.
+func domainEventMobsSelection(t *testing.T, root string) domainEventSelection {
+	t.Helper()
+	return domainEventSelection{
+		Cases:   domainEventMobsCorpusCases(t, root),
+		Sources: append([]string(nil), domainEventMobsFamilySources...),
+	}
+}
+
+// The frozen manifest counts this node's candidate must reach: 444 total
+// `mornlea_domain` cases, 232 of them registered under the shared
+// `domain.event` family.
+const (
+	domainEventMobsMergedDomainTotal = 444
+	domainEventMobsMergedFamilyTotal = 232
+)
+
+// TestDomainEventMobsManifestCandidateRegistersEveryMobsCase merges this
+// producer's selection into the tracked manifest and proves the merged
+// candidate reaches the frozen node counts before it is published. A base
+// that already registers the mobs corpus accepts an idempotent re-merge of
+// the same reviewed specs, so the same test gate covers both the first
+// publication and every later ordinary run.
+func TestDomainEventMobsManifestCandidateRegistersEveryMobsCase(t *testing.T) {
+	root := mustRepoRoot(t)
+	before := computeTrackedCorpusDigest(t, root)
+	defer assertTrackedCorpusUnchanged(t, root, before)
+
+	base := loadRealManifest(t, root)
+	selection := domainEventMobsSelection(t, root)
+	merged := mergeDomainEventSelections(t, root, base, selection)
+
+	baseIDs := make(map[string]bool, len(base.Cases))
+	for _, c := range base.Cases {
+		baseIDs[c.ID] = true
+	}
+	mergedByID := make(map[string]CaseSpec, len(merged.Cases))
+	for _, c := range merged.Cases {
+		mergedByID[c.ID] = c
+	}
+	added := 0
+	for _, want := range selection.Cases {
+		got, ok := mergedByID[want.ID]
+		if !ok {
+			t.Fatalf("merged manifest drops mobs case %s", want.ID)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("merged manifest rewrites mobs case %s", want.ID)
+		}
+		if !baseIDs[want.ID] {
+			added++
+		}
+	}
+	if added != 0 && added != domainEventMobsCaseTotal {
+		t.Fatalf("merged manifest adds %d new mobs cases, want 0 (already registered) or %d", added, domainEventMobsCaseTotal)
+	}
+	if len(merged.Cases) != len(base.Cases)+added {
+		t.Fatalf("merged manifest carries %d cases, want %d", len(merged.Cases), len(base.Cases)+added)
+	}
+
+	domainTotal, familyTopLevel := 0, 0
+	for _, c := range merged.Cases {
+		if c.RustConsumer == domainEventMobsConsumer {
+			domainTotal++
+		}
+		if c.Family == domainEventMobsFamily {
+			familyTopLevel++
+		}
+	}
+	if domainTotal != domainEventMobsMergedDomainTotal {
+		t.Fatalf("merged manifest registers %d mornlea_domain cases, want %d", domainTotal, domainEventMobsMergedDomainTotal)
+	}
+	if familyTopLevel != domainEventMobsMergedFamilyTotal {
+		t.Fatalf("merged manifest registers %d domain.event cases, want %d", familyTopLevel, domainEventMobsMergedFamilyTotal)
+	}
+	family, ok := domainEventMobsFamilySpec(merged)
+	if !ok {
+		t.Fatalf("merged manifest has no %s family", domainEventMobsFamily)
+	}
+	if len(family.Cases) != domainEventMobsMergedFamilyTotal {
+		t.Fatalf("%s lists %d cases, want %d", domainEventMobsFamily, len(family.Cases), domainEventMobsMergedFamilyTotal)
+	}
+	if merged.SourceRevision != base.SourceRevision {
+		t.Fatalf("merged manifest changes source_revision from %s to %s", base.SourceRevision, merged.SourceRevision)
+	}
+
+	exportRoot := strings.TrimSpace(os.Getenv(runtimeOracleExportDirEnv))
+	candidate := writeDomainEventManifestCandidate(t, root, exportRoot, merged)
+	if exportRoot != "" && candidate == "" {
+		t.Fatalf("manifest candidate export was rejected for %s", exportRoot)
+	}
+}
+
 // TestDomainOracle_event_mobs is the topic-named entry point the domain plan
 // names for this node. It delegates to the same executed table, so the two
 // filters select one source of expected results rather than two.

@@ -182,12 +182,12 @@ only discriminator the manifest carries.
   publication rules (`hostile-spawn`, `hostile-state`, `hostile-despawn`,
   `passive-spawn`, `passive-state`, `passive-despawn`) through the Go
   `protocol` DTOs. Its 68 frozen cases live under
-  `testdata/runtime-migration/cases/domain/event_mobs/` but are not yet
-  registered in the canonical manifest; that registration is a later node's
-  work, so publication is external-only through `RUNTIME_ORACLE_EXPORT_DIR`
-  under the producer ID `runtime-oracle/domain-event-mobs`, with the export
-  running before the committed-bytes comparison so an initial export can
-  materialize the full candidate while the tracked directory is still absent.
+  `testdata/runtime-migration/cases/domain/event_mobs/` and are registered in
+  the canonical manifest through the shared manifest-candidate helper below,
+  raising the tracked corpus to 444 `mornlea_domain` cases and 232
+  `domain.event` cases; the per-producer asset candidate still publishes
+  external-only through `RUNTIME_ORACLE_EXPORT_DIR` under the producer ID
+  `runtime-oracle/domain-event-mobs`.
   IDs and ticks are decimal strings in the frozen input so the full `u64`
   range stays lossless, grazing renders as a JSON Boolean in the normalized
   outcome, a rejected record retains the raw value of an unknown enum, and
@@ -265,6 +265,42 @@ only discriminator the manifest carries.
   consumer. Real Agent HTTP/MCP serialization execution remains package-local
   to `packages/shared/companion`; this package must not copy expected outcomes
   into `ExecutedObservation` values or publish a nominal Agent trace.
+
+## Shared manifest candidate (`domain_event_manifest_test.go`)
+
+- The corpus-registration chain grows the shared `domain.event` registration
+  through one test-only helper: each producer exposes a selection
+  (`domainEventMobsSelection` and successors) carrying only its exact reviewed
+  `CaseSpec` values and provenance paths, and
+  `mergeDomainEventSelections` clones the tracked manifest, rejects a
+  duplicate or conflicting case ID in the base or any selection (a
+  byte-identical re-registration is an idempotent no-op), sorts the complete
+  top-level case list by ID, replaces the one `domain.event` family's case
+  list with the sorted union of every top-level `domain.event` case, unions
+  and re-hashes the family's provenance by repository-relative path,
+  preserves `source_revision`, and reconciles the merged and the reloaded
+  value against the production `Discover`/`ReconcileWorking` path.
+- `writeDomainEventManifestCandidate` publishes one complete candidate as
+  exactly `runtime-oracle/domain-event-manifest/contracts.json` below a fresh
+  external `RUNTIME_ORACLE_EXPORT_DIR` (producer ID
+  `runtime-oracle/domain-event-manifest`), delegating repository, symlink and
+  freshness safety to the existing export helpers, reloading and reconciling
+  the written bytes before returning the path. An empty export root writes
+  nothing; ordinary test runs leave the tracked manifest and case directories
+  unchanged, and the reviewed candidate is copied into
+  `testdata/runtime-migration/contracts.json` mechanically, never assembled
+  or edited by hand.
+- Node 4.1 registered the 68 mob cases this way: the tracked corpus now
+  carries 444 `mornlea_domain` cases and 232 `domain.event` cases, and the
+  Rust `event_mobs` topic adapter in `mornlea_domain` owns all six rules.
+- Enforcement: `TestDomainEventManifestMergeRejectsDuplicateCase`,
+  `TestDomainEventManifestMergeRejectsMissingFamilyCase`,
+  `TestDomainEventManifestMergeSortsCasesSourcesAndFamilyCases`,
+  `TestDomainEventManifestMergePreservesUnrelatedFamilies`,
+  `TestDomainEventManifestCandidateRejectsRepositoryAndSymlinkTargets`,
+  `TestDomainEventManifestCandidateReloadsAndReconciles`, and
+  `TestDomainEventMobsManifestCandidateRegistersEveryMobsCase`.
+
 - Expected outcomes come from executing the real Go validator or codec, never
   from a hand-written value or a Rust result. Every test run compares generated
   bytes against the frozen corpus read-only; package-test flags or code paths
