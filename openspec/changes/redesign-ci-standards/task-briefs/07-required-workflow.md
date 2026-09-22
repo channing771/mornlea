@@ -95,7 +95,7 @@ Each non-aggregator job records elapsed seconds and `${RUNNER_OS}/$(uname -m)` t
    go test ./packages/audit -run 'Test(RequiredCIWorkflow|CompanionAgentCI|EnglishCommentGateIntegration|MornleaCurrentIdentity)' -count=1
    ```
 
-   Also run `TestGodotIsOptionalForLegacyBuild` and `scripts/godot/rollback-check.sh` to record the expected transition failures: both old gates still require the in-file Godot job until Node 5.2 atomically creates the optional workflow and migrates those consumers. Do not weaken or edit those gates in this node. Full audit, rollback, and changed-scope race acceptance are deferred only across this one ordered commit boundary and become mandatory in Node 5.2.
+   Also run `TestGodotIsOptionalForLegacyBuild` and `scripts/godot/rollback-check.sh`. Record the expected transition failure from the old audit test, which still requires the in-file Godot job until Node 5.2 creates the optional workflow. The unchanged rollback script is expected to pass here because it already rejects required-CI Godot dependencies without requiring an optional workflow; Node 5.2 strengthens it to require and inspect `godot.yml`. Do not weaken or edit either consumer in this node. Full audit and changed-scope race acceptance are deferred only across this one ordered commit boundary and become mandatory in Node 5.2.
 
 ## Closure
 
