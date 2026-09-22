@@ -46,7 +46,7 @@ scripts/godot/**
 
 The two jobs are:
 
-- `godot-static`: `ubuntu-24.04`, timeout 20. It uses the pinned checkout, setup-go, and setup-uv actions from Node 5.1; setup-uv pins `0.12.5`. It runs `scripts/ci/doctor.sh godot-static`, `make godot-project-check`, `make godot-asset-check`, and `make godot-python-check` in that order.
+- `godot-static`: `ubuntu-24.04`, timeout 20. It uses the pinned checkout, setup-go, and setup-uv actions from Node 5.1; setup-uv pins `0.12.5`. It explicitly installs ripgrep with `sudo apt-get update` and `sudo apt-get install --yes ripgrep` before running `scripts/ci/doctor.sh godot-static`, `make godot-project-check`, `make godot-asset-check`, and `make godot-python-check` in that order. Dependency installation is workflow setup, not validation semantics.
 - `godot-runtime`: needs `godot-static`, runs on `macos-15`, timeout 90. It uses pinned checkout and setup-uv, installs ripgrep explicitly with `brew install ripgrep`, runs `scripts/ci/doctor.sh godot-runtime`, then `scripts/godot/fetch.sh`, `scripts/godot/build-python-runtime.sh --verify`, and `make godot-smoke`. The smoke remains `--iterations 100 --isolated-python` through the Make target and stays headless.
 
 Both jobs record duration and runner identity. Neither job uses `continue-on-error`, retries, a required-workflow artifact, or a `merge-gate` job.
