@@ -94,4 +94,4 @@ and the existing runtime-oracle corpus harness.
 
 ## 5. Review, publication and successor handoff
 
-- [ ] 5.1 [Review, validate, sync and archive the event successor](plans/05-closeout.md#node-51-review-validate-sync-and-archive-the-event-successor). Direct prerequisites: 4.3. Run the complete focused and stage-boundary gates, reconcile the ledger and guides, sync only this implemented delta, archive only after zero unresolved Important findings, and leave F2 explicitly blocked.
+- [x] 5.1 [Review, validate, sync and archive the event successor](plans/05-closeout.md#node-51-review-validate-sync-and-archive-the-event-successor). Direct prerequisites: 4.3. Run the complete focused and stage-boundary gates, reconcile the ledger and guides, sync only this implemented delta, archive only after zero unresolved Important findings, and leave F2 explicitly blocked.

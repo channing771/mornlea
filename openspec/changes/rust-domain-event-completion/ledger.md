@@ -422,3 +422,56 @@
 - Architecture skill: no change.
 - Implementation stage complete: 11/12 nodes accepted; node 5.1
   (controller closeout) begins.
+
+## 2026-09-22 — node 5.1 closeout
+
+- Reviewed range: `af9b8c32..4ee21a81` (24 commits: 11 implementation, 12
+  controller status/docs, 1 category reconciliation), then one post-review
+  fix commit `82f3bc60` (`test(runtime-oracle): fix comment identifier
+  quoting`). All 12 checkboxes complete.
+- Whole-range independent review: all nine determinations ✅; 0 Critical,
+  0 Important; 2 Minors deferred with named successors (packet-count
+  classification seam owned by the later protocol-successor corpus work;
+  `MAX_CHUNK_BLOCK_INDEX` derivation owned by the next `sections.rs`
+  ownership change). Ready to archive: yes.
+- Post-review defect (reopened and repaired): the full audit gate
+  `TestCommentBacktickIdentifiersExist` — absent from the per-node
+  five-guard subsets — found 14 backticked non-Go identifiers in producer
+  comments. Comments-only fix verified (0 non-comment changed lines); the
+  controller records the validation-scope lesson: producer nodes that add
+  Go comments must include this gate.
+- Code-result SHA for all stage gates: `82f3bc60116d894eb0fe01cc3bb85859694c5596`.
+  Stage results (one line per command, no source edits between):
+  `git diff --check` ok; `make rust` ok; full
+  `go test ./packages/tools/cmd/runtime-oracle -race -count=1` ok (83.7s);
+  `cargo fmt --all --check` ok; `event_mobs` 18/0; `event_objects` 16/0;
+  `event_chat` 10/0; `resource_bounds` 16/0; `event_surface` 4/0;
+  `corpus_domain` 51/0; `go test ./packages/audit -count=1` ok (22.4s);
+  `make rust-check` ok; `make test-race` ok (all modules, audit under race
+  94.5s); `make dev-check` ok;
+  `openspec validate rust-domain-event-completion --strict --no-interactive`
+  valid; `openspec validate --all --strict --no-interactive` 127/127;
+  `git diff --exit-code -- testdata/runtime-migration` clean;
+  `git status --short` clean. `GOCACHE=/tmp/mornlea-gocache` was used for
+  Go commands after the sandbox intermittently denied entries in the default
+  user build cache; identical commands and semantics, recorded for
+  reproducibility.
+- Source revision: `736af2f4b8bc3cbea4648733aa07e5ef9ce0e9d5` in both the
+  manifest and `BaselineSourceRevision`. Final counts: 533 unique executed
+  domain cases / 321 `domain.event` / 68 mob / 45 object / 44 chat / 30
+  source paths / 9 semantic mutations all failing comparison.
+- Architecture skill: no change. The two candidate lessons (rejection
+  categories must fold into the frozen corpus vocabulary; comment-quoting
+  gate scope) are already embodied in accepted gates and are process
+  validation lessons, not stable cross-task architecture conventions.
+- Canonical sync: the four ADDED requirements merged into
+  `openspec/specs/rust-runtime-foundation/spec.md` (9 → 12 requirements,
+  +141 lines); line-by-line inspection found no protocol/save completion,
+  numerical/pathfinding completion, online-authority, complete-F1 or F2
+  readiness claims; both strict validations re-ran green post-sync with no
+  intermediate commit.
+- F2 dependency inspection: `rust-authoritative-server` still gates F2 on
+  complete F1 (protocol, storage, numerical APIs, pathfinding, final
+  zero-gap acceptance). Only wording drift repaired post-archive: relative
+  links to this change and "active successor" phrasing updated to the
+  archive path; F2 scope unchanged.
