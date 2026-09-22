@@ -1,8 +1,13 @@
 package archcheck_test
 
 import (
+	"archive/zip"
 	"bufio"
+	"bytes"
+	"crypto/sha256"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -10,6 +15,106 @@ import (
 )
 
 var sha256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+func TestGodotFetchMaterializesVerifiedEditor(t *testing.T) {
+	for _, test := range []struct {
+		name, entry                       string
+		mode                              os.FileMode
+		verifyOnly, previous, wantSuccess bool
+	}{
+		{"cold cache publishes executable", "Godot.app/Contents/MacOS/Godot", 0o755, false, false, true},
+		{"verified archive replaces old editor", "Godot.app/Contents/MacOS/Godot", 0o755, false, true, true},
+		{"missing editor is rejected", "README", 0o644, false, false, false},
+		{"nonexecutable editor is rejected", "Godot.app/Contents/MacOS/Godot", 0o644, false, false, false},
+		{"symlink application is rejected", "Godot.app", os.ModeSymlink | 0o755, false, false, false},
+		{"invalid editor preserves old editor", "README", 0o644, false, true, false},
+		{"verify only never extracts", "Godot.app/Contents/MacOS/Godot", 0o755, true, false, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := t.TempDir()
+			script := filepath.Join(fixture, "repository/scripts/godot/fetch.sh")
+			writeExecutable(t, script, readBaselineDoc(t, repositoryRoot(t), "scripts/godot/fetch.sh"))
+			var archive bytes.Buffer
+			writer := zip.NewWriter(&archive)
+			header := &zip.FileHeader{Name: test.entry, Method: zip.Store}
+			header.SetMode(test.mode)
+			entry, err := writer.CreateHeader(header)
+			if err != nil {
+				t.Fatal(err)
+			}
+			editor := []byte("#!/bin/sh\nexit 0\n")
+			payload := editor
+			if test.mode&os.ModeSymlink != 0 {
+				target := filepath.Join(fixture, "foreign-Godot.app")
+				writeExecutable(t, filepath.Join(target, "Contents/MacOS/Godot"), string(editor))
+				payload = []byte(target)
+			}
+			if _, err := entry.Write(payload); err != nil {
+				t.Fatal(err)
+			}
+			if err := writer.Close(); err != nil {
+				t.Fatal(err)
+			}
+			archivePath := filepath.Join(fixture, "editor.zip")
+			templatesPath := filepath.Join(fixture, "templates.tpz")
+			writeFile(t, archivePath, archive.Bytes())
+			templates := []byte("verified templates fixture")
+			writeFile(t, templatesPath, templates)
+			pins := fmt.Sprintf("GODOT_VERSION=fixture\nGODOT_MACOS_UNIVERSAL_URL=file://%s\nGODOT_MACOS_UNIVERSAL_SHA256=%x\nGODOT_EXPORT_TEMPLATES_URL=file://%s\nGODOT_EXPORT_TEMPLATES_SHA256=%x\n", archivePath, sha256.Sum256(archive.Bytes()), templatesPath, sha256.Sum256(templates))
+			writeFile(t, filepath.Join(filepath.Dir(script), "version.env"), []byte(pins))
+			cache := filepath.Join(fixture, "cache")
+			artifact := filepath.Join(cache, "fixture/darwin-universal")
+			installed := filepath.Join(artifact, "Godot.app/Contents/MacOS/Godot")
+			if test.previous {
+				writeExecutable(t, installed, "previous editor")
+			}
+			arguments := []string{"--cache-dir", cache}
+			if test.verifyOnly {
+				writeFile(t, filepath.Join(artifact, "Godot_vfixture_macos.universal.zip"), archive.Bytes())
+				writeFile(t, filepath.Join(artifact, "Godot_vfixture_export_templates.tpz"), templates)
+				arguments = append(arguments, "--verify-only")
+			}
+			command := exec.Command(script, arguments...)
+			if _, err := exec.LookPath("ditto"); err != nil {
+				// Linux policy CI exercises publication with a real ZIP extractor;
+				// macOS runs the qualified application extractor directly.
+				bin := t.TempDir()
+				writeExecutable(t, filepath.Join(bin, "ditto"), "#!/usr/bin/env bash\nset -euo pipefail\n[[ $# -eq 4 && $1 == -x && $2 == -k ]]\nexec unzip -q \"$3\" -d \"$4\"\n")
+				command.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
+			}
+			output, err := command.CombinedOutput()
+			if (err == nil) != test.wantSuccess {
+				t.Fatalf("fetch success=%t: %v\n%s", test.wantSuccess, err, output)
+			}
+			if test.verifyOnly || (!test.wantSuccess && !test.previous) {
+				if _, err := os.Stat(filepath.Join(artifact, "Godot.app")); !os.IsNotExist(err) {
+					t.Fatalf("fetch published an unqualified editor: %v\n%s", err, output)
+				}
+			} else {
+				want := editor
+				if !test.wantSuccess {
+					want = []byte("previous editor")
+				}
+				if got := readFile(t, installed); !bytes.Equal(got, want) {
+					t.Fatalf("installed editor = %q, want %q", got, want)
+				}
+				info, err := os.Stat(installed)
+				if err != nil || info.Mode()&0o111 == 0 {
+					t.Fatalf("installed editor is not executable: %v", err)
+				}
+			}
+			entries, err := os.ReadDir(artifact)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, entry := range entries {
+				if strings.HasPrefix(entry.Name(), ".godot-extract.") {
+					t.Fatalf("fetch left staging data behind: %s", entry.Name())
+				}
+			}
+		})
+	}
+}
 
 func TestGodotDesktopOnlyToolchainPin(t *testing.T) {
 	root := repositoryRoot(t)

@@ -21,8 +21,8 @@ func TestCIDoctorProfilesAndFailures(t *testing.T) {
 		"native-linux":  {"bash", "cargo", "cc", "go", "ldd", "make", "nm", "readelf", "rustc", "rustup", "shasum"},
 		"native-macos":  {"bash", "cargo", "codesign", "go", "install_name_tool", "make", "nm", "rustc", "rustup", "shasum"},
 		"agent":         {"bash", "go", "python3", "uv"},
-		"godot-static":  {"bash", "go", "rg", "uv"},
-		"godot-runtime": {"bash", "cargo", "nm", "rg", "rustc", "rustup", "uv"},
+		"godot-static":  {"bash", "make", "rg"},
+		"godot-runtime": {"bash", "cargo", "cc", "clang++", "codesign", "curl", "ditto", "git", "go", "install_name_tool", "make", "nm", "patch", "perl", "pgrep", "rg", "rustc", "rustup", "sandbox-exec", "shasum", "tar", "unzip", "uv", "xcrun"},
 	}
 	for profile, commands := range profiles {
 		t.Run(profile, func(t *testing.T) {
@@ -33,6 +33,21 @@ func TestCIDoctorProfilesAndFailures(t *testing.T) {
 			}
 			if got, want := output, "CI dependency profile passed: "+profile+"\n"; got != want {
 				t.Fatalf("doctor output = %q, want %q", got, want)
+			}
+			if strings.HasPrefix(profile, "godot-") {
+				for _, missing := range commands {
+					if missing == "bash" {
+						continue
+					}
+					t.Run("missing "+missing, func(t *testing.T) {
+						selected := slices.DeleteFunc(slices.Clone(commands), func(command string) bool { return command == missing })
+						output, err := ciRun(root, ciFixtureBin(t, selected), script, profile)
+						want := "missing required executable for " + profile + ": " + missing + "\n"
+						if err == nil || output != want {
+							t.Fatalf("missing dependency result: %v\n%s\nwant: %s", err, output, want)
+						}
+					})
+				}
 			}
 		})
 	}

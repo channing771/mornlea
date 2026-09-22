@@ -17,8 +17,8 @@ go) required=(bash go gofmt) ;;
 native-linux) required=(bash cargo cc go ldd make nm readelf rustc rustup shasum) ;;
 native-macos) required=(bash cargo codesign go install_name_tool make nm rustc rustup shasum) ;;
 agent) required=(bash go python3 uv) ;;
-godot-static) required=(bash go rg uv) ;;
-godot-runtime) required=(bash cargo nm rg rustc rustup uv) ;;
+godot-static) required=(bash make rg) ;;
+godot-runtime) required=(bash cargo cc clang++ codesign curl ditto git go install_name_tool make nm patch perl pgrep rg rustc rustup sandbox-exec shasum tar unzip uv xcrun) ;;
 *) usage ;;
 esac
 
