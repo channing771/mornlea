@@ -364,3 +364,28 @@ checkbox/status source.
   node gates and obtained a clean independent re-review.
 - Architecture skill: no change. This is evidence and orchestration hardening,
   not a runtime ownership change.
+
+## 2026-09-22 — Node 5.3 acceptance
+
+- Implementation: `9b3d700c` (`fix(corpus): reject redirected producer
+  prefixes`). The runtime-oracle and companion exporters retain local helpers
+  to preserve dependency direction but now implement the same component-walk
+  contract.
+- TDD evidence: both baseline helpers followed fixed producer-prefix symlinks
+  into a synthetic repository or external directory, and invalid asset rows
+  created producer directories before returning their intended path errors.
+  New fresh-root tests reproduced each mutation before implementation.
+- Implementation validates producer IDs and the complete asset set before any
+  directory mutation, walks export/producer/asset-parent components with
+  `Lstat` plus single-component `Mkdir`, rejects symlinks and non-directories,
+  creates the final producer child exclusively, rechecks resolved containment,
+  and retains exclusive file creation. Neither helper uses `MkdirAll`.
+- Independent review found and closed two test/portability defects: platform-
+  invalid paths now use `filepath.Localize`, and the companion symlink sentinel
+  now checks the actual redirected target. Final verdict: zero Critical,
+  Important or Minor findings; Ready.
+- Controller verification: combined focused race passed (runtime-oracle 2.323s,
+  companion 2.068s); full race passed (51.873s, 11.892s); diff, no-`MkdirAll`,
+  and frozen corpus gates passed.
+- Architecture skill: no change. The node implements the already approved
+  external no-replace publication boundary.
