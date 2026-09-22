@@ -21,7 +21,7 @@ ARGS ?=
 # dev-check、vet）显式循环该列表，防止新模块成为 ./... 盲区。
 GO_TEST_MODULES := ./packages/contracts ./packages/shared ./packages/server ./packages/client ./packages/tools ./packages/audit
 
-.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck comment-language-check fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev godot-build godot-check godot-asset-check godot-project-check godot-python-check godot-input-check godot-camera-check godot-target-check godot-entity-check godot-environment-check godot-hud-check godot-disconnect-check godot-smoke godot-terrain-check godot-capability-check godot-playable-smoke godot-visual-evidence godot-visual-compare godot-benchmark
+.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck comment-language-check ci-preflight fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev godot-build godot-check godot-asset-check godot-project-check godot-python-check godot-input-check godot-camera-check godot-target-check godot-entity-check godot-environment-check godot-hud-check godot-disconnect-check godot-smoke godot-terrain-check godot-capability-check godot-playable-smoke godot-visual-evidence godot-visual-compare godot-benchmark
 
 run test test-multiplayer bench-multiplayer visual-check visual-update: rust
 build: rust
@@ -38,6 +38,7 @@ help:
 		'  make test-race-short   race detector 快速冒烟(六模块循环 + `-short` 跳过重型测试)' \
 		'  make test-race-changed 只对改动包及其反向依赖跑 race(T1 层;RACE_BASE=ref 换基线)' \
 		'  make dev-check        迭代期快检:gofmt/六模块 vet+短测试与 Rust 静态检查' \
+		'  make ci-preflight     运行平台无关的 CI 前置检查与包分区验证' \
 		'  make test-multiplayer 运行 M3C 八玩家与 v6 报告测试' \
 		'  make bench-multiplayer 运行三组 M3C 多人微基准' \
 		'  make archcheck        验证依赖闭包与无图形服务端边界' \
@@ -164,6 +165,15 @@ archcheck:
 
 comment-language-check:
 	$(GO) test ./packages/audit -run 'EnglishCommentMigration|CodeCommentLanguage|CommentScanner' -count=1
+
+ci-preflight:
+	scripts/ci/doctor.sh preflight
+	test -z "$$(gofmt -l $$(git ls-files '*.go'))"
+	npx --yes @fission-ai/openspec@1.7.0 validate --all --strict --no-interactive
+	node --test scripts/agent-hooks/guard.test.mjs
+	$(MAKE) comment-language-check
+	scripts/ci/package-inventory.sh --check
+	$(GO) test ./packages/audit -count=1
 
 # dev-check:迭代期快检——gofmt 检查、vet、全仓短测试(重型测试经 `-short` 跳过)
 # 与 Rust fmt/clippy/单测。完整门禁(test/test-race/visual-check/rust-check)
