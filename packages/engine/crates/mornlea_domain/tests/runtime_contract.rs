@@ -137,38 +137,6 @@ fn non_finite_input_rotation_is_rejected() {
     assert_eq!(err, mornlea_domain::DomainError::NonFiniteRotation);
 }
 
-#[test]
-fn observations_order_by_tick_then_family() {
-    let late = mornlea_domain::Observation::new(2, "domain.input", "sha256:a").unwrap();
-    let early_event = mornlea_domain::Observation::new(1, "domain.event", "sha256:b").unwrap();
-    let early_input = mornlea_domain::Observation::new(1, "domain.input", "sha256:c").unwrap();
-    let ordered = mornlea_domain::order_observations([
-        late.clone(),
-        early_input.clone(),
-        early_event.clone(),
-    ]);
-    assert_eq!(
-        ordered
-            .iter()
-            .map(|row| (row.tick, row.family_id()))
-            .collect::<Vec<_>>(),
-        vec![
-            (1, "domain.event"),
-            (1, "domain.input"),
-            (2, "domain.input")
-        ]
-    );
-}
-
-#[test]
-fn unknown_observation_family_is_rejected() {
-    let err = mornlea_domain::Observation::new(1, "protocol.frame", "sha256:a")
-        .expect_err("unknown family must fail");
-    assert_eq!(err, mornlea_domain::DomainError::UnknownId);
-    assert!(mornlea_domain::Observation::new(1, "domain.event", "sha256:b").is_ok());
-    assert!(mornlea_domain::Observation::new(1, "domain.input", "sha256:c").is_ok());
-}
-
 fn read_manifest(dir: &str) -> String {
     fs::read_to_string(PathBuf::from(dir).join("Cargo.toml")).expect("crate manifest")
 }

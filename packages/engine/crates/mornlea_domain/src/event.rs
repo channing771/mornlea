@@ -1,4 +1,20 @@
-use crate::identity::DomainError;
+//! The semantic publication surface and the routing envelope this crate
+//! owns.
+//!
+//! The leaf modules beside this file own the checked payload values; this
+//! module owns the two shapes above them: the closed [`Event`] set, which
+//! names exactly the semantic publications an authority routes to sessions,
+//! and the [`RoutedEvent`] envelope, which pairs one publication with its
+//! explicit destination.
+//!
+//! The surface is deliberately exclusive. No variant carries a packet ID,
+//! raw wire bytes, a digest, a handshake, login, rejection, keepalive or
+//! disconnect fact, a chunk-worker acquire, generate, ready or resync
+//! lifecycle message, or a generated-chunk pointer: those are transport and
+//! runtime-owner concerns that stay outside the domain value set, and the
+//! enum has no catch-all member that could smuggle one back in. Values that
+//! already carry a publish tick retain it; the envelope adds none, because
+//! routing is not a publication instant.
 
 mod chat;
 mod inventory;
@@ -45,60 +61,81 @@ pub use world::{
     ForgetChunksParts,
 };
 
-/// Inventory family owned by this crate for semantic player inputs.
-pub const FAMILY_INPUT: &str = "domain.input";
-/// Inventory family owned by this crate for replay observations.
-pub const FAMILY_EVENT: &str = "domain.event";
-
-/// Normalized checkpoint observation for offline differential comparison.
+/// The closed set of semantic publications an authority routes to sessions.
 ///
-/// Family IDs outside the domain inventory fail before the observation is
-/// published. Digest emptiness is incomplete evidence, not a repairable gap.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Observation {
-    pub tick: u64,
-    family_id: String,
-    digest: String,
+/// Every payload is an already-checked leaf value, so wrapping is total and
+/// the enum adds no rule of its own. Consumers are expected to match
+/// exhaustively: the set is closed, so an unplanned variant is a compile
+/// failure at every consumer rather than a silently accepted shape.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Event {
+    ChunkSnapshot(ChunkSnapshot),
+    BlockChanges(BlockChanges),
+    ForgetChunks(ForgetChunks),
+    PlayerState(PlayerState),
+    CommandRejected(CommandRejection),
+    RemotePlayerSpawn(RemotePlayerSpawn),
+    RemotePlayerDespawn(RemotePlayerDespawn),
+    RemotePlayerStates(RemotePlayerStates),
+    InventoryState(InventoryState),
+    ItemDropUpserts(ItemDropUpserts),
+    ItemDropRemoves(ItemDropRemoves),
+    FurnaceState(FurnaceState),
+    ContainerClosed(ContainerClosed),
+    ChestState(ChestState),
+    Chat(ChatEvent),
+    CompanionSpawn(CompanionSpawn),
+    CompanionStates(CompanionStates),
+    CompanionDespawn(CompanionDespawn),
+    PlaceBlockSucceeded(PlacementSuccess),
+    CraftingState(CraftingState),
+    HostileSpawn(HostileSpawn),
+    HostileState(HostileState),
+    HostileDespawn(HostileDespawn),
+    CombatHit(CombatHit),
+    PassiveSpawn(PassiveSpawn),
+    PassiveState(PassiveState),
+    PassiveDespawn(PassiveDespawn),
+    ProjectileSpawn(ProjectileSpawn),
+    ProjectileState(ProjectileState),
+    ProjectileDespawn(ProjectileDespawn),
 }
 
-impl Observation {
-    pub fn new(
-        tick: u64,
-        family_id: impl Into<String>,
-        digest: impl Into<String>,
-    ) -> Result<Self, DomainError> {
-        let family_id = family_id.into();
-        if family_id != FAMILY_INPUT && family_id != FAMILY_EVENT {
-            return Err(DomainError::UnknownId);
-        }
-        let digest = digest.into();
-        if digest.trim().is_empty() {
-            return Err(DomainError::IncompleteIdentity);
-        }
-        Ok(Self {
-            tick,
-            family_id,
-            digest,
-        })
-    }
-
-    pub fn family_id(&self) -> &str {
-        &self.family_id
-    }
-
-    pub fn digest(&self) -> &str {
-        &self.digest
-    }
+/// The destination one publication addresses.
+///
+/// `Session` deliberately admits zero, because whether a session number
+/// names a live session is a runtime concern this value does not own.
+/// `Broadcast` is an explicit shape of its own and is never encoded as a
+/// sentinel session number, so the two destinations cannot be confused.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EventRecipient {
+    Session(u64),
+    Broadcast,
 }
 
-/// Orders observations by tick, then by family id, matching the replay
-/// identity requirement for deterministic checkpoint comparison.
-pub fn order_observations(rows: impl IntoIterator<Item = Observation>) -> Vec<Observation> {
-    let mut ordered: Vec<_> = rows.into_iter().collect();
-    ordered.sort_by(|left, right| {
-        left.tick
-            .cmp(&right.tick)
-            .then(left.family_id.cmp(&right.family_id))
-    });
-    ordered
+/// One publication paired with its explicit destination.
+///
+/// The envelope stores both parts unchanged and adds nothing of its own: no
+/// tick, because payloads that carry a publish tick keep it and routing is
+/// not a publication instant, and no priority or ordering, because those
+/// belong to the runtime owner that drains the envelopes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RoutedEvent {
+    recipient: EventRecipient,
+    event: Event,
+}
+
+impl RoutedEvent {
+    /// Stores the recipient and the event exactly as supplied.
+    pub fn new(recipient: EventRecipient, event: Event) -> Self {
+        Self { recipient, event }
+    }
+
+    pub fn recipient(&self) -> EventRecipient {
+        self.recipient
+    }
+
+    pub fn event(&self) -> &Event {
+        &self.event
+    }
 }

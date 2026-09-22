@@ -488,13 +488,30 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   exhaustive classification, the zero-identity absence proof, the
   command/speech slot separation counts, and the absent envelope fields).
 
-## Observations (`src/event.rs`, `tests/runtime_contract.rs`)
+## Event surface and routing (`src/event.rs`, `tests/event_surface.rs`)
 
-- `Observation::new` publishes only `domain.input` and `domain.event`
-  family IDs; any other family is `UnknownId`
-  (`unknown_observation_family_is_rejected`).
-- `order_observations` sorts by tick, then family id
-  (`observations_order_by_tick_then_family`).
+- `Event` is the closed set of the thirty semantic publications this crate
+  owns, declared in the frozen order
+  `event_surface_constructs_exactly_30_semantic_variants` pins: every
+  payload is a checked leaf value, no variant carries a packet ID, raw
+  bytes, a digest, a handshake/login/rejection/keepalive/disconnect fact, a
+  chunk-worker lifecycle message or a generated-chunk pointer, and there is
+  no catch-all. The construction test's name match is exhaustive without a
+  wildcard, so an unplanned variant is a compile failure rather than a
+  silently accepted shape.
+- `EventRecipient::Session(u64)` admits zero because session existence and
+  broadcast policy are runtime concerns; `Broadcast` is an explicit shape
+  and never a sentinel session. `RoutedEvent::new` stores the recipient and
+  the event unchanged, adds no tick of its own, and exposes
+  `recipient()`/`event()`
+  (`routed_event_preserves_session_zero_and_event`,
+  `routed_event_preserves_broadcast_and_event`).
+- The crate publishes no digest helper: the retired digest-era public names
+  are gone from `src/event.rs` and `src/lib.rs`, and
+  `domain_public_api_has_no_digest_observation_exports` keeps them out.
+- Focused entry: `cargo test -p mornlea_domain --test event_surface --locked`
+  (4 cases: the retired-name source gate, the 30-variant construction in
+  the declared order, and the two recipient-form preservation tests).
 
 ## Domain corpus dispatch (`tests/corpus_domain.rs`, `tests/corpus_domain/`)
 
@@ -530,4 +547,5 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_mobs --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_objects --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_chat --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_surface --locked
 ```
