@@ -25,11 +25,15 @@ The path list is explicit and includes:
 .github/workflows/godot.yml
 Makefile
 apps/mornlea-godot/**
+go.work
+go.work.sum
 packages/audit/godot_*_test.go
 packages/audit/ci_workflow_standard_test.go
 packages/client/assets/**
 packages/client/cmd/mornlea-godot-assets/**
 packages/client/cmd/mornlea-godot-core/**
+packages/client/go.mod
+packages/client/go.sum
 packages/client/presentation/**
 packages/client/runtime/**
 packages/contracts/**
@@ -46,14 +50,14 @@ scripts/godot/**
 
 The two jobs are:
 
-- `godot-static`: `ubuntu-24.04`, timeout 20. It uses the pinned checkout, setup-go, and setup-uv actions from Node 5.1; setup-uv pins `0.12.5`. It explicitly installs ripgrep with `sudo apt-get update` and `sudo apt-get install --yes ripgrep` before running `scripts/ci/doctor.sh godot-static`, `make godot-project-check`, `make godot-asset-check`, and `make godot-python-check` in that order. Dependency installation is workflow setup, not validation semantics.
-- `godot-runtime`: needs `godot-static`, runs on `macos-15`, timeout 90. It uses pinned checkout and setup-uv, installs ripgrep explicitly with `brew install ripgrep`, runs `scripts/ci/doctor.sh godot-runtime`, then `scripts/godot/fetch.sh`, `scripts/godot/build-python-runtime.sh --verify`, and `make godot-smoke`. The smoke remains `--iterations 100 --isolated-python` through the Make target and stays headless.
+- `godot-static`: `ubuntu-24.04`, timeout 20. It uses the pinned checkout, setup-go, and setup-uv actions from Node 5.1; setup-uv pins `0.12.5`. It explicitly installs ripgrep with `sudo apt-get update` and `sudo apt-get install --yes ripgrep` before running `scripts/ci/doctor.sh godot-static`, `make godot-project-check`, and `make godot-asset-check` in that order. Dependency installation is workflow setup, not validation semantics.
+- `godot-runtime`: needs `godot-static`, runs on `macos-15`, timeout 90. It uses pinned checkout and setup-uv, installs ripgrep explicitly with `brew install ripgrep`, runs `scripts/ci/doctor.sh godot-runtime`, then `scripts/godot/fetch.sh`, `scripts/godot/build-python-runtime.sh --verify`, `make godot-python-check`, and `make godot-smoke` in that order. `godot-python-check` is runtime-owned because it deliberately uses the materialized Darwin embedded Python with locked/offline/no-download semantics. The smoke remains `--iterations 100 --isolated-python` through the Make target and stays headless.
 
 Both jobs record duration and runner identity. Neither job uses `continue-on-error`, retries, a required-workflow artifact, or a `merge-gate` job.
 
 ## Test-first steps
 
-1. Refactor `TestGodotIsOptionalForLegacyBuild` to read both workflow files. Keep the Make legacy-edge checks. Required workflow violations assert no Godot job, command, script path, need, or path-filter indirection. Optional workflow violations assert the exact name/triggers/path set/jobs/runners/timeouts/actions/order and the three static plus one smoke Make gates.
+1. Refactor `TestGodotIsOptionalForLegacyBuild` to read both workflow files. Keep the Make legacy-edge checks. Required workflow violations assert no Godot job, command, script path, need, or path-filter indirection. Optional workflow violations assert the exact name/triggers/path set/jobs/runners/timeouts/actions/order, the two static Make gates, and the runtime-owned Python plus smoke Make gates.
 
 2. Replace old mutations that assumed `godot` sat directly before `test`. Add mutations that delete a required path, move smoke into required CI, add `continue-on-error`, remove the 100-cycle isolated smoke through the Makefile fixture, remove manual dispatch, change a runner to `latest`, or make an optional job depend on/produce `merge-gate`.
 

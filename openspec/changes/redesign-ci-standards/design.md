@@ -101,8 +101,8 @@ Third-party actions are pinned to immutable commit SHAs and selected from revisi
 
 The optional Godot workflow has two layers:
 
-- platform-neutral project closure, descriptor, import, and contract checks;
-- platform-specific extension build, runtime smoke, and the existing repeated lifecycle qualification on a supported macOS runner.
+- platform-neutral project closure, descriptor, import, deterministic-asset, and contract checks;
+- platform-specific embedded-Python tooling checks after runtime materialization, extension build, runtime smoke, and the existing repeated lifecycle qualification on a supported macOS runner.
 
 Its path filters include the Godot project, Godot bridge crate, extension build and validation scripts, asset generator and relevant inputs, workflow and Makefile entry points, and executable audit tests. Manual dispatch is always available to diagnose filter mistakes or validate a candidate before cutover.
 
