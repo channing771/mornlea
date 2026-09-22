@@ -357,11 +357,7 @@ func TestDefaultRegistryAtlasIsStable(t *testing.T) {
 
 func atlasPixelsForTest(t *testing.T, registry *Registry) (int, []byte) {
 	t.Helper()
-	exporter, ok := any(registry).(interface{ AtlasPixels() (int, []byte) })
-	if !ok {
-		t.Skip("AtlasPixels 只存在于 darwin 客户端构建")
-	}
-	return exporter.AtlasPixels()
+	return registry.AtlasPixels()
 }
 
 func TestEmbeddedDefaultPackMetadata(t *testing.T) {
