@@ -30,9 +30,11 @@ pub mod event_inventory;
 #[path = "corpus_domain/event_people.rs"]
 pub mod event_people;
 
-use runtime_corpus::{CorpusConsumer, try_load_cases_from_root};
+use runtime_corpus::{CorpusConsumer, FrozenCase, try_load_cases_from_root};
 use std::collections::HashSet;
-use support::{ExecuteCase, ExecutedCase, OwnsCase, assert_domain_normalized};
+use support::{
+    DispatchError, ExecuteCase, ExecutedCase, OwnsCase, assert_domain_normalized, execute_checked,
+};
 
 /// The domain.input ordering case stays with `external:runtime-authority`
 /// because its expectation reports authoritative behavior
@@ -113,37 +115,49 @@ const TOPICS: &[TopicAdapter] = &[
 /// files inside the dispatch loop. Gaps (a case owned by nobody), overlaps
 /// (a case owned by several topics), and duplicates (a repeated case id) all
 /// fail here, and every topic must execute exactly its frozen count.
-fn dispatch_domain_partition() -> Vec<ExecutedCase> {
+fn dispatch_domain_partition() -> Result<Vec<ExecutedCase>, DispatchError> {
     let root = runtime_corpus::find_repo_root();
     let domain_cases =
-        try_load_cases_from_root(&root, CorpusConsumer::Domain).expect("load domain cases");
+        try_load_cases_from_root(&root, CorpusConsumer::Domain).map_err(|error| {
+            DispatchError::InvalidCase {
+                case_id: "dispatch_domain_partition".to_string(),
+                message: format!("failed to load domain cases: {error}"),
+            }
+        })?;
+    dispatch_domain_cases(&domain_cases)
+}
 
+fn dispatch_domain_cases(cases: &[FrozenCase]) -> Result<Vec<ExecutedCase>, DispatchError> {
     let mut executed = Vec::new();
     let mut seen_ids: HashSet<String> = HashSet::new();
     let mut counts = vec![0usize; TOPICS.len()];
 
-    for case in &domain_cases {
-        assert!(
-            seen_ids.insert(case.id.clone()),
-            "duplicate domain case id: {}",
-            case.id
-        );
+    for case in cases {
+        if !seen_ids.insert(case.id.clone()) {
+            return Err(DispatchError::InvalidCase {
+                case_id: case.id.clone(),
+                message: "duplicate domain case id".to_string(),
+            });
+        }
 
         let mut owners = TOPICS
             .iter()
             .enumerate()
             .filter(|(_, topic)| (topic.owns)(case));
-        let (owner_index, owner) = owners
-            .next()
-            .unwrap_or_else(|| panic!("case {} has no owning topic", case.id));
-        assert!(
-            owners.next().is_none(),
-            "case {} is owned by multiple topics",
-            case.id
-        );
+        let Some((owner_index, owner)) = owners.next() else {
+            return Err(DispatchError::InvalidCase {
+                case_id: case.id.clone(),
+                message: "case has no owning topic".to_string(),
+            });
+        };
+        if owners.next().is_some() {
+            return Err(DispatchError::InvalidCase {
+                case_id: case.id.clone(),
+                message: "case is owned by multiple topics".to_string(),
+            });
+        }
 
-        let actual = (owner.execute)(case)
-            .unwrap_or_else(|error| panic!("case {} failed to execute: {error}", case.id));
+        let actual = execute_checked(case, owner.execute)?;
         counts[owner_index] += 1;
         executed.push(ExecutedCase {
             case: case.clone(),
@@ -152,24 +166,32 @@ fn dispatch_domain_partition() -> Vec<ExecutedCase> {
     }
 
     for (topic, count) in TOPICS.iter().zip(counts.iter()) {
-        assert_eq!(
-            *count, topic.exact_count,
-            "topic {} count mismatch",
-            topic.name
-        );
+        if *count != topic.exact_count {
+            return Err(DispatchError::InvalidCase {
+                case_id: "dispatch_domain_cases".to_string(),
+                message: format!(
+                    "topic {} expected exactly {} cases, but executed {count}",
+                    topic.name, topic.exact_count
+                ),
+            });
+        }
     }
-    assert_eq!(
-        executed.len(),
-        TOTAL_DOMAIN_CASES,
-        "expected exactly {TOTAL_DOMAIN_CASES} dispatched domain cases"
-    );
+    if executed.len() != TOTAL_DOMAIN_CASES {
+        return Err(DispatchError::InvalidCase {
+            case_id: "dispatch_domain_cases".to_string(),
+            message: format!(
+                "expected exactly {TOTAL_DOMAIN_CASES} dispatched domain cases, but executed {}",
+                executed.len()
+            ),
+        });
+    }
 
-    executed
+    Ok(executed)
 }
 
 #[test]
 fn corpus_domain_executes_376_unique_cases() {
-    let executed = dispatch_domain_partition();
+    let executed = dispatch_domain_partition().expect("dispatch domain partition");
 
     let mut unique_executed_ids = HashSet::new();
     for case in &executed {
@@ -223,7 +245,7 @@ fn corpus_domain_excludes_external_authority_case() {
 
 #[test]
 fn corpus_domain_comparator_detects_semantic_drift() {
-    let executed = dispatch_domain_partition();
+    let executed = dispatch_domain_partition().expect("dispatch domain partition");
     let accepted = executed
         .iter()
         .find(|case| case.actual.get("kind").and_then(|kind| kind.as_str()) == Some("ok"))
@@ -269,6 +291,33 @@ fn corpus_domain_comparator_detects_semantic_drift() {
         outcome.is_err(),
         "drift in expectation field '{field_name}' must fail comparison"
     );
+}
+
+#[test]
+fn corpus_domain_rejects_mutated_input_consumer_at_dispatch() {
+    let root = runtime_corpus::find_repo_root();
+    let mut domain_cases =
+        try_load_cases_from_root(&root, CorpusConsumer::Domain).expect("load domain cases");
+    assert_eq!(domain_cases.len(), TOTAL_DOMAIN_CASES);
+
+    let mutated = domain_cases
+        .first_mut()
+        .expect("the domain partition must contain a case");
+    let mutated_id = mutated.id.clone();
+    mutated
+        .input_json
+        .as_mut()
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("domain case input is an object")
+        .insert("consumer".to_string(), serde_json::json!("corpus_frame"));
+
+    match dispatch_domain_cases(&domain_cases) {
+        Err(support::DispatchError::InvalidCase { case_id, .. }) => {
+            assert_eq!(case_id, mutated_id);
+        }
+        Err(error) => panic!("unexpected dispatch error: {error}"),
+        Ok(_) => panic!("mutated input consumer must fail integrated dispatch"),
+    }
 }
 
 #[test]

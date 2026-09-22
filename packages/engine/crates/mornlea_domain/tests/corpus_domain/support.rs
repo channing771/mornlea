@@ -57,7 +57,7 @@ pub fn execute_topic(
                     message: format!("duplicate case id {}", case.id),
                 });
             }
-            let actual = execute(&case)?;
+            let actual = execute_checked(&case, execute)?;
             executed.push(ExecutedCase { case, actual });
         }
     }
@@ -104,6 +104,23 @@ pub fn invalid_case(case: &FrozenCase, message: impl Into<String>) -> DispatchEr
         case_id: case.id.clone(),
         message: message.into(),
     }
+}
+
+/// Validates the independently loaded case input identity before handing the
+/// case to its semantic executor.
+pub fn execute_checked(
+    case: &FrozenCase,
+    execute: ExecuteCase,
+) -> Result<serde_json::Value, DispatchError> {
+    let input = input_object(case)?;
+    let consumer = required_string(case, input, "consumer")?;
+    if consumer != "mornlea_domain" {
+        return Err(invalid_case(
+            case,
+            format!("input consumer must be 'mornlea_domain', got '{consumer}'"),
+        ));
+    }
+    execute(case)
 }
 
 pub fn input_object(case: &FrozenCase) -> Result<&JsonMap, DispatchError> {
@@ -474,23 +491,11 @@ pub fn parse_f32_token(case: &FrozenCase, path: &str, text: &str) -> Result<f32,
         "Inf" | "+Inf" => Ok(f32::INFINITY),
         "-Inf" => Ok(f32::NEG_INFINITY),
         _ => {
-            // Rust's f32::from_str accepts strings like "infinity", "inf", "nan", etc. case-insensitively.
-            // But the specification strictly states:
-            // "parse_f32_token accepts ordinary decimal text plus exactly NaN, Inf, +Inf, and -Inf;
-            // other non-decimal spellings are hard failures."
-            // "A decimal token that overflows or underflows with a parser error is also hard;
-            // only the four explicit spellings may intentionally produce non-finite bits."
-            // Verify characters: must be decimal (optional +/- prefix, digits, optional decimal point and exponent).
-            // Reject any alpha chars!
-            let has_alpha = text.chars().any(|c| c.is_alphabetic());
-            if has_alpha {
+            if !is_decimal_f32_token(text) {
                 return Err(invalid_case(
                     case,
-                    format!("invalid non-decimal spelling in float token at '{path}': '{text}'"),
+                    format!("invalid decimal grammar in float token at '{path}': '{text}'"),
                 ));
-            }
-            if text == "-0" || text == "-0.0" || text == "-0.000000" {
-                return Ok(-0.0f32);
             }
             let val = text.parse::<f32>().map_err(|e| {
                 invalid_case(
@@ -509,6 +514,44 @@ pub fn parse_f32_token(case: &FrozenCase, path: &str, text: &str) -> Result<f32,
             Ok(val)
         }
     }
+}
+
+fn is_decimal_f32_token(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let mut index = 0;
+    if matches!(bytes.first(), Some(b'+') | Some(b'-')) {
+        index += 1;
+    }
+
+    let mut mantissa_digits = 0;
+    let mut saw_decimal_point = false;
+    while let Some(byte) = bytes.get(index) {
+        match byte {
+            b'0'..=b'9' => mantissa_digits += 1,
+            b'.' if !saw_decimal_point => saw_decimal_point = true,
+            _ => break,
+        }
+        index += 1;
+    }
+    if mantissa_digits == 0 {
+        return false;
+    }
+
+    if matches!(bytes.get(index), Some(b'e') | Some(b'E')) {
+        index += 1;
+        if matches!(bytes.get(index), Some(b'+') | Some(b'-')) {
+            index += 1;
+        }
+        let exponent_start = index;
+        while matches!(bytes.get(index), Some(b'0'..=b'9')) {
+            index += 1;
+        }
+        if index == exponent_start {
+            return false;
+        }
+    }
+
+    index == bytes.len()
 }
 
 pub fn normalize_u64(value: u64) -> serde_json::Value {
@@ -563,6 +606,14 @@ pub fn normalized_error(
 mod tests {
     use super::*;
     use crate::runtime_corpus::{CorpusConsumer, InputFormat};
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static EXECUTOR_CALLED: AtomicBool = AtomicBool::new(false);
+
+    fn spy_executor(case: &FrozenCase) -> Result<serde_json::Value, DispatchError> {
+        EXECUTOR_CALLED.store(true, Ordering::SeqCst);
+        Ok(case.normalized.clone())
+    }
 
     fn test_case() -> FrozenCase {
         FrozenCase {
@@ -829,14 +880,31 @@ mod tests {
         assert_eq!(neg_zero.to_bits(), (-0.0f32).to_bits());
         let neg_zero_float = parse_f32_token(&case, "token", "-0.0").unwrap();
         assert_eq!(neg_zero_float.to_bits(), (-0.0f32).to_bits());
+        let exponent_neg_zero = parse_f32_token(&case, "token", "-0e0").unwrap();
+        assert_eq!(exponent_neg_zero.to_bits(), (-0.0f32).to_bits());
 
-        // finite decimal
-        let val = parse_f32_token(&case, "token", "1.5").unwrap();
-        assert_eq!(val, 1.5f32);
+        // Finite decimal grammar includes signed exponents and either side of
+        // the decimal point when the mantissa still contains a digit.
+        for (token, expected) in [
+            ("1.5", 1.5f32),
+            ("1e-3", 0.001f32),
+            ("1E+3", 1000.0f32),
+            (".5e2", 50.0f32),
+            ("1.", 1.0f32),
+        ] {
+            assert_eq!(parse_f32_token(&case, "token", token).unwrap(), expected);
+        }
 
-        // invalid tokens
-        assert!(parse_f32_token(&case, "token", "infinity").is_err());
-        assert!(parse_f32_token(&case, "token", "invalid").is_err());
+        // Malformed spellings, aliases, whitespace, hexadecimal notation and
+        // decimal overflow are hard input failures.
+        for token in [
+            "e3", "1e", "1e+", "--1", "0x1p0", "1_0", " 1", "1 ", "1e1000", "infinity", "invalid",
+        ] {
+            assert!(
+                parse_f32_token(&case, "token", token).is_err(),
+                "token '{token}' must be rejected"
+            );
+        }
 
         // A decimal token with no exponent letter that overflows f32 must be a
         // hard failure, not a silently accepted infinity.
@@ -966,5 +1034,41 @@ mod tests {
             Err(DispatchError::NotImplemented { .. }) => panic!("unexpected NotImplemented error"),
             Ok(_) => panic!("zero expected count must not be accepted"),
         }
+    }
+
+    #[test]
+    fn support_execute_checked_validates_consumer_before_execution() {
+        let mut case = test_case();
+        for (label, consumer) in [
+            ("missing", None),
+            ("null", Some(serde_json::Value::Null)),
+            ("number", Some(serde_json::json!(7))),
+            ("other known", Some(serde_json::json!("corpus_frame"))),
+        ] {
+            let mut input = JsonMap::new();
+            if let Some(consumer) = consumer {
+                input.insert("consumer".to_string(), consumer);
+            }
+            case.input_json = Some(serde_json::Value::Object(input));
+            EXECUTOR_CALLED.store(false, Ordering::SeqCst);
+
+            let error = match execute_checked(&case, spy_executor) {
+                Err(error) => error,
+                Ok(_) => panic!("{label} consumer must fail"),
+            };
+            assert!(
+                matches!(error, DispatchError::InvalidCase { .. }),
+                "{label} consumer must be an invalid case"
+            );
+            assert!(
+                !EXECUTOR_CALLED.load(Ordering::SeqCst),
+                "{label} consumer must fail before execution"
+            );
+        }
+
+        case.input_json = Some(serde_json::json!({ "consumer": "mornlea_domain" }));
+        EXECUTOR_CALLED.store(false, Ordering::SeqCst);
+        execute_checked(&case, spy_executor).expect("domain consumer must execute");
+        assert!(EXECUTOR_CALLED.load(Ordering::SeqCst));
     }
 }
