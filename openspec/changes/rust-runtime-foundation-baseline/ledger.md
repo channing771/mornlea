@@ -311,3 +311,24 @@ checkbox/status source.
   --no-interactive` passed 125/125.
 - Dispatch order is serial 5.1 through 5.9 with a scoped implementation commit
   and controller acceptance record per node; 5.10 remains controller-owned.
+
+## 2026-09-22 — Node 5.1 acceptance
+
+- Implementation: `98e8a2a1` (`fix(runtime-oracle): bind coverage to executable
+  routes`). Files were limited to the five node-owned runtime-oracle files;
+  frozen corpus assets were unchanged.
+- TDD evidence: the six exact tests first failed because
+  `ConsumerRoute`/`ConsumerRegistration` did not exist. They then covered all
+  nine routes, malformed registries, JSON/binary boundaries, execution-side
+  reads and non-regular manifest/source/case assets.
+- Independent review found one Important: malformed registries accumulated an
+  error but still traversed cases and could report coverage. The worker
+  reproduced it with an unreadable asset, changed registry validation to return
+  an empty report before family/case traversal, and passed re-review with no
+  Critical or Important findings. One comment-format Minor was also fixed.
+- Controller verification: all six names appeared in `go test -list`; the exact
+  focused `-race` run passed in 3.322s; the full runtime-oracle `-race` run
+  passed in 52.239s; `git diff --check` and the runtime-migration corpus diff
+  gate passed.
+- Architecture skill: no change. This node enforces the already approved
+  executable-evidence boundary without changing runtime ownership.
