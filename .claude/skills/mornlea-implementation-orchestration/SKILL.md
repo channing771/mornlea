@@ -41,6 +41,14 @@ The controller remains responsible for integration and completion evidence.
 
 After an independently verifiable task or small coherent feature node passes its focused gates, create a scoped Git commit before starting the next node. Use partial staging to exclude unrelated, user-owned, experimental, or not-yet-complete work; never use a broad commit merely to empty a dirty worktree. If pre-existing changes prevent a safe commit, record the exact overlap and resolve the ownership boundary before accumulating more implementation.
 
+## Acceptance Evidence and Absolute Scope
+
+`tasks.md` is the sole OpenSpec plan identity and status source. Linked task packets provide execution detail without carrying a second checklist or completion state. Append durable implementation, validation and review evidence to the change ledger for the corresponding node. Do not create or maintain a flat or packet-keyed `.superpowers/sdd` progress store.
+
+A failed required closeout gate leaves its node open. Do not archive on the basis of deadline pressure, sunk review or sync work, an inherited-failure assertion, or general approval to finish. Revise the acceptance contract explicitly before archive if verified evidence justifies a different gate policy; record that revision in the active OpenSpec artifacts before applying it.
+
+Treat absolute requirements such as “every producer” or “no writer” as repository-wide until the active OpenSpec artifacts explicitly define a narrower boundary. Planning and review require repository-wide producer enumeration before dispatch, followed by exact packet and file ownership for every discovered producer. A verbal or external scope interpretation does not replace a reconciled task packet.
+
 ## Parallel-Controller Handover
 
 Multiple controllers (Codex, Claude Code, ZCode) alternately advance the same change in one worktree. Before starting the next node, run the four-point orphan check: the task checkboxes, the change ledger's ruling/routing/evidence rows for the frontier task, untracked in-flight files, and in-flight file mtimes against the current clock (roughly 2–3 hours stale with no follow-up artifacts means adoptable). Adopt orphan artifacts as the requirement source only after empirical review: an orphan red test may itself carry contract violations, and a coherent orphan implementation still needs contract verification plus an independent review before closeout. Record the adoption ruling, corrections, and routing in the ledger by appending; never rewrite another controller's records, and re-read files that report stale reads after parallel edits.

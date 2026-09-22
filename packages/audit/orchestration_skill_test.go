@@ -40,6 +40,91 @@ func TestProjectOrchestrationPrefersContextIsolation(t *testing.T) {
 	}
 }
 
+func TestProjectOrchestrationRetrospectivePolicy(t *testing.T) {
+	root := repositoryRoot(t)
+	for _, test := range []struct {
+		path      string
+		fragments []string
+	}{
+		{
+			path:      ".codex/skills/mornlea-implementation-orchestration/SKILL.md",
+			fragments: projectOrchestrationRetrospectiveSkillFragments(),
+		},
+		{
+			path:      ".claude/skills/mornlea-implementation-orchestration/SKILL.md",
+			fragments: projectOrchestrationRetrospectiveSkillFragments(),
+		},
+		{
+			path:      ".codex/skills/mornlea-implementation-orchestration/references/worker-planning.md",
+			fragments: projectOrchestrationRetrospectiveReferenceFragments(),
+		},
+		{
+			path:      ".claude/skills/mornlea-implementation-orchestration/references/worker-planning.md",
+			fragments: projectOrchestrationRetrospectiveReferenceFragments(),
+		},
+	} {
+		t.Run(test.path, func(t *testing.T) {
+			source := string(readOrchestrationPolicyFile(t, filepath.Join(root, filepath.FromSlash(test.path))))
+			if violations := missingOrchestrationRetrospectiveFragments(source, test.fragments); len(violations) > 0 {
+				t.Fatalf("%s does not preserve retrospective policy:\n%s", test.path, strings.Join(violations, "\n"))
+			}
+		})
+	}
+}
+
+func TestProjectOrchestrationRetrospectivePolicyGuardDetectsDrift(t *testing.T) {
+	for name, fragments := range map[string][]string{
+		"skill":     projectOrchestrationRetrospectiveSkillFragments(),
+		"reference": projectOrchestrationRetrospectiveReferenceFragments(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			valid := strings.Join(fragments, "\n")
+			if violations := missingOrchestrationRetrospectiveFragments(valid, fragments); len(violations) != 0 {
+				t.Fatalf("valid %s fixture produced violations: %v", name, violations)
+			}
+			for _, fragment := range fragments {
+				t.Run(fragment, func(t *testing.T) {
+					mutated := strings.Replace(valid, fragment, "", 1)
+					if violations := missingOrchestrationRetrospectiveFragments(mutated, fragments); len(violations) != 1 {
+						t.Fatalf("expected one retrospective-policy violation after removing %q, got %v", fragment, violations)
+					}
+				})
+			}
+		})
+	}
+}
+
+func projectOrchestrationRetrospectiveSkillFragments() []string {
+	return []string{
+		"`tasks.md` is the sole OpenSpec plan identity and status source",
+		"Do not create or maintain a flat or packet-keyed `.superpowers/sdd` progress store",
+		"A failed required closeout gate leaves its node open",
+		"Revise the acceptance contract explicitly before archive",
+		"repository-wide producer enumeration",
+	}
+}
+
+func projectOrchestrationRetrospectiveReferenceFragments() []string {
+	return []string{
+		"`tasks.md` remains the sole OpenSpec plan identity and status source",
+		"Append per-node implementation and status evidence to the change ledger before starting the next node",
+		"Batched retroactive acceptance is a recorded deviation",
+		"A failed required closeout gate keeps the node open",
+		"explicit acceptance-contract revision before archive",
+		"repository-wide producer enumeration",
+	}
+}
+
+func missingOrchestrationRetrospectiveFragments(source string, required []string) []string {
+	var violations []string
+	for _, fragment := range required {
+		if !strings.Contains(source, fragment) {
+			violations = append(violations, "missing retrospective-policy fragment: "+fragment)
+		}
+	}
+	return violations
+}
+
 func TestProjectOpenSpecApplySkillsRouteOrchestration(t *testing.T) {
 	root := repositoryRoot(t)
 	for _, relative := range []string{

@@ -52,4 +52,10 @@ Reject a packet that says only “port the family”, “add appropriate validat
 
 Keep decisions and implementation briefs within `openspec/changes/<change>/`; `tasks.md` is the single checkbox/status source. Supporting briefs name node IDs but do not maintain competing completion checkboxes. Do not edit installed plugin caches or create a second active plan in `docs/superpowers/`. Discover skill locations through available skill/plugin metadata or local installed `SKILL.md` resources.
 
+`tasks.md` remains the sole OpenSpec plan identity and status source; linked packets describe how to execute a node but never become a packet-keyed status store. Append per-node implementation and status evidence to the change ledger before starting the next node. Batched retroactive acceptance is a recorded deviation, not the normal workflow, and it must identify the affected nodes and recovered evidence.
+
+A failed required closeout gate keeps the node open. Deadline pressure, prior review or sync effort, claims that a failure is inherited, and general archive approval do not change that result. A different gate policy requires explicit acceptance-contract revision before archive, with the active artifacts reconciled before the node is accepted.
+
+For an absolute requirement such as “every producer” or “no writer,” require repository-wide producer enumeration during planning and repeat the enumeration during review. Revise the packet and file ownership before dispatch when any producer falls outside the proposed boundary; do not treat a verbal scope interpretation or package-local green test as repository-wide evidence.
+
 Respect user-supplied scope, chosen execution method and existing authorization. A request to revise design and plan authorizes those reversible artifacts, not runtime deployment. Skill defaults must not create repeated approvals, external notifications or model/provider changes. If a required skill truly cannot be found, state which one is missing and which dependent work cannot be truthfully performed.
