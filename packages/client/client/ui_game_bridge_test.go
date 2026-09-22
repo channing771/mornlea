@@ -32,13 +32,13 @@ func TestGameActionBridgeStrictValidation(t *testing.T) {
 		`{"type":"game-action","token":1,"op":"slot","area":"inventory","index":0,"button":"middle","shift":false}`,
 		`{"type":"game-action","token":1,"op":"slot","area":"inventory","index":0,"button":"left","shift":"false"}`,
 		`{"type":"game-action","token":1,"op":"slot","area":"inventory","index":0,"button":"left","shift":null}`,
-		// 拖出丢弃：区域/索引缺失、越界与未知区域都整事件拒绝。
+		// Drops reject the whole event for missing, out-of-range, or unknown slot addresses.
 		`{"type":"game-action","token":1,"op":"drop"}`,
 		`{"type":"game-action","token":1,"op":"drop","area":"inventory"}`,
 		`{"type":"game-action","token":1,"op":"drop","area":"inventory","index":36}`,
 		`{"type":"game-action","token":1,"op":"drop","area":"output","index":0}`,
 		`{"type":"game-action","token":1,"op":"drop","area":"inventory","index":0,"button":"left"}`,
-		// 拖拽落槽：任一端缺失、越界或携带多余字段都整事件拒绝。
+		// Drag moves reject the whole event when either endpoint is missing or out of range, or fields are extra.
 		`{"type":"game-action","token":1,"op":"dragMove","fromArea":"inventory","fromIndex":0,"toArea":"inventory"}`,
 		`{"type":"game-action","token":1,"op":"dragMove","fromArea":"inventory","fromIndex":36,"toArea":"inventory","toIndex":0}`,
 		`{"type":"game-action","token":1,"op":"dragMove","fromArea":"inventory","fromIndex":0,"toArea":"chest","toIndex":27}`,
@@ -67,9 +67,9 @@ func TestGameActionSlotPointerFieldsLandOnStruct(t *testing.T) {
 	}
 }
 
-// TestGameActionDragAndDropFieldsLandOnStruct 钉住拖拽两操作的解码落位：
-// dragMove 的源/目标双端与 drop 的单端寻址各自落位，供 handleGameAction 的
-// 拖拽分支消费。
+// `TestGameActionDragAndDropFieldsLandOnStruct` verifies decoding for both drag
+// operations: `dragMove` fills both endpoints and `drop` fills its single slot
+// address for the `handleGameAction` drag branches.
 func TestGameActionDragAndDropFieldsLandOnStruct(t *testing.T) {
 	events, err := DecodeUIEventBatch([]byte(`{"v":1,"events":[` +
 		`{"type":"game-action","token":9,"op":"dragMove","fromArea":"chest","fromIndex":3,"toArea":"inventory","toIndex":10},` +

@@ -7,7 +7,7 @@ import (
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-// takeAllReady 依次取出就绪堆的全部键，供顺序断言复用。
+// `takeAllReady` drains every key so ordering assertions can share one helper.
 func takeAllReady(ready *readySectionHeap) []core.SectionKey {
 	keys := make([]core.SectionKey, 0, ready.Len())
 	for {
@@ -19,10 +19,11 @@ func takeAllReady(ready *readySectionHeap) []core.SectionKey {
 	}
 }
 
-// TestReadySectionHeapOrdersNearestFirstThenLexicographic 钉住复合键契约：
-// 维度仍是最外层（其他维度的键即使距离更近也排在当前维度之后），同维度内
-// 按到视图中心的水平平方距离升序，距离平局回落到既有字典序（X、Z、Y）。
-// 同一区块列内的高低区段共享水平距离，先后完全由字典序的 Y 次序决定。
+// `TestReadySectionHeapOrdersNearestFirstThenLexicographic` fixes the compound-key
+// contract: dimension remains outermost, while keys within the center's
+// dimension sort by ascending horizontal squared distance and then the existing
+// lexical `X`, `Z`, `Y` order. Vertical sections in one chunk column share a distance
+// and are therefore ordered by `Y` alone.
 func TestReadySectionHeapOrdersNearestFirstThenLexicographic(t *testing.T) {
 	ready := newReadySectionHeap()
 	ready.SetCenter(ViewCenter{Dimension: core.Overworld, Chunk: core.ChunkPos{}})
@@ -56,8 +57,8 @@ func TestReadySectionHeapOrdersNearestFirstThenLexicographic(t *testing.T) {
 	}
 }
 
-// TestReadySectionHeapOrderIndependentOfInsertionOrder 钉住「出队序与插入
-// 顺序无关」：同一键集按多种顺序插入，出队序列必须逐位一致。
+// `TestReadySectionHeapOrderIndependentOfInsertionOrder` verifies that one key
+// set drains identically after several insertion orders.
 func TestReadySectionHeapOrderIndependentOfInsertionOrder(t *testing.T) {
 	keys := []core.SectionKey{
 		{Dimension: core.Overworld, Pos: core.SectionPos{X: -2}},
@@ -89,8 +90,8 @@ func TestReadySectionHeapOrderIndependentOfInsertionOrder(t *testing.T) {
 	}
 }
 
-// TestReadySectionHeapRecentersWhenCenterMoves 钉住中心移动后的惰性重排：
-// 按旧中心排序的待烘焙键，在 SetCenter 到新中心后必须按新中心距离出队。
+// `TestReadySectionHeapRecentersWhenCenterMoves` verifies lazy reordering: keys
+// sorted around the old center must drain by distance from the new `SetCenter` value.
 func TestReadySectionHeapRecentersWhenCenterMoves(t *testing.T) {
 	ready := newReadySectionHeap()
 	west := core.SectionKey{Dimension: core.Overworld, Pos: core.SectionPos{}}
@@ -136,9 +137,9 @@ func TestReadySectionHeapRemoveMaintainsIndexes(t *testing.T) {
 	}
 }
 
-// TestMesherSchedulePrefersNearestToViewCenter 经 `Schedule` 调用面钉住中心
-// 传递：同帧内两个可网格化的脏段，靠近视图中心的那个必须先被投递；下一帧
-// 中心移动到另一侧后，投递优先级随之反转。
+// `TestMesherSchedulePrefersNearestToViewCenter` verifies center propagation
+// through `Schedule`: the nearer of two meshable dirty sections dispatches
+// first, and moving the center across them reverses priority on the next frame.
 func TestMesherSchedulePrefersNearestToViewCenter(t *testing.T) {
 	mesher := newUnstartedMesherForBackpressureTest(2)
 	mesher.jobs <- mesherJob{}
@@ -158,7 +159,8 @@ func TestMesherSchedulePrefersNearestToViewCenter(t *testing.T) {
 		t.Fatalf("近处优先的首个 job = %+v，想要 %+v", job.key, east)
 	}
 
-	// 模拟 worker 侧消费后重新入队（与背压基准同一手法），保留两段待烘焙。
+	// Requeue after simulated worker consumption, matching the backpressure test,
+	// so both sections remain pending for the next schedule.
 	mesher.mu.Lock()
 	delete(mesher.queued, east)
 	mesher.enqueueReadyLocked(east)

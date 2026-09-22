@@ -209,9 +209,9 @@ it("页脚提示行说明半组、单件与快捷搬运", () => {
   expect(screen.getByText("先选物品，再选目标位置；右键半组 / Shift+右键单件 / Shift+点击快速搬运")).toBeTruthy();
 });
 
-// ===== 指针拖拽 =====
-// jsdom 未实现 PointerEvent，Event 构造器会丢弃 clientX/button 等 init 键；
-// 测试用显式属性注入派发同形指针事件。
+// ===== Pointer dragging =====
+// jsdom does not implement PointerEvent, and Event drops init keys such as
+// clientX and button, so tests explicitly inject properties on equivalent events.
 const firePointer = (
   target: Window | Element,
   type: "pointerdown" | "pointermove" | "pointerup" | "pointercancel",
@@ -223,7 +223,7 @@ const firePointer = (
   Object.defineProperty(event, "clientY", { value: init.clientY ?? 0 });
   fireEvent(target, event);
 };
-// 拖拽夹具：背包 1（索引 0）放一组石头供拖起，全部路径共用同一构造。
+// The shared drag fixture puts a stone stack in inventory slot 1 (index 0).
 const dragState = (): GameState => {
   const inventory = state.inventory.map((slot, index) => index === 0 ? { item: 1, count: 5, name: "石头" } : { ...slot });
   return { ...state, inventory };
@@ -237,7 +237,7 @@ it("拖起呈现浮层与让位源槽，落到其它槽位发 dragMove", () => {
   const emit = vi.fn();
   const { container } = render(<GamePanels game={dragState()} onEvent={emit} />);
   dragStart();
-  // 拖拽呈现：浮层只在实际拖拽时渲染，源槽位让位。
+  // The ghost appears only during an active drag, and the source slot yields visually.
   const ghost = container.querySelector(".game-drag-ghost");
   expect(ghost).toBeTruthy();
   expect(screen.getByRole("button", { name: "背包 1：石头" }).className).toContain("game-slot--drag-source");
@@ -252,7 +252,7 @@ it("拖起呈现浮层与让位源槽，落到其它槽位发 dragMove", () => {
     toArea: "inventory",
     toIndex: 1
   });
-  // 松手后浮层消失。
+  // Releasing the pointer removes the ghost.
   expect(container.querySelector(".game-drag-ghost")).toBeNull();
 });
 
@@ -260,7 +260,7 @@ it("拖到面板空白处松手取消且不发消息", () => {
   const emit = vi.fn();
   render(<GamePanels game={dragState()} onEvent={emit} />);
   dragStart();
-  // 页脚是面板内非槽位空白承载面。
+  // The footer is non-slot whitespace inside the panel.
   firePointer(screen.getByText("E / Esc 关闭"), "pointerup", { clientX: 40, clientY: 40 });
   expect(emit).not.toHaveBeenCalled();
 });
@@ -269,7 +269,7 @@ it("拖到面板外松手发按槽位寻址的整组丢弃", () => {
   const emit = vi.fn();
   const { container } = render(<GamePanels game={dragState()} onEvent={emit} />);
   dragStart();
-  // 覆盖层属面板外空白（页面背景/世界）：整组丢弃按源槽寻址。
+  // The overlay is outside-panel whitespace, so dropping uses the source slot address.
   const overlay = container.querySelector(".game-panel-overlay");
   expect(overlay).toBeTruthy();
   firePointer(overlay!, "pointerup", { clientX: 5, clientY: 5 });
@@ -290,7 +290,7 @@ it("松手回源槽是取消语义且吞掉后续点击", () => {
   const source = screen.getByRole("button", { name: "背包 1：石头" });
   firePointer(source, "pointerup", { clientX: 40, clientY: 40 });
   expect(emit).not.toHaveBeenCalled();
-  // 真实 WebView 会在拖拽结束后补一次 click：必须被吞掉，不得误发槽位语义。
+  // A real WebView follows drag completion with a click; it must not emit a slot action.
   fireEvent.click(source);
   expect(emit).not.toHaveBeenCalled();
 });
@@ -302,8 +302,8 @@ it("Esc 取消拖拽且不发消息", () => {
   fireEvent.keyDown(window, { key: "Escape" });
   expect(emit).not.toHaveBeenCalled();
   expect(container.querySelector(".game-drag-ghost")).toBeNull();
-  // Esc 取消不残留 click 抑制位：其后的键盘激活 click 仍走普通槽位语义
-  //（不会被误吞一次）。
+  // Escape cancellation leaves no click-suppression state, so a later
+  // keyboard-activated click still follows normal slot semantics.
   fireEvent.click(screen.getByRole("button", { name: "背包 1：石头" }));
   expect(emit).toHaveBeenCalledTimes(1);
   expect(emit).toHaveBeenCalledWith({
@@ -321,14 +321,14 @@ it("拖拽被 pointercancel 中断后取消且不误结算", () => {
   const emit = vi.fn();
   const { container } = render(<GamePanels game={dragState()} onEvent={emit} />);
   dragStart();
-  // 系统中断（触摸取消/系统手势）只有 pointercancel、没有 pointerup：
-  // 按取消收尾，浮层消失。
+  // A system interruption emits pointercancel without pointerup; cancellation
+  // must complete and remove the ghost.
   firePointer(window, "pointercancel");
   expect(container.querySelector(".game-drag-ghost")).toBeNull();
-  // 中断后残留的 stray pointerup 不得把已取消的拖拽误结算成 dragMove/drop。
+  // A stray pointerup after interruption cannot settle the cancelled drag as `dragMove` or `drop`.
   firePointer(screen.getByRole("button", { name: "背包 2：空" }), "pointerup", { clientX: 40, clientY: 40 });
   expect(emit).not.toHaveBeenCalled();
-  // 后续普通点击不受残留抑制位影响，仍走两次点击语义。
+  // A later ordinary click remains unaffected and follows two-click semantics.
   fireEvent.click(screen.getByRole("button", { name: "背包 1：石头" }));
   expect(emit).toHaveBeenCalledTimes(1);
   expect(emit).toHaveBeenCalledWith({
@@ -346,7 +346,7 @@ it("窗口失焦时取消拖拽且不发消息", () => {
   const emit = vi.fn();
   const { container } = render(<GamePanels game={dragState()} onEvent={emit} />);
   dragStart();
-  // cmd-tab 等失焦场景收不到 pointerup：按取消收尾，浮层消失。
+  // Focus loss such as Command-Tab receives no pointerup, so cancellation removes the ghost.
   fireEvent.blur(window);
   expect(container.querySelector(".game-drag-ghost")).toBeNull();
   firePointer(window, "pointerup", { clientX: 40, clientY: 40 });
@@ -368,7 +368,7 @@ it("未越过阈值松手保持两次点击语义", () => {
   const { container } = render(<GamePanels game={dragState()} onEvent={emit} />);
   const source = screen.getByRole("button", { name: "背包 1：石头" });
   firePointer(source, "pointerdown", { clientX: 10, clientY: 10 });
-  // 未移动即松手：无浮层、无拖拽消息，随后的 click 仍走普通槽位语义。
+  // Releasing without movement creates no ghost or drag message; the following click stays ordinary.
   firePointer(source, "pointerup", { clientX: 11, clientY: 10 });
   expect(container.querySelector(".game-drag-ghost")).toBeNull();
   fireEvent.click(source);
@@ -386,7 +386,7 @@ it("未越过阈值松手保持两次点击语义", () => {
 
 it("未确认或空槽不发起拖拽", () => {
   const emit = vi.fn();
-  // 未确认：面板数据整体处于 unconfirmed。
+  // The entire panel state is unconfirmed.
   const { container: unconfirmedContainer } = render(<GamePanels game={{ ...dragState(), confirmed: false }} onEvent={emit} />);
   const disabledSource = screen.getByRole("button", { name: "背包 1：石头" });
   firePointer(disabledSource, "pointerdown", { clientX: 10, clientY: 10 });
@@ -394,7 +394,7 @@ it("未确认或空槽不发起拖拽", () => {
   expect(unconfirmedContainer.querySelector(".game-drag-ghost")).toBeNull();
   firePointer(window, "pointerup", { clientX: 40, clientY: 40 });
   cleanup();
-  // 空槽：已确认但源槽无物品。
+  // The source is confirmed but empty.
   const { container: emptyContainer } = render(<GamePanels game={state} onEvent={emit} />);
   firePointer(screen.getByRole("button", { name: "背包 1：空" }), "pointerdown", { clientX: 10, clientY: 10 });
   firePointer(window, "pointermove", { clientX: 40, clientY: 40 });
@@ -407,7 +407,7 @@ it("拖拽中的权威刷新照常应用且拖拽呈现保持", () => {
   const emit = vi.fn();
   const { rerender, container } = render(<GamePanels game={dragState()} onEvent={emit} />);
   dragStart();
-  // 权威刷新：背包 2 被服务端确认填入泥土，源槽数量变化为 4。
+  // Authoritative refresh fills inventory slot 2 with dirt and changes the source count to four.
   const refreshed = {
     ...dragState(),
     inventory: dragState().inventory.map((slot, index) => {
@@ -417,11 +417,11 @@ it("拖拽中的权威刷新照常应用且拖拽呈现保持", () => {
     })
   };
   rerender(<GamePanels game={refreshed} onEvent={emit} />);
-  // 面板底层数据更新为确认状态。
+  // The underlying panel data reflects the confirmed update.
   expect(screen.getByRole("button", { name: "背包 2：泥土" })).toBeTruthy();
-  // 拖拽浮层保持跟随（快照呈现被拖组）。
+  // The drag ghost keeps following with its captured stack snapshot.
   expect(container.querySelector(".game-drag-ghost")).toBeTruthy();
-  // 松手落槽仍按语义引用结算。
+  // Releasing on a slot still settles through semantic references.
   firePointer(screen.getByRole("button", { name: "背包 2：泥土" }), "pointerup", { clientX: 40, clientY: 40 });
   expect(emit).toHaveBeenCalledWith({
     type: "game-action",

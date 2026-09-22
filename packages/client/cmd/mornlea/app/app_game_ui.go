@@ -165,8 +165,9 @@ func (a *Application) handleGameAction(action client.UIGameAction) {
 		a.sendGameCommand(network.TakeCraftingOutput{Sequence: a.nextSequence()})
 		return
 	}
-	// 拖拽落槽：与两次点击主键路径共用同一映射与同一发送出口，保证发出的
-	// Move* 消息逐字段一致（同格与熔炉产物目标沿两次点击的取消语义）。
+	// Drag moves share the two-click primary path's mapping and send boundary, so
+	// emitted `Move*` messages match field for field. Same-slot and furnace-output
+	// targets retain the two-click cancellation semantics.
 	if action.Op == "dragMove" {
 		from, valid := a.gameUnifiedSlot(kind, client.UIGameSlotRef{Area: action.FromArea, Index: action.FromIndex})
 		if !valid {
@@ -187,8 +188,9 @@ func (a *Application) handleGameAction(action client.UIGameAction) {
 		a.sendUnifiedSlotMove(kind, from, to)
 		return
 	}
-	// 拖出面板整组丢弃：区域/槽位映射与槽位点击一致，翻译为按视图槽位寻址的
-	// DropStack；投放位置与整组数量由服务端权威推导。
+	// Whole-stack drops use the same area and slot mapping as clicks, translated
+	// into a view-addressed `network.DropStack`. The server authoritatively derives
+	// the placement and full-stack count.
 	if action.Op == "drop" {
 		target := client.UIGameSlotRef{Area: action.Area, Index: action.Index}
 		to, valid := a.gameUnifiedSlot(kind, target)
@@ -205,8 +207,9 @@ func (a *Application) handleGameAction(action client.UIGameAction) {
 			state, _ := a.furnace.State()
 			a.sendGameCommand(network.DropStack{Sequence: a.nextSequence(), Container: state.Furnace, View: network.StackViewContainer, Slot: to})
 		default:
-			// 个人背包面板的背包/快捷栏格走背包视图域（原始 0..35 索引），
-			// 与快捷搬运同款换算；网格格与工作台面板仍走合成视图统一映射。
+			// Inventory and hotbar slots in the personal panel use raw indices 0..35
+			// in the inventory view, matching quick moves. Grid slots and the
+			// workbench still use the unified crafting-view mapping.
 			if kind == "inventory" && target.Area == "inventory" {
 				a.sendGameCommand(network.DropStack{Sequence: a.nextSequence(), View: network.StackViewInventory, Slot: to - 9})
 				return
@@ -292,9 +295,10 @@ func (a *Application) handleGameAction(action client.UIGameAction) {
 	a.sendUnifiedSlotMove(kind, from, to)
 }
 
-// sendUnifiedSlotMove 按当前面板身份把统一视图格 from→to 的整堆移动翻译为
-// 既有 Move* 命令：两次点击主键路径与拖拽落槽（dragMove）共用这一出口，
-// 结构上保证两条交互发出逐字段一致的消息。
+// `sendUnifiedSlotMove` translates a whole-stack move between unified `from` and
+// `to` slots into the existing `Move*` command for the active panel. Two-click
+// primary moves and `dragMove` share this boundary so their messages match field
+// for field.
 func (a *Application) sendUnifiedSlotMove(kind string, from, to uint8) {
 	if kind == "chest" {
 		state, _ := a.chest.State()

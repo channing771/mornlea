@@ -370,9 +370,9 @@ func TestGameShiftLeftClickQuickMoveClearsSourceAndMapsView(t *testing.T) {
 	}
 }
 
-// TestGameDragMoveSendsIdenticalMessageAsTwoClickPrimary 钉住拖拽落槽的硬需求：
-// 与两次点击主键路径发出逐字段一致的 Move* 消息（序号按发送顺序递增），
-// 覆盖个人背包、工作台、箱子与熔炉四种面板身份。
+// `TestGameDragMoveSendsIdenticalMessageAsTwoClickPrimary` verifies that a drag
+// move emits the same `Move*` fields as the two-click primary path, aside from
+// monotonically increasing sequence numbers, for all four panel identities.
 func TestGameDragMoveSendsIdenticalMessageAsTwoClickPrimary(t *testing.T) {
 	newApp := func(t *testing.T) (*Application, network.ServerEndpoint) {
 		t.Helper()
@@ -450,8 +450,9 @@ func TestGameDragMoveSendsIdenticalMessageAsTwoClickPrimary(t *testing.T) {
 	})
 }
 
-// TestGameDragMoveCancelsOnSameSlotAndFurnaceOutputTarget 钉住拖拽落槽沿两次
-// 点击的取消语义：同格与熔炉产物目标不发任何消息，且清除既有两击来源。
+// `TestGameDragMoveCancelsOnSameSlotAndFurnaceOutputTarget` verifies two-click
+// cancellation semantics for drag moves: both targets emit no message, while an
+// invalid furnace-output target preserves the source and a same-slot drag clears it.
 func TestGameDragMoveCancelsOnSameSlotAndFurnaceOutputTarget(t *testing.T) {
 	a, endpoint := newInteractiveTestApplication(t)
 	a.menu.phase = MenuPhaseGame
@@ -464,18 +465,18 @@ func TestGameDragMoveCancelsOnSameSlotAndFurnaceOutputTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.setInventoryOpen(true)
-	// 预置两击来源：非法拖拽目标沿两次点击语义不得破坏来源。
+	// Seed a two-click source; an invalid drag target must preserve it.
 	gameTestAction(a, "slot", "furnace", 0)
 	if a.gameSource == nil {
 		t.Fatal("夹具：来源未记录")
 	}
-	// 熔炉产物格不得作为拖拽目标（来源方向不受限）。
+	// The furnace output cannot be a drag target, though it may be a source.
 	gameTestDragAction(a, "furnace", 0, "furnace", 2)
 	assertNoInteractiveClientMessage(t, endpoint)
 	if a.gameSource == nil || a.gameSource.Area != "furnace" {
 		t.Fatalf("非法拖拽目标破坏了来源: %#v", a.gameSource)
 	}
-	// 同格拖拽是取消语义：清除来源、不发消息。
+	// A same-slot drag cancels by clearing the source without sending a message.
 	gameTestDragAction(a, "furnace", 0, "furnace", 0)
 	assertNoInteractiveClientMessage(t, endpoint)
 	if a.gameSource != nil {
@@ -483,9 +484,10 @@ func TestGameDragMoveCancelsOnSameSlotAndFurnaceOutputTarget(t *testing.T) {
 	}
 }
 
-// TestGameDropSendsViewAddressedDropStack 钉住拖出丢弃的视图域映射：个人背包
-// 面板的背包格走背包视图原始索引、网格格走合成视图；工作台背包格走合成
-// 视图 +9 映射；容器面板带权威引用走容器视图统一索引。
+// `TestGameDropSendsViewAddressedDropStack` verifies view-domain mapping for
+// drops: personal inventory slots use raw inventory-view indices, personal grid
+// slots use the crafting view, workbench inventory slots add nine, and container
+// panels use unified container-view indices with the authoritative reference.
 func TestGameDropSendsViewAddressedDropStack(t *testing.T) {
 	a, endpoint := newInteractiveTestApplication(t)
 	a.menu.phase = MenuPhaseGame
@@ -498,19 +500,19 @@ func TestGameDropSendsViewAddressedDropStack(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.setInventoryOpen(true)
-	// 个人面板背包格：背包视图域原始索引（与快捷搬运同款换算）。
+	// Personal inventory slots use raw inventory-view indices, matching quick moves.
 	gameTestDropAction(a, "inventory", 12)
 	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.DropStack); !ok ||
 		got.View != network.StackViewInventory || got.Slot != 12 || got.Container != (core.ContainerRef{}) {
 		t.Fatalf("个人面板背包丢弃: %#v", got)
 	}
-	// 个人面板网格格：合成视图统一网格索引。
+	// Personal grid slots use unified crafting-view grid indices.
 	gameTestDropAction(a, "crafting", 1)
 	if got, ok := receiveInteractiveClientMessage(t, endpoint).(network.DropStack); !ok ||
 		got.View != network.StackViewCrafting || got.Slot != 1 {
 		t.Fatalf("个人面板网格丢弃: %#v", got)
 	}
-	// 工作台背包格：合成视图 +9 统一映射。
+	// Workbench inventory slots use the unified crafting-view offset of nine.
 	workbench := network.CraftingState{Size: 3}
 	if err := a.crafting.Apply(workbench); err != nil {
 		t.Fatal(err)
@@ -520,7 +522,8 @@ func TestGameDropSendsViewAddressedDropStack(t *testing.T) {
 		got.View != network.StackViewCrafting || got.Slot != 14 {
 		t.Fatalf("工作台背包丢弃: %#v", got)
 	}
-	// 箱子面板：容器视图统一索引（背包区原始 0..35、箱区 36..62）并带权威引用。
+	// Chest panels use unified container-view indices (inventory 0..35 and chest
+	// 36..62) together with the authoritative container reference.
 	chest := network.ChestState{Chest: core.ContainerRef{Kind: core.ContainerKindChest, Generation: 1}}
 	if err := a.chest.Apply(chest); err != nil {
 		t.Fatal(err)
@@ -535,7 +538,7 @@ func TestGameDropSendsViewAddressedDropStack(t *testing.T) {
 		got.Container != chest.Chest || got.View != network.StackViewContainer || got.Slot != 39 {
 		t.Fatalf("箱内丢弃: %#v", got)
 	}
-	// 熔炉面板：燃料格统一索引 37，输出格（合法来源方向）38。
+	// Furnace panels map fuel to unified index 37 and output, a valid source, to 38.
 	if err := a.chest.Close(network.ContainerClosed{Container: chest.Chest}); err != nil {
 		t.Fatal(err)
 	}
@@ -555,12 +558,12 @@ func TestGameDropSendsViewAddressedDropStack(t *testing.T) {
 	}
 }
 
-// TestGameDragAndDropWaitForAuthority 钉住确认门禁：未确认状态下拖拽落槽与
-// 拖出丢弃都不产生任何协议消息。
+// `TestGameDragAndDropWaitForAuthority` verifies that unconfirmed state gates
+// both drag moves and drops before they emit protocol messages.
 func TestGameDragAndDropWaitForAuthority(t *testing.T) {
 	a, endpoint := newInteractiveTestApplication(t)
 	a.menu.phase = MenuPhaseGame
-	// 不 Apply 权威背包状态：镜像处于未确认。
+	// Leave the inventory mirror unconfirmed by not applying authoritative state.
 	a.setInventoryOpen(true)
 	gameTestDragAction(a, "inventory", 0, "inventory", 10)
 	gameTestDropAction(a, "inventory", 0)

@@ -45,12 +45,12 @@ export type GameAction = {
   /** Shift 修饰位：左键为快捷搬运，右键第二击在单件/半组间定档。 */
   readonly shift: boolean;
 } | {
-  /** 拖出面板整组丢弃：服务端按视图槽位寻址在玩家脚下投放整组。 */
+  /** Drops a whole stack outside the panel; the server uses the view slot to place it at the player's feet. */
   readonly op: "drop";
   readonly area: SlotArea;
   readonly index: number;
 } | {
-  /** 拖拽落槽：与两次点击主键搬运完全相同的权威消息（源/目标语义槽位引用）。 */
+  /** Moves a dragged stack with the same authoritative source and destination slot references as two-click primary movement. */
   readonly op: "dragMove";
   readonly fromArea: SlotArea;
   readonly fromIndex: number;

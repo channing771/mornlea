@@ -9,8 +9,8 @@ import (
 
 // UIGameAction 是带视图身份的语义操作；不携带像素坐标。槽位操作额外携带
 // 按键类型（Button，left/right）与 Shift 修饰位（Shift），供分堆与快捷搬运
-// 分支分派；拖拽落槽（dragMove）携带源/目标两个语义槽位引用，拖出面板丢弃
-// （drop）复用 Area/Index 寻址；数量与落位一律由服务端推导。
+// branch dispatch. A `dragMove` carries source and destination semantic slot
+// references, while `drop` reuses `Area` and `Index`; the server derives counts and placement.
 type UIGameAction struct {
 	Token     uint64 `json:"token"`
 	Op        string `json:"op"`
@@ -24,8 +24,9 @@ type UIGameAction struct {
 	ToIndex   int    `json:"toIndex,omitempty"`
 }
 
-// gameAreaIndexLimit 返回一个语义槽位区域的上闭界索引；未知区域返回 false。
-// 槽位点击、拖拽落槽与拖出丢弃共用同一张区域→上界表，避免三处各写一份。
+// `gameAreaIndexLimit` returns the inclusive upper index bound for one semantic
+// slot area, or false for an unknown area. Slot clicks, drag moves, and drops
+// share this area-to-bound table.
 func gameAreaIndexLimit(area string) (int, bool) {
 	switch area {
 	case "inventory":
@@ -41,8 +42,9 @@ func gameAreaIndexLimit(area string) (int, bool) {
 	}
 }
 
-// decodeSlotAddress 把一对 (area,index) JSON 字段严格解码进目标字段，供单端
-// （slot/drop）与双端（dragMove）寻址复用：未知区域与越界索引都整事件拒绝。
+// `decodeSlotAddress` strictly decodes one `(area,index)` JSON pair for both
+// single-ended `slot` and `drop` addressing and double-ended `dragMove`
+// addressing. Unknown areas and out-of-range indices reject the whole event.
 func decodeSlotAddress(
 	fields map[string]json.RawMessage,
 	areaField string,
@@ -107,13 +109,13 @@ func decodeGameActionEvent(fields map[string]json.RawMessage) (UIEvent, error) {
 		}
 		action.Shift = *shift
 	case "drop":
-		// 拖出面板整组丢弃：单端寻址与槽位点击同界，无按键语义字段。
+		// A whole-stack drop uses the same single-ended bounds as a slot click and has no button fields.
 		required = append(required, "area", "index")
 		if err := decodeSlotAddress(fields, "area", "index", &action.Area, &action.Index); err != nil {
 			return UIEvent{}, err
 		}
 	case "dragMove":
-		// 拖拽落槽：源/目标两端各自独立校验区域与索引域，跨区域合法。
+		// A drag move validates source and destination independently and permits cross-area moves.
 		required = append(required, "fromArea", "fromIndex", "toArea", "toIndex")
 		if err := decodeSlotAddress(fields, "fromArea", "fromIndex", &action.FromArea, &action.FromIndex); err != nil {
 			return UIEvent{}, err

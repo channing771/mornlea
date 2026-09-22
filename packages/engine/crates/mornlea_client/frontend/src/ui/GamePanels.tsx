@@ -10,11 +10,13 @@ type Props = {
 };
 const titles = { none: "", inventory: "随身行囊", character: "旅人手记", workbench: "工作台", chest: "储物箱", furnace: "熔炉" };
 const labels: Record<SlotArea, string> = { inventory: "背包", crafting: "合成", chest: "箱子", furnace: "熔炉" };
-// 拖拽激活位移阈值（像素平方距离）：未越过阈值松手仍按普通点击走两次点击
-// 语义，越过才呈现拖起浮层——点击与拖拽互不抢占。
+// Drag activation uses a squared pixel-distance threshold. Releasing below it
+// preserves ordinary two-click semantics; crossing it alone reveals the ghost,
+// so click and drag interactions do not steal each other.
 const dragStartThresholdPixels = 3;
-// 一次进行中的拖拽：源槽语义引用 + 被拖组快照 + 指针位置。快照只服务浮层
-// 呈现；结算寻址一律用语义引用，权威刷新照常覆盖面板数据。
+// An active drag retains the semantic source reference, a visual stack snapshot,
+// and pointer position. Settlement always uses semantic references, while the
+// snapshot serves only the ghost and authoritative refreshes still update panels.
 type PanelDrag = {
     readonly from: { readonly area: SlotArea; readonly index: number };
     readonly stack: HudSlot;
@@ -24,12 +26,13 @@ type PanelDrag = {
 export function GamePanels({ game, hud, onEvent }: Props) {
     const emit = (action: GameAction) => onEvent(action);
     const [drag, setDrag] = useState<PanelDrag | null>(null);
-    // dragRef 供 window 级监听读取最新拖拽态；armed 是「按下但未越过阈值」的
-    // 待定拖拽；suppressClick 在拖拽结束后的同源 click 上吞一次点击。
+    // `dragRef` gives window listeners the latest active drag. `armedRef` holds
+    // a press below threshold, and `suppressClickRef` consumes the click that
+    // follows a completed drag.
     const dragRef = useRef<PanelDrag | null>(null);
     const armedRef = useRef<{ from: PanelDrag["from"]; stack: HudSlot; x: number; y: number } | null>(null);
     const suppressClickRef = useRef(false);
-    // 监听器只挂一次，经 ref 读取每次渲染最新的发射闭包与视图 token。
+    // Listeners mount once and use a ref for the latest emitter and view token.
     const latestRef = useRef({ emit, token: game.token });
     useEffect(() => {
         latestRef.current = { emit, token: game.token };
@@ -58,7 +61,7 @@ export function GamePanels({ game, hud, onEvent }: Props) {
             }
         };
         const onPointerDown = (event: PointerEvent) => {
-            // 新的按下让旧抑制位失效；拖拽中按下次键（非主键）即取消拖拽。
+            // A new press clears stale suppression; a non-primary press during a drag cancels it.
             suppressClickRef.current = false;
             if (event.button !== 0 && dragRef.current)
                 endDrag();
@@ -66,11 +69,11 @@ export function GamePanels({ game, hud, onEvent }: Props) {
         const onPointerUp = (event: PointerEvent) => {
             const current = dragRef.current;
             if (!current) {
-                // 未激活的按下松手：随后的 click 仍走两次点击语义。
+                // Releasing an unactivated press preserves two-click semantics for the following click.
                 armedRef.current = null;
                 return;
             }
-            // 激活过的拖拽结束后浏览器仍会补一次 click，吞掉避免误发槽位语义。
+            // Browsers emit a click after an active drag ends; consume it to avoid a false slot action.
             suppressClickRef.current = true;
             endDrag();
             const target = event.target instanceof Element ? event.target : null;
@@ -78,7 +81,7 @@ export function GamePanels({ game, hud, onEvent }: Props) {
             if (slot) {
                 const toArea = slot.dataset.slotArea as SlotArea;
                 const toIndex = Number(slot.dataset.slotIndex);
-                // 松手回源槽是取消语义：与两次点击的同格取消一致，不发消息。
+                // Releasing on the source cancels without a message, matching same-slot two-click cancellation.
                 if (toArea === current.from.area && toIndex === current.from.index)
                     return;
                 latestRef.current.emit({
@@ -87,22 +90,23 @@ export function GamePanels({ game, hud, onEvent }: Props) {
                 });
                 return;
             }
-            // 面板内非槽位空白取消；面板外（页面背景/世界）整组丢弃。
+            // Non-slot panel whitespace cancels; outside-panel background drops the whole stack.
             if (target?.closest(".game-panel"))
                 return;
             latestRef.current.emit({ type: "game-action", token: latestRef.current.token, op: "drop", area: current.from.area, index: current.from.index });
         };
         const onKeyDown = (event: KeyboardEvent) => {
-            // Esc 只取消拖拽本身，不置 click 抑制位：取消后指针仍被按住，
-            // 其后的松手/点击回到普通两次点击语义，键盘激活的 click 也不会
-            // 被残留抑制位误吞。抑制位只在 pointerup 结算路径置位。
+            // Escape cancels only the drag and does not set click suppression.
+            // The pointer remains pressed, so its later release and click return
+            // to ordinary two-click semantics, and keyboard clicks remain intact.
+            // Only pointerup settlement sets suppression.
             if (event.key === "Escape" && dragRef.current)
                 endDrag();
         };
-        // 拖拽被系统中断（触摸取消、系统手势抢占）或窗口失焦（cmd-tab 等）
-        // 时收不到 pointerup：按取消语义收尾，浮层不得冻结、残留 dragRef
-        // 不得在下一次普通点击的 pointerup 里被误结算成 dragMove/drop。
-        // 两条路径都没有后续 click，同样不置抑制位。
+        // System interruption or window focus loss may omit pointerup. Cancel so
+        // the ghost cannot freeze and stale `dragRef` state cannot settle as
+        // `dragMove` or `drop` during a later click. Neither path has a following
+        // click, so neither sets suppression.
         const cancelDrag = () => {
             if (dragRef.current || armedRef.current)
                 endDrag();
@@ -133,8 +137,8 @@ export function GamePanels({ game, hud, onEvent }: Props) {
     // 全部由服务端权威完成，前端不自行计算分堆或快捷搬运结果。
     const slotAction = (area: SlotArea, index: number, button: "left" | "right", shift: boolean) => emit({ type: "game-action", token: game.token, op: "slot", area, index, button, shift });
     const slotButton = (area: SlotArea, slot: HudSlot, index: number) => <button key={index} type="button" data-slot-area={area} data-slot-index={index} className={`game-slot${area === "inventory" && index < 9 && hud?.hotbar?.selectedIndex === index ? " game-slot--selected" : ""}${drag?.from.area === area && drag.from.index === index ? " game-slot--drag-source" : ""}`} disabled={!game.confirmed} aria-label={`${labels[area]} ${index + 1}：${slot.name || "空"}`} aria-pressed={game.source?.area === area && game.source.index === index} onPointerDown={event => {
-        // 主键按下非空槽且已确认才允许拖起：未确认与空槽不发起任何拖拽，
-        // 也不影响后续点击语义。
+        // Only a primary press on a confirmed nonempty slot may arm a drag;
+        // unconfirmed or empty slots leave later click semantics unchanged.
         if (event.button !== 0 || !game.confirmed || slot.item === 0)
             return;
         armedRef.current = { from: { area, index }, stack: slot, x: event.clientX, y: event.clientY };
@@ -153,8 +157,8 @@ export function GamePanels({ game, hud, onEvent }: Props) {
     <span className="game-tooltip" role="tooltip">{slot.name || "空槽位"}{slot.count > 0 ? ` × ${slot.count}` : ""}{slot.durability !== undefined ? ` · 耐久 ${Math.round(slot.durability * 100)}%` : ""}</span>
     </button>;
     const grid = (area: SlotArea, slots: readonly HudSlot[], columns: number, offset = 0) => <div className="game-slot-grid" style={{ "--game-columns": columns } as CSSProperties}>{slots.map((slot, index) => slotButton(area, slot, index + offset))}</div>;
-    // 拖拽浮层只在实际拖拽时渲染（视觉基线不含静态浮层），跟随指针、
-    // 不参与命中（pointer-events:none），呈现被拖组的快照。
+    // Render the drag ghost only for an active drag, outside recorded visual
+    // baselines. It follows the pointer, ignores hit testing, and shows the stack snapshot.
     return <div className={`game-panel-overlay${drag ? " game-panel-overlay--dragging" : ""}`}>
     {drag && <div className="game-drag-ghost" style={{ left: drag.x, top: drag.y }} aria-hidden="true"><SlotContents slot={drag.stack}/></div>}
     {/* 容器级兜底：右键落在面板空白（页眉/页脚/留白）也只阻断原生菜单，

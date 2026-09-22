@@ -22,10 +22,11 @@ type ChunkStamp struct {
 	Revision  uint64
 }
 
-// ViewCenter 是烘焙优先级的视图中心：区块粒度的相机位置与其所在维度。
-// 由 Application 每帧从相机姿态推导后随 `Schedule` 传入；零值（Overworld
-// 原点）是合法中心，未显式设置时排序退化为「以原点为圆心的近处优先」，
-// 仍是确定性的。中心在同一渲染帧内恒定，无跨 goroutine 竞争。
+// `ViewCenter` defines the chunk-scale camera position and dimension used for
+// bake priority. `Application` derives it from the camera pose each frame and
+// passes it to `Schedule`. The zero value is a valid `core.Overworld` origin,
+// and omitted configuration deterministically prioritizes chunks near it.
+// The center stays fixed within one render frame and has no cross-goroutine access.
 type ViewCenter struct {
 	Dimension core.DimensionID
 	Chunk     core.ChunkPos
@@ -154,9 +155,11 @@ func (mesher *Mesher) ForgetChunk(
 	}
 }
 
-// Schedule 按到视图中心的近处优先确定性顺序至多投递 maxJobs 个 dirty 区段。
-// center 以区块粒度参与比较：中心跨界时惰性重建就绪堆一次（O(n)），同中心
-// 帧只做一次结构比较；每帧预算语义与中心无关，保持既有行为。
+// `Schedule` dispatches at most `maxJobs` dirty sections in deterministic
+// nearest-to-center order. `center` participates at chunk granularity: crossing
+// a chunk boundary lazily rebuilds the ready heap once in O(n), while an
+// unchanged center costs only one structural comparison. Center changes do not
+// alter the existing per-frame budget semantics.
 // Mirror 只在调用线程上读取，worker 仅接收克隆后的不可变邻域。
 func (mesher *Mesher) Schedule(mirror *Mirror, center ViewCenter, maxJobs int) {
 	if mirror == nil || maxJobs <= 0 {
@@ -174,9 +177,10 @@ func (mesher *Mesher) Schedule(mirror *Mirror, center ViewCenter, maxJobs int) {
 		return
 	}
 	maxJobs = min(maxJobs, freeSlots)
-	// 中心同步放在确认有空位之后：满 job 队列的背压帧一帧都不多花（见
-	// TestMesherScheduleFullJobQueueDoesNotScanDirtyBacklog），只有真正要
-	// 消费就绪堆的帧才可能触发一次 O(n) 重建。
+	// Synchronize the center only after confirming queue capacity. A frame under
+	// full `jobs` backpressure does no extra work (see
+	// `TestMesherScheduleFullJobQueueDoesNotScanDirtyBacklog`); only a frame that
+	// consumes the ready heap may trigger an O(n) rebuild.
 	mesher.ready.SetCenter(center)
 	mesher.mu.Unlock()
 

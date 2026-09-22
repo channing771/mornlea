@@ -196,16 +196,16 @@ func TestMenuVistaPhaseGating(t *testing.T) {
 			t.Fatalf("渲染全景帧: %v", err)
 		}
 	}
-	// 揭示门：16 个渲染帧只装配了每帧 12 个区块（远小于 625 个待生成
-	// 区块），全景必然尚未收敛——等待帧走仅天空清屏出口，自转时钟冻结
-	// 在 0，不再随渲染帧自增（收敛后从 tick 0 揭示的构造性前提）。
+	// The reveal gate assembles only 12 of 625 queued chunks per render frame, so
+	// 16 frames cannot converge. Waiting frames use the sky-only fallback and keep
+	// the rotation clock at zero, which lets the converged vista reveal from tick zero.
 	if vista.tick != 0 {
 		t.Fatalf("未收敛的 16 个渲染帧后自转 tick = %d，想要 0", vista.tick)
 	}
 
 	// 相位重进（主菜单 → 设置页）把自转 tick 归零：两次进入菜单相位的
-	// 第一帧姿态因此逐位一致（spec「全景背景确定性」）。先置非零模拟
-	// 已揭示若干帧后的时钟，重进归零才可观测。
+	// The first-frame poses therefore match exactly. Seed a nonzero clock to model
+	// several revealed frames so the reset on re-entry is observable.
 	vista.tick = 5
 	app.SetMenuPhase(MenuPhaseSettings)
 	if got := app.menuVistaForFrame(); got == nil {
@@ -227,10 +227,11 @@ func TestMenuVistaPhaseGating(t *testing.T) {
 	app.discardMenuVista() // 幂等
 }
 
-// TestMenuVistaTickPinRendersPinnedPose 钉住 capture 的钉 tick 语义：收敛后
-// SetMenuVistaTick，钉住之后的首帧以钉住姿态渲染（收敛帧数不影响最终画面）。
-// 揭示门在收敛前不推进时钟，钉住帧必然是揭示帧——正是 capture「收敛后
-// 钉帧」的真实时序。
+// `TestMenuVistaTickPinRendersPinnedPose` verifies capture tick pinning after
+// convergence. The first frame after `SetMenuVistaTick` renders the pinned pose,
+// independent of convergence duration. The reveal gate does not advance time
+// before convergence, so the pinned frame is necessarily a revealed frame and
+// matches capture's converge-then-pin sequence.
 func TestMenuVistaTickPinRendersPinnedPose(t *testing.T) {
 	app := NewOffscreenRenderApplicationForTest(
 		t, &IntegrationGlyphSource{}, 64, 64, config.Defaults().Render,
@@ -240,8 +241,8 @@ func TestMenuVistaTickPinRendersPinnedPose(t *testing.T) {
 	if vista == nil {
 		t.Fatal("菜单相位必须惰性构建全景")
 	}
-	// 先把装配泵到收敛（真实帧路径同样每帧泵一次，这里直接驱动等价）：
-	// capture 只在收敛后钉 tick。
+	// Pump to convergence exactly as the real frame path does once per frame;
+	// capture pins the tick only after convergence.
 	deadline := time.Now().Add(captureSettleTimeoutForVistaTest)
 	for frame := 0; vista.pending() > 0; frame++ {
 		if frame%1000 == 0 && time.Now().After(deadline) {
@@ -262,25 +263,25 @@ func TestMenuVistaTickPinRendersPinnedPose(t *testing.T) {
 	}
 }
 
-// TestMenuVistaRevealGateWithholdsUnconvergedFrames 钉住揭示门的纯逻辑契约
-// （不依赖 GPU）：装配未收敛（pending>0）时帧入口不得返回全景——渲染层
-// 因此走与构建失败降级共用的「仅天空清屏」出口，不提交任何全景几何，
-// 相机自转时钟随之冻结；收敛后的首帧返回同一全景实例且 tick 仍为 0
-// （首帧恰好渲染 pose(0)），之后持续揭示——收敛段帧序列与既有「全景
-// 背景确定性」契约逐帧一致。
+// `TestMenuVistaRevealGateWithholdsUnconvergedFrames` verifies the reveal gate
+// without a GPU. While `pending` is nonzero, frame entry cannot return the vista,
+// so rendering uses the build-failure sky-only fallback, submits no vista
+// geometry, and freezes the rotation clock. The first converged frame returns
+// the same vista at tick zero and subsequent frames keep it revealed, preserving
+// the existing deterministic frame sequence.
 func TestMenuVistaRevealGateWithholdsUnconvergedFrames(t *testing.T) {
 	vista, err := newMenuVistaForTest(t)
 	if err != nil {
 		t.Fatalf("构造全景管线: %v", err)
 	}
-	// 最小 Application 注入已构建的全景：渲染器与材质目录只约束首次
-	// 构建，已构建的全景直接进入帧入口，全景生命周期语义与真实帧路径
-	// 一致且无需 GPU。
+	// Inject an already-built vista into a minimal `Application`. Renderer and
+	// material registry requirements apply only to construction, so this preserves
+	// the real frame-entry lifecycle without requiring a GPU.
 	app := &Application{menu: menuState{phase: MenuPhaseMenu}}
 	app.menuVista = vista
 	app.menuVistaPhase = MenuPhaseMenu
 
-	// 未收敛帧：入口返回 nil（仅天空清屏出口），自转时钟不得离开 0。
+	// An unconverged frame returns nil for the sky-only path and keeps time at zero.
 	for frame := 0; frame < 4; frame++ {
 		if got := app.revealMenuVista(64); got != nil {
 			t.Fatalf("未收敛的第 %d 帧不得揭示全景几何", frame)
@@ -289,13 +290,13 @@ func TestMenuVistaRevealGateWithholdsUnconvergedFrames(t *testing.T) {
 			t.Fatalf("未收敛帧推进了自转时钟: tick=%d", vista.tick)
 		}
 	}
-	// 每帧 12 个区块 × 4 帧远小于 625 个待生成区块，此刻必然仍未收敛。
+	// Four frames at 12 chunks each are far below 625 queued chunks, so convergence is impossible here.
 	if vista.pending() == 0 {
 		t.Fatal("4 帧装配后全景不应收敛（每帧区块预算远小于队列总量）")
 	}
 
-	// 等待期由泵推进到收敛（真实帧路径每帧同样泵一次，渲染层职责之外
-	// 这里直接驱动），与 capture 收敛判据同一时限量级。
+	// Pump through the wait to convergence, matching the real once-per-frame path
+	// outside rendering, under the same order-of-magnitude timeout as capture.
 	deadline := time.Now().Add(captureSettleTimeoutForVistaTest)
 	for frame := 0; vista.pending() > 0; frame++ {
 		if frame%1000 == 0 && time.Now().After(deadline) {
@@ -304,8 +305,8 @@ func TestMenuVistaRevealGateWithholdsUnconvergedFrames(t *testing.T) {
 		vista.pump(64)
 	}
 
-	// 收敛后的首帧揭示同一实例，时钟从 0 起步（渲染 pose(0) 后才推进），
-	// 之后的帧持续揭示——揭示门不得在收敛后重新关闭。
+	// The first converged frame reveals the same instance from tick zero, which
+	// advances only after rendering, and later frames must not close the gate again.
 	for frame := 0; frame < 3; frame++ {
 		if got := app.revealMenuVista(64); got != vista {
 			t.Fatalf("收敛后的第 %d 帧必须揭示同一全景实例", frame)
@@ -316,10 +317,10 @@ func TestMenuVistaRevealGateWithholdsUnconvergedFrames(t *testing.T) {
 	}
 }
 
-// TestMenuVistaBuildFailureStillDegradesToSkyClear 钉住构建失败降级不因揭示门
-// 回退：无渲染器的菜单相位帧入口逐帧返回 nil（不构建、不揭示、不推进），
-// 全景状态保持 nil、pending 恒为 0——菜单相位照常以天空清屏底色渲染且
-// 菜单 chrome 可交互（spec「全景构建失败仍降级」）。
+// `TestMenuVistaBuildFailureStillDegradesToSkyClear` verifies that the reveal gate
+// preserves build-failure fallback. Without a renderer, each menu frame returns
+// nil without building, revealing, or advancing; vista state remains nil and
+// pending work stays zero, leaving the sky clear behind interactive menu chrome.
 func TestMenuVistaBuildFailureStillDegradesToSkyClear(t *testing.T) {
 	app := &Application{menu: menuState{phase: MenuPhaseMenu}}
 	for frame := 0; frame < 4; frame++ {

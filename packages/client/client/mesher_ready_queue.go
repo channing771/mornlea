@@ -9,8 +9,8 @@ import (
 type readySectionHeap struct {
 	keys    []core.SectionKey
 	indexes map[core.SectionKey]int
-	// center 是当前排序中心；只在持有 mesher.mu 的路径上读写
-	// （Add/Remove/Take/SetCenter），worker 消费路径不直接触碰。
+	// `center` is the current ordering origin. Only paths holding `mesher.mu`
+	// (`Add`, `Remove`, `Take`, and `SetCenter`) may access it; workers do not.
 	center ViewCenter
 }
 
@@ -65,10 +65,11 @@ func (ready *readySectionHeap) Take() (core.SectionKey, bool) {
 	return heap.Pop(ready).(core.SectionKey), true
 }
 
-// SetCenter 同步视图中心：区块粒度比较，未变化时只是一次结构比较；变化时
-// 整体重建堆一次（O(n)）。中心由 `Schedule` 每帧传入，相机在区块内的小幅
-// 漂移不会触发重建，跨界频率远低于帧率，因此不需要每帧 O(n log n) 全量
-// 重排。调用方必须已持有 mesher.mu。
+// `SetCenter` synchronizes the chunk-scale view center. An unchanged center costs
+// one structural comparison; a changed center rebuilds the heap once in O(n).
+// `Schedule` supplies the value each frame, so camera motion within a chunk does
+// not rebuild the heap and chunk-boundary crossings remain much less frequent
+// than frames. The caller must hold `mesher.mu`.
 func (ready *readySectionHeap) SetCenter(center ViewCenter) {
 	if ready.center == center {
 		return
@@ -77,11 +78,13 @@ func (ready *readySectionHeap) SetCenter(center ViewCenter) {
 	heap.Init(ready)
 }
 
-// readySectionLess 是就绪堆的复合键比较：维度仍是最外层（其他维度的键即使
-// 距离更近也排在当前维度之后），同维度内按到视图中心的水平平方距离升序，
-// 平局回落到既有 sectionKeyLess 字典序。距离只取水平分量并与上传调度
-// `FlushUploads` 的近处优先键对齐：同一区块列内的高低区段共享水平距离，
-// 先后由字典序的 Y 次序兜底，排序因此不依赖相机高度，中心只需区块粒度。
+// `readySectionLess` compares the ready heap's compound key. Dimension remains
+// outermost, even when another dimension has a closer key. Within the center's
+// dimension, horizontal squared distance sorts ascending, with the existing
+// `sectionKeyLess` order breaking ties. Using only horizontal distance matches
+// the nearest-first key in `FlushUploads`: vertical sections in one chunk
+// column share a distance and fall back to lexical `Y`, so camera height cannot
+// affect ordering and the center needs only chunk granularity.
 func readySectionLess(left, right core.SectionKey, center ViewCenter) bool {
 	if left.Dimension != right.Dimension {
 		return left.Dimension < right.Dimension
@@ -96,11 +99,12 @@ func readySectionLess(left, right core.SectionKey, center ViewCenter) bool {
 	return sectionKeyLess(left, right)
 }
 
-// sectionChunkDistance2 返回区段所在区块到视图中心的水平平方距离。
-// 差值与平方都在 int64 上累加：ready 队列只容纳服务端订阅范围内已加载
-// 区块的区段，到中心的距离实际以视距为上界，int64 余量巨大；这里采用
-// 「先拓宽再相减」的写法，比渲染侧参考实现（int32 求差后再转 int64）更
-// 安全，即使未来放宽坐标域也不会在求差或平方上溢出。
+// `sectionChunkDistance2` returns the horizontal squared distance from a
+// section's chunk to the view center. Differences and squares use `int64`.
+// Ready entries are loaded sections inside the server subscription radius, so
+// view distance bounds the real values with ample headroom. Widening before
+// subtraction is safer than the renderer reference implementation and avoids
+// overflow if the coordinate domain expands later.
 func sectionChunkDistance2(pos core.SectionPos, center core.ChunkPos) int64 {
 	dx := int64(pos.X) - int64(center.X)
 	dz := int64(pos.Z) - int64(center.Z)

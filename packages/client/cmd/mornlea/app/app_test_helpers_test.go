@@ -169,7 +169,7 @@ func gameTestPointerAction(a *Application, op, area string, index int, button st
 	a.handleGameAction(client.UIGameAction{Token: a.buildGameUIState().Token, Op: op, Area: area, Index: index, Button: button, Shift: shift})
 }
 
-// gameTestDragAction 构造一次拖拽落槽的语义操作（源/目标双端槽位引用）。
+// `gameTestDragAction` constructs a drag move with source and destination slot references.
 func gameTestDragAction(a *Application, fromArea string, fromIndex int, toArea string, toIndex int) {
 	a.handleGameAction(client.UIGameAction{
 		Token: a.buildGameUIState().Token, Op: "dragMove",
@@ -177,7 +177,7 @@ func gameTestDragAction(a *Application, fromArea string, fromIndex int, toArea s
 	})
 }
 
-// gameTestDropAction 构造一次拖出面板整组丢弃的语义操作。
+// `gameTestDropAction` constructs a whole-stack drop outside the panel.
 func gameTestDropAction(a *Application, area string, index int) {
 	a.handleGameAction(client.UIGameAction{
 		Token: a.buildGameUIState().Token, Op: "drop", Area: area, Index: index,
