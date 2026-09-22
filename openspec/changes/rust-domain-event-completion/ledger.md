@@ -214,3 +214,26 @@
   scheduled owner; (2) `hostile_spawn_records(count)` helper doc names the
   65-record call shape instead of the parameter.
 - Architecture skill: no change.
+
+## 2026-09-22 — node 2.2 acceptance
+
+- Implementation commit: `a3420b8a` (`feat(domain): add object event values`).
+  Red evidence verified: permissive skeleton admitted `block_index` 98304
+  (returned `Ok`) before the exact check landed, matching the mandated
+  behavioral red.
+- Controller gates at `a3420b8a`: `cargo fmt --all --check` ok;
+  `--test event_objects` 16 passed / 0 failed; `--test items_locations` 14
+  passed (existing `DropId`/`ItemStack` behavior untouched);
+  `--test runtime_contract production_manifest_has_no_codec_kernel_or_host_dependencies`
+  ok; audit comment gates ok; `git diff --check` clean.
+- Review ruling: spec compliant, quality Approved, 0 Critical, 0 Important.
+  Reviewer's named-risk checks confirmed the `DomainError` edit is append-only
+  with no exhaustive-match breakage, and `DropId`'s derived `Ord` really is
+  dimension → chunk x → chunk z → slot → generation (the batch order key).
+- Minors recorded for the final whole-branch review: (1) `MAX_CHUNK_BLOCK_INDEX`
+  hard-codes 98304 instead of deriving from `sections::SECTIONS_PER_CHUNK`
+  (consolidation candidate for a later node — implementer flagged it too);
+  (2) the `BatchTooLarge` branch of the five new constructors has no direct
+  4,097-rejection test inside this node — node 2.4's eleven resource-bounds
+  tests are the scheduled owner.
+- Architecture skill: no change.
