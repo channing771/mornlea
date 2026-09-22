@@ -253,7 +253,7 @@ and `1e1000`. Require negative-zero bits for `-0e0`.
 **Green and closure.** Run:
 
 ```bash
-rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --check
+rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --all --check
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain --locked
 rustup run 1.97.1 cargo clippy --manifest-path packages/engine/Cargo.toml -p mornlea_domain --all-targets --locked -- -D warnings
 ```

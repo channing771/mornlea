@@ -389,3 +389,28 @@ checkbox/status source.
   and frozen corpus gates passed.
 - Architecture skill: no change. The node implements the already approved
   external no-replace publication boundary.
+
+## 2026-09-22 — Node 5.4 acceptance
+
+- Implementation: `dd69a0c7` (`fix(domain): enforce corpus input identity and
+  float grammar`). Only the two node-owned Rust integration-test files changed;
+  production crates, dependencies, manifests and frozen assets were untouched.
+- TDD evidence: the red suite did not compile because the required checked
+  executor and injectable dispatcher were absent. The green implementation
+  validates the input object's exact `mornlea_domain` consumer before calling
+  any executor, and both topic and integrated dispatch paths use that boundary.
+- The integrated negative case mutates one real member of the 376-case slice
+  and receives `DispatchError::InvalidCase`; the executor spy remains uncalled
+  for missing, null, non-string and wrong known consumers. Decimal grammar now
+  accepts signed `e`/`E` exponents, `.5`, `1.` and preserves `-0e0` bits while
+  rejecting malformed spelling, aliases, whitespace, hex, underscores and
+  decimal overflow.
+- Independent review: zero findings. Controller verification:
+  `cargo fmt --all --check` passed; `corpus_domain` passed 32/32 with exactly
+  376 domain cases and one external authority case; clippy all targets with
+  `-D warnings` passed; diff check passed.
+- Plan correction: the original virtual-workspace `cargo fmt` command lacked
+  `--all` and returned `Failed to find targets`; the packet now records the
+  executable equivalent used by the gate.
+- Architecture skill: no change. The node repairs a test input/execution
+  boundary without changing domain or authority ownership.
