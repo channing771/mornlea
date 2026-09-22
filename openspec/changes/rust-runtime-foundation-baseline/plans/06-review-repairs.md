@@ -517,7 +517,7 @@ corpus diff is metadata-only:
 
 ```bash
 test "$(git diff --name-only "$BASE_SHA" -- testdata/runtime-migration)" = testdata/runtime-migration/contracts.json
-diff -u <(git show "$BASE_SHA:testdata/runtime-migration/contracts.json" | jq '(.families[].sources[]?.sha256) = "<sha256>"') <(jq '(.families[].sources[]?.sha256) = "<sha256>"' testdata/runtime-migration/contracts.json)
+diff -u <(git show "${BASE_SHA}:testdata/runtime-migration/contracts.json" | jq '(.families[].sources[]?.sha256) = "<sha256>"') <(jq '(.families[].sources[]?.sha256) = "<sha256>"' testdata/runtime-migration/contracts.json)
 test "$(git diff --unified=0 "$BASE_SHA" -- testdata/runtime-migration/contracts.json | rg -c '^[+-]\s+"sha256"')" -eq 12
 go test ./packages/tools/cmd/runtime-oracle ./packages/shared/companion ./packages/server/sim/runtime -race -count=1
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_loader --locked

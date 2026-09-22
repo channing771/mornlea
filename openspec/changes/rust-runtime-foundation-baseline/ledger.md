@@ -718,3 +718,26 @@ owns any issue that remains actionable after nodes 5.1–5.9.
   not a claim that missing skills were invoked.
 - Final readiness verdict: Ready, zero Critical, Important or Minor findings.
   `git diff --check` and strict active-change validation both passed.
+
+## 2026-09-22 — Node 5.9a acceptance
+
+- Baseline: `54d1084d`. Implementation: `7b302058` (`fix(corpus): refresh
+  reviewed provenance bindings`). The controller changed exactly six SHA-256
+  rows for four unchanged sources; no case, input, expectation or other asset
+  changed.
+- RED: `TestContractInventoryReconcilesFrozenCorpus` failed only on the six
+  expected source rows, and raw-file comparison reported six mismatches.
+  GREEN: all source rows match; normalizing source hashes makes the old and new
+  manifests identical, with exactly twelve added/deleted hash diff lines.
+- `make rust` passed before focused Go validation. Full runtime-oracle,
+  companion and server runtime race suites passed (53.847s, 12.910s, 23.942s).
+  Rust `corpus_loader` passed 10 tests; `corpus_domain` passed 32 tests including
+  the 376-unique-case execution check. `git diff --check` passed.
+- Independent review recomputed all six hashes, verified unchanged source
+  files and metadata-only scope, and reran the named inventory regression:
+  Ready with zero findings.
+- One validation-command portability correction uses `${BASE_SHA}:path`;
+  unbraced `$BASE_SHA:path` was interpreted as a zsh modifier. The braced
+  command passed and the reviewed packet now records it. No gate was relaxed.
+- Architecture skill: no change; this restores provenance identity without
+  changing runtime contracts.
