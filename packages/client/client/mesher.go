@@ -155,7 +155,7 @@ func (mesher *Mesher) ForgetChunk(
 	}
 }
 
-// `Schedule` dispatches at most `maxJobs` dirty sections in deterministic
+// `Schedule` dispatches dirty sections up to the caller-provided job limit in deterministic
 // nearest-to-center order. `center` participates at chunk granularity: crossing
 // a chunk boundary lazily rebuilds the ready heap once in O(n), while an
 // unchanged center costs only one structural comparison. Center changes do not

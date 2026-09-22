@@ -100,7 +100,7 @@ func readySectionLess(left, right core.SectionKey, center ViewCenter) bool {
 }
 
 // `sectionChunkDistance2` returns the horizontal squared distance from a
-// section's chunk to the view center. Differences and squares use `int64`.
+// section's chunk to the view center. Differences and squares use signed 64-bit arithmetic.
 // Ready entries are loaded sections inside the server subscription radius, so
 // view distance bounds the real values with ample headroom. Widening before
 // subtraction is safer than the renderer reference implementation and avoids

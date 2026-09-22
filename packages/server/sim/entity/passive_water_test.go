@@ -19,8 +19,8 @@ import (
 // Walkable directions require dry near and far probes, carry their own motion,
 // and reverse deterministically when every direction is blocked.
 
-// `fillWaterBasin` fills [minX,maxX) by [minZ,maxZ) above y=0 grass with
-// source water from y=1 through `depth`. The basin must remain inside loaded
+// `fillWaterBasin` fills [minX,maxX] by [minZ,maxZ] above y=0 grass with
+// source water from y=1 through the requested depth. The basin must remain inside loaded
 // chunks so the fixture does not invoke the unready-is-dry policy.
 func fillWaterBasin(t *testing.T, engine *Engine, minX, maxX, minZ, maxZ, depth int32) {
 	t.Helper()
@@ -70,7 +70,7 @@ func horizontalGapToRect(position mgl32.Vec3, minX, maxX, minZ, maxZ float32) fl
 func TestPassiveWaterWanderStopsBeforePond(t *testing.T) {
 	engine := newGrazeEngine(t, 0)
 	const cowID = uint64(51)
-	// The one-block-deep pond spans x=[8,14), z=[-6,6); the birth-chunk
+	// The one-block-deep pond covers integer x=8..14 and z=-6..6; the birth-chunk
 	// neighborhood [-16,32) covers the pond and both shores.
 	fillWaterBasin(t, engine, 8, 14, -6, 6, 1)
 	// Choose a wander segment roughly facing +X, with absolute forward Z below
@@ -225,7 +225,7 @@ func TestPassiveWaterProbeTreatsUnreadyChunkAsDry(t *testing.T) {
 func TestPassiveWaterNarrowTrenchDoesNotFreezeCow(t *testing.T) {
 	build := func() (*Engine, SessionID) {
 		engine, session := newTemptEngine(t)
-		// The east-west trench spans x=[2,14), leaving an exit in the detour direction.
+		// The east-west trench covers integer x=2..14, leaving an exit in the detour direction.
 		fillWaterBasin(t, engine, 2, 14, 10, 10, 1)
 		restoreGrazeCow(t, engine, 55, mgl32.Vec3{10.5, 1, 7.5})
 		// The northeast lure yields an exact diagonal approach. At z=9, the +Z far
