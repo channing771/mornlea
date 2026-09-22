@@ -355,3 +355,32 @@
   as classification conflicts rather than the earlier field rejection
   (latent only; no frozen case is compound-invalid).
 - Architecture skill: no change.
+
+## 2026-09-22 — node 4.2 acceptance
+
+- Implementation commit: `d92be1ee` (`test(domain): execute object event
+  corpus`). Red evidence verified: integrated corpus failed with
+  `case has no owning topic` for `item-drop-removes-duplicate` before the
+  adapter was registered, matching the intended no-owner red.
+- Controller gates at `d92be1ee`: export run (objects+manifest, `-race`) ok;
+  fresh-dir export byte-identical to the tracked manifest;
+  `--test corpus_domain event_objects::` 4 passed;
+  `corpus_domain_executes_exact_unique_partition` ok (489 exact unique
+  executions, 277 `domain.event`); audit five guards ok (GOCACHE override);
+  `git diff --check` clean.
+- Review ruling: spec compliant, quality Approved, 0 Critical, 0 Important.
+  Reviewer structurally verified 45 added cases (102−57 net; every removed
+  ID re-added = sort displacement only), 30-path provenance union adding
+  exactly the three named paths, `source_revision` unchanged, and the
+  adapter's five validation orders field-by-field against the unchanged Go
+  producer classifier.
+- Controller adjudication of the disclosed Go/Rust stack-error corner: the
+  adapter maps the shared Go `stack.item` rejection onto the finer Rust
+  constructor precedence in an explicit exhaustive branch, verified
+  fail-closed against the real `ItemStack::try_new`; only category+rule are
+  published. Accepted — no frozen case exercises the non-frozen corners and
+  future cases would verify honestly.
+- Minor recorded for the final whole-branch review: a missing `stack` key in
+  `parse_drops` reports without the `drops[i]` prefix (diagnostics-only; no
+  frozen case can hit it).
+- Architecture skill: no change.
