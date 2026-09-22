@@ -43,6 +43,23 @@ resolve_under_root() {
 	esac
 }
 
+reject_symlink_components() {
+	local path=$1 component candidate=$root_real
+	IFS=/ read -r -a components <<< "$path"
+	for component in "${components[@]}"; do
+		candidate="$candidate/$component"
+		[[ ! -L "$candidate" ]] || fail "repository path contains symlink component: $path"
+	done
+}
+
+sha256_file() {
+	local output digest
+	output=$(shasum -a 256 "$1") || return 1
+	read -r digest _ <<< "$output"
+	[[ "$digest" =~ ^[0-9a-f]{64}$ ]] || return 1
+	printf '%s\n' "$digest"
+}
+
 require_commands
 
 platform=
@@ -79,29 +96,39 @@ root_real=$(realpath "$root") || fail "cannot resolve repository root"
 
 manifest_file="$root_real/$manifest"
 manifest_dir=${manifest_file%/*}
+reject_symlink_components "$manifest"
 [[ -d "$manifest_dir" ]] || fail "manifest directory does not exist: $manifest_dir"
 resolve_under_root "$manifest_dir" >/dev/null
-[[ ! -L "$manifest_file" ]] || fail "manifest path is a symlink"
+[[ ! -e "$manifest_file" && ! -L "$manifest_file" || -f "$manifest_file" && ! -L "$manifest_file" ]] || fail "manifest destination is not a regular file"
 
 artifact_paths=("$@")
+# Validate original arguments before newline-delimited sorting can reinterpret one argument as several paths.
+for path in "${artifact_paths[@]}"; do
+	validate_relative_path "$path"
+	reject_symlink_components "$path"
+done
+
+sorted_file=$(mktemp "$manifest_dir/.native-artifact-paths.XXXXXX") || fail "cannot create temporary path list"
+temporary=
+trap 'rm -f "$sorted_file" "$temporary"' EXIT
+printf '%s\n' "${artifact_paths[@]}" | LC_ALL=C sort > "$sorted_file" || fail "cannot sort artifact paths"
 sorted_paths=()
 while IFS= read -r path || [[ -n "$path" ]]; do
 	sorted_paths+=("$path")
-done < <(printf '%s\n' "${artifact_paths[@]}" | LC_ALL=C sort)
+done < "$sorted_file"
 
 previous=
 for path in "${sorted_paths[@]}"; do
-	validate_relative_path "$path"
 	[[ "$path" != "$manifest" ]] || fail "manifest path overlaps artifact path"
 	[[ "$path" != "$previous" ]] || fail "duplicate artifact path: $path"
 	previous=$path
 	artifact_file="$root_real/$path"
 	[[ -f "$artifact_file" && ! -L "$artifact_file" ]] || fail "artifact is not a regular file: $path"
-	resolve_under_root "$artifact_file" >/dev/null
+	artifact_real=$(resolve_under_root "$artifact_file")
+	[[ ! -e "$manifest_file" || "$artifact_real" != "$(resolve_under_root "$manifest_file")" ]] || fail "manifest path overlaps artifact path"
 done
 
 temporary=$(mktemp "$manifest_dir/.native-artifact.XXXXXX") || fail "cannot create temporary manifest"
-trap 'rm -f "$temporary"' EXIT
 {
 	printf 'version 1\n'
 	printf 'sha %s\n' "$sha"
@@ -110,7 +137,7 @@ trap 'rm -f "$temporary"' EXIT
 		artifact_file="$root_real/$path"
 		size=$(wc -c < "$artifact_file")
 		size=${size//[[:space:]]/}
-		read -r digest _ < <(shasum -a 256 "$artifact_file")
+		digest=$(sha256_file "$artifact_file") || fail "cannot hash artifact: $path"
 		printf 'file %s %s %s\n' "$path" "$size" "$digest"
 	done
 } > "$temporary"

@@ -8,7 +8,7 @@ fail() {
 
 require_commands() {
 	local command
-	for command in bash realpath shasum sort wc mktemp mkdir mv cp; do
+	for command in bash realpath shasum sort wc mktemp mkdir mv cp tr; do
 		command -v "$command" >/dev/null 2>&1 || fail "missing required command: $command"
 	done
 }
@@ -34,6 +34,23 @@ resolve_under_root() {
 	"$root_real"|"$root_real"/*) printf '%s\n' "$resolved" ;;
 	*) fail "path escapes repository root: $path" ;;
 	esac
+}
+
+reject_symlink_components() {
+	local path=$1 component candidate=$root_real
+	IFS=/ read -r -a components <<< "$path"
+	for component in "${components[@]}"; do
+		candidate="$candidate/$component"
+		[[ ! -L "$candidate" ]] || fail "repository path contains symlink component: $path"
+	done
+}
+
+sha256_file() {
+	local output digest
+	output=$(shasum -a 256 "$1") || return 1
+	read -r digest _ <<< "$output"
+	[[ "$digest" =~ ^[0-9a-f]{64}$ ]] || return 1
+	printf '%s\n' "$digest"
 }
 
 require_commands
@@ -85,7 +102,14 @@ esac
 
 manifest_file="$root_real/$manifest"
 [[ -f "$manifest_file" && ! -L "$manifest_file" ]] || fail "manifest is not a regular file"
+reject_symlink_components "$manifest"
 resolve_under_root "$manifest_file" >/dev/null
+# Bash line parsing cannot preserve NUL bytes, so compare raw and NUL-stripped byte counts first.
+raw_manifest_size=$(wc -c < "$manifest_file")
+raw_manifest_size=${raw_manifest_size//[[:space:]]/}
+nul_stripped_size=$(LC_ALL=C tr -d '\000' < "$manifest_file" | wc -c) || fail "cannot inspect raw manifest"
+nul_stripped_size=${nul_stripped_size//[[:space:]]/}
+[[ "$raw_manifest_size" == "$nul_stripped_size" ]] || fail "manifest contains NUL byte"
 
 record_index=0
 file_index=0
@@ -105,11 +129,12 @@ while IFS= read -r record || [[ -n "$record" ]]; do
 		[[ "$path" == "${expected_paths[$file_index]}" ]] || fail "manifest file order or set is invalid"
 		artifact_file="$root_real/$path"
 		[[ -f "$artifact_file" && ! -L "$artifact_file" ]] || fail "artifact is not a regular file: $path"
+		reject_symlink_components "$path"
 		resolve_under_root "$artifact_file" >/dev/null
 		actual_size=$(wc -c < "$artifact_file")
 		actual_size=${actual_size//[[:space:]]/}
 		[[ "$size" == "$actual_size" ]] || fail "artifact size does not match: $path"
-		read -r actual_digest _ < <(shasum -a 256 "$artifact_file")
+		actual_digest=$(sha256_file "$artifact_file") || fail "cannot hash artifact: $path"
 		[[ "$digest" == "$actual_digest" ]] || fail "artifact digest does not match: $path"
 		file_index=$((file_index + 1))
 		;;
@@ -120,8 +145,19 @@ done < "$manifest_file"
 ((record_index == ${#expected_paths[@]} + 3)) || fail "manifest record count is invalid"
 ((file_index == ${#expected_paths[@]})) || fail "manifest file set is incomplete"
 
-deps_dir="$root_real/packages/engine/target/release/deps"
+# Validate every existing destination component before publication so copies cannot follow an artifact-controlled link.
+deps_relative=packages/engine/target/release/deps
+reject_symlink_components "$deps_relative"
+deps_dir="$root_real/$deps_relative"
+[[ ! -e "$deps_dir" && ! -L "$deps_dir" || -d "$deps_dir" && ! -L "$deps_dir" ]] || fail "unsafe publication directory"
 mkdir -p "$deps_dir"
+resolve_under_root "$deps_dir" >/dev/null
+for path in "${copy_paths[@]}"; do
+	destination="$deps_dir/${path##*/}"
+	[[ ! -L "$destination" ]] || fail "unsafe publication destination is a symlink"
+	[[ ! -e "$destination" || -f "$destination" ]] || fail "unsafe publication destination is not a regular file"
+	[[ ! -e "$destination" || "$(resolve_under_root "$destination")" == "$destination" ]] || fail "unsafe publication destination escapes repository root"
+done
 for path in "${copy_paths[@]}"; do
 	cp "$root_real/$path" "$deps_dir/"
 done

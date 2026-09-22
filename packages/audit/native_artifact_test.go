@@ -92,10 +92,10 @@ func TestNativeArtifactManifestMutations(t *testing.T) {
 		}},
 		{"reversed file order", func(t *testing.T, f *nativeArtifactFixture) { f.reverseFileRecords(t) }},
 		{"non decimal size", func(t *testing.T, f *nativeArtifactFixture) {
-			f.replaceManifest(t, "file "+f.paths[0]+" ", "file "+f.paths[0]+" invalid ")
+			f.replaceFileSize(t, f.paths[0], "invalid")
 		}},
 		{"size mismatch", func(t *testing.T, f *nativeArtifactFixture) {
-			f.replaceManifest(t, "file "+f.paths[0]+" ", "file "+f.paths[0]+" 999 ")
+			f.replaceFileSize(t, f.paths[0], "999")
 		}},
 		{"uppercase digest", func(t *testing.T, f *nativeArtifactFixture) {
 			f.replaceManifest(t, f.digest(t, f.paths[0]), strings.ToUpper(f.digest(t, f.paths[0])))
@@ -113,6 +113,7 @@ func TestNativeArtifactManifestMutations(t *testing.T) {
 			old := "file " + f.paths[0] + " " + f.sizeAndDigest(t, f.paths[0])
 			f.replaceManifest(t, old, old+" trailing")
 		}},
+		{"NUL byte", func(t *testing.T, f *nativeArtifactFixture) { f.insertManifestNUL(t) }},
 	} {
 		t.Run(mutation.name, func(t *testing.T) {
 			fixture := newNativeArtifactFixture(t, "linux-amd64")
@@ -123,6 +124,159 @@ func TestNativeArtifactManifestMutations(t *testing.T) {
 				t.Fatalf("verification mutation created deps: %v", err)
 			}
 		})
+	}
+}
+
+func TestNativeArtifactPackagerRejectsUnsafePublicationInputs(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		setup func(t *testing.T, fixture *nativeArtifactFixture)
+	}{
+		{
+			name: "newline artifact argument",
+			setup: func(t *testing.T, f *nativeArtifactFixture) {
+				output := f.packageWith(t, []string{
+					"bin/libmornlea_engine.so\nbin/mornlea-server",
+					"packages/engine/target/release/libmornlea_engine.so",
+				}, nil, false)
+				if !strings.Contains(output, "invalid repository-relative path") {
+					t.Fatalf("newline argument output = %q", output)
+				}
+			},
+		},
+		{
+			name: "symlink alias overlaps artifact",
+			setup: func(t *testing.T, f *nativeArtifactFixture) {
+				if err := os.Symlink(f.root, filepath.Join(f.root, "alias")); err != nil {
+					t.Fatal(err)
+				}
+				f.manifest = "alias/bin/libmornlea_engine.so"
+				original := readFile(t, filepath.Join(f.root, f.paths[0]))
+				output := f.packageWith(t, f.paths, nil, false)
+				if !strings.Contains(output, "symlink") {
+					t.Fatalf("symlink alias output = %q", output)
+				}
+				if got := readFile(t, filepath.Join(f.root, f.paths[0])); string(got) != string(original) {
+					t.Fatal("symlink alias overwrote the artifact")
+				}
+			},
+		},
+		{
+			name: "manifest destination is directory",
+			setup: func(t *testing.T, f *nativeArtifactFixture) {
+				f.manifest = "manifest-destination"
+				if err := os.Mkdir(filepath.Join(f.root, f.manifest), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				output := f.packageWith(t, f.paths, nil, false)
+				if !strings.Contains(output, "manifest destination") {
+					t.Fatalf("directory destination output = %q", output)
+				}
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newNativeArtifactFixture(t, "linux-amd64")
+			test.setup(t, fixture)
+			if _, err := os.Stat(filepath.Join(fixture.root, fixture.manifest)); !os.IsNotExist(err) && test.name == "newline artifact argument" {
+				t.Fatalf("unsafe package request wrote a manifest: %v", err)
+			}
+		})
+	}
+}
+
+func TestNativeArtifactCommandFailuresStopPublication(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		script  string
+		command string
+		verify  bool
+	}{
+		{"sort", "package-native-artifact.sh", "sort", false},
+		{"packager hash", "package-native-artifact.sh", "shasum", false},
+		{"verifier hash", "verify-native-artifact.sh", "shasum", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newNativeArtifactFixture(t, "linux-amd64")
+			if test.verify {
+				fixture.packageManifest(t)
+			}
+			bin := t.TempDir()
+			writeExecutable(t, filepath.Join(bin, test.command), "#!/usr/bin/env bash\nexit 42\n")
+			environment := []string{"PATH=" + bin + ":" + os.Getenv("PATH")}
+			var output string
+			if test.verify {
+				output = fixture.verifyWith(t, environment, false)
+			} else {
+				output = fixture.packageWith(t, fixture.paths, environment, false)
+			}
+			if !strings.Contains(output, "cannot") {
+				t.Fatalf("%s failure output = %q", test.script, output)
+			}
+			if _, err := os.Stat(filepath.Join(fixture.root, "packages/engine/target/release/deps")); !os.IsNotExist(err) {
+				t.Fatalf("%s failure published deps: %v", test.script, err)
+			}
+			if !test.verify {
+				if _, err := os.Stat(filepath.Join(fixture.root, fixture.manifest)); !os.IsNotExist(err) {
+					t.Fatalf("%s failure published manifest: %v", test.script, err)
+				}
+			}
+		})
+	}
+}
+
+func TestNativeArtifactVerifierRejectsUnsafeDestinations(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		setup func(t *testing.T, fixture *nativeArtifactFixture, outside string)
+	}{
+		{
+			name: "deps symlink",
+			setup: func(t *testing.T, f *nativeArtifactFixture, outside string) {
+				deps := filepath.Join(f.root, "packages/engine/target/release/deps")
+				if err := os.Symlink(outside, deps); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name: "destination file symlink",
+			setup: func(t *testing.T, f *nativeArtifactFixture, outside string) {
+				deps := filepath.Join(f.root, "packages/engine/target/release/deps")
+				if err := os.Mkdir(deps, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(filepath.Join(outside, "libmornlea_engine.so"), filepath.Join(deps, "libmornlea_engine.so")); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newNativeArtifactFixture(t, "linux-amd64")
+			fixture.packageManifest(t)
+			outside := t.TempDir()
+			outsideLibrary := filepath.Join(outside, "libmornlea_engine.so")
+			writeFile(t, outsideLibrary, []byte("outside must remain unchanged\n"))
+			test.setup(t, fixture, outside)
+			output := fixture.verifyWith(t, nil, false)
+			if !strings.Contains(output, "unsafe publication") && !strings.Contains(output, "symlink") {
+				t.Fatalf("unsafe destination output = %q", output)
+			}
+			if got := string(readFile(t, outsideLibrary)); got != "outside must remain unchanged\n" {
+				t.Fatalf("verification wrote outside root: %q", got)
+			}
+		})
+	}
+}
+
+func TestNativeArtifactVerifierRejectsNULBeforeParsing(t *testing.T) {
+	fixture := newNativeArtifactFixture(t, "linux-amd64")
+	fixture.packageManifest(t)
+	fixture.insertManifestNUL(t)
+	output := fixture.verifyWith(t, nil, false)
+	if !strings.Contains(output, "manifest contains NUL byte") {
+		t.Fatalf("NUL manifest output = %q", output)
 	}
 }
 
@@ -156,11 +310,16 @@ func nativeArtifactPaths(platform string) []string {
 
 func (f *nativeArtifactFixture) packageManifest(t *testing.T) {
 	t.Helper()
+	f.packageWith(t, f.paths, nil, true)
+}
+
+func (f *nativeArtifactFixture) packageWith(t *testing.T, paths, environment []string, wantSuccess bool) string {
+	t.Helper()
 	arguments := []string{"--platform", f.platform, "--sha", nativeArtifactSHA, "--root", f.root, "--manifest", f.manifest, "--"}
-	for index := len(f.paths) - 1; index >= 0; index-- {
-		arguments = append(arguments, f.paths[index])
+	for index := len(paths) - 1; index >= 0; index-- {
+		arguments = append(arguments, paths[index])
 	}
-	f.run(t, "package-native-artifact.sh", arguments, true)
+	return f.runWith(t, "package-native-artifact.sh", arguments, environment, wantSuccess)
 }
 
 func (f *nativeArtifactFixture) verify(t *testing.T, wantSuccess bool) {
@@ -168,10 +327,21 @@ func (f *nativeArtifactFixture) verify(t *testing.T, wantSuccess bool) {
 	f.run(t, "verify-native-artifact.sh", []string{"--platform", f.platform, "--sha", nativeArtifactSHA, "--root", f.root, "--manifest", f.manifest}, wantSuccess)
 }
 
+func (f *nativeArtifactFixture) verifyWith(t *testing.T, environment []string, wantSuccess bool) string {
+	t.Helper()
+	return f.runWith(t, "verify-native-artifact.sh", []string{"--platform", f.platform, "--sha", nativeArtifactSHA, "--root", f.root, "--manifest", f.manifest}, environment, wantSuccess)
+}
+
 func (f *nativeArtifactFixture) run(t *testing.T, script string, arguments []string, wantSuccess bool) {
+	t.Helper()
+	f.runWith(t, script, arguments, nil, wantSuccess)
+}
+
+func (f *nativeArtifactFixture) runWith(t *testing.T, script string, arguments, environment []string, wantSuccess bool) string {
 	t.Helper()
 	command := exec.Command(filepath.Join(repositoryRoot(t), "scripts", "ci", script), arguments...)
 	command.Dir = repositoryRoot(t)
+	command.Env = append(os.Environ(), environment...)
 	output, err := command.CombinedOutput()
 	if wantSuccess && err != nil {
 		t.Fatalf("%s failed: %v\n%s", script, err, output)
@@ -179,6 +349,7 @@ func (f *nativeArtifactFixture) run(t *testing.T, script string, arguments []str
 	if !wantSuccess && err == nil {
 		t.Fatalf("%s unexpectedly succeeded:\n%s", script, output)
 	}
+	return string(output)
 }
 
 func (f *nativeArtifactFixture) wantManifest(t *testing.T) string {
@@ -213,6 +384,28 @@ func (f *nativeArtifactFixture) replaceManifest(t *testing.T, old, replacement s
 		t.Fatalf("manifest does not contain %q", old)
 	}
 	writeFile(t, filepath.Join(f.root, f.manifest), []byte(strings.Replace(contents, old, replacement, 1)))
+}
+
+func (f *nativeArtifactFixture) replaceFileSize(t *testing.T, path, size string) {
+	t.Helper()
+	old := "file " + path + " " + f.sizeAndDigest(t, path)
+	replacement := "file " + path + " " + size + " " + f.digest(t, path)
+	f.replaceManifest(t, old, replacement)
+}
+
+func (f *nativeArtifactFixture) insertManifestNUL(t *testing.T) {
+	t.Helper()
+	path := filepath.Join(f.root, f.manifest)
+	contents := readFile(t, path)
+	needle := []byte("version 1")
+	index := strings.Index(string(contents), string(needle))
+	if index < 0 {
+		t.Fatal("manifest version record is missing")
+	}
+	mutated := append([]byte(nil), contents[:index+len("version")]...)
+	mutated = append(mutated, 0)
+	mutated = append(mutated, contents[index+len("version"):]...)
+	writeFile(t, path, mutated)
 }
 
 func (f *nativeArtifactFixture) appendManifest(t *testing.T, record string) {
@@ -273,6 +466,14 @@ func writeFile(t *testing.T, path string, contents []byte) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, contents, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeExecutable(t *testing.T, path, contents string) {
+	t.Helper()
+	writeFile(t, path, []byte(contents))
+	if err := os.Chmod(path, 0o755); err != nil {
 		t.Fatal(err)
 	}
 }
