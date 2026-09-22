@@ -468,3 +468,32 @@ checkbox/status source.
 - Architecture skill: no change. The edits repair local source-comment debt;
   the source-scanner lesson is an implementation-validation concern, not a
   stable cross-boundary architecture rule.
+
+## 2026-09-22 — Node 5.7 acceptance
+
+- Implementation: `87111777` (`docs(server): translate newly introduced source
+  comments`). All 14 owned server files changed only in comments selected from
+  the post-`752d138b` delta; behavior, strings, identifiers, test data and
+  byte-identical grandfathered comments remain unchanged.
+- TDD evidence: the initial audit reported increased or new debt in every owned
+  path. The final diagnostic contains only legitimate decreases for six owned
+  files; the other eight return to their baseline count and digest. No server
+  path reports growth, new debt or a same-count replacement.
+- Independent review proved that the 97 Han comment lines added after the
+  baseline are exactly the multiset removed by this worktree and that the
+  baseline-to-worktree diff adds no Han comment. Verdict: Ready with zero
+  findings.
+- Validation: `cd packages/server && go test ./... -race -count=1` passed every
+  package; `packages/server/server` was the longest at 279.721s. Exact-file
+  `gofmt`, comment-only changed-line scanning, task-ID scanning and
+  `git diff --check` passed. The controller reran the audit and confirmed that
+  every remaining increase/new/replacement belongs to node 5.8's shared files.
+- Acceptance lesson: the migration audit intentionally exits nonzero for a
+  legitimate decrease until the controlled ratchet. Intermediate nodes must
+  classify every owned-path diagnostic rather than treating process exit alone
+  as either success or failure.
+- Superpowers availability: the worker surface did not expose the skill entry
+  points. It reported that limitation and executed the frozen Superpowers
+  packet's RED, minimal edit, verification and independent-review stages.
+- Architecture skill: no change. This is comment-governance repair and adds no
+  stable runtime ownership rule.
