@@ -148,6 +148,10 @@ pub enum DomainError {
     /// so the constructor publishes nothing rather than a partially built
     /// value.
     Allocation,
+    /// The chunk-local block index is at or above the chunk's cell count, so
+    /// it names no cell inside the chunk the record announces and the value
+    /// is rejected rather than clamped to the last cell.
+    InvalidBlockIndex,
 }
 
 /// Reports whether the 16 bytes are a non-zero UUIDv4 in wire order.

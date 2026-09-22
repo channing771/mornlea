@@ -2,6 +2,7 @@ use crate::identity::DomainError;
 
 mod inventory;
 mod mobs;
+mod objects;
 mod outcome;
 mod people;
 mod player;
@@ -18,6 +19,12 @@ pub use mobs::{
     PassiveDespawnReason, PassiveDespawnRecord, PassiveSpawn, PassiveSpawnParts,
     PassiveSpawnRecord, PassiveSpawnRecordParts, PassiveState, PassiveStateParts,
     PassiveStateRecord, PassiveStateRecordParts,
+};
+pub use objects::{
+    ItemDrop, ItemDropParts, ItemDropRemoves, ItemDropRemovesParts, ItemDropUpserts,
+    ItemDropUpsertsParts, ProjectileDespawn, ProjectileDespawnParts, ProjectileKind,
+    ProjectileSpawn, ProjectileSpawnParts, ProjectileSpawnRecord, ProjectileSpawnRecordParts,
+    ProjectileState, ProjectileStateParts, ProjectileStateRecord, ProjectileStateRecordParts,
 };
 pub use outcome::{CombatHit, CombatTarget, CommandRejection, PlacementSuccess, RejectReason};
 pub use people::{

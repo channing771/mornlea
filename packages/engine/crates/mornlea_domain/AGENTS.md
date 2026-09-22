@@ -403,6 +403,52 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   65-record packet-separation batches, and the checked identity/vector
   gates).
 
+## Projectile and item-drop observations (`src/event/objects.rs`, `tests/event_objects.rs`)
+
+- `ProjectileSpawnRecord`/`ProjectileStateRecord` (with `Parts`), the
+  `ProjectileSpawn`/`ProjectileState`/`ProjectileDespawn` batches,
+  `ItemDrop`/`ItemDropParts` and the `ItemDropUpserts`/`ItemDropRemoves`
+  batches are the object publications an authoritative session sends about
+  the projectiles in flight and the dropped item stacks one subscriber can
+  see. Every record rule is the Go `protocol` object validator's rule, so a
+  record this crate admits is a record the protocol layer admits.
+- The projectile record constructors are total (`new`) because every part is
+  an already-checked domain value: the identity is a nonzero `ProjectileId`,
+  the kind one of the two closed `ProjectileKind` variants, the dimension
+  one of the two playable ones, and both vectors finite `FiniteVec3`s. All
+  four kind × dimension combinations are publishable — the
+  kind-by-dimension policy is an authority concern the wire and this domain
+  do not enforce. The state record carries no kind, dimension or velocity
+  because all three are fixed for the projectile's whole life; the spawn
+  carries no yaw or health because a projectile is a point-like transient
+  whose orientation the client derives from its velocity.
+- `ItemDrop::try_new` is the one fallible record: the chunk-local block
+  index has to stay below the chunk's 24 × 4096 cells, and the first value
+  outside is rejected as `DomainError::InvalidBlockIndex` (defined in
+  `src/identity.rs`) rather than clamped. `DropId`'s arbitrary raw dimension
+  and the shared `ItemStack` registration/count/durability rules are
+  consumed unchanged, so a drop cannot publish a slot value the inventory
+  families reject. The drop record carries no world position and no pickup
+  timer, despawn countdown or velocity: those are authority-side lifecycle
+  quantities the publication never puts on the wire.
+- The five batch constructors apply the shared cap → empty → strict-order
+  sequence (`BatchTooLarge`, `EmptyStateBatch`, `InvalidStateOrder`) with no
+  copy or sort and admit a zero tick. The projectile batches order by the
+  typed numeric `ProjectileId`; the drop batches order by the derived
+  `DropId` ordering (dimension, chunk column, slot, generation) without
+  normalizing raw dimensions. The 128-record projectile and 32-record drop
+  packet maxima are transport budgets in `mornlea_protocol`, not domain
+  rules: a 129-record or 33-record batch is still publishable and a
+  protocol adapter splits it.
+- Focused entry: `cargo test -p mornlea_domain --test event_objects --locked`
+  (16 cases: the four kind × dimension combinations, the spawn fields, the
+  identity-and-position-only state record, the tick-and-ids-only despawn,
+  the empty/reversed/duplicate batch rejections, the two above-wire-maximum
+  packet-separation batches, the checked identity/vector gates, the raw
+  negative dimension, the empty stack and index 98_303 boundary, the 98_304
+  no-clamp rejection, the shared stack rules, the zero tick, and the absent
+  authority-only fields).
+
 ## Observations (`src/event.rs`, `tests/runtime_contract.rs`)
 
 - `Observation::new` publishes only `domain.input` and `domain.event`
@@ -443,4 +489,5 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_world --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_people --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_mobs --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_objects --locked
 ```
