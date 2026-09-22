@@ -332,3 +332,35 @@ checkbox/status source.
   gate passed.
 - Architecture skill: no change. This node enforces the already approved
   executable-evidence boundary without changing runtime ownership.
+
+## 2026-09-22 — Node 5.2 acceptance
+
+- Implementation: `f9cc9169` (`fix(corpus): remove nominal traces and tracked
+  update paths`). Runtime-oracle no longer manufactures Agent observations from
+  expected files; the server command-order oracle has no tracked update flag or
+  ad-hoc export writer; and the new audit guard enumerates runtime-migration
+  producer tests across `packages/`.
+- TDD evidence: the focused audit first failed only on
+  `update-command-order-corpus`. The guard covers the full Go 1.26 constructor
+  map, top-level and `FlagSet` calls, aliases, dot imports, unresolved receivers,
+  action tokens and separation from storage/protocol golden workflows.
+- Plan reconciliation: a full audit gate at this node would be predictably red
+  on the already scheduled comment debt. The node contract now requires the
+  complete runtime-oracle/server race suites and focused audit corpus-writer and
+  dependency gates; node 5.8 and closeout retain ownership of the first
+  all-green full audit. No failure was waived or hidden.
+- Independent review found one Important: a local `FlagSet` receiver shadowing
+  a non-flag import alias could evade conservative selector handling. The
+  controller added the exact regression, removed the unsafe exemption and
+  passed re-review. Two stale server comments were also corrected.
+- Controller verification: focused audit race passed in 7.753s;
+  runtime-oracle race passed in 52.834s; server runtime race passed in 22.758s;
+  diff and frozen corpus gates passed. The full audit diagnostic failed only on
+  `TestEnglishCommentMigration`, with exactly the paths assigned to nodes
+  5.6–5.8 plus the recorded baseline decrease.
+- Worker continuity: the implementation worker hit its account usage limit
+  after review and before landing the final two-line fix. The controller
+  applied the reviewer-prescribed fix in the worker's owned files, reran all
+  node gates and obtained a clean independent re-review.
+- Architecture skill: no change. This is evidence and orchestration hardening,
+  not a runtime ownership change.

@@ -135,10 +135,16 @@ server flag. Then remove the writers and run:
 
 ```bash
 gofmt -w packages/tools/cmd/runtime-oracle/agent_contract_test.go packages/server/sim/runtime/command_order_oracle_test.go packages/audit/runtime_corpus_write_guard_test.go
-go test ./packages/audit -race -count=1 -run 'TestCorpusTestFlagsCannotRewriteFrozenEvidence|TestCorpusWriterFlagGuardDetectsDrift'
-go test ./packages/tools/cmd/runtime-oracle ./packages/server/sim/runtime ./packages/audit -race -count=1
+go test ./packages/audit -race -count=1 -run '^(TestCorpusTestFlagsCannotRewriteFrozenEvidence|TestCorpusWriterFlagGuardDetectsDrift|TestRuntimeOracleInternalDependencies|TestInternalDependenciesAreOneWay)$'
+go test ./packages/tools/cmd/runtime-oracle ./packages/server/sim/runtime -race -count=1
 git diff --exit-code -- testdata/runtime-migration
 ```
+
+The full audit suite is not a node-5.2 green gate because the independently
+scheduled comment-debt repairs in nodes 5.6–5.8 are deliberately still red.
+Run it once diagnostically and require every non-comment audit test to pass;
+node 5.8 and final node 5.10 own the first all-green full audit result. Do not
+change the comment baseline or translate out-of-scope files in this node.
 
 Do not add a new exporter, update variable, or write-capable CLI. Proposed
 commit: `fix(corpus): remove nominal traces and tracked update paths`.
