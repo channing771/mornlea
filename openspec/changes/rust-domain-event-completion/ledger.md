@@ -237,3 +237,27 @@
   4,097-rejection test inside this node — node 2.4's eleven resource-bounds
   tests are the scheduled owner.
 - Architecture skill: no change.
+
+## 2026-09-22 — node 2.3 acceptance
+
+- Implementation commit: `fd2c7de9` (`feat(domain): add chat event union`).
+  Red evidence verified: permissive constructor admitted `event_id: 0`
+  (returned `Ok`) before the nonzero check landed, matching the mandated
+  behavioral red.
+- Controller gates at `fd2c7de9`: `cargo fmt --all --check` ok;
+  `--test event_chat` 10 passed / 0 failed; `--test identity_values` 13
+  passed; `--test runtime_contract production_manifest_has_no_codec_kernel_or_host_dependencies`
+  ok; audit comment gates ok; `git diff --check` clean.
+- Review ruling: spec compliant, quality Approved, 0 Critical, 0 Important.
+  Reviewer verified the seven-variant `ChatBody`, six-state `TaskState`,
+  five-reason `TaskFailure`, the zero-ID-only rejection, the wildcard-free
+  16-branch exhaustive match (18 ok corpus cases collapse to 16 shapes — the
+  1024-byte command and 256-byte speech are boundary duplicates), derive
+  discipline against crate precedent, and fixture identity matching the Go
+  producer byte-for-byte.
+- Minor recorded for the final whole-branch review: the absence test
+  `chat_event_has_no_recipient_tick_reason_byte_or_command_sequence`
+  duplicates the getter readback of the keeps test; its independent content
+  is the four-field parts literal (mandated name, inherent to an absence
+  test).
+- Architecture skill: no change.
