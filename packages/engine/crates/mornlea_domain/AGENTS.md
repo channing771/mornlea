@@ -366,6 +366,43 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   limits, the next float above the limit, the spaced companion name, and the
   absent profile, persona, mining and velocity fields).
 
+## Hostile and passive mob observations (`src/event/mobs.rs`, `tests/event_mobs.rs`)
+
+- `HostileSpawnRecord`/`HostileStateRecord` (with `Parts`), the
+  `HostileSpawn`/`HostileState`/`HostileDespawn` batches, and the passive
+  mirror set (`PassiveSpawnRecord`/`PassiveStateRecord`, the total
+  `PassiveDespawnRecord::new`, `PassiveSpawn`/`PassiveState`/`PassiveDespawn`)
+  are the visibility-derived mob publications an authoritative session sends
+  about the hostiles and passive mobs one subscriber can see. Every record
+  rule is the Go `protocol` mob validator's rule, so a record this crate
+  admits is a record the protocol layer admits.
+- Spawn records check the overworld dimension (`InvalidDimension`), then yaw
+  finiteness (`NonFiniteRotation`, checked here because the record carries a
+  raw `f32` yaw rather than a `LookAngles`), then health inside
+  `1..=MAX_HEALTH` (`InvalidSurvivalValue`), in that order; state records
+  check yaw then health. Identity and position/velocity finiteness are
+  already enforced by `HostileId`/`PassiveId` and `FiniteVec3` before a
+  record can be assembled. State records carry no dimension because a
+  dimension change always goes through a despawn/spawn pair.
+- The six batch constructors apply the shared cap → empty → strict-ID-order
+  sequence (`BatchTooLarge`, `EmptyStateBatch`, `InvalidStateOrder`) with no
+  copy or sort and admit a zero tick. The 64-record packet maxima of both
+  families are transport budgets in `mornlea_protocol`, not domain rules: a
+  65-record batch is still publishable and a protocol adapter splits it.
+- `HostileKind` (`Nightwalker`/`BoneThrower`) and `PassiveDespawnReason`
+  (`Vanished`/`Died`) are closed enums; the raw kind/grazing/reason byte
+  conversions belong to evidence and protocol adapters, and grazing is stored
+  as the domain `bool`. No record exposes cooldown, target, path, AI or
+  capacity state; the hostile despawn carries identities only while the
+  passive despawn carries the closed reason pair.
+- Focused entry: `cargo test -p mornlea_domain --test event_mobs --locked`
+  (18 cases: the two seed records with a zero tick, the triple-violation
+  dimension-precedence rejections, the yaw-before-health rejections, the
+  health boundaries, the no-dimension state fields with grazing, the
+  vanished/died pair, the empty/reversed/duplicate batch rejections, the two
+  65-record packet-separation batches, and the checked identity/vector
+  gates).
+
 ## Observations (`src/event.rs`, `tests/runtime_contract.rs`)
 
 - `Observation::new` publishes only `domain.input` and `domain.event`
@@ -405,4 +442,5 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_inventory --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_world --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_people --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_mobs --locked
 ```

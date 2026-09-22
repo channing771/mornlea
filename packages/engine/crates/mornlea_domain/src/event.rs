@@ -1,6 +1,7 @@
 use crate::identity::DomainError;
 
 mod inventory;
+mod mobs;
 mod outcome;
 mod people;
 mod player;
@@ -9,6 +10,14 @@ mod world;
 pub use inventory::{
     ChestState, ChestStateParts, ContainerClosed, CraftingSize, CraftingState, CraftingStateParts,
     FurnaceState, FurnaceStateParts, InventoryState, InventoryStateParts,
+};
+pub use mobs::{
+    HostileDespawn, HostileDespawnParts, HostileKind, HostileSpawn, HostileSpawnParts,
+    HostileSpawnRecord, HostileSpawnRecordParts, HostileState, HostileStateParts,
+    HostileStateRecord, HostileStateRecordParts, PassiveDespawn, PassiveDespawnParts,
+    PassiveDespawnReason, PassiveDespawnRecord, PassiveSpawn, PassiveSpawnParts,
+    PassiveSpawnRecord, PassiveSpawnRecordParts, PassiveState, PassiveStateParts,
+    PassiveStateRecord, PassiveStateRecordParts,
 };
 pub use outcome::{CombatHit, CombatTarget, CommandRejection, PlacementSuccess, RejectReason};
 pub use people::{
