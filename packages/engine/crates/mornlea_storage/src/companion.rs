@@ -1219,7 +1219,7 @@ fn canonical_v5_parts(
         ));
     }
     let mut records = save.records.clone();
-    records.sort_by(|left, right| left.id.to_bytes().cmp(&right.id.to_bytes()));
+    records.sort_by_key(|left| left.id.to_bytes());
     for (index, body) in records.iter().enumerate() {
         validate_body(body)
             .map_err(|detail| corrupt("companion record", format!("{index}: {detail}")))?;
@@ -1234,7 +1234,7 @@ fn canonical_v5_parts(
         ));
     }
     let mut lifecycles = save.lifecycles.clone();
-    lifecycles.sort_by(|left, right| left.id.to_bytes().cmp(&right.id.to_bytes()));
+    lifecycles.sort_by_key(|left| left.id.to_bytes());
     let mut active: Vec<PlayerId> = Vec::new();
     for (index, lifecycle) in lifecycles.iter().enumerate() {
         if index > 0 && lifecycles[index - 1].id == lifecycle.id {
@@ -1261,7 +1261,7 @@ fn canonical_v5_parts(
     validate_queues(&save.queues, &records, CURRENT_SCHEMA)
         .map_err(|detail| corrupt("companion queues", detail))?;
     let mut queues = save.queues.clone();
-    queues.sort_by(|left, right| left.id.to_bytes().cmp(&right.id.to_bytes()));
+    queues.sort_by_key(|left| left.id.to_bytes());
     for queue in &queues {
         if !queue.summary.is_empty() {
             return Err(corrupt(

@@ -1400,8 +1400,7 @@ fn metadata_v5_with_wrong_dimension_count_is_rejected() {
     append_u32(&mut payload, 0);
     append_u64(&mut payload, 0);
     let err = decode_world_metadata(&seal_metadata(METADATA_V5, payload))
-        .err()
-        .expect("wrong dimension count must be rejected");
+        .expect_err("wrong dimension count must be rejected");
     assert!(matches!(err, StorageError::Corrupt(_)), "{err:?}");
 }
 
@@ -2195,7 +2194,7 @@ fn chunk_fixture_chunk(schema: u32) -> DecodedChunk {
 /// uses: `64 / bits` slots per word, the remaining bits unused.
 fn pack_section_words(bits: u8, values: &[u32]) -> Vec<u64> {
     let per_word = 64 / bits as usize;
-    let mut words = vec![0u64; (4096 + per_word - 1) / per_word];
+    let mut words = vec![0u64; 4096_usize.div_ceil(per_word)];
     for (index, value) in values.iter().enumerate() {
         let shift = (index % per_word) * bits as usize;
         words[index / per_word] |= u64::from(*value) << shift;

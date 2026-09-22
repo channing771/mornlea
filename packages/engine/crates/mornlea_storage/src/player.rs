@@ -470,10 +470,10 @@ fn migrate(from: u32, mut dto: PlayerDto) -> StorageResult<(PlayerDto, bool)> {
 /// Fills full durability into a legacy tool stack that carries no durability.
 fn fill_full_durability(stack: &ItemStack) -> ItemStack {
     let mut filled = *stack;
-    if let Some(full) = item_max_durability(stack.item) {
-        if filled.durability == 0 {
-            filled.durability = full;
-        }
+    if let Some(full) = item_max_durability(stack.item)
+        && filled.durability == 0
+    {
+        filled.durability = full;
     }
     filled
 }

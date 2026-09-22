@@ -265,7 +265,7 @@ pub fn encode(save: &ChunkSave) -> StorageResult<Vec<u8>> {
 /// allocation or compression, and a payload that cannot be read back is rejected
 /// rather than truncated.
 pub fn encode_at_schema(save: &ChunkSave, schema: u32) -> StorageResult<Vec<u8>> {
-    if schema < OLDEST_SCHEMA || schema > CURRENT_SCHEMA {
+    if !(OLDEST_SCHEMA..=CURRENT_SCHEMA).contains(&schema) {
         return Err(corrupt(
             "chunk schema",
             format!("unsupported schema {schema}"),
@@ -444,7 +444,7 @@ pub fn encode_logical(
     chunk: &Chunk,
     schema: u32,
 ) -> StorageResult<Vec<u8>> {
-    if schema < OLDEST_SCHEMA || schema > CURRENT_SCHEMA {
+    if !(OLDEST_SCHEMA..=CURRENT_SCHEMA).contains(&schema) {
         return Err(corrupt(
             "chunk schema",
             format!("unsupported schema {schema}"),
@@ -495,7 +495,7 @@ pub fn decode_logical(
     schema: u32,
     data: &[u8],
 ) -> StorageResult<Chunk> {
-    if schema < OLDEST_SCHEMA || schema > CURRENT_SCHEMA {
+    if !(OLDEST_SCHEMA..=CURRENT_SCHEMA).contains(&schema) {
         return Err(corrupt(
             "chunk schema",
             format!("unsupported chunk schema {schema}"),
@@ -631,7 +631,7 @@ fn migrate(schema: u32, chunk: Chunk) -> StorageResult<(Chunk, bool)> {
             // semantics, so their steps are identities. v9 likewise keeps the
             // v8 payload layout and only appends fluid block numbers, so no
             // block data is rewritten and no water is injected into old chunks.
-            6 | 7 | 8 => current,
+            6..=8 => current,
             other => {
                 return Err(corrupt(
                     "chunk migration",
@@ -1160,8 +1160,10 @@ fn append_chest_slot(dst: &mut ByteWriter, chest: &ChestSlot) {
 
 /// Decodes one drop slot at the current layout and validates it.
 fn decode_drop_slot(reader: &mut ByteReader<'_>) -> Result<DropSlot, String> {
-    let mut drop = DropSlot::default();
-    drop.generation = reader.u32()?;
+    let mut drop = DropSlot {
+        generation: reader.u32()?,
+        ..DropSlot::default()
+    };
     let active = reader.u8()?;
     if active > 1 {
         return Err(format!("invalid drop active flag {active}"));
@@ -1180,8 +1182,10 @@ fn decode_drop_slot(reader: &mut ByteReader<'_>) -> Result<DropSlot, String> {
 /// Decodes one drop slot at the pre-schema-5 layout, which has no durability and
 /// may hold a legacy multi-item tool stack.
 fn decode_legacy_drop_slot(reader: &mut ByteReader<'_>) -> Result<DropSlot, String> {
-    let mut drop = DropSlot::default();
-    drop.generation = reader.u32()?;
+    let mut drop = DropSlot {
+        generation: reader.u32()?,
+        ..DropSlot::default()
+    };
     let active = reader.u8()?;
     if active > 1 {
         return Err(format!("invalid drop active flag {active}"));
@@ -1241,8 +1245,10 @@ fn validate_drop_slot(drop: &DropSlot) -> Result<(), String> {
 
 /// Decodes one furnace slot and validates it.
 fn decode_furnace_slot(reader: &mut ByteReader<'_>) -> Result<FurnaceSlot, String> {
-    let mut furnace = FurnaceSlot::default();
-    furnace.generation = reader.u32()?;
+    let mut furnace = FurnaceSlot {
+        generation: reader.u32()?,
+        ..FurnaceSlot::default()
+    };
     let active = reader.u8()?;
     if active > 1 {
         return Err(format!("furnace active flag {active} is not 0 or 1"));
@@ -1263,8 +1269,10 @@ fn decode_furnace_slot(reader: &mut ByteReader<'_>) -> Result<FurnaceSlot, Strin
 
 /// Decodes one chest slot and validates it.
 fn decode_chest_slot(reader: &mut ByteReader<'_>) -> Result<ChestSlot, String> {
-    let mut chest = ChestSlot::default();
-    chest.generation = reader.u32()?;
+    let mut chest = ChestSlot {
+        generation: reader.u32()?,
+        ..ChestSlot::default()
+    };
     let active = reader.u8()?;
     if active > 1 {
         return Err(format!("chest active flag {active} is not 0 or 1"));
