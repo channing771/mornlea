@@ -191,3 +191,26 @@
   `domainEventChatValidTaskFailReason`) are drift-pinned only on the 44
   exercised inputs — inherent to the mandated classifier design.
 - Architecture skill: no change.
+
+## 2026-09-22 — node 2.1 acceptance
+
+- Implementation commit: `e4ac00a4` (`feat(domain): add mob event values`).
+  Red evidence verified: after interface setup, the permissive skeleton
+  admitted depths + non-finite yaw + health 0 (returned `Ok`) and the
+  precedence test failed for that behavioral reason, matching the packet's
+  mandated two-stage red.
+- Controller gates at `e4ac00a4`: `cargo fmt --all --check` ok;
+  `--test event_mobs --locked` 18 passed / 0 failed;
+  `--test runtime_contract production_manifest_has_no_codec_kernel_or_host_dependencies`
+  ok; audit comment gates ok; `git diff --check` clean.
+- Review ruling: spec compliant, quality Approved, 0 Critical, 0 Important.
+  Reviewer verified all 15 public types field-for-field, both precedence
+  orders, the six batch constructors against the frozen algorithm, derive
+  discipline, `MAX_HEALTH` reuse (`super::player::MAX_HEALTH`), and module
+  wiring matching the existing pattern.
+- Minors recorded for the final whole-branch review: (1) the `BatchTooLarge`
+  branch of the six new batch constructors has no direct coverage inside this
+  node — plan-constrained, and node 2.4's eleven resource-bounds tests are the
+  scheduled owner; (2) `hostile_spawn_records(count)` helper doc names the
+  65-record call shape instead of the parameter.
+- Architecture skill: no change.
