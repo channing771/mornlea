@@ -18,7 +18,7 @@ Decision: GO
 | 机读报告 | `testdata/godot-pilot/legacy-rust-memory-v23.json` | `testdata/godot-pilot/godot-pilot-v23.json` |
 | Git commit | `84f3e0e75dff6987e47cf2aa50f50d888e85eafb`（P0 基线） | `376f435a262bfc8fa611866dedfee8c56225444f` |
 | Worktree | dirty（P0） | dirty |
-| 协议 | protocol v45 | protocol v45 |
+| 协议 | protocol v44 | protocol v44 |
 | Engine ABI | engine ABI v11 | engine ABI v11 |
 | Client ABI | client ABI v19 | client ABI v19（试点不使用） |
 | Client-core ABI | 不适用 | v1 |
@@ -83,7 +83,7 @@ Godot 试点从确定性地形转录以固定相机抓取一帧 640×360 世界�
 |---|---|---|
 | 精确钉死的 Py4Godot/CPython 产物 | GO | 钉死修订、补丁序列、离线资格 |
 | 不依赖系统 Python 或运行时安装 | GO | 隔离 `PyConfig`、污染环境测试 |
-| 无权威/协议/预测分叉 | GO | 共用 Go runtime 与 protocol v45 |
+| 无权威/协议/预测分叉 | GO | 共用 Go runtime 与 protocol v44 |
 | 无静默丢失或部分批次 | GO | overflow_count 0，uploads_failed 0 |
 | 地形与最小实体稳定 | GO | 地形检查、300s playable smoke、v23 窗口 92 个 live 区段 |
 | GDExtension/Go core 重复关闭 | GO | 100 次隔离 smoke |

@@ -148,14 +148,11 @@
     },
     {
       "id": "godot-client-pilot-report",
-      "classification": "bilingual",
+      "classification": "historical",
       "paths": [
         "docs/notes/godot-client-pilot-report.md",
         "docs/notes/godot-client-pilot-report.zh.md"
-      ],
-      "english_path": "docs/notes/godot-client-pilot-report.md",
-      "chinese_path": "docs/notes/godot-client-pilot-report.zh.md",
-      "revision": "2026-09-19.1"
+      ]
     },
     {
       "id": "agent-dashboard-guide",
