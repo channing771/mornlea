@@ -26,6 +26,12 @@ type miningParityGenerator struct{}
 
 func (miningParityGenerator) GenerateChunk(_ core.DimensionID, position core.ChunkPos) *world.Chunk {
 	chunk := integrationChunk(position, core.StoneID)
+	// Dirt isolates the mining transcript from absolute-tick background grazing.
+	for z := 0; z < core.SectionSize; z++ {
+		for x := 0; x < core.SectionSize; x++ {
+			chunk.SetBlock(x, 0, z, core.DirtID)
+		}
+	}
 	for _, target := range []core.BlockPos{{X: -1, Y: 1, Z: -6}, {X: 1, Y: 1, Z: -6}} {
 		if target.Chunk() != position {
 			continue
@@ -35,6 +41,91 @@ func (miningParityGenerator) GenerateChunk(_ core.DimensionID, position core.Chu
 	}
 	chunk.Compact()
 	return chunk
+}
+
+func TestMiningParityGeneratorExcludesBackgroundGrazing(t *testing.T) {
+	for chunkZ := int32(-1); chunkZ <= 1; chunkZ++ {
+		for chunkX := int32(-1); chunkX <= 1; chunkX++ {
+			position := core.ChunkPos{X: chunkX, Z: chunkZ}
+			chunk := (miningParityGenerator{}).GenerateChunk(core.Overworld, position)
+			t.Run(fmt.Sprintf("chunk_%d_%d", chunkX, chunkZ), func(t *testing.T) {
+				for _, target := range []core.BlockPos{
+					{X: -1, Y: 1, Z: -6},
+					{X: 0, Y: 1, Z: -6},
+					{X: 1, Y: 1, Z: -6},
+				} {
+					if target.Chunk() != position {
+						continue
+					}
+					x, _, z := target.Local()
+					if got := chunk.BlockAt(x, target.Y, z); got != core.StoneID {
+						t.Fatalf("mining target %v = %v, want stone", target, got)
+					}
+				}
+				for z := 0; z < core.SectionSize; z++ {
+					for x := 0; x < core.SectionSize; x++ {
+						if got := chunk.BlockAt(x, 0, z); got != core.DirtID {
+							t.Fatalf("ground cell (%d, 0, %d) = %v, want dirt to exclude background grazing", x, z, got)
+						}
+					}
+				}
+			})
+		}
+	}
+}
+
+func newMiningParityHost(t *testing.T, config Config, store storage.WorldStore) *Host {
+	t.Helper()
+	host := mustNewHost(t, config, miningParityGenerator{}, store)
+	// Register cleanup before login or assertions can strand host workers.
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
+		defer cancel()
+		if err := host.Shutdown(ctx); err != nil {
+			t.Errorf("mining host Shutdown: %v", err)
+		}
+	})
+	return host
+}
+
+func TestMiningParityHostClosesOnScopeExit(t *testing.T) {
+	for _, exit := range []string{"return", "goexit"} {
+		t.Run(exit, func(t *testing.T) {
+			var host *Host
+			// Keep a failed cleanup regression from leaking beyond the parent scope.
+			t.Cleanup(func() {
+				if host == nil {
+					return
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
+				defer cancel()
+				if err := host.Shutdown(ctx); err != nil {
+					t.Errorf("fallback mining host Shutdown: %v", err)
+				}
+			})
+			t.Run("scope", func(t *testing.T) {
+				host = newMiningParityHost(t, hostTestConfig(), newHostTestStore())
+				if exit == "goexit" {
+					// Skipping follows the same goroutine-exit cleanup path as a fatal assertion
+					// without intentionally failing this regression.
+					t.SkipNow()
+				}
+			})
+			if host == nil {
+				t.Fatal("mining host was not created")
+			}
+			select {
+			case <-host.world.runtimeDone:
+			default:
+				t.Error("mining host runtime remains open after child scope")
+			}
+			select {
+			case <-host.world.closedDone:
+			default:
+				t.Error("mining host world remains open after child scope")
+			}
+		})
+	}
 }
 
 // barrenParityGenerator 是业务 transcript parity 专用的无草平坦世界：地表
@@ -261,8 +352,9 @@ func runMiningParityScript(t *testing.T, transport string) miningParityResult {
 	config := hostTestConfig()
 	config.ViewRadius = 1
 	config.AutosaveTicks = 1000
-	host := mustNewHost(t, config, miningParityGenerator{}, store)
+	host := newMiningParityHost(t, config, store)
 	endpoint, acceptDone, closeTransport := openParityTransport(t, host, transport, identity)
+	defer endpoint.Close()
 	defer closeTransport()
 	mirror := client.NewMirror()
 	drops := client.NewItemDrops()
