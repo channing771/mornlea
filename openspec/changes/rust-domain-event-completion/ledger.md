@@ -311,3 +311,47 @@
   substring check would also reject future prose use of "Observation" in the
   two source files (conservative by design).
 - Architecture skill: no change.
+
+## 2026-09-22 — node 4.1 acceptance
+
+- Implementation commit: `7f1cd010` (`test(domain): execute mob event
+  corpus`). Red evidence verified: integrated corpus failed with
+  `case has no owning topic` for a mob case before the adapter was
+  registered, matching the intended no-owner red.
+- Controller gates at `7f1cd010`: export run (mobs+manifest, `-race`) ok;
+  second fresh-dir export byte-identical to the tracked manifest
+  (`diff -u` empty); ordinary rerun ok; `--test corpus_domain event_mobs::`
+  3 passed; `corpus_domain_executes_exact_unique_partition` ok (444 exact
+  unique executions, 232 `domain.event`); audit five guards ok with
+  `GOCACHE=/tmp/mornlea-gocache` — the first controller run without the
+  override failed only because the sandbox-denied default go-build cache
+  entry made `go list` drop the tools module from enumeration
+  (`依赖白名单中的包 packages/tools/cmd/runtime-oracle 不存在`);
+  re-run with the override passed, no real dependency violation;
+  `git diff --check` clean.
+- Review ruling: spec compliant, quality Approved, 0 Critical, 0 Important.
+  Reviewer structurally compared old/new manifests (68 added / 0 removed /
+  601 total; 444 mornlea_domain; 232 domain.event; sources 25→27 adding
+  exactly `message_hostile.go`+`message_passive.go`; pre-existing hashes and
+  unrelated families byte-equal; `source_revision` unchanged) and verified
+  the adapter's six rule orders line-by-line against the Go producer.
+- Controller adjudications of disclosed ripples: (a) the two order-dependent
+  pre-existing tests (`TestProtocolOracleFrameRunnerInvokesProducerOncePerCheckpoint`,
+  `TestTraceIdentity/two_declared_cases_at1/2`) were repaired
+  order-independently without weakening — reviewer compared against
+  pre-change forms; accepted as derived-consumer ripple of the frozen
+  sort-by-ID merge rule. (b) Byte-identical re-registration as an
+  idempotent no-op is the only reading consistent with the mandated
+  byte-identity re-export gate; conflicting duplicates still reject —
+  accepted. (c) `runtime-oracle/domain-event-manifest` producer-ID line
+  authorized under the standing node-1.1 ruling.
+- Minors recorded for the final whole-branch review: (1) `manifestWithTwoCases`
+  in `trace_test.go` now clones a semantically mismatched case (agent.http
+  renamed under a protocol.frame ID) — structural-only consumers, nothing
+  weakened; (2) `TestDomainEventManifestMergeRejectsMissingFamilyCase`'s
+  fixture depends on which case is first-sorted; (3) the new AGENTS.md
+  section leaves the package-wide tail bullets of "Family evidence"
+  dangling under the new header; (4) compound-invalid records would surface
+  as classification conflicts rather than the earlier field rejection
+  (latent only; no frozen case is compound-invalid).
+- Architecture skill: no change.
