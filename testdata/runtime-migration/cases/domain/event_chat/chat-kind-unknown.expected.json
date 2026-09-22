@@ -1,0 +1,16 @@
+{
+  "kind": "error",
+  "category": "invalid-enum",
+  "fields": {
+    "command": "gather stone",
+    "companion_id": "2233445546674889aabbccddeeff00ff",
+    "companion_name": "Buddy",
+    "event_id": "7",
+    "kind": 10,
+    "player_id": "00112233445546778899aabbccddeeff",
+    "player_name": "Alice",
+    "reason": 0,
+    "rule": "chat_event.kind",
+    "speech": ""
+  }
+}

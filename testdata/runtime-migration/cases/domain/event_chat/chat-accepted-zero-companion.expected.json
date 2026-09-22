@@ -1,0 +1,16 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "command": "gather stone",
+    "companion_id": "00000000000000000000000000000000",
+    "companion_name": "Buddy",
+    "event_id": "7",
+    "kind": 1,
+    "player_id": "00112233445546778899aabbccddeeff",
+    "player_name": "Alice",
+    "reason": 0,
+    "rule": "chat_event.companion_id",
+    "speech": ""
+  }
+}

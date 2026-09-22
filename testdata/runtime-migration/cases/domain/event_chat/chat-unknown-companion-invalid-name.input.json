@@ -1,0 +1,13 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "chat",
+  "event_id": "7",
+  "player_id": "00112233445546778899aabbccddeeff",
+  "companion_id": "00000000000000000000000000000000",
+  "player_name": "Alice",
+  "companion_name": "Bud dy",
+  "kind": 2,
+  "reason": 2,
+  "command": "",
+  "speech": ""
+}

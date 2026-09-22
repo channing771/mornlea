@@ -1,0 +1,16 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "command": "",
+    "companion_id": "2233445546674889aabbccddeeff00ff",
+    "companion_name": "Buddy",
+    "event_id": "7",
+    "kind": 9,
+    "player_id": "00112233445546778899aabbccddeeff",
+    "player_name": "Alice",
+    "reason": 1,
+    "rule": "chat_event.reason",
+    "speech": "Ready."
+  }
+}

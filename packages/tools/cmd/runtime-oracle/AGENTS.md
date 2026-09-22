@@ -171,12 +171,12 @@ producer another family's cases: `protocol_frame_test.go` (framing), and
 `domain_command_control_test.go`, `domain_command_inventory_test.go`,
 `domain_event_player_test.go`, `domain_event_world_test.go`,
 `domain_event_inventory_test.go`, `domain_event_people_test.go`,
-`domain_event_mobs_test.go` and `domain_event_objects_test.go` (the domain
-families). The world-event file also carries the shared router arm
-(`runDomainEvent`) that the inventory, people, mobs and objects producers
-register their rule names into, because the `domain.event` family is shared by
-six producers and the rule name is the only discriminator the manifest
-carries.
+`domain_event_mobs_test.go`, `domain_event_objects_test.go` and
+`domain_event_chat_test.go` (the domain families). The world-event file also
+carries the shared router arm (`runDomainEvent`) that the inventory, people,
+mobs, objects and chat producers register their rule names into, because the
+`domain.event` family is shared by seven producers and the rule name is the
+only discriminator the manifest carries.
 
 - `domain_event_mobs_test.go` executes the six hostile and passive mob
   publication rules (`hostile-spawn`, `hostile-state`, `hostile-despawn`,
@@ -224,6 +224,40 @@ carries.
   `item_drop_removes.id_<index>.<field>`, plus `<rule>.count_range` and
   `<rule>.strictly_increasing_ids`. The 128/32-record wire batch caps stay
   transport budgets no case sits above.
+
+- `domain_event_chat_test.go` executes the sole closed-chat publication rule
+  (`chat`) through the Go `protocol.ChatEvent` DTO, closing the Go evidence
+  stage beside the mob (68 cases) and object (45 cases) producers with its
+  44 frozen cases. They live under
+  `testdata/runtime-migration/cases/domain/event_chat/` but are not yet
+  registered in the canonical manifest; that registration is a later node's
+  work, so publication is external-only through `RUNTIME_ORACLE_EXPORT_DIR`
+  under the producer ID `runtime-oracle/domain-event-chat`, with the export
+  running before the committed-bytes comparison so an initial export can
+  materialize the full candidate while the tracked directory is still absent.
+  The record is a semantic union rather than a flat payload: every raw input
+  key is always present (a decimal-string event identity, the two
+  32-lowercase-hex UUID identities, numeric kind and reason, and the two text
+  slots), and an admitted event publishes its exact semantic branch
+  (`accepted`, the four rejection branches, the five task-fact branches,
+  `task-failed-<reason>` or `speech`) with only that branch's legal
+  companion/name/command/speech data — the empty wire sentinels a branch
+  forbids are not retained. The classifier mirrors the exact branch order of
+  `ChatEvent.Validate`: global identity and name failures precede kind
+  dispatch, a non-speech kind carrying speech fails before the switch, and
+  inside the switch reason, companion identity/name, then command/speech text
+  decide. Rejection categories stay inside the frozen vocabulary:
+  `invalid-identity` for a zero event/player identity, `invalid-enum` for an
+  unknown kind, the reserved reject reason 3 and failure reasons outside
+  16..20, and `invalid-value` for every text-boundary (the 1,024/256 bounds
+  and their plus-one rows, untrimmed or empty names, commands and speech) and
+  every illegal cross-field combination (speech leak, command on speech,
+  reason-not-none, missing companion, zero companion where illegal). Rule
+  names begin `chat_event.` and name the failing field or combination:
+  `chat_event.rejected.reason` for the reserved reason, `chat_event.task_failed.reason`
+  for the failure-reason domain edges, `chat_event.kind` for an unknown kind,
+  and `chat_event.<field>` for everything else. A rejection retains the raw
+  semantic inputs, including an unknown numeric enum value.
 
 - `agent_contract_test.go` is deliberately not an executable Agent producer. It
   validates manifest identity, case presence, golden coverage and the

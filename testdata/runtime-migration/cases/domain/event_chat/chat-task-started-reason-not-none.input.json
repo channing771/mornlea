@@ -1,0 +1,13 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "chat",
+  "event_id": "7",
+  "player_id": "00112233445546778899aabbccddeeff",
+  "companion_id": "2233445546674889aabbccddeeff00ff",
+  "player_name": "Alice",
+  "companion_name": "Buddy",
+  "kind": 3,
+  "reason": 1,
+  "command": "gather stone",
+  "speech": ""
+}

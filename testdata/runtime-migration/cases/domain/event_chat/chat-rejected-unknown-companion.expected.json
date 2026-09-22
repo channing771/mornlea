@@ -1,0 +1,10 @@
+{
+  "kind": "ok",
+  "category": "unknown-companion",
+  "fields": {
+    "companion_name": "Buddy",
+    "event_id": "7",
+    "player_id": "00112233445546778899aabbccddeeff",
+    "player_name": "Alice"
+  }
+}

@@ -1940,13 +1940,61 @@ func TestDomainEventObjectsRouterExecutesProjectileSpawnSeed(t *testing.T) {
 	}
 }
 
+// TestDomainEventChatRouterExecutesAcceptedSeed is the initial routing
+// regression for the closed chat rule: the complete raw accepted event has to
+// reach the chat producer through the shared family router and publish the
+// accepted seed under its own semantic branch category. The seed bytes are
+// the frozen corpus rendering of the envelope, so the regression also pins
+// the shape the producer decodes: a decimal-string event identity, the two
+// 32-lowercase-hex UUID identities, numeric kind and reason fields, and every
+// key present including the empty speech slot.
+func TestDomainEventChatRouterExecutesAcceptedSeed(t *testing.T) {
+	seed := `{
+  "consumer": "mornlea_domain",
+  "rule": "chat",
+  "event_id": "7",
+  "player_id": "00112233445546778899aabbccddeeff",
+  "companion_id": "2233445546674889aabbccddeeff00ff",
+  "player_name": "Alice",
+  "companion_name": "Buddy",
+  "kind": 1,
+  "reason": 0,
+  "command": "gather stone",
+  "speech": ""
+}
+`
+	outcome, _, err := runDomainEvent(CaseSpec{ID: "domain.event/1/chat-accepted"}, []byte(seed))
+	if err != nil {
+		t.Fatalf("runDomainEvent rejected the accepted chat seed: %v", err)
+	}
+	if outcome.Kind != "ok" {
+		t.Fatalf("seed outcome kind = %q, want ok", outcome.Kind)
+	}
+	if outcome.Category != "accepted" {
+		t.Fatalf("seed outcome category = %q, want accepted", outcome.Category)
+	}
+	if outcome.Fields["event_id"] != "7" {
+		t.Fatalf("seed outcome event_id = %v, want 7", outcome.Fields["event_id"])
+	}
+	if outcome.Fields["player_name"] != "Alice" {
+		t.Fatalf("seed outcome player_name = %v, want Alice", outcome.Fields["player_name"])
+	}
+	if outcome.Fields["command"] != "gather stone" {
+		t.Fatalf("seed outcome command = %v, want gather stone", outcome.Fields["command"])
+	}
+	if _, carries := outcome.Fields["speech"]; carries {
+		t.Fatalf("accepted seed outcome retains the empty speech sentinel: %#v", outcome.Fields)
+	}
+}
+
 // runDomainEvent routes one `domain.event` case to the producer that owns its
 // rule. The family is shared by the world observations, the player and outcome
 // records, the inventory and container publications, the remote-player and
-// companion observations, the hostile and passive mob observations and the
-// projectile and item-drop observations, so the rule name is the only
-// discriminator the manifest carries, and a rule no producer names fails the
-// run rather than falling back to one that cannot execute it.
+// companion observations, the hostile and passive mob observations, the
+// projectile and item-drop observations and the closed chat events, so the
+// rule name is the only discriminator the manifest carries, and a rule no
+// producer names fails the run rather than falling back to one that cannot
+// execute it.
 func runDomainEvent(c CaseSpec, input []byte) (Outcome, []byte, error) {
 	envelope, err := domainEventDecodeRule(input)
 	if err != nil {
@@ -1973,6 +2021,8 @@ func runDomainEvent(c CaseSpec, input []byte) (Outcome, []byte, error) {
 		domainEventObjectsRuleProjectileDespawn, domainEventObjectsRuleItemDropUpserts,
 		domainEventObjectsRuleItemDropRemoves:
 		return runDomainEventObjects(c, input)
+	case domainEventChatRuleChat:
+		return runDomainEventChat(c, input)
 	default:
 		return Outcome{}, nil, fmt.Errorf("runtime-oracle: case %s names unknown rule %q", c.ID, envelope.Rule)
 	}
