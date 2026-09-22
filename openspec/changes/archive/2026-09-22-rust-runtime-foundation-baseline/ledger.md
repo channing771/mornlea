@@ -1004,3 +1004,20 @@ owns any issue that remains actionable after nodes 5.1–5.9.
   Preserve `.openspec.yaml` and all linked packets; the historical broad
   `2026-09-21-rust-runtime-foundation` archive remains unchanged. The following
   archive commit and separate post-archive evidence commit complete publication.
+
+## 2026-09-22 — Post-archive validation
+
+- Final archive commit SHA: `b24b15da5b7b26e9861f0bf912e076ae12685d77`
+  (`docs(openspec): archive reviewed runtime foundation baseline`).
+- At that exact commit, `git status --short` was empty and `git diff --check`
+  exited zero. `openspec validate --all --strict --no-interactive` exited zero:
+  125 passed, 0 failed.
+- The active change path is absent; the dated archive, its `.openspec.yaml`,
+  and the canonical specification are present. The historical broad archive
+  has no diff against the green repair SHA. All 29 task checkboxes are complete.
+- This separate evidence-only commit records the known archive SHA without
+  rewriting it. The controller reruns the same post-archive diff/strict gates
+  at the evidence commit and reports that final HEAD in the handoff.
+- Keep branch `codex/align-runtime-migration-plans` and the user's checkout in
+  place. No push, merge, pull request, workspace deletion or successor-runtime
+  acceptance is included in this closeout.
