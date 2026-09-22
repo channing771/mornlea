@@ -261,3 +261,24 @@
   is the four-field parts literal (mandated name, inherent to an absence
   test).
 - Architecture skill: no change.
+
+## 2026-09-22 — node 2.4 acceptance
+
+- Implementation commit: `4ec84951` (`test(domain): cover event batch
+  bounds`, tests + guide only, no production change). First-run outcome
+  recorded per the brief's nuance: all eleven tests passed immediately
+  because nodes 2.1/2.2 already implemented the frozen cap-first algorithm —
+  they land as regression coverage; no manufactured red, no discrepancy.
+- Controller gates at `4ec84951`: `cargo fmt --all --check` ok;
+  `--test resource_bounds` 16 passed / 0 failed (5 pre-existing + 11 new);
+  full `-p mornlea_domain --locked` 247 passed / 0 failed across all targets;
+  audit comment gates ok; `git diff --check` clean.
+- Review ruling: spec compliant, quality Approved, 0 Critical, 0 Important,
+  0 Minor. Reviewer verified the precedence proof is non-vacuous in all
+  eleven cases (the swap is a genuine adjacent inversion the `windows(2)`
+  scan would reject as `InvalidStateOrder` if the cap check moved), the
+  1-based drop-X scheme preserves derived `DropId` order across the span,
+  and the guide's fifteen-batch count and wire ceilings are correct.
+- This node closes the reviewer-noted gap from 2.1/2.2 (the `BatchTooLarge`
+  branch now has direct 4,097-rejection coverage for all eleven new batches).
+- Architecture skill: no change.
