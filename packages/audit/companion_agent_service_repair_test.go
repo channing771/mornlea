@@ -14,44 +14,40 @@ import (
 
 const companionAgentWorkflowFixture = `name: fixture
 jobs:
-  test:
+  merge-gate:
     if: ${{ always() }}
-    needs: [native-macos, integration]
-    runs-on: ubuntu-latest
+    needs: [native-linux, integration-server]
+    runs-on: ubuntu-24.04
     steps:
       - name: summary
         run: |
-          test "${{ needs.integration.result }}" = success
-  native-macos:
-    runs-on: macos-latest
+          test "${{ needs.integration-server.result }}" = success
+  native-linux:
+    runs-on: ubuntu-24.04
     steps: []
   unrelated-job:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps: []
-  integration:
-    needs: native-macos
-    runs-on: macos-latest
+  integration-server:
+    needs: native-linux
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.12'
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
         with:
           version: '0.12.5'
           enable-cache: true
           cache-dependency-glob: |
             packages/agent/pyproject.toml
             packages/agent/uv.lock
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         with:
-          name: native-macos-${{ github.sha }}
-          path: packages/engine/target/release
-      - name: verify artifact
-        run: scripts/ci/verify-native-artifact.sh
-      - name: check
-        run: make companion-agent-check
+          name: native-linux-${{ github.sha }}
+          path: .
       - name: integration
-        run: make companion-agent-integration
+        run: make ci-integration-server CI_CANDIDATE_SHA="$GITHUB_SHA"
 `
 
 func TestCompanionAgentCIGateMutations(t *testing.T) {
@@ -65,23 +61,21 @@ func TestCompanionAgentCIGateMutations(t *testing.T) {
 		new  string
 		want string
 	}{
-		{"integration dependency", "needs: native-macos\n    runs-on: macos-latest", "needs: quality\n    runs-on: macos-latest", "needs"},
-		{"macos runner", "runs-on: macos-latest\n    steps:\n      - uses: actions/setup-python", "runs-on: ubuntu-latest\n    steps:\n      - uses: actions/setup-python", "macos-latest"},
+		{"integration dependency", "needs: native-linux\n    runs-on: ubuntu-24.04", "needs: quality\n    runs-on: ubuntu-24.04", "needs"},
+		{"linux runner", "runs-on: ubuntu-24.04\n    steps:\n      - uses: actions/setup-python", "runs-on: macos-15\n    steps:\n      - uses: actions/setup-python", "ubuntu-24.04"},
 		{"python version", "python-version: '3.12'", "python-version: '3.13'", "Python 3.12"},
 		{"python version type", "python-version: '3.12'", "python-version: 3.12", "string"},
 		{"uv version", "version: '0.12.5'", "version: 'latest'", "uv 0.12.5"},
 		{"uv cache type", "enable-cache: true", "enable-cache: 'true'", "bool"},
 		{"pyproject cache dependency", "            packages/agent/pyproject.toml\n", "", "pyproject.toml"},
 		{"lock cache dependency", "            packages/agent/uv.lock\n", "", "uv.lock"},
-		{"same sha artifact", "name: native-macos-${{ github.sha }}", "name: native-macos-latest", "same-SHA"},
-		{"verify script missing", "      - name: verify artifact\n        run: scripts/ci/verify-native-artifact.sh\n", "", "校验脚本"},
-		{"verify script renamed", "        run: scripts/ci/verify-native-artifact.sh", "        run: scripts/ci/verify-native-artifact-fork.sh", "校验脚本"},
-		{"python check", "        run: make companion-agent-check", "        run: make companion-agent-check-disabled", "companion-agent-check"},
-		{"process integration", "        run: make companion-agent-integration", "        run: make companion-agent-integration-disabled", "companion-agent-integration"},
+		{"same sha artifact", "name: native-linux-${{ github.sha }}", "name: native-linux-latest", "same-SHA"},
+		{"artifact root", "          path: .", "          path: wrong", "path"},
+		{"integration command", `        run: make ci-integration-server CI_CANDIDATE_SHA="$GITHUB_SHA"`, "        run: make ci-integration-server-disabled", "make ci-integration-server"},
 		{"summary always condition missing", "    if: ${{ always() }}\n", "", "always"},
 		{"summary always condition changed", "    if: ${{ always() }}", "    if: ${{ success() }}", "always"},
-		{"summary dependency", "needs: [native-macos, integration]", "needs: [native-macos]", "test job needs integration"},
-		{"summary assertion", "test \"${{ needs.integration.result }}\" = success", "test \"${{ needs.quality.result }}\" = success", "integration result"},
+		{"summary dependency", "needs: [native-linux, integration-server]", "needs: [native-linux]", "merge-gate job needs integration"},
+		{"summary assertion", "test \"${{ needs.integration-server.result }}\" = success", "test \"${{ needs.quality.result }}\" = success", "integration result"},
 	}
 	for _, mutation := range mutations {
 		t.Run(mutation.name, func(t *testing.T) {
@@ -90,13 +84,15 @@ func TestCompanionAgentCIGateMutations(t *testing.T) {
 		})
 	}
 
-	verify := `      - name: verify artifact
-        run: scripts/ci/verify-native-artifact.sh
+	download := `      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: native-linux-${{ github.sha }}
+          path: .
 `
-	check := `      - name: check
-        run: make companion-agent-check
+	command := `      - name: integration
+        run: make ci-integration-server CI_CANDIDATE_SHA="$GITHUB_SHA"
 `
-	mutatedOrder := replaceCompanionFixtureOnce(t, companionAgentWorkflowFixture, verify+check, check+verify)
+	mutatedOrder := replaceCompanionFixtureOnce(t, companionAgentWorkflowFixture, download+command, command+download)
 	assertCompanionViolationContains(t, companionAgentWorkflowViolations([]byte(mutatedOrder)), "before")
 }
 
