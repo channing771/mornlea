@@ -1645,6 +1645,154 @@ func TestDomainEventChatIllegalFieldCombinationsAreRejected(t *testing.T) {
 	}
 }
 
+// domainEventChatSelection is this producer's exact reviewed registration:
+// the 44 committed case specifications with digests proven against the files
+// on disk, plus the provenance paths those rules are read from. The shared
+// manifest-candidate helper consumes it, so the candidate this node publishes
+// is assembled from the same reviewed `CaseSpec` values the committed corpus
+// freezes rather than from a second rendering.
+func domainEventChatSelection(t *testing.T, root string) domainEventSelection {
+	t.Helper()
+	return domainEventSelection{
+		Cases:   domainEventChatCorpusCases(t, root),
+		Sources: append([]string(nil), domainEventChatFamilySources...),
+	}
+}
+
+// The frozen manifest counts this node's candidate must reach: 533 total
+// `mornlea_domain` cases, 321 of them registered under the shared
+// `domain.event` family, and a family provenance union of 30 paths.
+const (
+	domainEventChatMergedDomainTotal = 533
+	domainEventChatMergedFamilyTotal = 321
+	domainEventChatMergedSourceTotal = 30
+)
+
+// TestDomainEventChatManifestCandidateClosesTheEventPartition merges this
+// producer's selection into the tracked manifest, refreshes the execution
+// baseline revision once to the captured checkout SHA, proves the merged
+// candidate closes the exact 533-case domain partition, and publishes the
+// candidate for controller review. A base that already registers the chat
+// corpus accepts an idempotent re-merge of the same reviewed specs, so the
+// same test gate covers both the first publication and every later ordinary
+// run.
+func TestDomainEventChatManifestCandidateClosesTheEventPartition(t *testing.T) {
+	root := mustRepoRoot(t)
+	before := computeTrackedCorpusDigest(t, root)
+	defer assertTrackedCorpusUnchanged(t, root, before)
+
+	base := loadRealManifest(t, root)
+	selection := domainEventChatSelection(t, root)
+	merged := mergeDomainEventSelections(t, root, base, selection)
+	// This node refreshes the execution baseline once: the captured checkout
+	// SHA is the single source revision the manifest's `source_revision` and
+	// the Go `BaselineSourceRevision` constant must both carry from here on.
+	merged.SourceRevision = BaselineSourceRevision
+
+	baseIDs := make(map[string]bool, len(base.Cases))
+	for _, c := range base.Cases {
+		baseIDs[c.ID] = true
+	}
+	mergedByID := make(map[string]CaseSpec, len(merged.Cases))
+	for _, c := range merged.Cases {
+		mergedByID[c.ID] = c
+	}
+	added := 0
+	for _, want := range selection.Cases {
+		got, ok := mergedByID[want.ID]
+		if !ok {
+			t.Fatalf("merged manifest drops chat case %s", want.ID)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("merged manifest rewrites chat case %s", want.ID)
+		}
+		if !baseIDs[want.ID] {
+			added++
+		}
+	}
+	if added != 0 && added != domainEventChatCaseTotal {
+		t.Fatalf("merged manifest adds %d new chat cases, want 0 (already registered) or %d", added, domainEventChatCaseTotal)
+	}
+	if len(merged.Cases) != len(base.Cases)+added {
+		t.Fatalf("merged manifest carries %d cases, want %d", len(merged.Cases), len(base.Cases)+added)
+	}
+
+	domainTotal, familyTopLevel := 0, 0
+	for _, c := range merged.Cases {
+		if c.RustConsumer == domainEventChatConsumer {
+			domainTotal++
+		}
+		if c.Family == domainEventChatFamily {
+			familyTopLevel++
+		}
+	}
+	if domainTotal != domainEventChatMergedDomainTotal {
+		t.Fatalf("merged manifest registers %d mornlea_domain cases, want %d", domainTotal, domainEventChatMergedDomainTotal)
+	}
+	if familyTopLevel != domainEventChatMergedFamilyTotal {
+		t.Fatalf("merged manifest registers %d domain.event cases, want %d", familyTopLevel, domainEventChatMergedFamilyTotal)
+	}
+	family, ok := domainEventFamilySpec(merged)
+	if !ok {
+		t.Fatalf("merged manifest has no %s family", domainEventChatFamily)
+	}
+	if len(family.Cases) != domainEventChatMergedFamilyTotal {
+		t.Fatalf("%s lists %d cases, want %d", domainEventChatFamily, len(family.Cases), domainEventChatMergedFamilyTotal)
+	}
+	if len(family.Sources) != domainEventChatMergedSourceTotal {
+		t.Fatalf("%s records %d provenance sources, want %d", domainEventChatFamily, len(family.Sources), domainEventChatMergedSourceTotal)
+	}
+	// The provenance union is the exact sorted 30-path set: no duplicate
+	// path, every recorded digest matching disk, and the five additions the
+	// three producer stages contributed all present.
+	paths := make(map[string]bool, len(family.Sources))
+	for index, source := range family.Sources {
+		if index > 0 && source.Path <= family.Sources[index-1].Path {
+			t.Fatalf("%s provenance is not strictly sorted at %s", domainEventChatFamily, source.Path)
+		}
+		if paths[source.Path] {
+			t.Fatalf("%s provenance lists the path %s twice", domainEventChatFamily, source.Path)
+		}
+		paths[source.Path] = true
+		hash, err := hashFile(filepath.Join(root, filepath.FromSlash(source.Path)))
+		if err != nil {
+			t.Fatalf("hash provenance source %s: %v", source.Path, err)
+		}
+		if hash != source.SHA256 {
+			t.Fatalf("provenance source %s records %s, disk has %s", source.Path, source.SHA256, hash)
+		}
+	}
+	for _, required := range []string{
+		"packages/shared/core/drop.go",
+		"packages/shared/network/protocol/message_drop.go",
+		"packages/shared/network/protocol/message_hostile.go",
+		"packages/shared/network/protocol/message_passive.go",
+		"packages/shared/network/protocol/message_projectile.go",
+	} {
+		if !paths[required] {
+			t.Fatalf("%s provenance misses the required path %s", domainEventChatFamily, required)
+		}
+	}
+	if merged.SourceRevision != BaselineSourceRevision {
+		t.Fatalf("merged manifest source_revision %s does not match the Go baseline %s", merged.SourceRevision, BaselineSourceRevision)
+	}
+
+	exportRoot := strings.TrimSpace(os.Getenv(runtimeOracleExportDirEnv))
+	candidate := writeDomainEventManifestCandidate(t, root, exportRoot, merged)
+	if exportRoot != "" && candidate == "" {
+		t.Fatalf("manifest candidate export was rejected for %s", exportRoot)
+	}
+	if exportRoot != "" {
+		reloaded, err := LoadInventory(candidate)
+		if err != nil {
+			t.Fatalf("reload published candidate: %v", err)
+		}
+		if reloaded.SourceRevision != BaselineSourceRevision {
+			t.Fatalf("published candidate source_revision %s does not match the Go baseline %s", reloaded.SourceRevision, BaselineSourceRevision)
+		}
+	}
+}
+
 // TestDomainOracle_event_chat is the topic-named entry point the domain plan
 // names for this node. It delegates to the same executed table, so the two
 // filters select one source of expected results rather than two.

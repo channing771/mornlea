@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "source_revision": "60c476645ee6dae1f6392336a7f3c593d2163ae3",
+  "source_revision": "736af2f4b8bc3cbea4648733aa07e5ef9ce0e9d5",
   "identities": {
     "protocol": 45,
     "chunk_schema": 9,
@@ -571,6 +571,50 @@
         "domain.event/1/block-changes-unsorted",
         "domain.event/1/block-changes-y-above-world",
         "domain.event/1/block-changes-y-below-world",
+        "domain.event/1/chat-accepted",
+        "domain.event/1/chat-accepted-command-1024-bytes",
+        "domain.event/1/chat-accepted-command-1025-bytes",
+        "domain.event/1/chat-accepted-empty-command",
+        "domain.event/1/chat-accepted-reason-not-none",
+        "domain.event/1/chat-accepted-spaced-companion-name",
+        "domain.event/1/chat-accepted-speech-leak",
+        "domain.event/1/chat-accepted-zero-companion",
+        "domain.event/1/chat-event-id-zero",
+        "domain.event/1/chat-invalid-format-leaks-command",
+        "domain.event/1/chat-invalid-format-leaks-companion-id",
+        "domain.event/1/chat-invalid-format-leaks-companion-name",
+        "domain.event/1/chat-kind-unknown",
+        "domain.event/1/chat-not-following-empty-command",
+        "domain.event/1/chat-player-id-zero",
+        "domain.event/1/chat-player-name-untrimmed",
+        "domain.event/1/chat-queue-full-missing-companion",
+        "domain.event/1/chat-rejected-invalid-format",
+        "domain.event/1/chat-rejected-not-following",
+        "domain.event/1/chat-rejected-queue-full",
+        "domain.event/1/chat-rejected-reserved-reason-three",
+        "domain.event/1/chat-rejected-unknown-companion",
+        "domain.event/1/chat-speech",
+        "domain.event/1/chat-speech-256-bytes",
+        "domain.event/1/chat-speech-257-bytes",
+        "domain.event/1/chat-speech-empty",
+        "domain.event/1/chat-speech-has-command",
+        "domain.event/1/chat-speech-reason-not-none",
+        "domain.event/1/chat-task-completed",
+        "domain.event/1/chat-task-event-speech-leak",
+        "domain.event/1/chat-task-failed-invalid-plan",
+        "domain.event/1/chat-task-failed-inventory-full",
+        "domain.event/1/chat-task-failed-path-unreachable",
+        "domain.event/1/chat-task-failed-planner-unavailable",
+        "domain.event/1/chat-task-failed-reason-fifteen",
+        "domain.event/1/chat-task-failed-reason-twenty-one",
+        "domain.event/1/chat-task-failed-world-changed",
+        "domain.event/1/chat-task-progress",
+        "domain.event/1/chat-task-started",
+        "domain.event/1/chat-task-started-reason-not-none",
+        "domain.event/1/chat-task-stopped",
+        "domain.event/1/chat-task-timed-out",
+        "domain.event/1/chat-unknown-companion-invalid-name",
+        "domain.event/1/chat-unknown-companion-leaks-id",
         "domain.event/1/chest-state-furnace-reference",
         "domain.event/1/chest-state-seed",
         "domain.event/1/chest-state-slot-above-array",
@@ -7744,6 +7788,842 @@
       "expected": {
         "path": "testdata/runtime-migration/cases/domain/event_world/block-changes-y-below-world.expected.json",
         "sha256": "sha256:cd71b852fb8bcfaff64d60c0614cc8c74576240d47fb7d1e71405f2a2c915c25"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-accepted",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-accepted.input.json",
+        "sha256": "sha256:b79446ca1b08ef9dc8c69cbc0d7531a4475204be3c8f30ae056f20da3f8da1af"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-accepted.expected.json",
+        "sha256": "sha256:1b37f7af21e05968d058da74a140bf752b8969021f773209f61998b61d65ea85"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-accepted-command-1024-bytes",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-accepted-command-1024-bytes.input.json",
+        "sha256": "sha256:da15571dfa407d41bbcb8709094af38fbaa712dfc1a5be69b0fa055d6028cfda"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-accepted-command-1024-bytes.expected.json",
+        "sha256": "sha256:5b4a48b48e6b4e9994d453da1a6eff47dca63e77da61cccab5506c20a7e2bda2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-accepted-command-1025-bytes",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-accepted-command-1025-bytes.input.json",
+        "sha256": "sha256:e4feb19e07aa4090a4577b03dea1b7e0370dad89aacbb2bd74441791321a6d01"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-accepted-command-1025-bytes.expected.json",
+        "sha256": "sha256:9079a6eb458ae1b8e592b32c70b43d26c8a0cad05ab7067c3eabed33360de307"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-accepted-empty-command",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-accepted-empty-command.input.json",
+        "sha256": "sha256:9f740190a849c972442ecf0c0b738e4f29440ea7cd465498c91ec09410cd710f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-accepted-empty-command.expected.json",
+        "sha256": "sha256:1b1cda923ebabfae537f87064a995e2904184c0c7f2a8043b6bcb880d0124bcb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-accepted-reason-not-none",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-accepted-reason-not-none.input.json",
+        "sha256": "sha256:b1747061206a492daa04b5e109a1f387cee4716cfcaca9689148611183201cac"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-accepted-reason-not-none.expected.json",
+        "sha256": "sha256:37c3018d8d31e5ccb6db3cbfbda89f1bfb62f247370916b32643b54539a5cfd3"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-accepted-spaced-companion-name",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-accepted-spaced-companion-name.input.json",
+        "sha256": "sha256:b518f63a1c386820a3032640ce22082ecc4f0d3eca5ed826932a6e9c1514aec2"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-accepted-spaced-companion-name.expected.json",
+        "sha256": "sha256:b465f83ead3124fbff0c58cf96a1a7ec381e03db277431472d39c30905bfe5dd"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-accepted-speech-leak",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-accepted-speech-leak.input.json",
+        "sha256": "sha256:2c77fd8695458e30abee1322f389300effce54d78054be0cdf32ff2dc9c6e442"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-accepted-speech-leak.expected.json",
+        "sha256": "sha256:7d92e793734f33188b02608b1a1b70cae47a7468cf945e6a154ba73f64968f3e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-accepted-zero-companion",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-accepted-zero-companion.input.json",
+        "sha256": "sha256:65cf9539dfbd4d5c5373a8e6a791091f8733cf066f7bdd69dcfb2e85a589904d"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-accepted-zero-companion.expected.json",
+        "sha256": "sha256:86f61aeb5cfa5a084d8cec39018fc0fce18b78948224759d46d9798847ae4fdf"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-event-id-zero",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-event-id-zero.input.json",
+        "sha256": "sha256:8704a37094cf743d35678a706bda7264be54b3681df21ca18aab372ab6f3f7e4"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-event-id-zero.expected.json",
+        "sha256": "sha256:f07c6344df9c54a560f0497a0a155c84cf18e030d80948e87443005dc78b9c5f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-invalid-format-leaks-command",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-invalid-format-leaks-command.input.json",
+        "sha256": "sha256:3277cf19ea1e85ee67462df9dbc73ba8bda0e1820a37f371f85966a463e13e86"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-invalid-format-leaks-command.expected.json",
+        "sha256": "sha256:e59f582aa5ef0c27861a5351919b2f83e560d062c7cb79ebf41e7b1c6e679d82"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-invalid-format-leaks-companion-id",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-invalid-format-leaks-companion-id.input.json",
+        "sha256": "sha256:688d717855066375cf35e96d4321b931957647f9d265ba557e88b62f5de272e9"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-invalid-format-leaks-companion-id.expected.json",
+        "sha256": "sha256:d98b07de8467ffe8b6ac514224b64fa8fb1b6301c1975e4b09989deeb648aa5f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-invalid-format-leaks-companion-name",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-invalid-format-leaks-companion-name.input.json",
+        "sha256": "sha256:bd87f90fac73b34b41f731c626b8acac041d3ab89c91353e264df000429fd20f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-invalid-format-leaks-companion-name.expected.json",
+        "sha256": "sha256:0082f752d2eeb7fcfbb7382cb8e2b175e8a8cb31549baeffaeee891c68ae1f87"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-kind-unknown",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-kind-unknown.input.json",
+        "sha256": "sha256:a315a8e3e4f74bbae865fb6555d5860be5d71c2da4ceaf0cb6937582b0efd92b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-kind-unknown.expected.json",
+        "sha256": "sha256:333959143aa55471f8be726803afea4e8ca44c598caf0d004466608dd70441fa"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-not-following-empty-command",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-not-following-empty-command.input.json",
+        "sha256": "sha256:c299866072f0026027d45da3a3151b58debb3f24d44640805354e369fa6f7109"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-not-following-empty-command.expected.json",
+        "sha256": "sha256:c4ac1dde490a573ed990fce19504fea4948cce28472e5e4d343fc0a530c8a391"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-player-id-zero",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-player-id-zero.input.json",
+        "sha256": "sha256:8c323a50c753cb9bf4a8eee86fb7bc69524818b902e91e8aa9475d30bc4bc03a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-player-id-zero.expected.json",
+        "sha256": "sha256:43ffea79663679425b4a91390a21347852df2e9fdaa173b4f01ea07a31c6e193"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-player-name-untrimmed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-player-name-untrimmed.input.json",
+        "sha256": "sha256:dc59a483f617d19f1d7c8abbde241d4c16025f95c8495d1068739ae292611ef4"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-player-name-untrimmed.expected.json",
+        "sha256": "sha256:713e0850b7046464ca9197e347eaeac25414e80ad8865182abb9312d995d81a5"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-queue-full-missing-companion",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-queue-full-missing-companion.input.json",
+        "sha256": "sha256:87c47dd8f910ecb2bf95079be1cd4dd18ef7bdd81398301bba137123f95ef1f1"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-queue-full-missing-companion.expected.json",
+        "sha256": "sha256:e5ec6617d9d20fdd3fd8770729ef9377e037a262fd78755107707009b6202bae"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-rejected-invalid-format",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-rejected-invalid-format.input.json",
+        "sha256": "sha256:641e3f2eaf76d59b671d1409dbcf7f2e51395a2a54a5755958155cde85531492"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-rejected-invalid-format.expected.json",
+        "sha256": "sha256:e055ea25f00d3b1055876cb1e171036d9b2e9f60578ecad62405041e8d193b0e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-rejected-not-following",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-rejected-not-following.input.json",
+        "sha256": "sha256:6746a04e78e8a286ab2d1f5e6f75dc8722958778781d7845cac3798835d1df0d"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-rejected-not-following.expected.json",
+        "sha256": "sha256:001f706263b32d36b975b99ee10b35850dca6261e3210aa2ee55e7dba45784a8"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-rejected-queue-full",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-rejected-queue-full.input.json",
+        "sha256": "sha256:3ee54c9073d52bfe43a33b547a7f7723f21f3652c9521fa67bf4566fe018f0bf"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-rejected-queue-full.expected.json",
+        "sha256": "sha256:ef4b3dc898c7cf372db2985fdce769ee653490400dec38440ae1852c6d4510ce"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-rejected-reserved-reason-three",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-rejected-reserved-reason-three.input.json",
+        "sha256": "sha256:eb71102d024e6a87bb5982a5e2a2fd935a6a83afd3203f01576a6739530c9949"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-rejected-reserved-reason-three.expected.json",
+        "sha256": "sha256:d411fc2a078a7662120f2fd08f83ee560e373410912e6707bf9a06ddf827e6bb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-rejected-unknown-companion",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-rejected-unknown-companion.input.json",
+        "sha256": "sha256:faab8ceb02daa3e76992a6be64ae2f494f1ff974dd08889090a6e28fd07dec1b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-rejected-unknown-companion.expected.json",
+        "sha256": "sha256:b8d10c735f2731b9e3f35b9bfcf68223bfd933fccec2026d08f9c6c0022c60d7"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-speech",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-speech.input.json",
+        "sha256": "sha256:8bfd1bff59d3d23ee38964872bc470ce36fb480e31f7689c4ae09871e751f027"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-speech.expected.json",
+        "sha256": "sha256:fa41795b8f946bb20c36953195fc2c157df19a1815c1302286265e9651e0f6a4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-speech-256-bytes",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-speech-256-bytes.input.json",
+        "sha256": "sha256:9da164d8c69412bb554175b318e358a26a0102d0da3cc8c6288d686c92c7cbdc"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-speech-256-bytes.expected.json",
+        "sha256": "sha256:8f0f4ae9b2addee7734b32e90f269f4408dc80e1375ff6ffc4284edd08282ce0"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-speech-257-bytes",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-speech-257-bytes.input.json",
+        "sha256": "sha256:a8b111cc3c013ce3210adc8e0b1d28e53baadd8984dc20074d269785f3a1683e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-speech-257-bytes.expected.json",
+        "sha256": "sha256:74ed5212ba6a3d24177e5db500300b9956c261b0daac55cff314a1e388820372"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-speech-empty",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-speech-empty.input.json",
+        "sha256": "sha256:ea210cc501b90f3ddf646754d174aea07854df9387a14cd135335d7c8fe4a274"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-speech-empty.expected.json",
+        "sha256": "sha256:137e5249d91a6a6577c6b710f3f255f4711644633fe26da3fcd07ff6f8fdbc75"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-speech-has-command",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-speech-has-command.input.json",
+        "sha256": "sha256:8eda641b8f5ac1b3ab94da9ca2cce30057aba77957559b8c41aba977ffa51d67"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-speech-has-command.expected.json",
+        "sha256": "sha256:4e4d0de369c4167cc1f7b161b8ba51cd9cab43b22d3c637738fcee0cf54cb34f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-speech-reason-not-none",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-speech-reason-not-none.input.json",
+        "sha256": "sha256:8b8d04ccaff1374f916c6b1204bc0b61a57a3e92d2bfe97a5aae07f67ecb4068"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-speech-reason-not-none.expected.json",
+        "sha256": "sha256:259cb1265f5c4620ecf90dccbf1b60c80785aa8e5e3e19b1b8ddf0bdf73c6961"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-task-completed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-completed.input.json",
+        "sha256": "sha256:0895dda231e7dca61e571044c1af90ea6b7d0955c76a1ba18b4af5cc4f767352"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-completed.expected.json",
+        "sha256": "sha256:1f069842a3ae80ddc6d283b0feb34a5245d955fb92aee438baf8b7552fefc63f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-task-event-speech-leak",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-event-speech-leak.input.json",
+        "sha256": "sha256:f9cf6e5eb6a01f59ab5751e98bafe498983f81be11582f795b3ee0342359a102"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-event-speech-leak.expected.json",
+        "sha256": "sha256:8d7e30f13129010f723df46a99e2f676b74b463044a6edd770995b6dee65e107"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-task-failed-invalid-plan",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-failed-invalid-plan.input.json",
+        "sha256": "sha256:3355b8bdf24e86f9c763b9a80a643133dcffc9a87adec3e683f063e1ef9e30fb"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-failed-invalid-plan.expected.json",
+        "sha256": "sha256:c8e5cb074f7ad948cd3b352a5bb6183416332954e2dbeaac27a31f74c00ee1d6"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-task-failed-inventory-full",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-failed-inventory-full.input.json",
+        "sha256": "sha256:0098b6f12ec66eb497c9e9025c27cf5bce01fd150742eb1947b66a643270f069"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-failed-inventory-full.expected.json",
+        "sha256": "sha256:ddc80785728b654ee0cfa28d1ac2e0cf3f4b146d3374f3d9e3c438108729b806"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-task-failed-path-unreachable",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-failed-path-unreachable.input.json",
+        "sha256": "sha256:821efbf320141ce368276a55867f2470e1e0a8691ad0981e03d1761496e9698e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-failed-path-unreachable.expected.json",
+        "sha256": "sha256:99d46d0d67c2268f5e9b63a8aa8489ba82e2888f86ac0f85b07fd26399678f53"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-task-failed-planner-unavailable",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-failed-planner-unavailable.input.json",
+        "sha256": "sha256:c7b8d99c59322cdf0efcc2d3d009a8df21d500f594a6a9a2acf920509628fbb9"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-failed-planner-unavailable.expected.json",
+        "sha256": "sha256:bfe064f75840fa8561aeb7128f4aa1a3e5025e717187bde544e44a4a0e5da383"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-task-failed-reason-fifteen",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-failed-reason-fifteen.input.json",
+        "sha256": "sha256:e9c6ba1914a5aa0119741acc87f27c1cd791873eb5396ed02e5dc51ef4753f21"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-failed-reason-fifteen.expected.json",
+        "sha256": "sha256:e9fc6c16d5b5833e8f13cbcbe0230ad45ce5fdf73acf1de2fb8d05f4a18f83ae"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-task-failed-reason-twenty-one",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-failed-reason-twenty-one.input.json",
+        "sha256": "sha256:3feee72c7d36d36d5d9d04ae538cc7e0dc4415530b13a45c71ee6e9b677154a5"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-failed-reason-twenty-one.expected.json",
+        "sha256": "sha256:ffb0380bea35d12cbd003d34f944de92b5c296d69e28997923f7e1fb581062ab"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-task-failed-world-changed",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-failed-world-changed.input.json",
+        "sha256": "sha256:e32d0933010d92e71dcfba03b8475f53a3661143ef70f7075345e8eadb77bb73"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-failed-world-changed.expected.json",
+        "sha256": "sha256:83d6f4806fa0c27c7b3d9f239437394ad4ce076eb1e7468df401f57eec7eb44d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-task-progress",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-progress.input.json",
+        "sha256": "sha256:0021ade770fffff8d48d1fe84d53b77a85ece5670fc4a2d088e78190e818d19b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-progress.expected.json",
+        "sha256": "sha256:59a61caa5f5919fcb698d7271f637a4b8103420a8dc4c60d0f887eabf5f40ce3"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-task-started",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-started.input.json",
+        "sha256": "sha256:8111ae86b13c6af791fdb705e381c2f603563760cba8959e1e9600b61e84b870"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-started.expected.json",
+        "sha256": "sha256:fafa390f7bebe82ace6a444859c92ec76b2454d1f3dd1db46568e8166fa659de"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-task-started-reason-not-none",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-started-reason-not-none.input.json",
+        "sha256": "sha256:1c31e554cd975e1b450748b4564e59b80b8d8d5645be8e6478591ccfc9468dd8"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-started-reason-not-none.expected.json",
+        "sha256": "sha256:c378b63f16364e0c6461138ac4bc27a6accf161ac4a87b78ba00ea71534b8f72"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-task-stopped",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-stopped.input.json",
+        "sha256": "sha256:6286d3c43de3e328ec26ed5c75d98f59960cb8e86bf4d824fcc4f3e6647459b7"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-stopped.expected.json",
+        "sha256": "sha256:9d2fec894d01d6603b58b8134cd5cb5cc38ac11e92721d33cded0d8f481b0ba5"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-task-timed-out",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-timed-out.input.json",
+        "sha256": "sha256:4fcab0317edd4aba5745514a7240536bd8d4d2fed7698c36e31a1247d90e7bac"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-task-timed-out.expected.json",
+        "sha256": "sha256:05d5ba0083a053f35c56f2e847772843bcf6db3ef82e2a6a733f38dccc4f6b18"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-unknown-companion-invalid-name",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-unknown-companion-invalid-name.input.json",
+        "sha256": "sha256:db4bfa2d2f0a2faf0092709b57db00bef1b4578e799b1fe8391a9740c0dcebed"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-unknown-companion-invalid-name.expected.json",
+        "sha256": "sha256:c9001ec709426182bc36b6e039edd5efee18f85b9187709511b0f3ae623203b8"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "domain.event/1/chat-unknown-companion-leaks-id",
+      "family": "domain.event",
+      "version": "1",
+      "operation": "admit",
+      "input": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-unknown-companion-leaks-id.input.json",
+        "sha256": "sha256:6f45879d5bc4c4b8233647104ae3eed291fbd4982801fb92488f259b2d9e23bb"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/domain/event_chat/chat-unknown-companion-leaks-id.expected.json",
+        "sha256": "sha256:8272b82e52ccaabf6d3a2e004d934e6c71db7a5e23191c430a6051eefe9b8760"
       },
       "checkpoints": [
         "0"

@@ -2412,12 +2412,15 @@ func domainEventMobsSelection(t *testing.T, root string) domainEventSelection {
 	}
 }
 
-// The frozen manifest counts this node's candidate must reach: 444 total
-// `mornlea_domain` cases, 232 of them registered under the shared
-// `domain.event` family.
+// The frozen manifest counts this producer's re-merge must reach now that
+// the domain corpus partition is closed: 533 total `mornlea_domain` cases,
+// 321 of them registered under the shared `domain.event` family. The
+// node-era intermediate totals (444 and 232) were correct while the corpus
+// was still growing; the closed partition is the final target every
+// producer's merge gate shares.
 const (
-	domainEventMobsMergedDomainTotal = 444
-	domainEventMobsMergedFamilyTotal = 232
+	domainEventMobsMergedDomainTotal = 533
+	domainEventMobsMergedFamilyTotal = 321
 )
 
 // TestDomainEventMobsManifestCandidateRegistersEveryMobsCase merges this

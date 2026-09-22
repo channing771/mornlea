@@ -36,6 +36,9 @@ pub mod event_mobs;
 #[path = "corpus_domain/event_objects.rs"]
 pub mod event_objects;
 
+#[path = "corpus_domain/event_chat.rs"]
+pub mod event_chat;
+
 use runtime_corpus::{CorpusConsumer, FrozenCase, try_load_cases_from_root};
 use std::collections::HashSet;
 use support::{
@@ -48,8 +51,8 @@ use support::{
 /// `command_order` tests remain the domain ordering proof.
 const EXTERNAL_AUTHORITY_CASE_ID: &str = "domain.input/45/session-sequence-arrival";
 
-/// Exact integrated total across the ten closed topics.
-const TOTAL_DOMAIN_CASES: usize = 489;
+/// Exact integrated total across the eleven closed topics.
+const TOTAL_DOMAIN_CASES: usize = 533;
 
 /// One closed topic adapter: its frozen count, ownership predicate, and
 /// executor. Counts are consumed from each topic's own frozen constant so the
@@ -123,6 +126,12 @@ const TOPICS: &[TopicAdapter] = &[
         exact_count: event_objects::EXPECTED_COUNT,
         owns: event_objects::owns,
         execute: event_objects::execute,
+    },
+    TopicAdapter {
+        name: "event_chat",
+        exact_count: event_chat::EXPECTED_COUNT,
+        owns: event_chat::owns,
+        execute: event_chat::execute,
     },
 ];
 
@@ -338,6 +347,112 @@ fn corpus_domain_rejects_mutated_input_consumer_at_dispatch() {
     }
 }
 
+/// Proves one frozen expectation is semantically load-bearing: it clones the
+/// loaded `FrozenCase`, applies exactly one mutation to its frozen expected
+/// normalized JSON, keeps the independently executed actual value, and
+/// requires the frozen comparator to panic inside `catch_unwind`.
+///
+/// The unmutated pair passes comparison first — outside `catch_unwind`, so a
+/// baseline mismatch fails the test on its own — which makes the later panic
+/// attributable to the mutation alone rather than to a hash, path or JSON
+/// shape problem.
+fn require_expectation_drift_panics(case_id: &str, mutate: impl FnOnce(&mut serde_json::Value)) {
+    let executed = dispatch_domain_partition().expect("dispatch domain partition");
+    let source = executed
+        .iter()
+        .find(|case| case.case.id == case_id)
+        .unwrap_or_else(|| panic!("missing case {case_id}"));
+
+    // The unmutated expectation passes comparison.
+    assert_domain_normalized(source);
+
+    let mut mutated = source.case.clone();
+    mutate(&mut mutated.normalized);
+    let drifted = ExecutedCase {
+        case: mutated,
+        actual: source.actual.clone(),
+    };
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        assert_domain_normalized(&drifted);
+    }));
+    assert!(
+        outcome.is_err(),
+        "mutated expectation for {case_id} must fail comparison"
+    );
+}
+
+#[test]
+fn corpus_domain_rejects_mutated_hostile_kind_semantics() {
+    require_expectation_drift_panics("domain.event/1/hostile-spawn-seed", |normalized| {
+        normalized["fields"]["spawns"][0]["kind"] = serde_json::json!(1);
+    });
+}
+
+#[test]
+fn corpus_domain_rejects_mutated_hostile_health_semantics() {
+    require_expectation_drift_panics("domain.event/1/hostile-spawn-seed", |normalized| {
+        normalized["fields"]["spawns"][0]["health"] = serde_json::json!(11);
+    });
+}
+
+#[test]
+fn corpus_domain_rejects_mutated_passive_grazing_semantics() {
+    require_expectation_drift_panics("domain.event/1/passive-state-seed", |normalized| {
+        normalized["fields"]["states"][0]["grazing"] = serde_json::json!(true);
+    });
+}
+
+#[test]
+fn corpus_domain_rejects_mutated_passive_despawn_reason_semantics() {
+    require_expectation_drift_panics("domain.event/1/passive-despawn-seed", |normalized| {
+        normalized["fields"]["despawns"][0]["reason"] = serde_json::json!(1);
+    });
+}
+
+#[test]
+fn corpus_domain_rejects_mutated_projectile_dimension_semantics() {
+    require_expectation_drift_panics(
+        "domain.event/1/projectile-spawn-all-kind-dimension-combinations",
+        |normalized| {
+            normalized["fields"]["spawns"][0]["dimension"] = serde_json::json!(1);
+        },
+    );
+}
+
+#[test]
+fn corpus_domain_rejects_mutated_projectile_velocity_semantics() {
+    require_expectation_drift_panics(
+        "domain.event/1/projectile-spawn-all-kind-dimension-combinations",
+        |normalized| {
+            normalized["fields"]["spawns"][0]["velocity"][0] = serde_json::json!("00000000");
+        },
+    );
+}
+
+#[test]
+fn corpus_domain_rejects_mutated_item_drop_block_index_semantics() {
+    require_expectation_drift_panics("domain.event/1/item-drop-upserts-seed", |normalized| {
+        normalized["fields"]["drops"][0]["block_index"] = serde_json::json!(18);
+    });
+}
+
+#[test]
+fn corpus_domain_rejects_mutated_item_drop_order_semantics() {
+    require_expectation_drift_panics("domain.event/1/item-drop-upserts-seed", |normalized| {
+        let drops = normalized["fields"]["drops"]
+            .as_array_mut()
+            .expect("seed expectation carries at least two drops");
+        drops.swap(0, 1);
+    });
+}
+
+#[test]
+fn corpus_domain_rejects_mutated_chat_branch_semantics() {
+    require_expectation_drift_panics("domain.event/1/chat-accepted", |normalized| {
+        normalized["category"] = serde_json::json!("speech");
+    });
+}
+
 #[test]
 fn corpus_structure() {
     let root = runtime_corpus::find_repo_root();
@@ -347,8 +462,8 @@ fn corpus_structure() {
         try_load_cases_from_root(&root, CorpusConsumer::Domain).expect("load domain cases");
     assert_eq!(
         domain_cases.len(),
-        489,
-        "expected exactly 489 mornlea_domain cases"
+        533,
+        "expected exactly 533 mornlea_domain cases"
     );
 
     let authority_cases = try_load_cases_from_root(&root, CorpusConsumer::ExternalRuntimeAuthority)
@@ -406,6 +521,7 @@ fn corpus_structure() {
     assert!(!event_people::owns(authority_case));
     assert!(!event_mobs::owns(authority_case));
     assert!(!event_objects::owns(authority_case));
+    assert!(!event_chat::owns(authority_case));
 
     // 4. Exact single ownership of every domain case
     let mut seen_ids = HashSet::new();
@@ -419,6 +535,7 @@ fn corpus_structure() {
     let mut event_people_count = 0;
     let mut event_mobs_count = 0;
     let mut event_objects_count = 0;
+    let mut event_chat_count = 0;
 
     for case in &domain_cases {
         assert!(
@@ -468,6 +585,10 @@ fn corpus_structure() {
             matches += 1;
             event_objects_count += 1;
         }
+        if event_chat::owns(case) {
+            matches += 1;
+            event_chat_count += 1;
+        }
 
         assert_eq!(
             matches, 1,
@@ -489,4 +610,5 @@ fn corpus_structure() {
     assert_eq!(event_people_count, 46, "event_people count mismatch");
     assert_eq!(event_mobs_count, 68, "event_mobs count mismatch");
     assert_eq!(event_objects_count, 45, "event_objects count mismatch");
+    assert_eq!(event_chat_count, 44, "event_chat count mismatch");
 }

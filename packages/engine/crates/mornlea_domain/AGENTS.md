@@ -516,10 +516,10 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
 ## Domain corpus dispatch (`tests/corpus_domain.rs`, `tests/corpus_domain/`)
 
 - Integration test `corpus_domain.rs` loads `testdata/runtime-migration/contracts.json`
-  and routes all 489 `mornlea_domain` cases into ten closed topic modules:
+  and routes all 533 `mornlea_domain` cases into eleven closed topic modules:
   `identity_text` (31), `values` (99), `command_control` (28), `command_inventory` (54),
   `event_player` (47), `event_world` (38), `event_inventory` (33), `event_people` (46),
-  `event_mobs` (68), and `event_objects` (45).
+  `event_mobs` (68), `event_objects` (45), and `event_chat` (44).
 - Every domain case is JSON-formatted and specifies operation `admit`. Single ownership
   is enforced across the closed partition; catch-all predicates are prohibited.
 - `event_mobs.rs` owns the six hostile/passive mob rules (`hostile-spawn`,
@@ -544,6 +544,31 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   classifier-only, the raw drop dimension `-1` and `ItemStack::EMPTY`
   construct and publish back losslessly, and submitted record order is
   never sorted.
+- `event_chat.rs` owns the sole chat rule (`chat`), closing the 533-case
+  partition with 44 cases and 321 total `domain.event` executions. The
+  executor parses every raw field, replays the Go `ChatEvent.Validate`
+  precedence — the global event/player identity and name gates, the speech
+  slot's kind exclusivity before kind dispatch, then inside the switch the
+  reason, companion identity, companion name and command/speech text — and
+  verifies each constructible culprit through the checked constructors. A
+  zero event identity reaches `ChatEvent::try_new` around an otherwise
+  valid synthetic event and must return `InvalidIdentity`, so the domain
+  proof stays in the domain type. An admitted event publishes its exact
+  semantic branch (`accepted`, the four rejection branches, the five task
+  facts, `task-failed-<reason>`, `speech`) with only that branch's legal
+  fields; a rejection retains every raw input including unknown numeric
+  kind and reason values. Unknown kind, reserved reject-reason, out-of-
+  domain failure-reason and illegal cross-field combinations stay
+  classifier-only; no `Unknown` variant is invented.
+- Nine semantic anti-copy mutations in `corpus_domain.rs`
+  (`corpus_domain_rejects_mutated_*`) each clone one loaded `FrozenCase`,
+  mutate exactly one field of its frozen expected normalized JSON, keep the
+  independently executed actual value, and require `assert_domain_normalized`
+  to panic inside `catch_unwind` while the unmutated pair passes first.
+  Together they cover the semantic-drift classes the delta specification
+  names across the mob, passive, projectile, item-drop and chat families:
+  kind, health, grazing, despawn-reason, dimension and velocity bits, a
+  block index, a record-order swap and a chat branch category.
 - `domain.input/45/session-sequence-arrival` is assigned to `external:runtime-authority`
   because its expectation carries authoritative admission, deduplication, and world effects.
 - `support.rs` provides shared strict JSON parsing, primitive type readers, exact-array

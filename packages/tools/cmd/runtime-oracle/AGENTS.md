@@ -229,12 +229,12 @@ only discriminator the manifest carries.
   (`chat`) through the Go `protocol.ChatEvent` DTO, closing the Go evidence
   stage beside the mob (68 cases) and object (45 cases) producers with its
   44 frozen cases. They live under
-  `testdata/runtime-migration/cases/domain/event_chat/` but are not yet
-  registered in the canonical manifest; that registration is a later node's
-  work, so publication is external-only through `RUNTIME_ORACLE_EXPORT_DIR`
-  under the producer ID `runtime-oracle/domain-event-chat`, with the export
-  running before the committed-bytes comparison so an initial export can
-  materialize the full candidate while the tracked directory is still absent.
+  `testdata/runtime-migration/cases/domain/event_chat/` and are registered in
+  the canonical manifest through the shared manifest-candidate helper below,
+  closing the tracked corpus at 533 `mornlea_domain` cases and 321
+  `domain.event` cases; the per-producer asset candidate still publishes
+  external-only through `RUNTIME_ORACLE_EXPORT_DIR` under the producer ID
+  `runtime-oracle/domain-event-chat`.
   The record is a semantic union rather than a flat payload: every raw input
   key is always present (a decimal-string event identity, the two
   32-lowercase-hex UUID identities, numeric kind and reason, and the two text
@@ -279,7 +279,11 @@ only discriminator the manifest carries.
   list with the sorted union of every top-level `domain.event` case, unions
   and re-hashes the family's provenance by repository-relative path,
   preserves `source_revision`, and reconciles the merged and the reloaded
-  value against the production `Discover`/`ReconcileWorking` path.
+  value against the production `Discover`/`ReconcileWorking` path. The one
+  explicit `source_revision` refresh is the closing node's own act: the
+  chat candidate test assigns the captured checkout SHA to the merged value
+  before publication so the manifest and the Go `BaselineSourceRevision`
+  constant stay identical.
 - `writeDomainEventManifestCandidate` publishes one complete candidate as
   exactly `runtime-oracle/domain-event-manifest/contracts.json` below a fresh
   external `RUNTIME_ORACLE_EXPORT_DIR` (producer ID
@@ -294,17 +298,27 @@ only discriminator the manifest carries.
   to 444 `mornlea_domain` cases and 232 `domain.event` cases, with the Rust
   `event_mobs` topic adapter in `mornlea_domain` owning all six rules.
 - Node 4.2 registered the 45 object cases the same way: the tracked corpus
-  now carries 489 `mornlea_domain` cases and 277 `domain.event` cases with a
+  reached 489 `mornlea_domain` cases and 277 `domain.event` cases with a
   30-path family provenance union, and the Rust `event_objects` topic
   adapter in `mornlea_domain` owns all five rules.
+- Node 4.3 registered the 44 chat cases and closed the exact 533-case
+  domain partition: the tracked corpus carries 533 `mornlea_domain` cases
+  and 321 `domain.event` cases over the unchanged 30-path provenance union,
+  the Rust `event_chat` topic adapter in `mornlea_domain` owns the chat
+  rule, and the same node refreshed `source_revision` once to the captured
+  checkout SHA `736af2f4b8bc3cbea4648733aa07e5ef9ce0e9d5`, which the Go
+  `BaselineSourceRevision` constant carries identically. With the partition
+  closed, every producer's re-merge gate now asserts the final 533/321
+  totals rather than its node-era intermediate counts.
 - Enforcement: `TestDomainEventManifestMergeRejectsDuplicateCase`,
   `TestDomainEventManifestMergeRejectsMissingFamilyCase`,
   `TestDomainEventManifestMergeSortsCasesSourcesAndFamilyCases`,
   `TestDomainEventManifestMergePreservesUnrelatedFamilies`,
   `TestDomainEventManifestCandidateRejectsRepositoryAndSymlinkTargets`,
   `TestDomainEventManifestCandidateReloadsAndReconciles`,
-  `TestDomainEventMobsManifestCandidateRegistersEveryMobsCase`, and
-  `TestDomainEventObjectsManifestCandidateRegistersEveryObjectsCase`.
+  `TestDomainEventMobsManifestCandidateRegistersEveryMobsCase`,
+  `TestDomainEventObjectsManifestCandidateRegistersEveryObjectsCase`, and
+  `TestDomainEventChatManifestCandidateClosesTheEventPartition`.
 
 - Expected outcomes come from executing the real Go validator or codec, never
   from a hand-written value or a Rust result. Every test run compares generated
