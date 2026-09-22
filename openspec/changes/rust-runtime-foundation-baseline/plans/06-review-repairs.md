@@ -738,9 +738,13 @@ transport closure. Retain the script's explicit successful shutdown,
 accept-worker join, disconnect and persisted-inventory verification.
 
 **Derived consumers.** This file is neither a manifest provenance source nor
-a generator/embed input: the reviewed manifest and repository references have
-no matching path or generation directive. Its Go test compiler and repository
-source scanners consume it. No artifact or hash refresh is authorized; the
+a generator/embed input: the reviewed manifest has no matching source and no
+generation/embed directive includes it. Repository references include
+historical plan/backlog links and
+`testdata/audit/english-comment-migration.json`; the latter's existing comment
+count stays unchanged because this node does not rewrite existing comments.
+The Go test compiler and repository source scanners consume this file.
+No artifact or hash refresh is authorized; the
 worker owns only this test source, the controller owns acceptance artifacts.
 Use existing source-language, dependency and corpus-writer audit gates plus
 the final full audit. New comments use English; do not rewrite existing
