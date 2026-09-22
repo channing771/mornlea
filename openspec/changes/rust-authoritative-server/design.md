@@ -1,6 +1,6 @@
 ## Context
 
-The accepted F1 baseline supplies only a reviewed subset of shared Rust contracts and offline evidence. The active domain-event successor and later protocol, storage, numerical-API and pathfinding successors must close before final F1 acceptance. The Go server remains the current production owner. F2 creates an opt-in Rust replacement only after that acceptance; P14 separately controls the default product switch. The complete rule inventory must be reconciled before claiming parity.
+The accepted F1 baseline supplies only a reviewed subset of shared Rust contracts and offline evidence. The archived domain-event successor and later protocol, storage, numerical-API and pathfinding successors must close before final F1 acceptance. The Go server remains the current production owner. F2 creates an opt-in Rust replacement only after that acceptance; P14 separately controls the default product switch. The complete rule inventory must be reconciled before claiming parity.
 
 ## Goals / Non-Goals
 
