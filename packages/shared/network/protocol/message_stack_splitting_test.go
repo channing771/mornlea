@@ -19,9 +19,8 @@ func stackSplittingFurnaceRef() core.ContainerRef {
 }
 
 // TestStackSplittingPacketIDsAreFrozen 钉死分堆双命令的最终编号：C→S
-// `MoveStackPartial=19`、`QuickMoveStack=20`，由协议 v44 承载；后续版本的
-// 「下一个仍未分配」上界与当前版本号由整组丢弃命令（v45）与版本钉值测试
-// 各自维护，本测试只锁两条分堆命令的编号不再漂移。
+// v44 carries `MoveStackPartial=19` and `QuickMoveStack=20`. The v45 drop
+// command and version pin own later boundaries; this test freezes only these IDs.
 func TestStackSplittingPacketIDsAreFrozen(t *testing.T) {
 	assertClientRegistry(t, []struct {
 		state  State

@@ -49,12 +49,12 @@ func ClientPacketID(state State, packet ClientPacket) (uint32, bool) {
 			return 17, true
 		case EquipArmor:
 			return 18, true
-		// 分堆双命令：部分移动与快捷搬运依次占用 19/20（v44）。
+		// v44 assigns stack splitting and quick moves to IDs 19/20.
 		case MoveStackPartial:
 			return 19, true
 		case QuickMoveStack:
 			return 20, true
-		// 面板拖出丢弃：整组投放命令占用 21（v45），下一 ID 22 仍未分配。
+		// v45 assigns the full-stack drop command to ID 21; ID 22 remains unassigned.
 		case DropStack:
 			return 21, true
 		}
@@ -112,12 +112,12 @@ func ClientPacketForID(state State, id uint32) (ClientPacket, bool) {
 			return PlaceWater{}, true
 		case 18:
 			return EquipArmor{}, true
-		// 分堆双命令：与 `ClientPacketID` 的 19/20 对称（v44）。
+		// Mirror the v44 IDs 19/20 from `ClientPacketID`.
 		case 19:
 			return MoveStackPartial{}, true
 		case 20:
 			return QuickMoveStack{}, true
-		// 面板拖出丢弃：与 `ClientPacketID` 的 21 对称（v45），下一 ID 22 仍未分配。
+		// Mirror the v45 ID 21 from `ClientPacketID`; ID 22 remains unassigned.
 		case 21:
 			return DropStack{}, true
 		}

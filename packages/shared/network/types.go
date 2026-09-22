@@ -234,8 +234,8 @@ type (
 	// QuickMoveStack 是快捷搬运命令：来源格整堆移到对侧区域首个可容纳
 	// 位置，目标序由服务端权威推导。
 	QuickMoveStack = protocol.QuickMoveStack
-	// DropStack 是面板拖出丢弃命令：把按视图槽位寻址的整组物品在玩家脚下
-	// 投放为掉落物，位置与数量由服务端权威推导。
+	// DropStack drops the full stack addressed by a view slot at the player's feet;
+	// the server derives its authoritative position and count.
 	DropStack = protocol.DropStack
 	// CloseContainer 是关闭容器命令。
 	CloseContainer = protocol.CloseContainer

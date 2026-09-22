@@ -8,7 +8,7 @@ import (
 	"github.com/channing771/mornlea/packages/shared/network/protocol"
 )
 
-// dropStackWire 手工构造整组丢弃载荷，绕过编码器校验注入非法值域。
+// dropStackWire bypasses encoder validation to construct invalid payloads.
 func dropStackWire(ref core.ContainerRef, view, slot uint8) []byte {
 	var encoder byteEncoder
 	encoder.u64(1)
@@ -18,10 +18,10 @@ func dropStackWire(ref core.ContainerRef, view, slot uint8) []byte {
 	return encoder.data
 }
 
-// TestDropStackGoldenWireLayout 覆盖整组丢弃命令的冻结布局：u64 序号 +
-// 18 字节容器引用 + u8 视图 + u8 统一索引的固定 28 字节。夹具取箱子引用并让
-// 视图与索引取非零中间值，任何换位、漏写或宽度漂移都会改变期望字节；
-// 截断与尾随字节都必须整包拒绝。
+// TestDropStackGoldenWireLayout freezes the command as a u64 sequence,
+// an 18-byte container reference, a u8 view, and a u8 unified slot. Nonzero
+// middle values and a chest reference expose field reordering, omissions, and
+// width drift. Truncated payloads and trailing bytes must reject the whole packet.
 func TestDropStackGoldenWireLayout(t *testing.T) {
 	drop := protocol.DropStack{
 		Sequence: 21, Container: testChestRef(), View: protocol.StackViewContainer, Slot: 62,
@@ -48,8 +48,8 @@ func TestDropStackGoldenWireLayout(t *testing.T) {
 	}
 }
 
-// TestDropStackZeroContainerRoundTrip 锁死非容器视图的零值引用在线上是
-// 18 个零字节：编码与解码都必须无损往返回零值 `core.ContainerRef`。
+// TestDropStackZeroContainerRoundTrip freezes the zero reference for
+// non-container views as 18 zero bytes and preserves `core.ContainerRef`.
 func TestDropStackZeroContainerRoundTrip(t *testing.T) {
 	packets := []protocol.ClientPacket{
 		protocol.DropStack{Sequence: 1, View: protocol.StackViewInventory, Slot: 35},
@@ -73,9 +73,8 @@ func TestDropStackZeroContainerRoundTrip(t *testing.T) {
 	}
 }
 
-// TestDropStackWireRejectionMatrix 覆盖 wire 侧同判：手工构造的非法载荷
-// （非法视图、容器视图零值引用、非容器视图非零引用、按视图分派的越界索引）
-// 在解码路径必须整包拒绝，编码路径对同类结构体值也必须前置拒绝。
+// TestDropStackWireRejectionMatrix keeps pre-encode and whole-packet decode
+// rejection aligned for invalid views, reference/view mismatches, and slot bounds.
 func TestDropStackWireRejectionMatrix(t *testing.T) {
 	chest := testChestRef()
 	furnace := stackSplittingFurnaceRef()
