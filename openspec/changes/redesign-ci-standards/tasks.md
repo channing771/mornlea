@@ -36,7 +36,7 @@
 
 ## 1. Portable asset source set
 
-- [ ] 1.1 Make CPU atlas export platform-neutral, prove Linux source-set ownership, and retain real Linux compilation in the Linux quality gate (`task-briefs/01-portable-atlas.md`).
+- [x] 1.1 Make CPU atlas export platform-neutral, prove Linux source-set ownership, and retain real Linux compilation in the Linux quality gate (`task-briefs/01-portable-atlas.md`).
 
 ## 2. Godot script failure contracts
 
