@@ -347,7 +347,7 @@
         },
         {
           "path": "packages/shared/network/protocol/registry.go",
-          "sha256": "sha256:ee6e4390c2713f466bf691cc5c649ad68eea42164081055ffa0428aee416fb2a"
+          "sha256": "sha256:5746346e853a0efad676cf0a893657986a94a4b600f0e2d7e970d32aa9e332b8"
         },
         {
           "path": "packages/shared/network/protocol/snapshot.go",
@@ -602,11 +602,11 @@
         },
         {
           "path": "packages/shared/network/protocol/packet.go",
-          "sha256": "sha256:595912b03f601dea9ad4c3a9a3275069f163e8764bcd9c4a836311711156ab08"
+          "sha256": "sha256:7f17bfa1ec21e58417c876aec881f7215ab61c04a3fcc0124e91ac9f928f5525"
         },
         {
           "path": "packages/shared/network/codec/codec_client.go",
-          "sha256": "sha256:90b9dc3c997661112f80502d684ee4c2314b6a3d9743a2b8c2a895b0c4e04d07"
+          "sha256": "sha256:572788394d3bc8b13b42d097beaa3fade87cdc4e9d5d022f7e5c92568c9c70de"
         },
         {
           "path": "packages/shared/core/item.go",
@@ -674,7 +674,7 @@
         },
         {
           "path": "packages/shared/network/protocol/message_drop_stack.go",
-          "sha256": "sha256:a45a88cd23921b1f25acc349a78a950eb714f316276fa69db946cc2e6d9fe097"
+          "sha256": "sha256:2d7e0233fc548df975a700f147e132f609ae712416ef826ebc560ac06cb33c0d"
         },
         {
           "path": "packages/shared/network/protocol/message_companion.go",
@@ -682,11 +682,11 @@
         },
         {
           "path": "packages/shared/network/protocol/packet.go",
-          "sha256": "sha256:595912b03f601dea9ad4c3a9a3275069f163e8764bcd9c4a836311711156ab08"
+          "sha256": "sha256:7f17bfa1ec21e58417c876aec881f7215ab61c04a3fcc0124e91ac9f928f5525"
         },
         {
           "path": "packages/shared/network/codec/codec_client.go",
-          "sha256": "sha256:90b9dc3c997661112f80502d684ee4c2314b6a3d9743a2b8c2a895b0c4e04d07"
+          "sha256": "sha256:572788394d3bc8b13b42d097beaa3fade87cdc4e9d5d022f7e5c92568c9c70de"
         },
         {
           "path": "packages/shared/core/inventory.go",
