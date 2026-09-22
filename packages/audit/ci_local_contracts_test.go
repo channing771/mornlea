@@ -334,10 +334,20 @@ func TestCIRaceEntrypointFallbackReader(t *testing.T) {
 		t.Fatal(err)
 	}
 	argv := filepath.Join(t.TempDir(), "argv")
+	forcedFallback := filepath.Join(t.TempDir(), "forced-fallback")
+	primaryReader := filepath.Join(t.TempDir(), "primary-reader")
+	bashEnvironment := filepath.Join(t.TempDir(), "fallback.sh")
+	writeFile(t, bashEnvironment, []byte("type() { if [[ \"$1\" == mapfile ]]; then printf forced > \"$MORNLEA_CI_FORCED_FALLBACK\"; return 1; fi; builtin type \"$@\"; }\nmapfile() { printf called > \"$MORNLEA_CI_PRIMARY_READER\"; }\n"))
 	writeExecutable(t, filepath.Join(bin, "go"), "#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > \"$MORNLEA_CI_GO_ARGV\"\n")
-	output, err := ciRunWithEnv(fixtureRoot, bin, []string{"MORNLEA_CI_GO_ARGV=" + argv}, script, "server")
+	output, err := ciRunWithEnv(fixtureRoot, bin, []string{"BASH_ENV=" + bashEnvironment, "MORNLEA_CI_FORCED_FALLBACK=" + forcedFallback, "MORNLEA_CI_GO_ARGV=" + argv, "MORNLEA_CI_PRIMARY_READER=" + primaryReader}, script, "server")
 	if err != nil {
 		t.Fatalf("fallback reader failed: %v\n%s", err, output)
+	}
+	if got := string(readFile(t, forcedFallback)); got != "forced" {
+		t.Fatalf("fallback reader was not forced: %q", got)
+	}
+	if _, statErr := os.Stat(primaryReader); !os.IsNotExist(statErr) {
+		t.Fatalf("fallback reader invoked mapfile: %v", statErr)
 	}
 	if got := strings.Fields(string(readFile(t, argv))); !slices.Equal(got, []string{"test", "example/server", "-race", "-p=1"}) {
 		t.Fatalf("fallback reader argv = %q", got)
