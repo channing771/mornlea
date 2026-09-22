@@ -13,6 +13,7 @@
 - Modify: `packages/client/assets/atlas_test.go`.
 - Modify: `packages/client/assets/default_pack_test.go` (`atlasPixelsForTest`).
 - Modify after the source commit: `apps/mornlea-godot/assets/generated/manifest.json`.
+- Modify after the English comment rewrite: `testdata/audit/english-comment-migration.json` using the repository's update mode, then verify the resulting debt only decreases for the owned atlas source.
 - Create: `packages/audit/linux_asset_source_set_test.go`.
 - Read-only authority: `packages/client/AGENTS.md`; `packages/client/cmd/mornlea-godot-assets/main.go`; `packages/client/cmd/mornlea/app/app_startup.go`; `packages/client/client/render.go`; `packages/engine/crates/mornlea_client/src/ffi.rs`; `packages/engine/crates/mornlea_client/src/render/mod.rs`.
 - Excluded: generated Godot assets, Rust upload semantics, texture bytes, layer ordering, `atlasMips`, and ABI values.
@@ -78,6 +79,6 @@
 
 - Inspect `rg -n 'AtlasPixels|layerMipChain|atlasMips' packages/client packages/engine` and confirm there is one CPU implementation and every consumer retains the same signature and byte contract.
 - Run `make test-race-changed RACE_BASE="$task_base"`.
-- Use two ordered commits: `fix(assets): make atlas export platform neutral`, then `chore(godot): refresh atlas provenance` for the generated manifest.
-- Rollback unit: both commits together. Reverting only the provenance commit leaves `godot-asset-check` red; reverting both restores the Linux compile failure but does not affect later CI interfaces.
+- Use the two ordered product commits `fix(assets): make atlas export platform neutral`, then `chore(godot): refresh atlas provenance`. If the English-comment ratchet cannot be included before those commits without rewriting verified history, add one scoped `test(audit): ratchet atlas comment migration` commit rather than rebasing published node evidence.
+- Rollback unit: all commits from this node together. Reverting only the provenance commit leaves `godot-asset-check` red; reverting the source repair restores the Linux source-set failure, and reverting the baseline ratchet alone restores the changed-scope audit failure.
 - Report the red command/output, green commands/output, final commit SHA, and any unexpected platform consumer to the controller. The controller updates `tasks.md` and `ledger.md`.
