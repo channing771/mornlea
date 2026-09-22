@@ -105,3 +105,32 @@
   `plans/01-go-oracles.md` category sentences only. Packet 04 needs no edit
   (its category references are producer-delegating). Accepted-branch subject
   categories on `kind: "ok"` outcomes remain unrestricted.
+
+## 2026-09-22 — node 1.1 acceptance
+
+- Implementation commit: `b261de1e` (`test(runtime-oracle): add mob event
+  evidence`, 140 files). Red evidence verified: the routing regression failed
+  on the baseline with `unknown rule "hostile-spawn"` before the producer
+  existed, matching the packet's intended behavioral red.
+- Controller gates at `b261de1e`: `go test ./packages/tools/cmd/runtime-oracle
+  -race -count=1 -run '^(TestDomainEventMobs|TestDomainOracle_event_mobs)'` ok
+  (12 tests; run with `GOCACHE=/tmp/mornlea-gocache` after the default
+  user cache hit a sandbox-denied entry — environment workaround, same
+  command otherwise); audit guards `TestRuntimeOracleInternalDependencies`,
+  `TestCorpusTestFlagsCannotRewriteFrozenEvidence`,
+  `TestEnglishCommentMigration`, `TestCodeCommentsExcludeTaskIDs` ok;
+  `git diff --exit-code -- testdata/runtime-migration/contracts.json` clean;
+  `git diff --check` clean. Implementer additionally proved 136 external
+  files and an empty `diff -ru` against the tracked directory.
+- Review ruling: spec compliant, quality Approved, 0 Critical, 0 Important.
+  Reviewer independently confirmed zero-tick admission and
+  classifier-vs-validator check order against the real Go validators.
+- Minors recorded for the final whole-branch review: (1) implementer report
+  prose says 37 pinned rejection rule names, the test pins 36 (7+8+3+7+8+3) —
+  code correct; (2) `domainEventMobsExportPublished` is a novel once-per-
+  process export guard with no sibling precedent — safe here (sequential
+  same-package tests), but the double-publication hazard it solves exists for
+  sibling producers too; (3) the outcomes test infers the batch array key
+  from the first accepted record instead of naming it per rule.
+- Architecture skill: no change. The producer mirrors established
+  corpus conventions; no new cross-task convention qualified.
