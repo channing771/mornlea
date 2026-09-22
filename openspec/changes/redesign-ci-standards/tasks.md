@@ -59,4 +59,7 @@
 
 ## 6. Documentation and acceptance
 
-- [ ] 6.1 Reconcile CI documentation, run all focused and stage-boundary gates, review the full branch, and record exact-head workflow evidence (`task-briefs/09-closeout.md`).
+- [ ] 6.1 Reconcile current CI documentation and the active Godot tooling plan with the implemented topology (`task-briefs/09-documentation-reconciliation.md`).
+- [ ] 6.2 Run independent full-branch reviews and the complete local acceptance suite (`task-briefs/10-local-acceptance-review.md`).
+- [ ] 6.3 Push the PR and qualify one exact candidate head in required and optional workflows (`task-briefs/11-pr-hosted-acceptance.md`).
+- [ ] 6.4 Synchronize delta specs, archive the change, and qualify the final PR head (`task-briefs/12-archive-final-head.md`).
