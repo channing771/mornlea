@@ -45,7 +45,7 @@
 
 ## 3. Native artifact trust
 
-- [ ] 3.1 Implement deterministic platform/SHA/path/size/digest manifests and fail-closed verification (`task-briefs/04-native-artifacts.md`).
+- [x] 3.1 Implement deterministic platform/SHA/path/size/digest manifests and fail-closed verification (`task-briefs/04-native-artifacts.md`).
 
 ## 4. Repository-owned CI entry points
 
