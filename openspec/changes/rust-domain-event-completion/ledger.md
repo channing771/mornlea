@@ -282,3 +282,32 @@
 - This node closes the reviewer-noted gap from 2.1/2.2 (the `BatchTooLarge`
   branch now has direct 4,097-rejection coverage for all eleven new batches).
 - Architecture skill: no change.
+
+## 2026-09-22 — node 3.1 acceptance
+
+- Implementation commit: `9c2b498c` (`refactor(domain): publish exhaustive
+  event surface`). Red evidence verified: the source-contract test failed on
+  the baseline (old API present) and the wrong-recipient skeleton made the
+  session test fail by observing `Session(1)` instead of `Session(0)`, both
+  matching the mandated behavioral reds. Pre-edit `rg` consumer proof clean.
+- Controller gates at `9c2b498c`: `cargo fmt --all --check` ok;
+  `--test event_surface` 4 passed / 0 failed; `--test runtime_contract` 7
+  passed / 0 failed (two observation-only tests deleted); full
+  `-p mornlea_domain --locked` 249 passed / 0 failed; audit comment gates ok;
+  `git diff --check` clean.
+- Controller adjudication of the implementer's flagged concern: the final
+  `rg` finding the four retired names as string literals inside the mandated
+  guard test is inherent to the brief's own test design (the test must name
+  what it asserts absent). The brief's rg requirement targets production
+  definitions, re-exports and functional test use — the reviewer's focused
+  `rg` confirmed only the four guard-test literals remain. Accepted.
+- Review ruling: spec compliant, quality Approved, 0 Critical, 0 Important.
+  Reviewer verified the 30 variants in exact order with correct payloads,
+  derives, envelope signatures, complete digest-API deletion with no
+  stragglers, and that the 30-arm name match has no wildcard.
+- Minors recorded for the final whole-branch review: (1) enum declaration
+  order has no Rust introspection — compliance rests on review against the
+  frozen contract (done line-by-line by this reviewer); (2) the guard test's
+  substring check would also reject future prose use of "Observation" in the
+  two source files (conservative by design).
+- Architecture skill: no change.

@@ -84,7 +84,7 @@ and the existing runtime-oracle corpus harness.
 
 ## 3. Exhaustive production event surface
 
-- [ ] 3.1 [Replace digest observations with the exact 30-variant event surface](plans/03-event-surface.md#node-31-replace-digest-observations-with-the-exact-30-variant-event-surface). Direct prerequisites: 2.1, 2.2, 2.3. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_surface --locked` and require exactly 30 constructed variants plus both recipient forms.
+- [x] 3.1 [Replace digest observations with the exact 30-variant event surface](plans/03-event-surface.md#node-31-replace-digest-observations-with-the-exact-30-variant-event-surface). Direct prerequisites: 2.1, 2.2, 2.3. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_surface --locked` and require exactly 30 constructed variants plus both recipient forms.
 
 ## 4. Executable Rust corpus and frozen evidence
 
