@@ -18,3 +18,12 @@
 - The full audit's existing protocol-documentation and English-comment-inventory failures reproduced on untouched baseline `8d9cc122486097fb7d7788abdb523ecd13f5a75a`; no exemptions or unrelated changes were introduced.
 - Architecture skill: promoted the verified distinction between Rust semantic correctness and Godot/Python presentation evidence. Implementation-specific future facts stay in these plans and the visual handoff guide.
 - No current canonical spec, runtime, tracked image, version or default entry changed; the user-owned `pr-submit` skill deletions remain excluded.
+
+## 2026-09-22 — F1 prerequisite correction after baseline archive
+
+- Baseline: `effd8a247427d2ab5710a8f481349c4cd4676721`, the merge commit of PR #184 on `main`; CI failure is not treated as acceptance evidence.
+- Discovery: the archived `rust-runtime-foundation-baseline` explicitly leaves mob/object/chat events, complete protocol and storage evidence, safe public numerical APIs, pathfinding and final F1 acceptance to successor changes. Current code and the frozen corpus confirm those gaps.
+- Ruling: F2 remains planning-only and may not start from the archived baseline. The first active successor is `rust-domain-event-completion`; later protocol, storage, numerical-API and pathfinding successors plus a zero-gap F1 acceptance remain mandatory prerequisites.
+- Artifact reconciliation: `proposal.md`, `design.md` and task 1.1 now require complete F1 evidence rather than treating the baseline archive or a stale `rust-runtime-foundation` link as completion.
+- Orchestration: the controller performed the bounded planning correction directly because the artifacts and prerequisite ruling are tightly coupled; no implementation or delegated worker was started.
+- Architecture skill: no change. This is an application of the existing target-architecture and migration-seam rules, not a new stable cross-task convention.

@@ -1,6 +1,6 @@
 ## Context
 
-F1 supplies the shared Rust contracts and offline oracle. The Go server remains the current production owner. F2 creates an opt-in Rust replacement; P14 separately controls the default product switch. The complete rule inventory must be reconciled before claiming parity.
+The accepted F1 baseline supplies only a reviewed subset of shared Rust contracts and offline evidence. The active domain-event successor and later protocol, storage, numerical-API and pathfinding successors must close before final F1 acceptance. The Go server remains the current production owner. F2 creates an opt-in Rust replacement only after that acceptance; P14 separately controls the default product switch. The complete rule inventory must be reconciled before claiming parity.
 
 ## Goals / Non-Goals
 
@@ -38,12 +38,12 @@ A live shadow server cannot validate safely by writing the same world. A Go fall
 
 ## Migration Plan
 
-Accept F1; freeze server coverage; implement independently verified core capabilities; run offline differential and transport/persistence failure tests; qualify opt-in activation and rollback. F3 can consume the accepted protocol/session contract during development, but final integration acceptance needs the complete F2 result.
+Accept complete F1, including the domain-event, protocol, storage, numerical-API and pathfinding successors; freeze server coverage; implement independently verified core capabilities; run offline differential and transport/persistence failure tests; qualify opt-in activation and rollback. The archived baseline and any one successor are insufficient authorization to begin F2 implementation. F3 can consume an accepted protocol/session contract during development, but final integration acceptance needs the complete F2 result.
 
 ## Validation and completion evidence
 
 Implementation follows failing contract/replay tests, minimum implementation, then refactoring. Test targets in `tasks.md` are prospective until their owning task registers them. Use the actual Rust workspace (`--manifest-path packages/engine/Cargo.toml`) and named integration targets; inspect `-- --list` output and reject empty discovery. Do not substitute text searches or unrelated optional-build audits for prerequisite acceptance.
 
-Record source SHA, corpus digest/coverage, command, discovered/executed tests, result, failure cases and rollback proof in `ledger.md`. Rust stage completion requires its full declared inventory, not only the first successful slice. Commit each independently verified task; if an inventory item exceeds one session, refine it into explicit capability tasks before implementation rather than checking off a broad placeholder. Planning validation proves artifact structure only.
+Before any implementation task starts, record the final F1 acceptance source SHA, the accepted successor set, zero uncovered supported families and the complete acceptance command in `ledger.md`. Then record source SHA, corpus digest/coverage, command, discovered/executed tests, result, failure cases and rollback proof for F2 work. Rust stage completion requires its full declared inventory, not only the first successful slice. Commit each independently verified task; if an inventory item exceeds one session, refine it into explicit capability tasks before implementation rather than checking off a broad placeholder. Planning validation proves artifact structure only.
 
 At implementation closeout run formatting, `make rust-check`, `make dev-check` (including all six Go-module vet commands), `make test-race`, `go test ./packages/audit -count=1`, and `openspec validate --all --strict --no-interactive`. Add the change-specific replay, failure-injection and platform gates. No graphical foreground window may be started by automated tests.
