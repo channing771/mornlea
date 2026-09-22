@@ -384,3 +384,41 @@
   `parse_drops` reports without the `drops[i]` prefix (diagnostics-only; no
   frozen case can hit it).
 - Architecture skill: no change.
+
+## 2026-09-22 — node 4.3 acceptance (implementation stage closed)
+
+- Implementation commit: `b390e531` (`test(domain): close event corpus
+  coverage`). Red evidence verified: intended no-owner red for a chat case
+  plus nine no-panic mutation reds recorded before their mutations.
+- Controller-captured baseline: `CORPUS_SOURCE_SHA =
+  736af2f4b8bc3cbea4648733aa07e5ef9ce0e9d5` written identically to the
+  manifest `source_revision` and Go `BaselineSourceRevision` (controller
+  verified one occurrence in each consumer).
+- Controller gates at `b390e531`: export run (chat+manifest, `-race`) ok;
+  fresh-dir export byte-identical; FULL runtime-oracle package `-race` ok
+  (83.8s); `--test corpus_domain event_chat::` 3 passed;
+  `corpus_domain_executes_exact_unique_partition` ok (533 exact unique
+  executions); `corpus_domain_rejects_mutated_` 10 passed; audit five guards
+  ok; `git diff --check` clean.
+- Review ruling: spec compliant, quality Approved, 0 Critical, 0 Important.
+  Reviewer independently recomputed all 30 source digests and 44 chat asset
+  digests from disk, verified 533/321/44/30 counts structurally, verified
+  the adapter's branch order against `ChatEvent.Validate` branch-for-branch
+  (including the speech branch's command-empty-before-companion order and
+  per-reason sub-orders), confirmed the zero-ID proof genuinely reaches
+  `ChatEvent::try_new`, and verified every mutation's pre/post values against
+  the tracked seeds (semantic content changes, not hash/path/shape breakage).
+- Controller adjudication of disclosed edits: (a) mobs/objects absolute-total
+  guards (444/232, 489/277) were latently red since node 4.2 — that node's
+  packet validation never ran the unfiltered full package, which is a
+  validation-scope gap the controller records here; the re-pin to the closed
+  533/321 totals preserves exactness (a `>=` bound would have weakened it)
+  and is accepted. (b) The mid-flight reason-gate fix (queue-full/
+  not-following/task-failed keep their reasons) was verified against the Go
+  authority and pinned by the branch-map test.
+- Minor recorded for the final whole-branch review: each mutation test
+  re-dispatches the full 533-case partition (consistent with the file's
+  existing per-test dispatch pattern; all 10 mutation tests in 0.49s).
+- Architecture skill: no change.
+- Implementation stage complete: 11/12 nodes accepted; node 5.1
+  (controller closeout) begins.

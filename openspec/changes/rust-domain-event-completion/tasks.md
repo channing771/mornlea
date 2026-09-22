@@ -90,7 +90,7 @@ and the existing runtime-oracle corpus harness.
 
 - [x] 4.1 [Execute and register the 68 mob cases](plans/04-corpus-adapters.md#node-41-execute-and-register-the-68-mob-cases). Direct prerequisites: 1.1, 2.1, 2.4, 3.1. Run the named Go producer and `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain event_mobs:: --locked`; the integrated partition must contain exactly 444 cases.
 - [x] 4.2 [Execute and register the 45 object cases](plans/04-corpus-adapters.md#node-42-execute-and-register-the-45-object-cases). Direct prerequisites: 1.2, 2.2, 4.1. Run the named Go producer and `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test corpus_domain event_objects:: --locked`; the integrated partition must contain exactly 489 cases.
-- [ ] 4.3 [Execute and register the 44 chat cases and close the 533-case partition](plans/04-corpus-adapters.md#node-43-execute-and-register-the-44-chat-cases-and-close-the-533-case-partition). Direct prerequisites: 1.3, 2.3, 4.2. Refresh the bound source revision exactly as specified, run the named Go/Rust suites, require exactly 533 unique executed domain cases, and prove the nine named semantic mutations fail comparison.
+- [x] 4.3 [Execute and register the 44 chat cases and close the 533-case partition](plans/04-corpus-adapters.md#node-43-execute-and-register-the-44-chat-cases-and-close-the-533-case-partition). Direct prerequisites: 1.3, 2.3, 4.2. Refresh the bound source revision exactly as specified, run the named Go/Rust suites, require exactly 533 unique executed domain cases, and prove the nine named semantic mutations fail comparison.
 
 ## 5. Review, publication and successor handoff
 
