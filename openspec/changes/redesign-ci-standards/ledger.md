@@ -14,3 +14,33 @@ This append-only ledger records controller decisions, task routing, evidence, an
 | 2026-09-22 | planning | Architecture skill: no change — the plan applies the existing optional-Godot and platform-ownership rules but has not yet produced a new stable cross-task rule backed by implementation evidence. |
 | 2026-09-22 | planning | Discovery: workflow/script consumers, six-module package enumeration, three failing seams, generated atlas provenance, and Godot rollback checks were enumerated before task ownership was frozen. The atlas source node owns its generated manifest refresh; the optional-workflow node owns rollback-check migration. |
 | 2026-09-22 | planning | Readiness review: passed — nine nodes have independently reviewable deliverables, exact editable/read-only files, frozen interfaces, concrete baseline failures, red/green commands, exclusions, scoped commits, rollback units, and acyclic predecessors. All continuous-integration requirements and five Review Focus cases trace to named nodes; task briefs contain no competing status checkboxes. |
+
+## Execution preflight
+
+| Check | Producer / consumer contract | Finding |
+| --- | --- | --- |
+| Node 1.1 | Linux compile regression, platform-neutral `AtlasPixels`, then committed-source provenance refresh | Internally consistent; source and derived manifest are deliberately separate ordered commits. |
+| Node 2.1 | Missing-`rg` audit regression and validator prerequisite guard | Internally consistent; the guard precedes repository discovery and all validator modes. |
+| Node 2.2 | Fake Cargo producer and `build-extension.sh` consumer for unset, relative, absolute, and traversal cases | Internally consistent; repository-relative resolution is frozen by the brief. |
+| Node 3.1 | Manifest packager, verifier, platform identity, mutation suite, and `scripts/ci` ownership guide | Internally consistent; legacy workflow callers remain intentionally broken only until their atomic Node 5.1 migration. |
+| Node 4.1 | Dependency profiles, package inventory, partition proof, race launcher, and `ci-preflight` | Internally consistent; package counts remain observations rather than acceptance constants. |
+| Node 4.2 | Native packaging, artifact verification, Linux quality, race, and split integration entry points | Internally consistent; host-only limits are explicit and workflow acceptance owns the other platform. |
+| Node 5.1 | Audit mutations and the exact pinned required workflow graph | Internally consistent; the workflow consumes only repository-owned `ci-*` semantics and removes the obsolete `test` aggregator. |
+| Node 5.2 | Required/optional workflow audit, rollback policy, and path-scoped Godot workflow | Internally consistent; optional status never suppresses command failures or enters `merge-gate`. |
+| Node 6.1 | Documentation, full validation, review, exact-head evidence, synchronization, archive, and PR handoff | Internally consistent; archive happens only after exact-head workflow evidence and is revalidated on the archived head. |
+| Nodes 1.1 -> 4.2 | Platform-neutral atlas API is compiled by Linux quality and asset generation | Matching signature and unchanged byte contract; no GPU ownership moves. |
+| Nodes 1.1 -> 5.2 | Committed source provenance is consumed by optional Godot asset validation | Matching generated-manifest ownership; Node 1.1 owns the refresh. |
+| Nodes 2.1 -> 4.1 | Validator fail-closed dependency semantics are mirrored by the CI doctor | Matching missing-tool policy; validator and environment checks remain independently defensive. |
+| Nodes 2.1/2.2 -> 5.2 | Repaired validator and Cargo target contracts are consumed by optional Godot jobs | Matching command interfaces; no workflow-only fallback is permitted. |
+| Nodes 3.1 -> 4.2 | Platform/SHA/path/size/digest manifest API is consumed by native Make targets | Matching named options, manifest paths, and expected platform file sets. |
+| Nodes 3.1/4.2 -> 5.1 | Native producers and consumers are transferred through same-SHA workflow artifacts | Matching artifact roots and manifest names; no downstream rebuild fallback. |
+| Nodes 4.1 -> 4.2 | Doctor, package inventory, and race launcher are composed by remaining CI targets | Matching profile and slice names; dependencies are acyclic. |
+| Nodes 4.1/4.2 -> 5.1 | Repository-owned entry points replace inline workflow validation semantics | Matching job commands and platform ownership; workflow YAML retains setup and transport only. |
+| Nodes 5.1 -> 5.2 | `.github/AGENTS.md` and required graph constrain optional workflow extraction | Matching ownership guide; Godot remains outside required job blocks and merge dependencies. |
+| Nodes 5.1/5.2 -> 6.1 | Implemented topology and command names feed documentation and exact-head acceptance | Matching stable statuses `Required CI / merge-gate` and `Godot CI`; branch protection remains external. |
+
+| Date | Node | Record |
+| --- | --- | --- |
+| 2026-09-22 | execution | Orphan check: no completed checkbox without evidence, no in-flight ledger row, no untracked or modified file, and no stale implementation artifact existed in the isolated worktree at `3401fa7a`. |
+| 2026-09-22 | execution | Ruling: keep `tasks.md` and this ledger as the only durable execution state, using existing OpenSpec task briefs and ephemeral reports/diff packages outside the repository — the project orchestration skill explicitly forbids a `.superpowers/sdd` progress store; if wrong, recovery loses disposable reviewer packets but not task status, commits, or durable evidence. |
+| 2026-09-22 | execution | Ruling: resolve each node's `task_base` to an immutable SHA and record/pass that exact value rather than relying on a worker shell variable surviving separate commands — this preserves changed-scope validation semantics; if wrong, a worker may rerun a broader gate but cannot omit committed changes. |
