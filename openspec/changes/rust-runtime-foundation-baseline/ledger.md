@@ -414,3 +414,25 @@ checkbox/status source.
   executable equivalent used by the gate.
 - Architecture skill: no change. The node repairs a test input/execution
   boundary without changing domain or authority ownership.
+
+## 2026-09-22 — Node 5.5 acceptance
+
+- Implementation: `af53b7a3` (`docs(godot): restore historical pilot
+  identity`). The measured English and Chinese reports again identify protocol
+  v44, and the manifest classifies both paths as historical evidence rather
+  than a current bilingual document pair.
+- TDD evidence: after restoring v44 in the prose while leaving the bilingual
+  manifest entry intact, `TestCurrentDocumentationVersions` failed on the stale
+  protocol identity as expected. Changing the classification to `historical`
+  made the current-version gate exclude the immutable report.
+- Independent review found one Important gap: the completeness test checked
+  only the Chinese file's existence, one English protocol occurrence and
+  generic JSON validity. The worker added exact three-occurrence v44 checks for
+  both languages and asserted protocol 44 in the linked machine-readable
+  report; a deliberate Chinese v45 mutation failed before the correction.
+  Re-review verdict: Ready with no remaining findings.
+- Controller verification: the focused perfcheck test, all three documentation
+  audit families, the combined two-package selection and `git diff --check`
+  passed. No report measurements, commit IDs, decision or JSON fixture changed.
+- Architecture skill: no change. This restores historical evidence identity
+  and does not change runtime architecture.
