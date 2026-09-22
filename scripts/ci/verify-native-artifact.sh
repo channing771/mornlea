@@ -104,7 +104,7 @@ manifest_file="$root_real/$manifest"
 [[ -f "$manifest_file" && ! -L "$manifest_file" ]] || fail "manifest is not a regular file"
 reject_symlink_components "$manifest"
 resolve_under_root "$manifest_file" >/dev/null
-# Bash line parsing cannot preserve NUL bytes, so compare raw and NUL-stripped byte counts first.
+# This verifier owns manifest v1 compatibility and fails closed before any consumer trusts downloaded bytes.
 raw_manifest_size=$(wc -c < "$manifest_file")
 raw_manifest_size=${raw_manifest_size//[[:space:]]/}
 nul_stripped_size=$(LC_ALL=C tr -d '\000' < "$manifest_file" | wc -c) || fail "cannot inspect raw manifest"
@@ -145,7 +145,7 @@ done < "$manifest_file"
 ((record_index == ${#expected_paths[@]} + 3)) || fail "manifest record count is invalid"
 ((file_index == ${#expected_paths[@]})) || fail "manifest file set is incomplete"
 
-# Validate every existing destination component before publication so copies cannot follow an artifact-controlled link.
+# Publish only after full validation, so native consumers never receive partial or untrusted library copies.
 deps_relative=packages/engine/target/release/deps
 reject_symlink_components "$deps_relative"
 deps_dir="$root_real/$deps_relative"

@@ -55,6 +55,7 @@ func TestNativeArtifactManifestRoundTrip(t *testing.T) {
 		t.Run(platform, func(t *testing.T) {
 			fixture := newNativeArtifactFixture(t, platform)
 			fixture.packageManifest(t)
+			fixture.assertNoPackagingTemporaries(t)
 			if got := string(readFile(t, filepath.Join(fixture.root, fixture.manifest))); got != fixture.wantManifest(t) {
 				t.Fatalf("manifest bytes = %q, want %q", got, fixture.wantManifest(t))
 			}
@@ -406,6 +407,17 @@ func (f *nativeArtifactFixture) insertManifestNUL(t *testing.T) {
 	mutated = append(mutated, 0)
 	mutated = append(mutated, contents[index+len("version"):]...)
 	writeFile(t, path, mutated)
+}
+
+func (f *nativeArtifactFixture) assertNoPackagingTemporaries(t *testing.T) {
+	t.Helper()
+	temporaries, err := filepath.Glob(filepath.Join(f.root, ".native-artifact*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(temporaries) != 0 {
+		t.Fatalf("packager left temporary files: %v", temporaries)
+	}
 }
 
 func (f *nativeArtifactFixture) appendManifest(t *testing.T, record string) {

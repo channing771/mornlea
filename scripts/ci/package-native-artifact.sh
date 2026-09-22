@@ -102,7 +102,7 @@ resolve_under_root "$manifest_dir" >/dev/null
 [[ ! -e "$manifest_file" && ! -L "$manifest_file" || -f "$manifest_file" && ! -L "$manifest_file" ]] || fail "manifest destination is not a regular file"
 
 artifact_paths=("$@")
-# Validate original arguments before newline-delimited sorting can reinterpret one argument as several paths.
+# This producer owns manifest v1 serialization and rejects ambiguous inputs rather than widening that compatibility contract.
 for path in "${artifact_paths[@]}"; do
 	validate_relative_path "$path"
 	reject_symlink_components "$path"
@@ -142,4 +142,5 @@ temporary=$(mktemp "$manifest_dir/.native-artifact.XXXXXX") || fail "cannot crea
 	done
 } > "$temporary"
 mv "$temporary" "$manifest_file"
+rm -f "$sorted_file"
 trap - EXIT
