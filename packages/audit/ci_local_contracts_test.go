@@ -204,6 +204,37 @@ func TestCIRepositoryPackageInventory(t *testing.T) {
 	}
 }
 
+func TestCIPackageInventoryQueriesEveryModuleOnBothPlatforms(t *testing.T) {
+	root := repositoryRoot(t)
+	script := filepath.Join(root, "scripts", "ci", "package-inventory.sh")
+	realGo, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	queries := filepath.Join(t.TempDir(), "queries")
+	writeExecutable(t, filepath.Join(bin, "go"), fmt.Sprintf("#!/usr/bin/env bash\nif [[ \"${1:-}\" == list ]]; then\n\tprintf '%%s/%%s %%s\\n' \"$GOOS\" \"$GOARCH\" \"$PWD\" >> \"$MORNLEA_CI_QUERY_LOG\"\n\tprintf 'example/%%s/%%s|\\n' \"$GOOS\" \"$GOARCH\"\n\texit 0\nfi\nexec %q \"$@\"\n", realGo))
+	output, err := ciRunWithEnv(root, bin+":"+os.Getenv("PATH"), []string{"MORNLEA_CI_QUERY_LOG=" + queries}, script, "--all")
+	if err != nil {
+		t.Fatalf("matrix inventory failed: %v\n%s", err, output)
+	}
+	got := strings.Split(strings.TrimSpace(string(readFile(t, queries))), "\n")
+	for index := range got {
+		got[index] = strings.Replace(got[index], root+"/", "", 1)
+	}
+	slices.Sort(got)
+	want := make([]string, 0, 12)
+	for _, platform := range []string{"linux/amd64", "darwin/arm64"} {
+		for _, module := range []string{"packages/audit", "packages/client", "packages/contracts", "packages/server", "packages/shared", "packages/tools"} {
+			want = append(want, platform+" "+module)
+		}
+	}
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("inventory platform/module queries = %v, want %v", got, want)
+	}
+}
+
 func TestCIRaceEntrypointArguments(t *testing.T) {
 	root := repositoryRoot(t)
 	script := filepath.Join(root, "scripts", "ci", "run-go-race.sh")
@@ -260,16 +291,56 @@ func TestCIRaceEntrypointRejectsEmptyInventoryBeforeGoTest(t *testing.T) {
 	writeExecutable(t, script, string(readFile(t, filepath.Join(repositoryRoot(t), "scripts", "ci", "run-go-race.sh"))))
 	writeExecutable(t, filepath.Join(fixtureRoot, "scripts", "ci", "package-inventory.sh"), "#!/usr/bin/env bash\nexit 0\n")
 	bin := ciFixtureBin(t, []string{"bash"})
+	directoryTool, err := exec.LookPath("dirname")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(directoryTool, filepath.Join(bin, "dirname")); err != nil {
+		t.Fatal(err)
+	}
 	argv := filepath.Join(t.TempDir(), "argv")
+	inventoryCalled := filepath.Join(t.TempDir(), "inventory-called")
+	writeExecutable(t, filepath.Join(fixtureRoot, "scripts", "ci", "package-inventory.sh"), "#!/usr/bin/env bash\nprintf called > \"$MORNLEA_CI_INVENTORY_CALLED\"\n")
 	bashEnvironment := filepath.Join(t.TempDir(), "mapfile.sh")
-	writeFile(t, bashEnvironment, []byte("mapfile() { eval \"$2=('')\"; }\n"))
+	mapfileCalled := filepath.Join(t.TempDir(), "mapfile-called")
+	writeFile(t, bashEnvironment, []byte("mapfile() { printf called > \"$MORNLEA_CI_MAPFILE_CALLED\"; eval \"$2=('')\"; }\n"))
 	writeExecutable(t, filepath.Join(strings.Split(bin, ":")[0], "go"), "#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > \"$MORNLEA_CI_GO_ARGV\"\n")
-	output, err := ciRunWithEnv(fixtureRoot, bin, []string{"BASH_ENV=" + bashEnvironment, "MORNLEA_CI_GO_ARGV=" + argv}, script, "server")
+	output, err := ciRunWithEnv(fixtureRoot, bin, []string{"BASH_ENV=" + bashEnvironment, "MORNLEA_CI_GO_ARGV=" + argv, "MORNLEA_CI_INVENTORY_CALLED=" + inventoryCalled, "MORNLEA_CI_MAPFILE_CALLED=" + mapfileCalled}, script, "server")
 	if err == nil {
 		t.Fatalf("empty inventory unexpectedly succeeded: %s", output)
 	}
+	if got := string(readFile(t, inventoryCalled)); got != "called" {
+		t.Fatalf("empty inventory fixture was not reached: %q", got)
+	}
+	if _, statErr := os.Stat(mapfileCalled); !os.IsNotExist(statErr) {
+		t.Fatalf("empty inventory reached mapfile after the guard: %v", statErr)
+	}
 	if _, statErr := os.Stat(argv); !os.IsNotExist(statErr) {
 		t.Fatalf("empty inventory invoked go test: %v", statErr)
+	}
+}
+
+func TestCIRaceEntrypointFallbackReader(t *testing.T) {
+	fixtureRoot := t.TempDir()
+	script := filepath.Join(fixtureRoot, "scripts", "ci", "run-go-race.sh")
+	writeExecutable(t, script, string(readFile(t, filepath.Join(repositoryRoot(t), "scripts", "ci", "run-go-race.sh"))))
+	writeExecutable(t, filepath.Join(fixtureRoot, "scripts", "ci", "package-inventory.sh"), "#!/usr/bin/env bash\nprintf 'example/server\\n'\n")
+	bin := ciFixtureBin(t, []string{"bash"})
+	directoryTool, err := exec.LookPath("dirname")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(directoryTool, filepath.Join(bin, "dirname")); err != nil {
+		t.Fatal(err)
+	}
+	argv := filepath.Join(t.TempDir(), "argv")
+	writeExecutable(t, filepath.Join(bin, "go"), "#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > \"$MORNLEA_CI_GO_ARGV\"\n")
+	output, err := ciRunWithEnv(fixtureRoot, bin, []string{"MORNLEA_CI_GO_ARGV=" + argv}, script, "server")
+	if err != nil {
+		t.Fatalf("fallback reader failed: %v\n%s", err, output)
+	}
+	if got := strings.Fields(string(readFile(t, argv))); !slices.Equal(got, []string{"test", "example/server", "-race", "-p=1"}) {
+		t.Fatalf("fallback reader argv = %q", got)
 	}
 }
 

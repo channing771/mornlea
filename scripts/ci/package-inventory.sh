@@ -20,27 +20,35 @@ modules=$(cd "$root" && workspace_modules) || fail 'cannot parse go.work module 
 [[ "$modules" == "$expected_modules" ]] || fail "unexpected go.work module directories: ${modules//$'\n'/,}"
 
 # This inventory owns package loading validation, rather than treating `-e` output as usable by default.
+platform_excludes_package_error() {
+	[[ "$1" == linux && "$2" == amd64 && "$3" == packages/client && "$4" == github.com/channing771/mornlea/packages/client/cmd/mornlea/capture && "$5" == dependency ]]
+}
+
 list_module() {
 	local goos=$1 goarch=$2 module=$3 output package loading
 	shift 3
 	output=$(cd "$root/$module" && CGO_ENABLED=1 GOOS="$goos" GOARCH="$goarch" go list -e -f '{{.ImportPath}}|{{if .Error}}direct{{end}}{{if .DepsErrors}}dependency{{end}}' "$@") || fail "cannot list packages for $module"
 	while IFS='|' read -r package loading; do
 		[[ -n "$package" ]] || fail "package loading error: empty import path in $module"
-		[[ -z "$loading" ]] || fail "package loading error: $package"
+		if [[ -n "$loading" ]]; then
+			# Darwin owns the capture dependency; Linux still enumerates the client module for future portable packages.
+			platform_excludes_package_error "$goos" "$goarch" "$module" "$package" "$loading" && continue
+			fail "package loading error: $package"
+		fi
 		printf '%s\n' "$package"
 	done <<< "$output"
 }
 
 all_packages() {
-	local module
-	# Linux owns server/rest coverage; Darwin owns the client source set whose native capture dependency is Darwin-only.
+	local goos goarch module
+	# Each supported platform queries every workspace module before the union is partitioned.
 	{
-		for module in packages/audit packages/contracts packages/server packages/shared packages/tools; do
-			list_module linux amd64 "$module" ./...
+		for goos in linux darwin; do
+			if [[ "$goos" == linux ]]; then goarch=amd64; else goarch=arm64; fi
+			while IFS= read -r module; do
+				list_module "$goos" "$goarch" "$module" ./...
+			done <<< "$modules"
 		done
-		while IFS= read -r module; do
-			list_module darwin arm64 "$module" ./...
-		done <<< "$modules"
 	} | LC_ALL=C sort -u
 }
 
