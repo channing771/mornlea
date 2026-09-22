@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Preserve protocol v45, player schema v9, chunk schema v9, world metadata v6, companions.ai v5, hostile_mobs v2, passive_mobs v1, engine ABI v11, client ABI v19, and benchmark scenario v23.
-- Required runners are `ubuntu-24.04` x64 and `macos-15` arm64; `*-latest` labels are forbidden.
+- Required runners are `ubuntu-24.04` x64 and `macos-15` arm64; the optional pinned-runtime job uses `macos-26` arm64 with Xcode 26.5 because its checked-in Python runtime inputs require Clang 21 and the macOS 26.5 SDK. `*-latest` labels are forbidden.
 - External actions use the immutable SHAs listed in `task-briefs/07-required-workflow.md`; mutable major tags are forbidden.
 - Every job has `contents: read` or narrower permissions and an explicit timeout; required commands never use `continue-on-error`, allow-failure, or automatic retries.
 - The exact candidate SHA and normalized platform are manifest inputs; caches never satisfy artifact identity.

@@ -30,8 +30,8 @@ go: bash go gofmt
 native-linux: bash cargo cc go ldd make nm readelf rustc rustup shasum
 native-macos: bash cargo codesign go install_name_tool make nm rustc rustup shasum
 agent: bash go python3 uv
-godot-static: bash go rg uv
-godot-runtime: bash cargo nm rg rustc rustup uv
+godot-static: bash make rg
+godot-runtime: bash cargo cc clang++ codesign curl ditto git go install_name_tool make nm patch perl pgrep rg rustc rustup sandbox-exec shasum tar unzip uv xcrun
 ```
 
 It checks every command, reports all missing names in lexical order as `missing required executable for <profile>: <name>`, and exits 1 when any are absent. Unknown profiles exit 2 with a usage line. A success prints `CI dependency profile passed: <profile>`.

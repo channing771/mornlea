@@ -106,6 +106,8 @@ The repository MUST expose one stable required merge-gate status. It MUST succee
 
 Until an independently approved cutover change promotes the Godot client, Godot project, embedded-Python, bridge, export, and lifecycle qualification MUST execute in a separate workflow outside the required merge gate. The workflow MUST run for relevant Godot, bridge, Python-runtime, deterministic-asset, and gate-definition changes, and MUST support explicit manual execution. Unrelated changes MUST NOT download or build the Godot toolchain. A Godot failure MUST remain red and diagnosable; optional status MUST NOT be implemented by swallowing command failures.
 
+The optional runtime layer MUST select the architecture and Xcode toolchain required by its checked-in build inputs, explicitly populate dependency inputs on a cold runner, build the native engine before any cgo asset consumer, and materialize the checksum-verified Godot editor at the cache path used by headless validation. A workflow cache or preinstalled editor MUST NOT be required for success.
+
 #### Scenario: Unrelated server-only change avoids Godot setup
 
 - **GIVEN** a pull request changes only authoritative server code and no Godot input, bridge contract, generated-asset input, or gate definition
