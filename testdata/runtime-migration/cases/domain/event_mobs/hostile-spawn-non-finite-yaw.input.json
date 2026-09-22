@@ -1,0 +1,34 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "hostile-spawn",
+  "server_tick": "7",
+  "spawns": [
+    {
+      "id": "1",
+      "dimension": 0,
+      "position": [
+        "1.5",
+        "64",
+        "-3.25"
+      ],
+      "yaw": "-Inf",
+      "health": 10,
+      "kind": 0
+    },
+    {
+      "id": "2",
+      "dimension": 0,
+      "position": [
+        "2.5",
+        "65",
+        "-4.25"
+      ],
+      "yaw": "0.5",
+      "health": 10,
+      "kind": 0
+    }
+  ],
+  "states": [],
+  "ids": [],
+  "despawns": []
+}

@@ -1,0 +1,42 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "hostile-state",
+  "server_tick": "7",
+  "spawns": [],
+  "states": [
+    {
+      "id": "1",
+      "position": [
+        "1.5",
+        "64",
+        "-3.25"
+      ],
+      "velocity": [
+        "0.25",
+        "0",
+        "-0.5"
+      ],
+      "yaw": "0.5",
+      "health": 0,
+      "kind": 0
+    },
+    {
+      "id": "2",
+      "position": [
+        "2.5",
+        "65",
+        "-4.25"
+      ],
+      "velocity": [
+        "0.25",
+        "0",
+        "-0.5"
+      ],
+      "yaw": "0.5",
+      "health": 10,
+      "kind": 0
+    }
+  ],
+  "ids": [],
+  "despawns": []
+}

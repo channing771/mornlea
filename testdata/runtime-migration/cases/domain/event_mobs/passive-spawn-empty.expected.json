@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "rule": "passive_spawn.count_range",
+    "server_tick": "7",
+    "spawns": []
+  }
+}

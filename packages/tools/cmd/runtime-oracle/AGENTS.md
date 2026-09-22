@@ -170,11 +170,32 @@ producer another family's cases: `protocol_frame_test.go` (framing), and
 `domain_values_test.go`, `domain_identity_values_test.go`,
 `domain_command_control_test.go`, `domain_command_inventory_test.go`,
 `domain_event_player_test.go`, `domain_event_world_test.go`,
-`domain_event_inventory_test.go` and `domain_event_people_test.go` (the domain
-families). The world-event file also carries the shared router arm
-(`runDomainEvent`) that the inventory and people producers register their rule
-names into, because the `domain.event` family is shared by four producers and
-the rule name is the only discriminator the manifest carries.
+`domain_event_inventory_test.go`, `domain_event_people_test.go` and
+`domain_event_mobs_test.go` (the domain families). The world-event file also
+carries the shared router arm (`runDomainEvent`) that the inventory, people
+and mobs producers register their rule names into, because the `domain.event`
+family is shared by five producers and the rule name is the only discriminator
+the manifest carries.
+
+- `domain_event_mobs_test.go` executes the six hostile and passive mob
+  publication rules (`hostile-spawn`, `hostile-state`, `hostile-despawn`,
+  `passive-spawn`, `passive-state`, `passive-despawn`) through the Go
+  `protocol` DTOs. Its 68 frozen cases live under
+  `testdata/runtime-migration/cases/domain/event_mobs/` but are not yet
+  registered in the canonical manifest; that registration is a later node's
+  work, so publication is external-only through `RUNTIME_ORACLE_EXPORT_DIR`
+  under the producer ID `runtime-oracle/domain-event-mobs`, with the export
+  running before the committed-bytes comparison so an initial export can
+  materialize the full candidate while the tracked directory is still absent.
+  IDs and ticks are decimal strings in the frozen input so the full `u64`
+  range stays lossless, grazing renders as a JSON Boolean in the normalized
+  outcome, a rejected record retains the raw value of an unknown enum, and
+  the 64-record wire batch caps stay transport budgets no case sits above.
+  Rejection categories stay inside the frozen vocabulary: `invalid-identity`
+  for a zero entity ID, `invalid-enum` for dimension, kind, grazing and
+  reason, and `invalid-value` for everything else, with rule names shaped
+  `<rule>.record_<index>.<field>`, `<rule>.count_range` and
+  `<rule>.strictly_increasing_ids`.
 
 - `agent_contract_test.go` is deliberately not an executable Agent producer. It
   validates manifest identity, case presence, golden coverage and the

@@ -1,0 +1,18 @@
+{
+  "kind": "error",
+  "category": "invalid-identity",
+  "fields": {
+    "despawns": [
+      {
+        "id": "0",
+        "reason": 0
+      },
+      {
+        "id": "2",
+        "reason": 1
+      }
+    ],
+    "rule": "passive_despawn.record_0.id",
+    "server_tick": "7"
+  }
+}

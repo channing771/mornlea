@@ -1,0 +1,18 @@
+{
+  "kind": "error",
+  "category": "invalid-enum",
+  "fields": {
+    "despawns": [
+      {
+        "id": "1",
+        "reason": 2
+      },
+      {
+        "id": "2",
+        "reason": 1
+      }
+    ],
+    "rule": "passive_despawn.record_0.reason",
+    "server_tick": "7"
+  }
+}

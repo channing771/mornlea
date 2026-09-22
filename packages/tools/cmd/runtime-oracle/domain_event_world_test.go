@@ -1771,12 +1771,78 @@ func TestDomainOracle_event_world(t *testing.T) {
 	TestDomainEventWorldOracleExecutesEveryCase(t)
 }
 
+// TestDomainEventMobsRouterExecutesHostileSpawnSeed is the initial routing
+// regression for the hostile and passive mob rules: the full seed input has
+// to reach the mob producer through the shared family router and publish the
+// accepted seed under its own category, with both records in the submitted
+// order. The seed bytes are the frozen corpus rendering of the envelope, so
+// the regression also pins the shape the producer decodes: decimal-string
+// ticks and IDs, decimal float texts, and the four explicit batch arrays.
+func TestDomainEventMobsRouterExecutesHostileSpawnSeed(t *testing.T) {
+	seed := `{
+  "consumer": "mornlea_domain",
+  "rule": "hostile-spawn",
+  "server_tick": "7",
+  "spawns": [
+    {
+      "id": "1",
+      "dimension": 0,
+      "position": [
+        "1.5",
+        "64",
+        "-3.25"
+      ],
+      "yaw": "0.5",
+      "health": 10,
+      "kind": 0
+    },
+    {
+      "id": "2",
+      "dimension": 0,
+      "position": [
+        "2.5",
+        "65",
+        "-4.25"
+      ],
+      "yaw": "0.5",
+      "health": 10,
+      "kind": 0
+    }
+  ],
+  "states": [],
+  "ids": [],
+  "despawns": []
+}
+`
+	outcome, _, err := runDomainEvent(CaseSpec{ID: "domain.event/1/hostile-spawn-seed"}, []byte(seed))
+	if err != nil {
+		t.Fatalf("runDomainEvent rejected the hostile spawn seed: %v", err)
+	}
+	if outcome.Kind != "ok" {
+		t.Fatalf("seed outcome kind = %q, want ok", outcome.Kind)
+	}
+	if outcome.Category != "hostile-spawn" {
+		t.Fatalf("seed outcome category = %q, want hostile-spawn", outcome.Category)
+	}
+	spawns, ok := outcome.Fields["spawns"].([]map[string]any)
+	if !ok {
+		t.Fatalf("seed outcome carries no spawns array: %#v", outcome.Fields["spawns"])
+	}
+	if len(spawns) != 2 {
+		t.Fatalf("seed outcome carries %d spawn records, want 2", len(spawns))
+	}
+	if spawns[0]["id"] != "1" || spawns[1]["id"] != "2" {
+		t.Fatalf("seed spawn records are not in the submitted order: %#v", spawns)
+	}
+}
+
 // runDomainEvent routes one `domain.event` case to the producer that owns its
 // rule. The family is shared by the world observations, the player and outcome
-// records, the inventory and container publications and the remote-player and
-// companion observations, so the rule name is the only discriminator the
-// manifest carries, and a rule no producer names fails the run rather than
-// falling back to one that cannot execute it.
+// records, the inventory and container publications, the remote-player and
+// companion observations and the hostile and passive mob observations, so the
+// rule name is the only discriminator the manifest carries, and a rule no
+// producer names fails the run rather than falling back to one that cannot
+// execute it.
 func runDomainEvent(c CaseSpec, input []byte) (Outcome, []byte, error) {
 	envelope, err := domainEventDecodeRule(input)
 	if err != nil {
@@ -1795,6 +1861,10 @@ func runDomainEvent(c CaseSpec, input []byte) (Outcome, []byte, error) {
 		domainEventPeopleRuleRemoteStates, domainEventPeopleRuleCompanionSpawn,
 		domainEventPeopleRuleCompanionStates, domainEventPeopleRuleCompanionDespawn:
 		return runDomainEventPeople(c, input)
+	case domainEventMobsRuleHostileSpawn, domainEventMobsRuleHostileState,
+		domainEventMobsRuleHostileDespawn, domainEventMobsRulePassiveSpawn,
+		domainEventMobsRulePassiveState, domainEventMobsRulePassiveDespawn:
+		return runDomainEventMobs(c, input)
 	default:
 		return Outcome{}, nil, fmt.Errorf("runtime-oracle: case %s names unknown rule %q", c.ID, envelope.Rule)
 	}

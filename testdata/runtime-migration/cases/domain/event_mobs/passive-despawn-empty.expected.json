@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "despawns": [],
+    "rule": "passive_despawn.count_range",
+    "server_tick": "7"
+  }
+}

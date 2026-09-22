@@ -1,0 +1,12 @@
+{
+  "kind": "error",
+  "category": "invalid-identity",
+  "fields": {
+    "ids": [
+      "0",
+      "2"
+    ],
+    "rule": "hostile_despawn.record_0.id",
+    "server_tick": "7"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "hostile-despawn",
+  "server_tick": "7",
+  "spawns": [],
+  "states": [],
+  "ids": [
+    "0",
+    "2"
+  ],
+  "despawns": []
+}

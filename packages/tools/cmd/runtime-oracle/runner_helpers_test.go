@@ -37,6 +37,7 @@ var validProducerIDs = map[string]bool{
 	"runtime-oracle/domain-event-world":       true,
 	"runtime-oracle/domain-event-inventory":   true,
 	"runtime-oracle/domain-event-people":      true,
+	"runtime-oracle/domain-event-mobs":        true,
 	"companion/agent-contract":                true,
 }
 

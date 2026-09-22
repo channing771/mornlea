@@ -1,0 +1,42 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "rule": "passive_state.record_0.health",
+    "server_tick": "7",
+    "states": [
+      {
+        "grazing": false,
+        "health": 0,
+        "id": "1",
+        "position": [
+          "3fc00000",
+          "42800000",
+          "c0500000"
+        ],
+        "velocity": [
+          "3e800000",
+          "00000000",
+          "bf000000"
+        ],
+        "yaw": "3f000000"
+      },
+      {
+        "grazing": true,
+        "health": 10,
+        "id": "2",
+        "position": [
+          "40200000",
+          "42820000",
+          "c0880000"
+        ],
+        "velocity": [
+          "3e800000",
+          "00000000",
+          "bf000000"
+        ],
+        "yaw": "3f000000"
+      }
+    ]
+  }
+}

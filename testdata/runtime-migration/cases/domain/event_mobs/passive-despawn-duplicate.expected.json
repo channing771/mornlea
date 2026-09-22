@@ -1,0 +1,18 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "despawns": [
+      {
+        "id": "1",
+        "reason": 0
+      },
+      {
+        "id": "1",
+        "reason": 1
+      }
+    ],
+    "rule": "passive_despawn.strictly_increasing_ids",
+    "server_tick": "7"
+  }
+}

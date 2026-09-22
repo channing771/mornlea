@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "ids": [],
+    "rule": "hostile_despawn.count_range",
+    "server_tick": "7"
+  }
+}

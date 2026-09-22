@@ -1,0 +1,11 @@
+{
+  "kind": "ok",
+  "category": "hostile-despawn",
+  "fields": {
+    "ids": [
+      "1",
+      "2"
+    ],
+    "server_tick": "7"
+  }
+}

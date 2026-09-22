@@ -1,0 +1,32 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "rule": "passive_spawn.strictly_increasing_ids",
+    "server_tick": "7",
+    "spawns": [
+      {
+        "dimension": 0,
+        "health": 10,
+        "id": "1",
+        "position": [
+          "3fc00000",
+          "42800000",
+          "c0500000"
+        ],
+        "yaw": "3f000000"
+      },
+      {
+        "dimension": 0,
+        "health": 10,
+        "id": "1",
+        "position": [
+          "40200000",
+          "42820000",
+          "c0880000"
+        ],
+        "yaw": "3f000000"
+      }
+    ]
+  }
+}
