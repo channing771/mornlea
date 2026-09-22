@@ -1,0 +1,28 @@
+{
+  "kind": "error",
+  "category": "invalid-identity",
+  "fields": {
+    "ids": [
+      {
+        "chunk": [
+          0,
+          0
+        ],
+        "dimension": 0,
+        "generation": 0,
+        "slot": 1
+      },
+      {
+        "chunk": [
+          0,
+          0
+        ],
+        "dimension": 0,
+        "generation": 1,
+        "slot": 2
+      }
+    ],
+    "rule": "item_drop_removes.id_0.generation",
+    "server_tick": "7"
+  }
+}

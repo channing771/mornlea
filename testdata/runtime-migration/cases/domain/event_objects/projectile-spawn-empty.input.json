@@ -1,0 +1,9 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "projectile-spawn",
+  "server_tick": "7",
+  "spawns": [],
+  "states": [],
+  "ids": [],
+  "drops": []
+}

@@ -1,0 +1,27 @@
+{
+  "kind": "ok",
+  "category": "item-drop-removes",
+  "fields": {
+    "ids": [
+      {
+        "chunk": [
+          0,
+          0
+        ],
+        "dimension": 0,
+        "generation": 1,
+        "slot": 1
+      },
+      {
+        "chunk": [
+          0,
+          0
+        ],
+        "dimension": 0,
+        "generation": 1,
+        "slot": 2
+      }
+    ],
+    "server_tick": "7"
+  }
+}

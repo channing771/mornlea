@@ -1,0 +1,44 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "drops": [
+      {
+        "block_index": 17,
+        "id": {
+          "chunk": [
+            0,
+            0
+          ],
+          "dimension": 0,
+          "generation": 1,
+          "slot": 1
+        },
+        "stack": {
+          "count": 1,
+          "durability": 0,
+          "item": 66
+        }
+      },
+      {
+        "block_index": 18,
+        "id": {
+          "chunk": [
+            0,
+            0
+          ],
+          "dimension": 0,
+          "generation": 1,
+          "slot": 2
+        },
+        "stack": {
+          "count": 1,
+          "durability": 0,
+          "item": 1
+        }
+      }
+    ],
+    "rule": "item_drop_upserts.drop_0.stack.item",
+    "server_tick": "7"
+  }
+}

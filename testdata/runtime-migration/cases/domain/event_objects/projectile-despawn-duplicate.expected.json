@@ -1,0 +1,12 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "ids": [
+      "1",
+      "1"
+    ],
+    "rule": "projectile_despawn.strictly_increasing_ids",
+    "server_tick": "7"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "item-drop-upserts",
+  "server_tick": "7",
+  "spawns": [],
+  "states": [],
+  "ids": [],
+  "drops": [
+    {
+      "id": {
+        "dimension": 0,
+        "chunk": [
+          0,
+          0
+        ],
+        "slot": 1,
+        "generation": 1
+      },
+      "block_index": 17,
+      "stack": {
+        "item": 1,
+        "count": 1,
+        "durability": 0
+      }
+    },
+    {
+      "id": {
+        "dimension": 0,
+        "chunk": [
+          0,
+          0
+        ],
+        "slot": 2,
+        "generation": 1
+      },
+      "block_index": 18,
+      "stack": {
+        "item": 1,
+        "count": 1,
+        "durability": 0
+      }
+    }
+  ]
+}

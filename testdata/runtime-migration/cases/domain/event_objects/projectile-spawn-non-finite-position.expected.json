@@ -1,0 +1,70 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "rule": "projectile_spawn.record_0.position",
+    "server_tick": "7",
+    "spawns": [
+      {
+        "dimension": 0,
+        "id": "1",
+        "kind": 0,
+        "position": [
+          "7fc00000",
+          "42800000",
+          "c0500000"
+        ],
+        "velocity": [
+          "3e800000",
+          "00000000",
+          "bf000000"
+        ]
+      },
+      {
+        "dimension": 1,
+        "id": "2",
+        "kind": 0,
+        "position": [
+          "40200000",
+          "42820000",
+          "c0880000"
+        ],
+        "velocity": [
+          "3e800000",
+          "00000000",
+          "bf000000"
+        ]
+      },
+      {
+        "dimension": 0,
+        "id": "3",
+        "kind": 1,
+        "position": [
+          "40600000",
+          "42840000",
+          "c0a80000"
+        ],
+        "velocity": [
+          "3e800000",
+          "00000000",
+          "bf000000"
+        ]
+      },
+      {
+        "dimension": 1,
+        "id": "4",
+        "kind": 1,
+        "position": [
+          "40900000",
+          "42860000",
+          "c0c80000"
+        ],
+        "velocity": [
+          "3e800000",
+          "00000000",
+          "bf000000"
+        ]
+      }
+    ]
+  }
+}

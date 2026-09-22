@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "ids": [],
+    "rule": "item_drop_removes.count_range",
+    "server_tick": "7"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "kind": "ok",
+  "category": "projectile-state",
+  "fields": {
+    "server_tick": "7",
+    "states": [
+      {
+        "id": "1",
+        "position": [
+          "3fc00000",
+          "42800000",
+          "c0500000"
+        ]
+      },
+      {
+        "id": "2",
+        "position": [
+          "40200000",
+          "42820000",
+          "c0880000"
+        ]
+      }
+    ]
+  }
+}

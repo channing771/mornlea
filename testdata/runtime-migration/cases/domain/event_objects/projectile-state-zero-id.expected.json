@@ -1,0 +1,26 @@
+{
+  "kind": "error",
+  "category": "invalid-identity",
+  "fields": {
+    "rule": "projectile_state.record_0.id",
+    "server_tick": "7",
+    "states": [
+      {
+        "id": "0",
+        "position": [
+          "3fc00000",
+          "42800000",
+          "c0500000"
+        ]
+      },
+      {
+        "id": "2",
+        "position": [
+          "40200000",
+          "42820000",
+          "c0880000"
+        ]
+      }
+    ]
+  }
+}

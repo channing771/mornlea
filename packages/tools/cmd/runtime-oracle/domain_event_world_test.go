@@ -1836,13 +1836,117 @@ func TestDomainEventMobsRouterExecutesHostileSpawnSeed(t *testing.T) {
 	}
 }
 
+// TestDomainEventObjectsRouterExecutesProjectileSpawnSeed is the initial
+// routing regression for the projectile and item-drop rules: the full
+// four-record seed input has to reach the object producer through the shared
+// family router and publish the accepted seed under its own category, with
+// all four records in the submitted order. The seed bytes are the frozen
+// corpus rendering of the envelope, so the regression also pins the shape the
+// producer decodes: decimal-string ticks and IDs, decimal float texts, and
+// the four explicit batch arrays.
+func TestDomainEventObjectsRouterExecutesProjectileSpawnSeed(t *testing.T) {
+	seed := `{
+  "consumer": "mornlea_domain",
+  "rule": "projectile-spawn",
+  "server_tick": "7",
+  "spawns": [
+    {
+      "id": "1",
+      "kind": 0,
+      "dimension": 0,
+      "position": [
+        "1.5",
+        "64",
+        "-3.25"
+      ],
+      "velocity": [
+        "0.25",
+        "0",
+        "-0.5"
+      ]
+    },
+    {
+      "id": "2",
+      "kind": 0,
+      "dimension": 1,
+      "position": [
+        "2.5",
+        "65",
+        "-4.25"
+      ],
+      "velocity": [
+        "0.25",
+        "0",
+        "-0.5"
+      ]
+    },
+    {
+      "id": "3",
+      "kind": 1,
+      "dimension": 0,
+      "position": [
+        "3.5",
+        "66",
+        "-5.25"
+      ],
+      "velocity": [
+        "0.25",
+        "0",
+        "-0.5"
+      ]
+    },
+    {
+      "id": "4",
+      "kind": 1,
+      "dimension": 1,
+      "position": [
+        "4.5",
+        "67",
+        "-6.25"
+      ],
+      "velocity": [
+        "0.25",
+        "0",
+        "-0.5"
+      ]
+    }
+  ],
+  "states": [],
+  "ids": [],
+  "drops": []
+}
+`
+	outcome, _, err := runDomainEvent(CaseSpec{ID: "domain.event/1/projectile-spawn-all-kind-dimension-combinations"}, []byte(seed))
+	if err != nil {
+		t.Fatalf("runDomainEvent rejected the projectile spawn seed: %v", err)
+	}
+	if outcome.Kind != "ok" {
+		t.Fatalf("seed outcome kind = %q, want ok", outcome.Kind)
+	}
+	if outcome.Category != "projectile-spawn" {
+		t.Fatalf("seed outcome category = %q, want projectile-spawn", outcome.Category)
+	}
+	spawns, ok := outcome.Fields["spawns"].([]map[string]any)
+	if !ok {
+		t.Fatalf("seed outcome carries no spawns array: %#v", outcome.Fields["spawns"])
+	}
+	if len(spawns) != 4 {
+		t.Fatalf("seed outcome carries %d spawn records, want 4", len(spawns))
+	}
+	for index, id := range []string{"1", "2", "3", "4"} {
+		if spawns[index]["id"] != id {
+			t.Fatalf("seed spawn records are not in the submitted order: %#v", spawns)
+		}
+	}
+}
+
 // runDomainEvent routes one `domain.event` case to the producer that owns its
 // rule. The family is shared by the world observations, the player and outcome
 // records, the inventory and container publications, the remote-player and
-// companion observations and the hostile and passive mob observations, so the
-// rule name is the only discriminator the manifest carries, and a rule no
-// producer names fails the run rather than falling back to one that cannot
-// execute it.
+// companion observations, the hostile and passive mob observations and the
+// projectile and item-drop observations, so the rule name is the only
+// discriminator the manifest carries, and a rule no producer names fails the
+// run rather than falling back to one that cannot execute it.
 func runDomainEvent(c CaseSpec, input []byte) (Outcome, []byte, error) {
 	envelope, err := domainEventDecodeRule(input)
 	if err != nil {
@@ -1865,6 +1969,10 @@ func runDomainEvent(c CaseSpec, input []byte) (Outcome, []byte, error) {
 		domainEventMobsRuleHostileDespawn, domainEventMobsRulePassiveSpawn,
 		domainEventMobsRulePassiveState, domainEventMobsRulePassiveDespawn:
 		return runDomainEventMobs(c, input)
+	case domainEventObjectsRuleProjectileSpawn, domainEventObjectsRuleProjectileState,
+		domainEventObjectsRuleProjectileDespawn, domainEventObjectsRuleItemDropUpserts,
+		domainEventObjectsRuleItemDropRemoves:
+		return runDomainEventObjects(c, input)
 	default:
 		return Outcome{}, nil, fmt.Errorf("runtime-oracle: case %s names unknown rule %q", c.ID, envelope.Rule)
 	}

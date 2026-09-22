@@ -1,0 +1,28 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "ids": [
+      {
+        "chunk": [
+          0,
+          0
+        ],
+        "dimension": 0,
+        "generation": 1,
+        "slot": 1
+      },
+      {
+        "chunk": [
+          0,
+          0
+        ],
+        "dimension": 0,
+        "generation": 1,
+        "slot": 1
+      }
+    ],
+    "rule": "item_drop_removes.strictly_increasing_ids",
+    "server_tick": "7"
+  }
+}

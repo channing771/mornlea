@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "rule": "projectile_spawn.count_range",
+    "server_tick": "7",
+    "spawns": []
+  }
+}

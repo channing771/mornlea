@@ -1,0 +1,28 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "item-drop-removes",
+  "server_tick": "7",
+  "spawns": [],
+  "states": [],
+  "ids": [
+    {
+      "dimension": 0,
+      "chunk": [
+        0,
+        0
+      ],
+      "slot": 2,
+      "generation": 1
+    },
+    {
+      "dimension": 0,
+      "chunk": [
+        0,
+        0
+      ],
+      "slot": 1,
+      "generation": 1
+    }
+  ],
+  "drops": []
+}

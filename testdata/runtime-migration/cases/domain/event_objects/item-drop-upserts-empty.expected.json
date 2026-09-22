@@ -1,0 +1,9 @@
+{
+  "kind": "error",
+  "category": "invalid-value",
+  "fields": {
+    "drops": [],
+    "rule": "item_drop_upserts.count_range",
+    "server_tick": "7"
+  }
+}

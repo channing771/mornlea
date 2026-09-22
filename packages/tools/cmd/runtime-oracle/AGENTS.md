@@ -170,12 +170,13 @@ producer another family's cases: `protocol_frame_test.go` (framing), and
 `domain_values_test.go`, `domain_identity_values_test.go`,
 `domain_command_control_test.go`, `domain_command_inventory_test.go`,
 `domain_event_player_test.go`, `domain_event_world_test.go`,
-`domain_event_inventory_test.go`, `domain_event_people_test.go` and
-`domain_event_mobs_test.go` (the domain families). The world-event file also
-carries the shared router arm (`runDomainEvent`) that the inventory, people
-and mobs producers register their rule names into, because the `domain.event`
-family is shared by five producers and the rule name is the only discriminator
-the manifest carries.
+`domain_event_inventory_test.go`, `domain_event_people_test.go`,
+`domain_event_mobs_test.go` and `domain_event_objects_test.go` (the domain
+families). The world-event file also carries the shared router arm
+(`runDomainEvent`) that the inventory, people, mobs and objects producers
+register their rule names into, because the `domain.event` family is shared by
+six producers and the rule name is the only discriminator the manifest
+carries.
 
 - `domain_event_mobs_test.go` executes the six hostile and passive mob
   publication rules (`hostile-spawn`, `hostile-state`, `hostile-despawn`,
@@ -196,6 +197,33 @@ the manifest carries.
   reason, and `invalid-value` for everything else, with rule names shaped
   `<rule>.record_<index>.<field>`, `<rule>.count_range` and
   `<rule>.strictly_increasing_ids`.
+
+- `domain_event_objects_test.go` executes the five projectile and item-drop
+  publication rules (`projectile-spawn`, `projectile-state`,
+  `projectile-despawn`, `item-drop-upserts`, `item-drop-removes`) through the
+  Go `protocol` DTOs. Its 45 frozen cases live under
+  `testdata/runtime-migration/cases/domain/event_objects/` but are not yet
+  registered in the canonical manifest; that registration is a later node's
+  work, so publication is external-only through `RUNTIME_ORACLE_EXPORT_DIR`
+  under the producer ID `runtime-oracle/domain-event-objects`, with the export
+  running before the committed-bytes comparison so an initial export can
+  materialize the full candidate while the tracked directory is still absent.
+  Projectile IDs and ticks are decimal strings in the frozen input so the full
+  `u64` range stays lossless, a drop identity stays the object of its five
+  ordered key fields with the raw i32 dimension first, and a carried stack
+  stays the numeric `item/count/durability` object. A drop's raw dimension is
+  deliberately unvalidated — the Go `DropID.Valid` rule checks only the slot
+  range and the generation, so a negative raw dimension is an admitted
+  boundary and the batch ordering compares the raw dimension first.
+  Rejection categories stay inside the frozen vocabulary: `invalid-identity`
+  for a zero projectile ID and for drop-ID slot/generation errors,
+  `invalid-enum` for an unknown projectile kind or dimension, and
+  `invalid-value` for block-index, stack, non-finite and aggregate errors,
+  with rule names shaped `<rule>.record_<index>.<field>`,
+  `item_drop_upserts.drop_<index>.<field>` and
+  `item_drop_removes.id_<index>.<field>`, plus `<rule>.count_range` and
+  `<rule>.strictly_increasing_ids`. The 128/32-record wire batch caps stay
+  transport budgets no case sits above.
 
 - `agent_contract_test.go` is deliberately not an executable Agent producer. It
   validates manifest identity, case presence, golden coverage and the

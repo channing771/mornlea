@@ -1,0 +1,26 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "projectile-state",
+  "server_tick": "7",
+  "spawns": [],
+  "states": [
+    {
+      "id": "2",
+      "position": [
+        "2.5",
+        "65",
+        "-4.25"
+      ]
+    },
+    {
+      "id": "1",
+      "position": [
+        "1.5",
+        "64",
+        "-3.25"
+      ]
+    }
+  ],
+  "ids": [],
+  "drops": []
+}

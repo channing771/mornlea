@@ -1,0 +1,70 @@
+{
+  "consumer": "mornlea_domain",
+  "rule": "projectile-spawn",
+  "server_tick": "7",
+  "spawns": [
+    {
+      "id": "1",
+      "kind": 0,
+      "dimension": 0,
+      "position": [
+        "1.5",
+        "64",
+        "-3.25"
+      ],
+      "velocity": [
+        "0.25",
+        "0",
+        "-0.5"
+      ]
+    },
+    {
+      "id": "2",
+      "kind": 0,
+      "dimension": 1,
+      "position": [
+        "2.5",
+        "65",
+        "-4.25"
+      ],
+      "velocity": [
+        "0.25",
+        "0",
+        "-0.5"
+      ]
+    },
+    {
+      "id": "3",
+      "kind": 1,
+      "dimension": 0,
+      "position": [
+        "3.5",
+        "66",
+        "-5.25"
+      ],
+      "velocity": [
+        "0.25",
+        "0",
+        "-0.5"
+      ]
+    },
+    {
+      "id": "4",
+      "kind": 1,
+      "dimension": 1,
+      "position": [
+        "4.5",
+        "67",
+        "-6.25"
+      ],
+      "velocity": [
+        "0.25",
+        "0",
+        "-0.5"
+      ]
+    }
+  ],
+  "states": [],
+  "ids": [],
+  "drops": []
+}
