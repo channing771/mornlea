@@ -436,3 +436,35 @@ checkbox/status source.
   passed. No report measurements, commit IDs, decision or JSON fixture changed.
 - Architecture skill: no change. This restores historical evidence identity
   and does not change runtime architecture.
+
+## 2026-09-22 — Node 5.6 acceptance
+
+- Implementation: `4c7b7a5c` (`docs(client): translate newly introduced source
+  comments`). Exactly the 17 client, frontend and Rust bridge files owned by
+  the node changed, and every changed line is a comment selected from the
+  post-`752d138b` delta; grandfathered comments and behavior remain untouched.
+- TDD evidence: the initial English-comment audit reported increased or new
+  debt in all 17 owned paths. After translation, its only owned diagnostics are
+  legitimate decreases in five files; no owned path reports growth, new debt
+  or a same-count digest replacement. Later server/shared debt remains assigned
+  to nodes 5.7 and 5.8.
+- Validation: client and app race tests passed (4.208s and 121.150s in the
+  controller rerun); frontend typecheck, 255 tests, production build and
+  tracked-dist gate passed; the Rust client passed 235/235 tests; Rust format
+  and `git diff --check` passed.
+- Independent review found one Minor semantic-summary error in a furnace-output
+  test comment. The worker corrected the distinction between preserving the
+  source slot and clearing a same-slot action; re-review was Ready with no
+  remaining findings.
+- Tooling lesson: a translated comment token named `static` changed Tailwind's
+  source scan and generated CSS. The worker reworded the comment to `recorded`
+  and reran the complete frontend gate. Comment-only tasks must still execute
+  language/toolchain build gates because source scanners can treat comments as
+  inputs.
+- Superpowers availability: the worker surface did not expose the plugin skill
+  resources. The worker reported this rather than claiming an invocation and
+  followed the controller's previously frozen, independently reviewed
+  Superpowers packet through RED, minimal edit, verification and re-review.
+- Architecture skill: no change. The edits repair local source-comment debt;
+  the source-scanner lesson is an implementation-validation concern, not a
+  stable cross-boundary architecture rule.
