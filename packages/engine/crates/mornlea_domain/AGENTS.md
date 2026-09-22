@@ -49,25 +49,29 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   input is rejected without inspecting a single scalar. `CompanionName`
   inherits that byte-first gate before its embedded-whitespace scan.
 
-## Resource bounds (`src/lib.rs`, `src/event/world.rs`, `src/event/people.rs`, `tests/resource_bounds.rs`)
+## Resource bounds (`src/lib.rs`, `src/event/world.rs`, `src/event/people.rs`, `src/event/mobs.rs`, `src/event/objects.rs`, `tests/resource_bounds.rs`)
 
 - `MAX_SEMANTIC_BATCH_RECORDS` (`4096`) is the shared semantic work cap for
-  `BlockChanges`, `ForgetChunks`, `RemotePlayerStates` and `CompanionStates`.
-  Each constructor checks it at its first line and reports `BatchTooLarge`
-  before every content relation, so an oversized input costs a length compare
-  instead of proportional scans, copies or sorts. It is a work bound, not a
-  wire budget: the protocol packet ceilings (4096 block changes and forget
-  chunks, 7 remote-player records, 4 companion records) stay transport budgets
-  in `mornlea_protocol`.
+  `BlockChanges`, `ForgetChunks`, `RemotePlayerStates`, `CompanionStates`, the
+  three hostile batches, the three passive batches, the three projectile
+  batches and the two item-drop batches. Each constructor checks it at its
+  first line and reports `BatchTooLarge` before every content relation, so an
+  oversized input costs a length compare instead of proportional scans, copies
+  or sorts. It is a work bound, not a wire budget: the protocol packet ceilings
+  (4096 block changes and forget chunks, 7 remote-player records, 4 companion
+  records, 64 hostile and passive records, 128 projectile records, 32 drops)
+  stay transport budgets in `mornlea_protocol`.
 - `DomainError::NonFiniteValue` is the vector finiteness error
   (`FiniteVec3::try_new`); `NonFiniteRotation` stays the rotation error owned
   by `LookAngles::try_new`. `DomainError::Allocation` is the typed mapping of
   a failed scratch reservation: `ForgetChunks` sorts a `try_reserve_exact`
   scratch (`reserve_sorted_scratch` in `event/world.rs`,
   `allocation_failure_maps_to_typed_error`) and never copies, sorts or
-  publishes before the reserve succeeds.
-- Precedence is pinned by `tests/resource_bounds.rs`: every batch type admits
-  a 4096-record input and rejects a 4097-record input that also violates a
+  publishes before the reserve succeeds. The mob, projectile and item-drop
+  batches own the provided box and reserve no scratch, so they have no
+  allocation-failure path to pin.
+- Precedence is pinned by `tests/resource_bounds.rs`: all fifteen batch types
+  admit a 4096-record input and reject a 4097-record input that also violates a
   later content rule with `BatchTooLarge`, proving the gate precedes the
   content scan. The empty block-change revision barrier stays admitted.
 
