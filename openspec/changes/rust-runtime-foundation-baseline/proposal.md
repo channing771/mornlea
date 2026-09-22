@@ -46,6 +46,7 @@ None.
 
 - Affected code: `packages/tools/cmd/runtime-oracle/`,
   `packages/shared/companion/` test producers, `packages/audit/` gates,
+  `packages/server/server/transport_parity_integration_test.go`,
   `packages/engine/tests/runtime_corpus.rs`, and
   `packages/engine/crates/mornlea_domain/`.
 - Protocol/save compatibility: protocol remains v45 and every save/ABI version

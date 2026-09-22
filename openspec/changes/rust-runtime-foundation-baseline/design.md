@@ -320,7 +320,7 @@ and archive. A linked node's editable-file list grants one worker temporary
 exclusive ownership of those files, including shared test support or public
 exports; no other worker edits them until review and commit. Workers do not
 update status. The initial six repair areas decomposed into fifteen bounded
-implementation nodes; final review adds twelve bounded repair/retrospective nodes
+implementation nodes; final review adds thirteen bounded repair/retrospective nodes
 before a renewed controller closeout. Each node receives one
 exclusive file set, one behavioral red/green cycle, one independent code
 review, one scoped implementation commit, and one controller-only status
