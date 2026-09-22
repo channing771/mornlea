@@ -50,7 +50,7 @@
 ## 4. Repository-owned CI entry points
 
 - [x] 4.1 Implement dependency profiles, six-module race inventory, preflight, and race-slice entry points (`task-briefs/05-preflight-and-race.md`).
-- [ ] 4.2 Implement native build, Linux bundle, quality, and split integration entry points (`task-briefs/06-native-and-integration.md`).
+- [x] 4.2 Implement native build, Linux bundle, quality, and split integration entry points (`task-briefs/06-native-and-integration.md`).
 
 ## 5. Workflow topology
 
