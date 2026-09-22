@@ -1660,7 +1660,7 @@ func domainEventChatSelection(t *testing.T, root string) domainEventSelection {
 }
 
 // The frozen manifest counts this node's candidate must reach: 533 total
-// `mornlea_domain` cases, 321 of them registered under the shared
+// mornlea_domain cases, 321 of them registered under the shared
 // `domain.event` family, and a family provenance union of 30 paths.
 const (
 	domainEventChatMergedDomainTotal = 533
@@ -1685,7 +1685,7 @@ func TestDomainEventChatManifestCandidateClosesTheEventPartition(t *testing.T) {
 	selection := domainEventChatSelection(t, root)
 	merged := mergeDomainEventSelections(t, root, base, selection)
 	// This node refreshes the execution baseline once: the captured checkout
-	// SHA is the single source revision the manifest's `source_revision` and
+	// SHA is the single source revision the manifest's "source_revision" and
 	// the Go `BaselineSourceRevision` constant must both carry from here on.
 	merged.SourceRevision = BaselineSourceRevision
 

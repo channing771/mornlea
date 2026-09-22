@@ -42,7 +42,7 @@ import (
 // domain value does not carry, so no case in this family sits above one; the
 // classifier names the bound only so a count a case does name stays
 // classifiable. The domain requires a nonempty batch whose IDs are strictly
-// increasing, which the `count_range` and `strictly_increasing_ids` rules
+// increasing, which the "count_range" and "strictly_increasing_ids" rules
 // pin. IDs and ticks are decimal strings in the frozen input so their full
 // `u64` range stays lossless, the grazing byte is a JSON Boolean in the
 // normalized outcome, and a rejected record retains the raw input value of an
@@ -153,8 +153,8 @@ var domainEventMobsExportPublished bool
 // rather than JSON numbers so NaN, the infinities and a signed zero stay
 // expressible. The six rules share one envelope whose four batch keys are
 // always serialized, an empty batch included, so a replay consumer never
-// reads a missing key as an absent batch: hostile rules fill `spawns`,
-// `states` and `ids`, passive rules fill `spawns`, `states` and `despawns`,
+// reads a missing key as an absent batch: hostile rules fill "spawns",
+// `states` and `ids`, passive rules fill "spawns", `states` and "despawns",
 // and the keys a rule does not read stay explicit empty lists.
 type domainEventMobsInput struct {
 	Consumer   string  `json:"consumer"`
@@ -224,7 +224,7 @@ type domainEventMobsPassiveDespawnRecord struct {
 }
 
 // domainEventMobsInputWire is the frozen on-disk rendering of one corpus
-// input. The two mob families share the `spawns` and `states` keys while
+// input. The two mob families share the "spawns" and `states` keys while
 // their record shapes differ, so the typed arrays live on the input and the
 // wire renders the pair the rule names; the keys a rule does not read are
 // explicit empty lists rather than absent keys.
@@ -2413,7 +2413,7 @@ func domainEventMobsSelection(t *testing.T, root string) domainEventSelection {
 }
 
 // The frozen manifest counts this producer's re-merge must reach now that
-// the domain corpus partition is closed: 533 total `mornlea_domain` cases,
+// the domain corpus partition is closed: 533 total mornlea_domain cases,
 // 321 of them registered under the shared `domain.event` family. The
 // node-era intermediate totals (444 and 232) were correct while the corpus
 // was still growing; the closed partition is the final target every

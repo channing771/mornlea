@@ -216,8 +216,8 @@ func mergeDomainEventSelectionsChecked(
 	}
 	merged.Families[familyIndex].Sources = sources
 
-	// 5. `source_revision` is preserved verbatim; refreshing it is a later
-	// node's explicit act.
+	// 5. The "source_revision" field is preserved verbatim; refreshing it is
+	// a later node's explicit act.
 	return merged, nil
 }
 

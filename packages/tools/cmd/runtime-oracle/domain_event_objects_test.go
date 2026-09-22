@@ -43,8 +43,8 @@ import (
 // keep are transport budgets the domain value does not carry, so no case in
 // this family sits above one; the classifier names the bound only so a count
 // a case does name stays classifiable. The domain requires a nonempty batch
-// whose identities are strictly increasing, which the `count_range` and
-// `strictly_increasing_ids` rules pin. Projectile IDs and ticks are decimal
+// whose identities are strictly increasing, which the "count_range" and
+// "strictly_increasing_ids" rules pin. Projectile IDs and ticks are decimal
 // strings in the frozen input so their full `u64` range stays lossless, a
 // `core.DropID` stays the object of its five ordered key fields, and a drop's
 // raw dimension is deliberately unvalidated because the Go `DropID.Valid`
@@ -162,7 +162,7 @@ var domainEventObjectsExportPublished bool
 // signed zero stay expressible. The five rules share one envelope whose four
 // batch keys are always serialized, an empty batch included, so a replay
 // consumer never reads a missing key as an absent batch: the projectile rules
-// fill `spawns`, `states` and `ids`, the drop rules fill `drops` and `ids`,
+// fill "spawns", `states` and `ids`, the drop rules fill `drops` and `ids`,
 // and the keys a rule does not read stay explicit empty lists. The `ids` key
 // carries decimal projectile identities for `projectile-despawn` and drop-ID
 // objects for `item-drop-removes`, so the two shapes never meet in one
@@ -2285,7 +2285,7 @@ func domainEventObjectsSelection(t *testing.T, root string) domainEventSelection
 }
 
 // The frozen manifest counts this producer's re-merge must reach now that
-// the domain corpus partition is closed: 533 total `mornlea_domain` cases,
+// the domain corpus partition is closed: 533 total mornlea_domain cases,
 // 321 of them registered under the shared `domain.event` family, and a
 // family provenance union of 30 paths. The node-era intermediate totals
 // (489 and 277) were correct while the corpus was still growing; the
