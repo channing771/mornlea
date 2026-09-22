@@ -18,9 +18,8 @@ import (
 // either duplicate it or turn the corpus into a tautology. Instead this file
 // verifies the evidence that producer published: it binds every committed corpus
 // case to a manifest entry with reviewed digests, proves the frozen corpus covers
-// exactly the committed golden fixtures, pins the case identities to the external
-// consumer the change names, and validates an exported report through the
-// production trace publisher and validator.
+// exactly the committed golden fixtures, and pins the case identities to the
+// external consumer the change names.
 
 const (
 	// agentHTTPFamily and agentMCPFamily are the two externally owned contract
@@ -46,9 +45,6 @@ const (
 	// is missing has no independently executed evidence at all.
 	agentProducerTestRelPath = "packages/shared/companion/runtime_contract_oracle_test.go"
 	agentProducerTestName    = "TestRuntimeAgentContractOracle"
-	// agentCorpusReportName is the published report file name for the executed
-	// Agent contract evidence.
-	agentCorpusReportName = "runtime-corpus-agent.json"
 )
 
 // agentContractSource is one golden fixture the frozen corpus must cover.
@@ -206,88 +202,6 @@ func TestAgentContractOracleRunnerEnumeratesEveryAgentCase(t *testing.T) {
 		if !outcomesEqual(obs.Outcome, spy.outcome) {
 			t.Fatalf("observation for %s carries %#v, want the producer's own %#v", obs.CaseID, obs.Outcome, spy.outcome)
 		}
-	}
-}
-
-// TestAgentContractOracleReportPublishesAndValidates assembles the executed Agent
-// contract evidence into a report, publishes it through the production atomic
-// exporter, reloads it and validates it against the working manifest. This is the
-// identity and content check a later Rust acceptance step performs; it does not
-// claim any Rust Agent behaviour.
-func TestAgentContractOracleReportPublishesAndValidates(t *testing.T) {
-	root := mustRepoRoot(t)
-	manifest := agentWorkingManifest(t, root)
-	observations := agentObservationsFromCorpus(t, root, manifest)
-
-	trace, err := traceFromObservations(manifest, observations)
-	if err != nil {
-		t.Fatalf("traceFromObservations: %v", err)
-	}
-	if err := ValidateTraceAtRoot(root, trace, manifest); err != nil {
-		t.Fatalf("executed agent evidence failed trace validation: %v", err)
-	}
-
-	workspace, cleanup, err := NewTraceWorkspace(root)
-	if err != nil {
-		t.Fatalf("NewTraceWorkspace: %v", err)
-	}
-	defer cleanup()
-	target := filepath.Join(workspace, agentCorpusReportName)
-	if err := ExportTrace(root, target, trace, manifest); err != nil {
-		t.Fatalf("ExportTrace: %v", err)
-	}
-	loaded, err := LoadTraceAtRoot(root, target, manifest)
-	if err != nil {
-		t.Fatalf("published report does not validate: %v", err)
-	}
-	if loaded.SchemaVersion != traceSchemaVersion {
-		t.Fatalf("report schema_version = %d, want %d", loaded.SchemaVersion, traceSchemaVersion)
-	}
-	if loaded.SourceRevision != manifest.SourceRevision {
-		t.Fatalf("report source revision = %s, want %s", loaded.SourceRevision, manifest.SourceRevision)
-	}
-	if loaded.CorpusDigest != trace.CorpusDigest {
-		t.Fatalf("report corpus digest = %s, want %s", loaded.CorpusDigest, trace.CorpusDigest)
-	}
-	if len(loaded.Inputs) != len(manifest.Cases) || len(loaded.Observations) != len(manifest.Cases) {
-		t.Fatalf("report carries %d inputs and %d observations, want %d each",
-			len(loaded.Inputs), len(loaded.Observations), len(manifest.Cases))
-	}
-	obsByID := make(map[string]Outcome, len(observations))
-	for _, obs := range observations {
-		obsByID[obs.CaseID] = obs.Outcome
-	}
-	for _, obs := range loaded.Observations {
-		want, ok := obsByID[obs.CaseID]
-		if !ok || !outcomesEqual(obs.Outcome, want) {
-			t.Fatalf("report observation for %s does not match the frozen corpus outcome", obs.CaseID)
-		}
-	}
-	agentAssertOutcomeKinds(t, loaded.Observations)
-}
-
-// TestAgentContractOracleReportRejectsTamperedOutcome pins that a changed result
-// fails the report even though every case file and digest still exists.
-func TestAgentContractOracleReportRejectsTamperedOutcome(t *testing.T) {
-	root := mustRepoRoot(t)
-	manifest := agentWorkingManifest(t, root)
-	observations := agentObservationsFromCorpus(t, root, manifest)
-
-	trace, err := traceFromObservations(manifest, observations)
-	if err != nil {
-		t.Fatalf("traceFromObservations: %v", err)
-	}
-	if err := ValidateTraceAtRoot(root, trace, manifest); err != nil {
-		t.Fatalf("untampered evidence failed trace validation: %v", err)
-	}
-
-	trace.Observations[0].Outcome.Kind = "ok"
-	if trace.Observations[0].Outcome.Kind == "error" {
-		trace.Observations[0].Outcome.Category = "tampered"
-	}
-	err = ValidateTraceAtRoot(root, trace, manifest)
-	if err == nil || !strings.Contains(err.Error(), "does not match normalized expected outcome") {
-		t.Fatalf("expected a tampered-outcome rejection, got: %v", err)
 	}
 }
 
@@ -536,42 +450,6 @@ func agentGoldenFixtureNames(t *testing.T, root, relative string) []string {
 		names = append(names, testCase.Name)
 	}
 	return names
-}
-
-// agentObservationsFromCorpus rebuilds one observation per frozen case from the
-// outcome the package-local producer executed, which is the evidence a report
-// carries.
-func agentObservationsFromCorpus(t *testing.T, root string, manifest Inventory) []ExecutedObservation {
-	t.Helper()
-	observations := make([]ExecutedObservation, 0, len(manifest.Cases))
-	for _, c := range manifest.Cases {
-		observations = append(observations, ExecutedObservation{
-			Tick:    0,
-			CaseID:  c.ID,
-			Outcome: readExpectedOutcome(t, root, c),
-		})
-	}
-	return observations
-}
-
-// agentAssertOutcomeKinds proves the executed evidence distinguishes accepted
-// values from rejections instead of publishing one constant answer.
-func agentAssertOutcomeKinds(t *testing.T, observations []Observation) {
-	t.Helper()
-	accepted, rejected := 0, 0
-	for _, obs := range observations {
-		switch obs.Outcome.Kind {
-		case "ok":
-			accepted++
-		case "error":
-			rejected++
-		default:
-			t.Fatalf("observation for %s publishes kind %q, want ok or error", obs.CaseID, obs.Outcome.Kind)
-		}
-	}
-	if accepted == 0 || rejected == 0 {
-		t.Fatalf("executed evidence records %d accepted and %d rejected cases, want both non-zero", accepted, rejected)
-	}
 }
 
 // agentReadEnvelope reads the provenance envelope of one frozen corpus input.

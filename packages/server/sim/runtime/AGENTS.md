@@ -24,6 +24,9 @@
 - `tick_tunables.go`：`TickTunables` 与两组独立活动快照的一次捕获。
 - `command.go`/`persistence.go`/`world.go`：跨边界值、持久化与 realm 查询委派。
 - `runtime_test.go`/`ownership_guard_test.go`：阶段、单 owner 与无镜像回归。
+- `command_order_oracle_test.go` executes the real authority and compares its
+  normalized result with frozen runtime-migration evidence. It is read-only:
+  this package owns no corpus update flag, export helper, or tracked writer.
 
 ## 编排纪律
 
@@ -32,6 +35,9 @@
 - `ActiveTickTunables` 对 simulation/physics 活动快照各读取一次；二者独立而非跨组原子。server 正常 tick 与关服最终 tick 都把同一局部束传给 manager 和 `StepWithTunables`，权威路径不得再次读取全局快照或调用隐式 physics wrapper。
 - 并发入口（`Enqueue`、`EnqueueCompanionAction`、`EnqueueHostileAction`、`SubmitAcquired`、`SubmitGenerated`）经有界 inbox 与稳定排序进入 tick，跨 goroutine 发送成功后的消息及其切片视为不可变。
 - Treat global chunk readiness and per-session publication readiness as separate state. A session that newly wants an already-ready shared chunk still needs one `TickResult.Ready` wake-up even when the global wanted union is unchanged; stable subscriptions do not repeat it, and the server publication layer suppresses snapshots already sent to other sessions.
+- Runtime-migration oracle tests may read and compare frozen corpus assets but
+  must never rewrite or export them. Corpus changes are separately reviewed
+  controller work, guarded repository-wide by `packages/audit`.
 - 权威 tick、持久化与发布热路径不得执行无界工作或阻塞 CPU/磁盘/网络。
 
 ## 定点验证

@@ -154,13 +154,11 @@ and the isolated export helpers (`exportGeneratedAssets`,
   `TestReadCaseInputUsesFormatBudget`,
   `TestProtocolOracleFrameExport*`.
 
-## Family producers (`domain_*_test.go`, `agent_contract_test.go`)
+## Family evidence (`domain_*_test.go`, `agent_contract_test.go`)
 
-Each corpus family has exactly one producer file, and each declares a
-family-scoped working manifest so a run never hands its producer another
-family's cases: `protocol_frame_test.go` (framing), `agent_contract_test.go`
-(the Agent HTTP/MCP contracts, whose consumer is the explicit
-`external:agent-contract` marker plus this Go test target), and
+Each executable corpus family in this package has exactly one producer file,
+and each declares a family-scoped working manifest so a run never hands its
+producer another family's cases: `protocol_frame_test.go` (framing), and
 `domain_values_test.go`, `domain_identity_values_test.go`,
 `domain_command_control_test.go`, `domain_command_inventory_test.go`,
 `domain_event_player_test.go`, `domain_event_world_test.go`,
@@ -170,6 +168,12 @@ families). The world-event file also carries the shared router arm
 names into, because the `domain.event` family is shared by four producers and
 the rule name is the only discriminator the manifest carries.
 
+- `agent_contract_test.go` is deliberately not an executable Agent producer. It
+  validates manifest identity, case presence, golden coverage and the
+  service-free ownership boundary for the explicit `external:agent-contract`
+  consumer. Real Agent HTTP/MCP serialization execution remains package-local
+  to `packages/shared/companion`; this package must not copy expected outcomes
+  into `ExecutedObservation` values or publish a nominal Agent trace.
 - Expected outcomes come from executing the real Go validator or codec, never
   from a hand-written value or a Rust result. Every test run compares generated
   bytes against the frozen corpus read-only; package-test flags or code paths
@@ -182,7 +186,11 @@ the rule name is the only discriminator the manifest carries.
   `TestAgentContractOracle*`, `TestCorpusOutcomeVocabularyMatchesExecutionContract`
   over every committed expectation, and `TestTestBinaryFlagsCannotRewriteTheFrozenCorpus`
   (which asserts that no flag containing `update` or mentioning tracked corpus
-  rewrites can be registered in the test binary).
+  rewrites can be registered in the test binary). The repository-wide
+  `packages/audit` guards `TestCorpusTestFlagsCannotRewriteFrozenEvidence` and
+  `TestCorpusWriterFlagGuardDetectsDrift` enumerate runtime-migration producer
+  tests and reject update, rewrite, regeneration and write flags while leaving
+  separately governed storage/protocol golden workflows outside this rule.
 
 ## Focused Verification
 

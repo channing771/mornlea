@@ -1,8 +1,8 @@
 package runtime_test
 
 // This file is the package-local Go producer for the command ordering evidence.
-// It is deliberately self-contained: the corpus JSON shape, the encoding and the
-// hashing are the standard library only, and it imports neither the runtime
+// It is deliberately self-contained: the corpus JSON shape and encoding use the
+// standard library only, and it imports neither the runtime
 // oracle package nor any shared test package, because `packages/server` is not
 // allowed to depend on `packages/tools`.
 //
@@ -15,10 +15,8 @@ package runtime_test
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"io/fs"
@@ -35,22 +33,8 @@ import (
 )
 
 const (
-	// commandOrderFamily is the corpus family this package executes. Its
-	// eventual owner is the Rust domain crate, which owns the envelope and the
-	// ordering rule this family pins.
-	commandOrderFamily = "domain.input"
-	// commandOrderVersion is the version segment of this family's case identity,
-	// which must name the family's current version rather than a label of its
-	// own. `domain.input` is pinned by the runtime oracle's discovery to the
-	// protocol version, so the case carries that number: a case whose version
-	// segment does not name a version its family publishes is inconsistent with
-	// the family it belongs to, even though the manifest's case ID check only
-	// requires the `<family>/<version>/<label>` shape.
-	commandOrderVersion = "45"
-	// commandOrderOperation is the manifest operation name for an ordering case.
-	commandOrderOperation = "order"
-	// commandOrderConsumer is the manifest consumer this family pins: the Rust
-	// crate that owns the envelope and the ordering rule.
+	// commandOrderConsumer is the consumer recorded inside the frozen input
+	// envelope. The manifest separately assigns execution to runtime authority.
 	commandOrderConsumer = "mornlea_domain"
 	// commandOrderCorpusRelDir is the repository-relative directory holding the
 	// frozen ordering corpus case.
@@ -58,24 +42,6 @@ const (
 	// commandOrderCaseLabel is the corpus label of the one case this node
 	// registers, and the subject of both corpus files.
 	commandOrderCaseLabel = "session-sequence-arrival"
-	// commandOrderCaseID is the manifest case identity the label carries.
-	commandOrderCaseID = commandOrderFamily + "/" + commandOrderVersion + "/" + commandOrderCaseLabel
-	// commandOrderSource is the primary provenance source of the ordering rule:
-	// the authoritative engine that sorts and admits the drained commands.
-	commandOrderSource = "packages/server/sim/runtime/engine_step.go"
-	// commandOrderNumericSemantics records the numeric contract this family
-	// pins, in the same shape the other domain families use.
-	commandOrderNumericSemantics = "order by tick, session, sequence then arrival index; no key consults the command kind; a same-sequence pair of different kinds resolves to the earliest arrival; a zero sequence is rejected only for the command that takes part in acknowledgement"
-	// commandOrderProducerTestRelPath and the two producer test names locate the
-	// package-local producer that drives the real authority. The topic name is
-	// the entry point the domain plan's filter requires; a corpus whose producer
-	// test is missing has no independently executed evidence at all.
-	commandOrderProducerTestRelPath = "packages/server/sim/runtime/command_order_oracle_test.go"
-	commandOrderProducerExecuteName = "TestCommandOrderOracle"
-	commandOrderProducerTopicName   = "TestCommandOrderOracle"
-	// commandOrderCorpusReportName is the published report file name for the
-	// executed ordering evidence.
-	commandOrderCorpusReportName = "runtime-corpus-domain-command-order.json"
 	// commandOrderTick is the tick the frozen case submits its commands in.
 	commandOrderTick = uint64(7)
 	// commandOrderSessionTwo is the second session the frozen case names.
@@ -90,16 +56,6 @@ const (
 	// selects. It is a slot the stocked hotbar leaves empty, so the probe's
 	// write is unambiguous.
 	commandOrderProbeSlot = 7
-)
-
-// commandOrderUpdateCorpus rewrites the frozen ordering corpus from the executed
-// authority. It follows the same discipline as the other fixture update flags:
-// an ordinary run only compares, so a frozen artifact is never silently
-// regenerated to match an implementation.
-var commandOrderUpdateCorpus = flag.Bool(
-	"update-command-order-corpus",
-	false,
-	"rewrite testdata/runtime-migration/cases/domain/command_order from the executed authoritative engine",
 )
 
 // commandOrderInputCommand is one command a frozen case submits, in arrival
@@ -173,25 +129,6 @@ type commandOrderOutcome struct {
 	Kind     string         `json:"kind"`
 	Category string         `json:"category,omitempty"`
 	Fields   map[string]any `json:"fields,omitempty"`
-}
-
-// commandOrderAssetRef identifies one corpus file and its reviewed digest.
-type commandOrderAssetRef struct {
-	Path   string `json:"path"`
-	SHA256 string `json:"sha256"`
-}
-
-// commandOrderCaseSpec is the manifest entry one corpus case registers.
-type commandOrderCaseSpec struct {
-	ID           string               `json:"id"`
-	Family       string               `json:"family"`
-	Version      string               `json:"version"`
-	Operation    string               `json:"operation"`
-	Input        commandOrderAssetRef `json:"input"`
-	InputFormat  string               `json:"input_format"`
-	Expected     commandOrderAssetRef `json:"expected"`
-	Checkpoints  []string             `json:"checkpoints"`
-	RustConsumer string               `json:"rust_consumer"`
 }
 
 // commandOrderSessionSelection is one session's observed hotbar selection.
@@ -274,8 +211,7 @@ type commandOrderRun struct {
 // the arrival index rather than the kind name.
 func TestCommandOrderOracle(t *testing.T) {
 	records := commandOrderExecute(t)
-	commandOrderSyncCorpus(t, records)
-	commandOrderExport(t, commandOrderRepoRoot(t), records)
+	commandOrderVerifyCorpus(t, records)
 }
 
 // TestCommandOrderOracleReversedArrivalChoosesTheEarliestArrival proves the
@@ -859,13 +795,10 @@ func commandOrderLastSelection(admitted []commandOrderCommandRef, session string
 	return last, found
 }
 
-// commandOrderSyncCorpus writes or verifies the frozen corpus files.
-//
-// An ordinary run is read-only: it proves the committed files still match what
-// the authority produces now, so a drifted artifact fails instead of being
-// regenerated. The explicit update flag rewrites them, which is the only way a
-// frozen artifact changes.
-func commandOrderSyncCorpus(t *testing.T, records []commandOrderRecord) {
+// commandOrderVerifyCorpus proves the committed files still match what the
+// authority produces now. It is deliberately read-only: drift fails instead of
+// regenerating the evidence under test.
+func commandOrderVerifyCorpus(t *testing.T, records []commandOrderRecord) {
 	t.Helper()
 
 	corpusDir := filepath.Join(commandOrderRepoRoot(t), filepath.FromSlash(commandOrderCorpusRelDir))
@@ -883,27 +816,14 @@ func commandOrderSyncCorpus(t *testing.T, records []commandOrderRecord) {
 		want[record.label+".expected.json"] = append(outcome, '\n')
 	}
 
-	if *commandOrderUpdateCorpus {
-		for relative, data := range want {
-			target := filepath.Join(corpusDir, filepath.FromSlash(relative))
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				t.Fatalf("create corpus directory: %v", err)
-			}
-			if err := os.WriteFile(target, data, 0o644); err != nil {
-				t.Fatalf("write %s: %v", relative, err)
-			}
-		}
-		return
-	}
-
 	for relative, data := range want {
 		target := filepath.Join(corpusDir, filepath.FromSlash(relative))
 		committed, err := os.ReadFile(target)
 		if err != nil {
-			t.Fatalf("read frozen corpus case %s: %v (rerun with -update-command-order-corpus after reviewing the change)", relative, err)
+			t.Fatalf("read frozen corpus case %s: %v", relative, err)
 		}
 		if !bytes.Equal(committed, data) {
-			t.Errorf("frozen corpus case %s drifted from the executed authority (rerun with -update-command-order-corpus after reviewing the change)", relative)
+			t.Errorf("frozen corpus case %s drifted from the executed authority", relative)
 		}
 	}
 
@@ -950,116 +870,6 @@ func commandOrderSyncCorpus(t *testing.T, records []commandOrderRecord) {
 			t.Fatalf("frozen corpus case %s describes a different batch than the executed table", record.label)
 		}
 	}
-}
-
-// commandOrderExport publishes the executed evidence to a caller-supplied fresh
-// directory.
-//
-// The environment variable is the only export path and has no repository
-// default, so an ordinary run exports nothing. The published files are the
-// corpus input, the executed outcome and the report the controller merges, all
-// with the digests reviewed against the committed files.
-func commandOrderExport(t *testing.T, root string, records []commandOrderRecord) {
-	t.Helper()
-
-	dir := strings.TrimSpace(os.Getenv("RUNTIME_ORACLE_EXPORT_DIR"))
-	if dir == "" {
-		return
-	}
-	info, err := os.Stat(dir)
-	if err != nil || !info.IsDir() {
-		t.Fatalf("RUNTIME_ORACLE_EXPORT_DIR %s is not a directory: %v", dir, err)
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("read RUNTIME_ORACLE_EXPORT_DIR %s: %v", dir, err)
-	}
-	if len(entries) != 0 {
-		t.Fatalf("RUNTIME_ORACLE_EXPORT_DIR %s is not fresh", dir)
-	}
-
-	cases := make([]commandOrderCaseSpec, 0, len(records))
-	for _, record := range records {
-		input, err := json.MarshalIndent(record.input, "", "  ")
-		if err != nil {
-			t.Fatalf("encode exported input for %s: %v", record.label, err)
-		}
-		outcome, err := json.MarshalIndent(record.outcome, "", "  ")
-		if err != nil {
-			t.Fatalf("encode exported outcome for %s: %v", record.label, err)
-		}
-		input = append(input, '\n')
-		outcome = append(outcome, '\n')
-		if err := commandOrderWriteExport(filepath.Join(dir, record.label+".input.json"), input); err != nil {
-			t.Fatalf("export input for %s: %v", record.label, err)
-		}
-		if err := commandOrderWriteExport(filepath.Join(dir, record.label+".expected.json"), outcome); err != nil {
-			t.Fatalf("export outcome for %s: %v", record.label, err)
-		}
-		cases = append(cases, commandOrderCaseSpec{
-			ID:        commandOrderFamily + "/" + commandOrderVersion + "/" + record.label,
-			Family:    commandOrderFamily,
-			Version:   commandOrderVersion,
-			Operation: commandOrderOperation,
-			Input: commandOrderAssetRef{
-				Path:   commandOrderCorpusRelDir + "/" + record.label + ".input.json",
-				SHA256: commandOrderDigest(input),
-			},
-			InputFormat: "json",
-			Expected: commandOrderAssetRef{
-				Path:   commandOrderCorpusRelDir + "/" + record.label + ".expected.json",
-				SHA256: commandOrderDigest(outcome),
-			},
-			Checkpoints:  []string{"0"},
-			RustConsumer: commandOrderConsumer,
-		})
-	}
-
-	report := map[string]any{
-		"family":             commandOrderFamily,
-		"version":            commandOrderVersion,
-		"operation":          commandOrderOperation,
-		"consumer":           commandOrderConsumer,
-		"numeric_semantics":  commandOrderNumericSemantics,
-		"source":             commandOrderSource,
-		"producer_test":      commandOrderProducerTestRelPath,
-		"producer_test_name": commandOrderProducerExecuteName,
-		"topic_test_name":    commandOrderProducerTopicName,
-		"corpus_rel_dir":     commandOrderCorpusRelDir,
-		"report_name":        commandOrderCorpusReportName,
-		"case_id":            commandOrderCaseID,
-		"cases":              cases,
-		"repository_root":    root,
-	}
-	encoded, err := json.MarshalIndent(report, "", "  ")
-	if err != nil {
-		t.Fatalf("encode export report: %v", err)
-	}
-	if err := commandOrderWriteExport(filepath.Join(dir, commandOrderCorpusReportName), append(encoded, '\n')); err != nil {
-		t.Fatalf("export report: %v", err)
-	}
-}
-
-// commandOrderWriteExport writes one exported file and refuses a symlink target,
-// so an export can never land outside the caller's directory.
-func commandOrderWriteExport(path string, data []byte) error {
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return err
-	}
-	info, err := os.Lstat(path)
-	if err != nil {
-		return err
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("refusing to export through a symlink: %s", path)
-	}
-	return nil
-}
-
-// commandOrderDigest renders one byte slice as the corpus digest form.
-func commandOrderDigest(data []byte) string {
-	sum := sha256.Sum256(data)
-	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 // commandOrderRepoRoot discovers the repository root from the test's working
