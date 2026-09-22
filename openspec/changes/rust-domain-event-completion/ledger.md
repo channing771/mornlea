@@ -162,3 +162,32 @@
   hard-code 98303/98304 while the mutation derives the bound from core
   geometry constants (theoretical coupling to a frozen contract).
 - Architecture skill: no change.
+
+## 2026-09-22 — node 1.3 acceptance (Go evidence stage closed)
+
+- Implementation commit: `48c49e13` (`test(runtime-oracle): add chat event
+  evidence`, 92 files). Red evidence verified: routing regression failed with
+  `unknown rule "chat"` on the node 1.2 baseline, matching the intended
+  behavioral red.
+- Controller gates at `48c49e13`: focused chat tests ok; full
+  `go test ./packages/tools/cmd/runtime-oracle -race -count=1` ok (63.8s —
+  shared router proves all twelve event rules single-owned); five audit
+  guards ok; `git diff --exit-code -- testdata/runtime-migration/contracts.json`
+  clean; `git diff --check` clean. Implementer proved 88 external files
+  byte-identical to tracked.
+- Review ruling: spec compliant, quality Approved, 0 Critical, 0 Important.
+  Reviewer's named-risk check verified the classifier mirrors
+  `ChatEvent.Validate` (`message_companion.go:157-220`) branch-for-branch,
+  including per-branch sub-orders and text-bound predicates, with bounds
+  aliased to the same constants the private validators use.
+- Reviewer Minor 1 (validProducerIDs edit outside the brief's file list) is
+  ratified by the controller's standing ruling from node 1.1 — the one-line
+  producer registration is the mechanically required export-path step.
+- Minors recorded for the final whole-branch review: (1) the
+  outcomes test's category-coverage loop resolves categories through the
+  rule→category table instead of the outcome's own category (transitivity
+  holds via the illegal-combinations test); (2) local mirrors of
+  protocol-private predicates (`domainEventChatValidPlayerName`,
+  `domainEventChatValidTaskFailReason`) are drift-pinned only on the 44
+  exercised inputs — inherent to the mandated classifier design.
+- Architecture skill: no change.
