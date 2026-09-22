@@ -93,7 +93,7 @@ Because this change makes `.github/workflows` and `scripts/ci` explicit policy a
 
 ### 5. Route validation by supported platform instead of runner convenience
 
-Platform-neutral and server-owned work uses a pinned supported Linux runner. macOS is reserved for artifacts and tests that consume Darwin libraries or exercise the graphical client. Runner labels are explicit supported versions rather than floating `*-latest` aliases.
+Platform-neutral and server-owned work uses a pinned supported Linux runner. Linux quality compiles and vets the complete supported Linux package set; graphical app, capture, developer-capture, and gfxspike packages remain in the complete macOS client source set and are excluded through one audit-checked exact list. macOS is reserved for artifacts and tests that consume Darwin libraries or exercise the graphical client. Runner labels are explicit supported versions rather than floating `*-latest` aliases.
 
 Third-party actions are pinned to immutable commit SHAs and selected from revisions compatible with the runner's supported Node runtime. Every job has an explicit timeout and least-privilege permissions. Caches may accelerate a job but are never treated as validation evidence or a substitute for candidate-bound artifacts.
 

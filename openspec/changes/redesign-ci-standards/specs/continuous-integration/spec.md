@@ -72,7 +72,7 @@ Linux and macOS native artifacts MUST be built as separate platform-owned units 
 
 ### Requirement: Required source sets and race coverage remain complete
 
-Required CI MUST compile the repository on Linux and MUST validate the supported macOS native source set. Full Go race coverage MUST include every package from all six modules in committed `go.work`; the race slices MUST have a union equal to the workspace-wide package set and pairwise-empty intersections. Server and platform-neutral slices SHALL use Linux capacity, while a slice MAY use macOS only when its selected source set or runtime contract requires macOS. The independent server probe MUST remain outside race with its existing exact test identity and `-count=1`.
+Required CI MUST compile and vet every package in the repository's supported Linux source set and MUST validate the supported macOS native source set. Full Go race coverage MUST include every package from all six modules in committed `go.work`; the race slices MUST have a union equal to the workspace-wide package set and pairwise-empty intersections. Server and platform-neutral slices SHALL use Linux capacity, while a slice MAY use macOS only when its selected source set or runtime contract requires macOS. The independent server probe MUST remain outside race with its existing exact test identity and `-count=1`.
 
 #### Scenario: Darwin-only API leaks into a Linux command
 

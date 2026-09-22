@@ -52,7 +52,7 @@ Every target is listed in `make help`. Do not make legacy `build`, `test`, `run`
 - `nm -D --defined-only bin/libmornlea_engine.so` exports exactly the required four checked symbols: `mornlea_engine_abi_version`, `mornlea_mesh_section`, `mornlea_collision_resolve`, and `mornlea_raycast_batch`;
 - after the move, `ldd` resolves the adjacent `bin/libmornlea_engine.so`, `bin/mornlea-server -h` exits 1, output contains `flag: help requested`, and no loader failure text occurs.
 
-`run-linux-quality.sh` uses `package-inventory.sh --all` and `mapfile` to compile every supported package under `GOOS=linux GOARCH=amd64 CGO_ENABLED=1` with `go test "${packages[@]}" -run '^$' -count=1`, then runs six-module `go vet`, and finally runs the current audit/storage/network/physics focused tests. A Darwin-only package returned by the union is excluded from Linux compilation only by an explicit list containing the three planning-baseline paths `client/cmd/mornlea/app`, `client/cmd/mornlea/devcapture`, and `tools/gfxspike`; the audit test recomputes the Darwin-minus-Linux set and requires equality so the list cannot silently grow.
+`run-linux-quality.sh` uses `package-inventory.sh --all` and `mapfile` to compile every supported package under `GOOS=linux GOARCH=amd64 CGO_ENABLED=1` with `go test "${packages[@]}" -run '^$' -count=1`, then runs `go vet` over that same filtered package list, and finally runs the current audit/storage/network/physics focused tests. This is six-module vet coverage because the filtered list is derived from the complete workspace inventory, not six broad `./...` patterns that reintroduce unsupported Darwin packages. A Darwin-only package returned by the union is excluded from Linux compile and vet only by an explicit list containing the four verified paths `client/cmd/mornlea/app`, `client/cmd/mornlea/capture`, `client/cmd/mornlea/devcapture`, and `tools/gfxspike`; the audit test recomputes the Linux-unsupported set from cgo-enabled Linux `go list -e` package and dependency errors plus the Darwin union and requires exact equality so the list cannot silently grow.
 
 `run-integration-server.sh` runs, in order:
 
@@ -75,7 +75,7 @@ Performance numbers remain informational, while command failures and incomplete 
 
 1. Add `TestCIEntrypointsOwnRequiredCommands` to parse Make rules and assert every target, prerequisite, manifest argument, script call, and help entry above. Add forbidden-edge assertions for legacy targets. Baseline fails because targets are absent.
 
-2. Add `TestLinuxQualityPlatformExclusionsAreExact`, which computes Darwin and Linux package inventories and requires their set difference to equal the three explicit paths above. This test guards future build-tag changes.
+2. Add `TestLinuxQualityPlatformExclusionsAreExact`, which computes the Darwin union and cgo-enabled Linux package/error inventory and requires the unsupported set to equal the four explicit paths above. Assert that compile and vet consume the same filtered list. This guards future build-tag and dependency-boundary changes.
 
 3. Add script mutation/source tests for the Linux bundle restore trap and all loader/symbol assertions, plus integration tests that use fake `make`/`go` binaries to capture the exact ordered argv. Run:
 
