@@ -1,4 +1,8 @@
-# Controller closeout plan
+# Superseded first controller closeout plan
+
+This packet records the first closeout attempt, which final review invalidated.
+It is not dispatchable; node 5.10 in `06-review-repairs.md` is the current
+closeout contract.
 
 Node 5.1 is controller-owned and is not delegated to an implementation worker.
 The controller uses Superpowers `verification-before-completion` before any
@@ -18,7 +22,9 @@ After nodes 1.2, 2.1, 2.2, 3.10 and 4.1 are accepted and committed, review the
 entire extracted range, run all stage gates at one code-result SHA, publish the
 narrow canonical capability, and archive only
 `rust-runtime-foundation-baseline`. The broad `rust-runtime-foundation` parent
-and its remaining nodes are not synchronized or archived here.
+is already preserved at
+`openspec/changes/archive/2026-09-21-rust-runtime-foundation`; this baseline does
+not sync or modify its remaining scope.
 
 **Controller-owned files and operations**
 
@@ -125,8 +131,7 @@ an intermediate commit:
    one-line commit proposed as
    `docs(openspec): close runtime foundation baseline`.
 
-The broad parent remains active only as decomposition history until the
-seventeen successor OpenSpecs frozen in its `design.md` are scaffolded. Its
+The broad parent remains archived as decomposition history. Its
 checked boxes must not be interpreted as re-review evidence after this baseline
 archive; the archived baseline and canonical spec become the dependency.
 

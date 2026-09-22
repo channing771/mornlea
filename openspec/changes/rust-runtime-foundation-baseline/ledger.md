@@ -206,3 +206,108 @@ checkbox/status source.
   frozen-contract patterns; no verified new cross-task rule emerged. Both
   skill copies remain byte-identical (`cmp` verified) and no promotion diff is
   included.
+
+## 2026-09-22 — Final review invalidated the first archive
+
+- Reviewed worker range: `cdf48941..c049f8d0`. Two independent read-only
+  reviews were saved as
+  `.superpowers/sdd/tasks-2026-09-22-rust-runtime-foundation-baseline/final-code-review.md`
+  and `final-spec-review.md`. Code review verdict: With fixes, zero Critical,
+  six Important, one Minor. Spec review verdict: No, zero Critical, four
+  Important, one Minor.
+- Verified blockers: runtime-oracle manufactured Agent `ExecutedObservation`
+  values from committed expectations; external exporters could follow a
+  symlink in the fixed producer prefix; the server command-order test retained
+  a tracked-corpus update flag and a separate writer; name-only consumer
+  registration did not prove family/version/operation execution; Go applied a
+  4 MiB budget to JSON inputs that Rust capped at 256 KiB and did not reject
+  every non-regular file before reads; Rust ignored input JSON `consumer` and
+  rejected valid decimal exponents; a measured protocol-v44 Godot report had
+  been rewritten to claim v45; and the English-comment stage gate remained
+  red.
+- Process ruling: the earlier node 5.1 contradicted its own contract, which
+  said any required gate failure blocks sync/archive. The claimed user
+  adjudication did not revise the OpenSpec acceptance contract and therefore
+  could not turn a red required gate into completion. Commit history is
+  retained, but the dated archive was moved back to
+  `openspec/changes/rust-runtime-foundation-baseline`, the prematurely synced
+  canonical spec was removed, and closeout is open again.
+- Planning defects: node 2.1 enumerated only the tools and companion writers,
+  so its absolute “every rewrite path” claim omitted the server producer;
+  consumer support was modeled as a name rather than an executable route;
+  nodes 3.1–4.1 were accepted in a batched status commit while their detailed
+  evidence remained in an ignored flat SDD ledger; and a historical report was
+  edited to satisfy a current-version gate instead of being classified as
+  historical evidence.
+- Corrective decomposition: nodes 5.1–5.5 repair executable evidence,
+  containment, parsing and historical identity; nodes 5.6–5.8 translate the
+  previously deferred comment debt in non-overlapping client, server and shared
+  groups; node 5.9 promotes only reusable orchestration rules; node 5.10 owns a
+  fresh whole-range review, all-green stage validation, sync and archive.
+- Planning skills: the controller used Superpowers `brainstorming` and
+  `writing-plans`, reconciled `design.md`, made `tasks.md` the only checkbox
+  source, and wrote the exact worker packets in `plans/06-review-repairs.md`.
+  An independent worker-readiness review is required before dispatch.
+- Architecture skill: no change. The findings change task orchestration and
+  evidence acceptance, not Mornlea runtime ownership or dependency direction.
+
+## 2026-09-22 — Final-review repair plan readiness
+
+- First independent readiness verdict: NOT READY with one Critical, six
+  Important and one Minor finding. The draft corpus-flag audit would have
+  rejected separately governed storage/protocol golden-fixture flags; the Go
+  execution reader still had a 4 MiB JSON path; the integrated Rust dispatcher
+  bypassed the proposed input-consumer check; shared-file ownership was not
+  serialized; comment translation did not identify the policy baseline; skill
+  testing lacked pressure scenarios; and archive recovery did not restore the
+  active change.
+- Controller rulings: the audit now enumerates runtime-migration producers and
+  rejects any update-like flag only in that set; node 5.1 owns and shares the
+  input-budget decision with `readCaseInput`; Rust exposes one checked executor
+  used by both dispatch paths; nodes 5.1–5.10 form a serial DAG; comment work
+  selects only additions/rewrites after baseline commit `752d138b` and permits
+  intermediate decreases; skill RED/GREEN uses three frozen pressure
+  scenarios; and closeout names the exact target plus complete post-archive
+  recovery.
+- The renewed closeout also owns recovery of node 3.1–4.1 evidence from the
+  ignored flat progress file into this versioned ledger and records the batched
+  status commit as a deviation. The ignored file is not a continuing plan or
+  status source.
+- Second controller readiness check: every review finding maps to one node;
+  producer/consumer interfaces agree; shared files are serialized; each worker
+  has an exclusive edit set, deterministic red test and exact green command;
+  compatibility and rollback decisions are closed. Independent re-review is
+  still required before the planning checkpoint commit.
+
+## 2026-09-22 — Repair plan re-review round two
+
+- Independent verdict: NOT READY with zero Critical, four Important and two
+  Minor findings. The first round's Critical and its JSON-budget, DAG,
+  comment-baseline, ledger-recovery and archive-restoration findings were
+  closed.
+- Remaining rulings: node 5.2 now freezes every Go 1.26 `flag` constructor,
+  name-argument index, alias/dot-import handling and `FlagSet` coverage; node
+  5.4 exposes a slice-injected integrated dispatcher and tests a mutated real
+  case instead of source text; node 5.9 uses five fresh control and five fresh
+  guided samples for each of three combined-pressure scenarios; node 5.10
+  separates the clean repair SHA from the archive commit SHA and uses a new
+  recovery commit for any post-commit failure.
+- Minor corrections: task 5.7 permits accumulated legitimate decreases, and
+  the superseded broad change is described as the unchanged
+  `2026-09-21-rust-runtime-foundation` historical archive rather than an active
+  parent.
+- A third independent readiness review is required before dispatch.
+
+## 2026-09-22 — Repair plan readiness accepted
+
+- Third independent verdict: READY with zero Critical, Important or Minor
+  findings. The reviewer confirmed the complete Go 1.26 flag map, real injected
+  Rust dispatch boundary, 5× control/guided skill pressure matrix, two-SHA
+  archive evidence, recovery commit policy, comment-decrease semantics and
+  historical parent state.
+- Validation: `git diff --check` passed;
+  `openspec validate rust-runtime-foundation-baseline --strict
+  --no-interactive` passed; `openspec validate --all --strict
+  --no-interactive` passed 125/125.
+- Dispatch order is serial 5.1 through 5.9 with a scoped implementation commit
+  and controller acceptance record per node; 5.10 remains controller-owned.
