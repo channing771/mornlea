@@ -40,7 +40,7 @@
 
 ## 2. Godot script failure contracts
 
-- [ ] 2.1 Make project validation reject a missing `rg` before any scan or success output (`task-briefs/02-validator-prerequisites.md`).
+- [x] 2.1 Make project validation reject a missing `rg` before any scan or success output (`task-briefs/02-validator-prerequisites.md`).
 - [ ] 2.2 Make the Godot extension producer and consumer share the effective Cargo target root (`task-briefs/03-cargo-target-root.md`).
 
 ## 3. Native artifact trust
