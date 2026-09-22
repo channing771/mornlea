@@ -18,7 +18,7 @@ Decision: GO
 | Machine-readable report | `testdata/godot-pilot/legacy-rust-memory-v23.json` | `testdata/godot-pilot/godot-pilot-v23.json` |
 | Git commit | `84f3e0e75dff6987e47cf2aa50f50d888e85eafb` (P0 baseline) | `376f435a262bfc8fa611866dedfee8c56225444f` |
 | Worktree | dirty (P0) | dirty |
-| Protocol | protocol v44 | protocol v44 |
+| Protocol | protocol v45 | protocol v45 |
 | Engine ABI | engine ABI v11 | engine ABI v11 |
 | Client ABI | client ABI v19 | client ABI v19 (unused by the pilot) |
 | Client-core ABI | n/a | v1 |
@@ -83,7 +83,7 @@ Not covered: local Memory assembly, complete menus/containers, viewmodel, partic
 |---|---|---|
 | Exact hardened Py4Godot/CPython artifact | GO | Pinned revision, patch series, offline qualification |
 | No system Python or runtime install | GO | Isolated `PyConfig`, poisoned-environment tests |
-| No authority/protocol/prediction fork | GO | Shared Go runtime and protocol v44 |
+| No authority/protocol/prediction fork | GO | Shared Go runtime and protocol v45 |
 | No silent loss or partial batch | GO | overflow_count 0, uploads_failed 0 |
 | Terrain and minimum entity stable | GO | terrain check, 300s playable smoke, 92 live sections in the v23-window run |
 | Repeated GDExtension/Go core close | GO | 100-cycle isolated smoke |

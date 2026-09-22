@@ -161,8 +161,8 @@ P7 只批准远程 TCP pilot 为 Go。该决定不授权切换默认客户端，
 
 | Stage | Owner | Prerequisite | Exit condition | Rollback |
 |---|---|---|---|---|
-| [F1](../openspec/changes/rust-runtime-foundation/proposal.md) | Rust domain、protocol、storage contract 与 numerical kernel | P7 Go | 与 Go 的 replay/oracle 一致；没有第二个在线写者 | 保留 Go 生产路径 |
-| [F2](../openspec/changes/rust-authoritative-server/proposal.md) | Rust authoritative server | [F1](../openspec/changes/rust-runtime-foundation/proposal.md) | 确定性 replay、存档迁移、故障路径 parity、共享 Memory/TCP 语义 | 保留 Go 权威；禁止 dual-write |
+| [F1](../openspec/changes/archive/2026-09-21-rust-runtime-foundation/proposal.md) | Rust domain、protocol、storage contract 与 numerical kernel | P7 Go | 与 Go 的 replay/oracle 一致；没有第二个在线写者 | 保留 Go 生产路径 |
+| [F2](../openspec/changes/rust-authoritative-server/proposal.md) | Rust authoritative server | [F1](../openspec/changes/archive/2026-09-21-rust-runtime-foundation/proposal.md) | 确定性 replay、存档迁移、故障路径 parity、共享 Memory/TCP 语义 | 保留 Go 权威；禁止 dual-write |
 | [F3](../openspec/changes/rust-client-core/proposal.md) | Rust client-core 与 typed Godot bridge | F1；F2 protocol | Transcript parity、correction/replay、有界 bridge、重复生命周期 | 保留 pilot Go core 且不再扩展 feature |
 | [P8](../openspec/changes/godot-production-terrain/proposal.md) | 生产地形呈现 | [F3](../openspec/changes/rust-client-core/proposal.md) | 独立 world feature 消费 Rust semantic family | 禁用 catalog 项；旧客户端保持默认 |
 | [P9](../openspec/changes/godot-complete-actors/proposal.md) | 完整实体与效果 | [F3](../openspec/changes/rust-client-core/proposal.md) | 可独立禁用的 actor feature | 按 catalog 禁用 |

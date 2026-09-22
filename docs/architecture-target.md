@@ -161,8 +161,8 @@ P7 decided Go for the remote-TCP pilot only. That decision does not authorize a 
 
 | Stage | Owner | Prerequisite | Exit condition | Rollback |
 |---|---|---|---|---|
-| [F1](../openspec/changes/rust-runtime-foundation/proposal.md) | Rust domain, protocol, storage contracts, and numerical kernels | P7 Go | Replay/oracle agreement with Go; no second online writer | Keep the Go production path |
-| [F2](../openspec/changes/rust-authoritative-server/proposal.md) | Rust authoritative server | [F1](../openspec/changes/rust-runtime-foundation/proposal.md) | Deterministic replay, save migration, failure-path parity, shared Memory/TCP semantics | Keep Go authority; never dual-write |
+| [F1](../openspec/changes/archive/2026-09-21-rust-runtime-foundation/proposal.md) | Rust domain, protocol, storage contracts, and numerical kernels | P7 Go | Replay/oracle agreement with Go; no second online writer | Keep the Go production path |
+| [F2](../openspec/changes/rust-authoritative-server/proposal.md) | Rust authoritative server | [F1](../openspec/changes/archive/2026-09-21-rust-runtime-foundation/proposal.md) | Deterministic replay, save migration, failure-path parity, shared Memory/TCP semantics | Keep Go authority; never dual-write |
 | [F3](../openspec/changes/rust-client-core/proposal.md) | Rust client-core and typed Godot bridge | F1; F2 protocol | Transcript parity, correction/replay, bounded bridge, repeated lifecycle | Keep the pilot Go core without adding features |
 | [P8](../openspec/changes/godot-production-terrain/proposal.md) | Production terrain presentation | [F3](../openspec/changes/rust-client-core/proposal.md) | Independent world feature against Rust semantic families | Disable the catalog entry; keep the old client default |
 | [P9](../openspec/changes/godot-complete-actors/proposal.md) | Complete entities and effects | [F3](../openspec/changes/rust-client-core/proposal.md) | Independently disableable actor features | Disable by catalog |
