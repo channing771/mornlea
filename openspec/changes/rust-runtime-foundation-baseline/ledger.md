@@ -741,3 +741,73 @@ owns any issue that remains actionable after nodes 5.1–5.9.
   command passed and the reviewed packet now records it. No gate was relaxed.
 - Architecture skill: no change; this restores provenance identity without
   changing runtime contracts.
+
+## 2026-09-22 — Superpowers restored during node 5.9b
+
+- The user installed Superpowers 6.4.1 during helper verification. Discovery
+  now resolves the installed skill resources. The controller read
+  `using-superpowers`, its Codex adaptation, `brainstorming`, `writing-plans`,
+  TDD and its test-quality reference, systematic debugging, verification,
+  review reception/request, subagent development and its role templates, and
+  `writing-skills` with its pressure-testing reference.
+- The helper worker resumed final verification and self-review using the
+  installed skills. Its earlier RED and implementation occurred during the
+  disclosed fallback; this entry does not retroactively claim skill invocation.
+- Ruling: continue the existing approved architectural repair plan and mixed
+  execution — the user asked for full review, repair, lessons and archive, and
+  project guidance preserves that authorization — reopening product scope or
+  creating a second plan would fragment acceptance rather than improve it.
+- Brainstorming check: the intended outcome is an executable, truthful baseline
+  without new online authority or successor scope. Metadata repair, helper
+  repair and a reusable orchestration rule remain independent acceptance units.
+  The rule belongs in orchestration, not the architecture skill or a one-off
+  history note, because it changes future dispatch and review decisions.
+- Writing-plans and SDD preflight:
+
+  | Nodes | Shared contract and outcome |
+  | --- | --- |
+  | 5.9a / 5.9b | Current frozen source hashes precede real working reconciliation; helper test files are not hashed manifest sources. |
+  | 5.9b / 5.9c | Separate editable files; the helper repair provides the demonstrated derived-consumer planning lesson. |
+  | 5.9c / 5.10 | Mirrored skill text and behavioral pressure evidence precede whole-range review and all stage gates. |
+  | 5.9a | Six metadata-only substitutions match independent hashes and leave every case unchanged. |
+  | 5.9b | Four RED reconciliation tests precede in-place replacement; seven remaining files are prose-only. |
+  | 5.9c | No-guidance controls precede skill edits; guided samples must satisfy all three behavioral criteria. |
+  | 5.10 | Review and clean-SHA gates precede narrow sync; post-archive checks have separate durable evidence. |
+
+- Project-owned OpenSpec status and ledger override plugin defaults for an
+  ignored packet-keyed store, worker commits, redundant approval, or automatic
+  push. No machine settings, alternate plan store or external publication is
+  authorized. Pressure tests establish skill behavior; existing fragment guards
+  only protect the retained policy text and are not behavioral acceptance.
+
+## 2026-09-22 — Node 5.9b acceptance
+
+- Baseline `e8bdc092`; implementation `0380bb19` (`test(corpus): reconcile
+  working manifest selections`). The worker changed exactly eleven test files:
+  four selected-family helpers and four new regressions, plus seven prose-only
+  files. Existing family records are replaced in place, unrelated case lists
+  are cleared, and an absent selected family fails closed.
+- RED: all four named working-manifest reconciliation tests failed with
+  `duplicate inventory family` before helper changes. GREEN: the same test
+  command passed, then the packet's combined focused race gate passed (4.860s).
+  The controller independently reran all four regressions successfully.
+- Full oracle race passed (53.633s); companion race passed (11.947s); both
+  source-comment audit gates passed (2.583s). Rust formatting passed,
+  `corpus_loader` passed 10 tests and `corpus_domain` passed 32 tests including
+  the 376-unique-case check. The worker ran `make rust` first on its clean
+  baseline. Sandbox cache failures were rerun with approved cache access, not
+  bypassed through source changes or exemption variables.
+- Each of the three exact stale-prose scans changed from matches to no matches.
+  Frozen corpus diff and changed-file/source-provenance intersection are empty;
+  `git diff --check` passed. No runtime or fixture semantics changed.
+- Independent review: Ready, zero Critical/Important/Minor. It verified the
+  eleven-file scope, all four real regressions and in-place replacements,
+  current export/selection descriptions, the Rust float explanation, and the
+  three zero-match scans. Final-stage gates, policy changes and archive state
+  remain controller-owned and open, not inferred from this task review.
+- Orchestration note: a fresh reviewer spawn returned `agent thread limit
+  reached`; the existing independent code-review agent was reused with only
+  the bounded diff and evidence. The implementer did not review its own
+  acceptance or create an alternate status store.
+- Architecture skill: no change; current corpus ownership and publication
+  boundaries are preserved.
