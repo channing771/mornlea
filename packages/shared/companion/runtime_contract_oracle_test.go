@@ -1119,6 +1119,192 @@ var companionValidProducerIDs = map[string]bool{
 	"companion/agent-contract": true,
 }
 
+// companionValidateProducerID and companionValidateGeneratedAssets complete
+// all deterministic input checks before export directories can be created.
+func companionValidateProducerID(producerID string) ([]string, error) {
+	if strings.TrimSpace(producerID) == "" || strings.Contains(producerID, "\\") || filepath.IsAbs(producerID) {
+		return nil, fmt.Errorf("companion: producer ID must be a clean relative slash path: %q", producerID)
+	}
+	parts := strings.Split(producerID, "/")
+	for _, part := range parts {
+		if part == "" || part == "." || part == ".." {
+			return nil, fmt.Errorf("companion: producer ID must be a clean relative slash path: %q", producerID)
+		}
+	}
+	if filepath.ToSlash(filepath.Clean(filepath.FromSlash(producerID))) != producerID {
+		return nil, fmt.Errorf("companion: producer ID must be a clean relative slash path: %q", producerID)
+	}
+	return parts, nil
+}
+
+func companionValidateGeneratedAssets(assets []generatedAsset) error {
+	seen := make(map[string]struct{}, len(assets))
+	paths := make([]string, 0, len(assets))
+	for _, asset := range assets {
+		if strings.TrimSpace(asset.RelativePath) == "" {
+			return fmt.Errorf("companion: empty asset relative path")
+		}
+		if strings.Contains(asset.RelativePath, "\\") {
+			return fmt.Errorf("companion: backslash rejected in relative path: %s", asset.RelativePath)
+		}
+		if filepath.IsAbs(asset.RelativePath) || strings.HasPrefix(asset.RelativePath, "/") {
+			return fmt.Errorf("companion: absolute path rejected: %s", asset.RelativePath)
+		}
+		parts := strings.Split(asset.RelativePath, "/")
+		for _, part := range parts {
+			if part == "." || part == ".." {
+				return fmt.Errorf("companion: relative path contains ./..: %s", asset.RelativePath)
+			}
+			if part == "" {
+				return fmt.Errorf("companion: asset relative path must be clean: %s", asset.RelativePath)
+			}
+		}
+		cleaned := filepath.Clean(filepath.FromSlash(asset.RelativePath))
+		if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("companion: path escapes producer directory: %s", asset.RelativePath)
+		}
+		normalized := filepath.ToSlash(cleaned)
+		if normalized != asset.RelativePath {
+			return fmt.Errorf("companion: asset relative path must be clean: %s", asset.RelativePath)
+		}
+		if _, err := filepath.Localize(asset.RelativePath); err != nil {
+			return fmt.Errorf("companion: asset relative path is not valid on this platform: %q: %w", asset.RelativePath, err)
+		}
+		if _, duplicate := seen[normalized]; duplicate {
+			return fmt.Errorf("companion: duplicate asset relative path: %s", asset.RelativePath)
+		}
+		seen[normalized] = struct{}{}
+		paths = append(paths, normalized)
+	}
+	for _, relative := range paths {
+		parts := strings.Split(relative, "/")
+		for index := 1; index < len(parts); index++ {
+			parent := strings.Join(parts[:index], "/")
+			if _, collision := seen[parent]; collision {
+				return fmt.Errorf("companion: asset path conflicts with another asset: %s", relative)
+			}
+		}
+	}
+	return nil
+}
+
+// companionCreateExportRoot creates only the missing export-root suffix and
+// refuses any component that stops being a real directory during the walk.
+func companionCreateExportRoot(absExport, existing string, missing []string) error {
+	info, err := os.Lstat(existing)
+	if err != nil {
+		return fmt.Errorf("companion: stat export ancestor %s: %w", existing, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("companion: export-prefix non-directory rejected: %s", existing)
+	}
+
+	current := existing
+	for _, component := range missing {
+		current = filepath.Join(current, component)
+		info, err := os.Lstat(current)
+		switch {
+		case err == nil && info.Mode()&os.ModeSymlink != 0:
+			return fmt.Errorf("companion: export-prefix symlink rejected: %s", current)
+		case err == nil && !info.IsDir():
+			return fmt.Errorf("companion: export-prefix non-directory rejected: %s", current)
+		case err == nil:
+			continue
+		case !os.IsNotExist(err):
+			return fmt.Errorf("companion: stat export path %s: %w", current, err)
+		}
+		if err := os.Mkdir(current, 0o755); err != nil {
+			return fmt.Errorf("companion: create export directory %s: %w", current, err)
+		}
+	}
+	if current != absExport {
+		return fmt.Errorf("companion: export root walk ended at %s, want %s", current, absExport)
+	}
+	return nil
+}
+
+// companionCreateProducerChild permits shared real prefix directories but
+// creates the final producer directory exclusively as the ownership boundary.
+func companionCreateProducerChild(exportRoot string, components []string) (string, error) {
+	current := exportRoot
+	for index, component := range components {
+		current = filepath.Join(current, component)
+		final := index == len(components)-1
+		info, err := os.Lstat(current)
+		switch {
+		case err == nil && info.Mode()&os.ModeSymlink != 0:
+			return "", fmt.Errorf("companion: producer-prefix symlink rejected: %s", current)
+		case err == nil && final:
+			return "", fmt.Errorf("companion: producer child already exists: %s", current)
+		case err == nil && !info.IsDir():
+			return "", fmt.Errorf("companion: producer-prefix non-directory rejected: %s", current)
+		case err == nil:
+			continue
+		case !os.IsNotExist(err):
+			return "", fmt.Errorf("companion: stat producer component %s: %w", current, err)
+		}
+		if err := os.Mkdir(current, 0o755); err != nil {
+			return "", fmt.Errorf("companion: create producer directory %s: %w", current, err)
+		}
+	}
+	return current, nil
+}
+
+// companionCreateAssetParents prepares every parent before the first asset is
+// opened, using the same symlink and non-directory checks as producer paths.
+func companionCreateAssetParents(producerChild string, assets []generatedAsset) error {
+	for _, asset := range assets {
+		parts := strings.Split(asset.RelativePath, "/")
+		current := producerChild
+		for _, component := range parts[:len(parts)-1] {
+			if component == "" {
+				continue
+			}
+			current = filepath.Join(current, filepath.FromSlash(component))
+			info, err := os.Lstat(current)
+			switch {
+			case err == nil && info.Mode()&os.ModeSymlink != 0:
+				return fmt.Errorf("companion: asset-prefix symlink rejected: %s", current)
+			case err == nil && !info.IsDir():
+				return fmt.Errorf("companion: asset-prefix non-directory rejected: %s", current)
+			case err == nil:
+				continue
+			case !os.IsNotExist(err):
+				return fmt.Errorf("companion: stat asset directory %s: %w", current, err)
+			}
+			if err := os.Mkdir(current, 0o755); err != nil {
+				return fmt.Errorf("companion: create asset directory %s: %w", current, err)
+			}
+		}
+	}
+	return nil
+}
+
+// companionRecheckExportContainment resolves the created producer path again
+// immediately before exclusive file creation.
+func companionRecheckExportContainment(repoRoot, exportRoot, producerChild string) error {
+	resolvedExport, err := filepath.EvalSymlinks(exportRoot)
+	if err != nil {
+		return fmt.Errorf("companion: resolve created export root %s: %w", exportRoot, err)
+	}
+	resolvedProducer, err := filepath.EvalSymlinks(producerChild)
+	if err != nil {
+		return fmt.Errorf("companion: resolve created producer child %s: %w", producerChild, err)
+	}
+	rel, err := filepath.Rel(resolvedExport, resolvedProducer)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("companion: producer child escaped export root: %s", producerChild)
+	}
+	live, err := isLivePath(repoRoot, resolvedProducer)
+	if err != nil {
+		return err
+	}
+	if live {
+		return fmt.Errorf("companion: live-path write rejected: producer child %s is inside repository", producerChild)
+	}
+	return nil
+}
+
 func isLivePath(root, target string) (bool, error) {
 	if strings.TrimSpace(target) == "" {
 		return false, nil
@@ -1161,11 +1347,18 @@ func exportGeneratedAssets(
 	producerID string,
 	assets []generatedAsset,
 ) (string, error) {
+	producerComponents, err := companionValidateProducerID(producerID)
+	if err != nil {
+		return "", err
+	}
 	if !companionValidProducerIDs[producerID] {
 		return "", fmt.Errorf("companion: unrecognized producer ID: %q", producerID)
 	}
 	if strings.TrimSpace(exportRoot) == "" {
 		return "", fmt.Errorf("companion: export root cannot be empty")
+	}
+	if err := companionValidateGeneratedAssets(assets); err != nil {
+		return "", err
 	}
 
 	absRoot, err := filepath.Abs(repoRoot)
@@ -1242,59 +1435,22 @@ func exportGeneratedAssets(
 		}
 	}
 
-	// Check and create the fixed producer child.
-	producerChild := filepath.Join(absExport, filepath.FromSlash(producerID))
-	if _, statErr := os.Lstat(producerChild); statErr == nil {
-		return "", fmt.Errorf("companion: producer child already exists: %s", producerChild)
-	} else if !os.IsNotExist(statErr) {
-		return "", fmt.Errorf("companion: stat producer child %s: %w", producerChild, statErr)
+	if err := companionCreateExportRoot(absExport, existing, missing); err != nil {
+		return "", err
 	}
-
-	if err := os.MkdirAll(producerChild, 0o755); err != nil {
-		return "", fmt.Errorf("companion: create producer directory %s: %w", producerChild, err)
+	producerChild, err := companionCreateProducerChild(absExport, producerComponents)
+	if err != nil {
+		return "", err
+	}
+	if err := companionCreateAssetParents(producerChild, assets); err != nil {
+		return "", err
+	}
+	if err := companionRecheckExportContainment(absRoot, absExport, producerChild); err != nil {
+		return "", err
 	}
 
 	for _, asset := range assets {
-		if strings.TrimSpace(asset.RelativePath) == "" {
-			return "", fmt.Errorf("companion: empty asset relative path")
-		}
-		if strings.Contains(asset.RelativePath, "\\") {
-			return "", fmt.Errorf("companion: backslash rejected in relative path: %s", asset.RelativePath)
-		}
-		if filepath.IsAbs(asset.RelativePath) || strings.HasPrefix(asset.RelativePath, "/") {
-			return "", fmt.Errorf("companion: absolute path rejected: %s", asset.RelativePath)
-		}
-		for _, part := range strings.Split(asset.RelativePath, "/") {
-			if part == "." || part == ".." {
-				return "", fmt.Errorf("companion: relative path contains ./..: %s", asset.RelativePath)
-			}
-		}
-		cleaned := filepath.Clean(asset.RelativePath)
-		if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
-			return "", fmt.Errorf("companion: path escapes producer directory: %s", asset.RelativePath)
-		}
-
 		target := filepath.Join(producerChild, filepath.FromSlash(asset.RelativePath))
-		rel, relErr := filepath.Rel(producerChild, target)
-		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return "", fmt.Errorf("companion: path escapes producer directory: %s", asset.RelativePath)
-		}
-
-		targetDir := filepath.Dir(target)
-		if err := os.MkdirAll(targetDir, 0o755); err != nil {
-			return "", fmt.Errorf("companion: create asset directory %s: %w", targetDir, err)
-		}
-
-		for d := targetDir; d != producerChild && len(d) > len(producerChild); d = filepath.Dir(d) {
-			info, lstatErr := os.Lstat(d)
-			if lstatErr != nil {
-				return "", fmt.Errorf("companion: stat asset dir %s: %w", d, lstatErr)
-			}
-			if info.Mode()&os.ModeSymlink != 0 {
-				return "", fmt.Errorf("companion: symlink component rejected: %s", d)
-			}
-		}
-
 		f, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if err != nil {
 			return "", fmt.Errorf("companion: create exclusive asset %s: %w", asset.RelativePath, err)
@@ -1358,15 +1514,141 @@ func TestCompanionExportGeneratedAssets(t *testing.T) {
 		t.Fatalf("expected symlink rejection, got: %v", err)
 	}
 
-	// 3. Escaping relative path rejection
-	freshExport := filepath.Join(t.TempDir(), "escaping-export")
-	badAssets := []generatedAsset{{RelativePath: "../escaped.json", Data: []byte("{}\n")}}
-	_, err = exportGeneratedAssets(repoRoot, freshExport, "companion/agent-contract", badAssets)
-	if err == nil {
-		t.Fatalf("expected escaping path rejection, got nil")
+	// 3. Fixed producer-prefix symlinks are rejected regardless of target.
+	producerPrefixTargets := []struct {
+		name       string
+		targetRoot func(t *testing.T, syntheticRepo string) string
+	}{
+		{
+			name: "into_repository",
+			targetRoot: func(_ *testing.T, syntheticRepo string) string {
+				return syntheticRepo
+			},
+		},
+		{
+			name: "to_external_directory",
+			targetRoot: func(t *testing.T, _ string) string {
+				t.Helper()
+				return t.TempDir()
+			},
+		},
+	}
+	for _, tc := range producerPrefixTargets {
+		t.Run("producer_prefix_"+tc.name, func(t *testing.T) {
+			syntheticRepo := t.TempDir()
+			exportRoot := filepath.Join(t.TempDir(), "export")
+			if err := os.Mkdir(exportRoot, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			targetRoot := tc.targetRoot(t, syntheticRepo)
+			if err := os.Symlink(targetRoot, filepath.Join(exportRoot, "companion")); err != nil {
+				t.Fatal(err)
+			}
+
+			sentinel := filepath.Join(targetRoot, "agent-contract", "sentinel.json")
+			redirectedAssets := []generatedAsset{{RelativePath: "sentinel.json", Data: []byte("{}\n")}}
+			_, err := exportGeneratedAssets(syntheticRepo, exportRoot, "companion/agent-contract", redirectedAssets)
+			if err == nil || !strings.Contains(err.Error(), "producer-prefix symlink") {
+				t.Fatalf("expected producer-prefix symlink rejection, got: %v", err)
+			}
+			if _, statErr := os.Lstat(sentinel); !os.IsNotExist(statErr) {
+				t.Fatalf("export wrote through producer-prefix symlink: %v", statErr)
+			}
+		})
+	}
+	t.Run("producer_prefix_non_directory", func(t *testing.T) {
+		syntheticRepo := t.TempDir()
+		exportRoot := filepath.Join(t.TempDir(), "export")
+		if err := os.Mkdir(exportRoot, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		prefix := filepath.Join(exportRoot, "companion")
+		if err := os.WriteFile(prefix, []byte("sentinel\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := exportGeneratedAssets(syntheticRepo, exportRoot, "companion/agent-contract", assets)
+		if err == nil || !strings.Contains(err.Error(), "producer-prefix non-directory") {
+			t.Fatalf("expected producer-prefix non-directory rejection, got: %v", err)
+		}
+		data, readErr := os.ReadFile(prefix)
+		if readErr != nil || string(data) != "sentinel\n" {
+			t.Fatalf("producer-prefix file changed: %q, err: %v", data, readErr)
+		}
+	})
+
+	// 4. Every invalid asset path is rejected before producer creation.
+	badPaths := []struct {
+		name    string
+		path    string
+		wantErr string
+	}{
+		{name: "parent", path: "../escaped.json", wantErr: "relative path contains ./.."},
+		{name: "absolute", path: "/absolute.json", wantErr: "absolute path rejected"},
+		{name: "nested_parent_escape", path: "sub/../../escaped.json", wantErr: "relative path contains ./.."},
+		{name: "backslash", path: "sub\\backslash.json", wantErr: "backslash rejected"},
+		{name: "current", path: "./current.json", wantErr: "relative path contains ./.."},
+		{name: "nested_current", path: "sub/./current.json", wantErr: "relative path contains ./.."},
+		{name: "nested_parent", path: "sub/../escaped.json", wantErr: "relative path contains ./.."},
+		{name: "empty_component", path: "sub//asset.json", wantErr: "asset relative path must be clean"},
+		{name: "trailing_slash", path: "sub/", wantErr: "asset relative path must be clean"},
+		{name: "nul", path: "sentinel\x00.json", wantErr: "asset relative path is not valid on this platform"},
+	}
+	for _, tc := range badPaths {
+		t.Run("invalid_asset_"+tc.name, func(t *testing.T) {
+			exportRoot := filepath.Join(t.TempDir(), "escaping-export")
+			producerChild := filepath.Join(exportRoot, "companion", "agent-contract")
+			badAssets := []generatedAsset{{RelativePath: tc.path, Data: []byte("{}\n")}}
+			_, err := exportGeneratedAssets(repoRoot, exportRoot, "companion/agent-contract", badAssets)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected %q rejection for relative path %q, got %v", tc.wantErr, tc.path, err)
+			}
+			if _, statErr := os.Lstat(producerChild); !os.IsNotExist(statErr) {
+				t.Fatalf("producer directory was created before asset validation: %v", statErr)
+			}
+			if _, statErr := os.Lstat(exportRoot); !os.IsNotExist(statErr) {
+				t.Fatalf("export root was created before asset validation: %v", statErr)
+			}
+		})
 	}
 
-	// 4. Successful export and preexisting child rejection
+	// 5. Invalid asset sets are rejected before producer creation.
+	invalidAssetSets := []struct {
+		name    string
+		assets  []generatedAsset
+		wantErr string
+	}{
+		{
+			name: "duplicate",
+			assets: []generatedAsset{
+				{RelativePath: "same.json", Data: []byte("first\n")},
+				{RelativePath: "same.json", Data: []byte("second\n")},
+			},
+			wantErr: "duplicate asset relative path",
+		},
+		{
+			name: "file_is_parent",
+			assets: []generatedAsset{
+				{RelativePath: "node", Data: []byte("file\n")},
+				{RelativePath: "node/child.json", Data: []byte("{}\n")},
+			},
+			wantErr: "asset path conflicts",
+		},
+	}
+	for _, tc := range invalidAssetSets {
+		t.Run("invalid_asset_set_"+tc.name, func(t *testing.T) {
+			exportRoot := filepath.Join(t.TempDir(), "invalid-assets")
+			producerChild := filepath.Join(exportRoot, "companion", "agent-contract")
+			_, err := exportGeneratedAssets(repoRoot, exportRoot, "companion/agent-contract", tc.assets)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected %q rejection, got %v", tc.wantErr, err)
+			}
+			if _, statErr := os.Lstat(producerChild); !os.IsNotExist(statErr) {
+				t.Fatalf("producer directory was created before asset-set validation: %v", statErr)
+			}
+		})
+	}
+
+	// 6. Successful export and preexisting child rejection
 	targetExport := filepath.Join(t.TempDir(), "valid-export")
 	pub, err := exportGeneratedAssets(repoRoot, targetExport, "companion/agent-contract", assets)
 	if err != nil {

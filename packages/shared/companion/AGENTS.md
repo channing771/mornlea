@@ -22,11 +22,15 @@ must not import each other, enforced by `packages/audit` `TestInternalDependenci
   no exports are written. When set, `exportGeneratedAssetsFromEnvironment` delegates
   to `exportGeneratedAssets` with the fixed producer ID `companion/agent-contract`.
 - The export helper verifies that the export root's nearest existing ancestor is
-  strictly outside the repository and contains no symlinks. It creates only the
-  fixed producer child directory (`<exportRoot>/companion/agent-contract`), fails
-  if that directory already exists, and writes assets with create-exclusive semantics
-  (`os.O_EXCL|os.O_CREATE|os.O_WRONLY`) without symlinks, path traversal, or file
-  replacement.
+  strictly outside the repository and contains no symlinks. It validates all
+  asset paths, duplicates, and file-as-parent collisions before mutation, then
+  creates export-root gaps, producer prefixes, and asset parents one component
+  at a time with `Lstat`/`Mkdir`. Every existing component must be a real
+  directory; the final fixed producer child
+  (`<exportRoot>/companion/agent-contract`) is created exclusively and any
+  preexisting final child is rejected. Resolved containment is checked again
+  before assets are opened with `os.O_EXCL|os.O_CREATE|os.O_WRONLY`, preventing
+  symlink redirection, path traversal, or replacement.
 - Enforcement: `TestAgentContractCorpusRoundTrip`, `TestCompanionExportGeneratedAssets`.
 
 ## Focused Verification

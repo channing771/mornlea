@@ -135,14 +135,22 @@ and the isolated export helpers (`exportGeneratedAssets`,
   There is no repository default: an unset variable exports nothing. When set,
   `exportGeneratedAssets` resolves the export root through its nearest existing
   ancestor, rejects repository containment and any symlink below that ancestor,
-  creates only the designated fresh producer child (`<exportRoot>/<producerID>`),
-  rejects preexisting producer directories, and writes fixed relative assets
-  with create-exclusive semantics without path escaping or replacement.
+  and validates every asset path, duplicate, and file-as-parent collision before
+  mutation. It creates export-root gaps, producer prefixes, and asset parents one
+  component at a time with `Lstat`/`Mkdir`: existing components must be real
+  directories, the final producer child (`<exportRoot>/<producerID>`) is created
+  exclusively, and a preexisting final child is rejected. Containment is
+  resolved again before fixed relative assets are opened with create-exclusive
+  semantics, so exports cannot escape, follow a fixed-prefix symlink, or replace
+  existing evidence.
   Production `main.go` reconciles and validates existing artifacts and has no
   trace-generation mode.
 - Enforcement: `TestExportGeneratedAssetsRejectsRepositoryContainedRoots`,
   `TestExportGeneratedAssetsRejectsSymlinkedAncestor`,
+  `TestExportGeneratedAssetsRejectsProducerPrefixSymlink`,
+  `TestExportGeneratedAssetsRejectsNonDirectoryProducerPrefix`,
   `TestExportGeneratedAssetsRejectsEscapingRelativePath`,
+  `TestExportGeneratedAssetsRejectsInvalidAssetSetBeforeCreation`,
   `TestExportGeneratedAssetsRejectsPreexistingProducerChild`,
   `TestExportGeneratedAssetsSuccessfulMultiProducerExport`,
   `TestProtocolOracleFrameIndependentOutcomes`,

@@ -40,17 +40,210 @@ var validProducerIDs = map[string]bool{
 	"companion/agent-contract":                true,
 }
 
+// validateProducerID and validateGeneratedAssets complete all deterministic
+// input checks before export directories can be created.
+func validateProducerID(producerID string) ([]string, error) {
+	if strings.TrimSpace(producerID) == "" || strings.Contains(producerID, "\\") || filepath.IsAbs(producerID) {
+		return nil, fmt.Errorf("runtime-oracle: producer ID must be a clean relative slash path: %q", producerID)
+	}
+	parts := strings.Split(producerID, "/")
+	for _, part := range parts {
+		if part == "" || part == "." || part == ".." {
+			return nil, fmt.Errorf("runtime-oracle: producer ID must be a clean relative slash path: %q", producerID)
+		}
+	}
+	if filepath.ToSlash(filepath.Clean(filepath.FromSlash(producerID))) != producerID {
+		return nil, fmt.Errorf("runtime-oracle: producer ID must be a clean relative slash path: %q", producerID)
+	}
+	return parts, nil
+}
+
+func validateGeneratedAssets(assets []generatedAsset) error {
+	seen := make(map[string]struct{}, len(assets))
+	paths := make([]string, 0, len(assets))
+	for _, asset := range assets {
+		if strings.TrimSpace(asset.RelativePath) == "" {
+			return fmt.Errorf("runtime-oracle: empty asset relative path")
+		}
+		if strings.Contains(asset.RelativePath, "\\") {
+			return fmt.Errorf("runtime-oracle: backslash rejected in relative path: %s", asset.RelativePath)
+		}
+		if filepath.IsAbs(asset.RelativePath) || strings.HasPrefix(asset.RelativePath, "/") {
+			return fmt.Errorf("runtime-oracle: absolute path rejected: %s", asset.RelativePath)
+		}
+		parts := strings.Split(asset.RelativePath, "/")
+		for _, part := range parts {
+			if part == "." || part == ".." {
+				return fmt.Errorf("runtime-oracle: relative path contains ./..: %s", asset.RelativePath)
+			}
+			if part == "" {
+				return fmt.Errorf("runtime-oracle: asset relative path must be clean: %s", asset.RelativePath)
+			}
+		}
+		cleaned := filepath.Clean(filepath.FromSlash(asset.RelativePath))
+		if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("runtime-oracle: path escapes producer directory: %s", asset.RelativePath)
+		}
+		normalized := filepath.ToSlash(cleaned)
+		if normalized != asset.RelativePath {
+			return fmt.Errorf("runtime-oracle: asset relative path must be clean: %s", asset.RelativePath)
+		}
+		if _, err := filepath.Localize(asset.RelativePath); err != nil {
+			return fmt.Errorf("runtime-oracle: asset relative path is not valid on this platform: %q: %w", asset.RelativePath, err)
+		}
+		if _, duplicate := seen[normalized]; duplicate {
+			return fmt.Errorf("runtime-oracle: duplicate asset relative path: %s", asset.RelativePath)
+		}
+		seen[normalized] = struct{}{}
+		paths = append(paths, normalized)
+	}
+	for _, relative := range paths {
+		parts := strings.Split(relative, "/")
+		for index := 1; index < len(parts); index++ {
+			parent := strings.Join(parts[:index], "/")
+			if _, collision := seen[parent]; collision {
+				return fmt.Errorf("runtime-oracle: asset path conflicts with another asset: %s", relative)
+			}
+		}
+	}
+	return nil
+}
+
+// createExportRoot creates only the missing export-root suffix and refuses any
+// component that stops being a real directory during the walk.
+func createExportRoot(absExport, existing string, missing []string) error {
+	info, err := os.Lstat(existing)
+	if err != nil {
+		return fmt.Errorf("runtime-oracle: stat export ancestor %s: %w", existing, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("runtime-oracle: export-prefix non-directory rejected: %s", existing)
+	}
+
+	current := existing
+	for _, component := range missing {
+		current = filepath.Join(current, component)
+		info, err := os.Lstat(current)
+		switch {
+		case err == nil && info.Mode()&os.ModeSymlink != 0:
+			return fmt.Errorf("runtime-oracle: export-prefix symlink rejected: %s", current)
+		case err == nil && !info.IsDir():
+			return fmt.Errorf("runtime-oracle: export-prefix non-directory rejected: %s", current)
+		case err == nil:
+			continue
+		case !os.IsNotExist(err):
+			return fmt.Errorf("runtime-oracle: stat export path %s: %w", current, err)
+		}
+		if err := os.Mkdir(current, 0o755); err != nil {
+			return fmt.Errorf("runtime-oracle: create export directory %s: %w", current, err)
+		}
+	}
+	if current != absExport {
+		return fmt.Errorf("runtime-oracle: export root walk ended at %s, want %s", current, absExport)
+	}
+	return nil
+}
+
+// createProducerChild permits shared real prefix directories but creates the
+// final producer directory exclusively as the publication ownership boundary.
+func createProducerChild(exportRoot string, components []string) (string, error) {
+	current := exportRoot
+	for index, component := range components {
+		current = filepath.Join(current, component)
+		final := index == len(components)-1
+		info, err := os.Lstat(current)
+		switch {
+		case err == nil && info.Mode()&os.ModeSymlink != 0:
+			return "", fmt.Errorf("runtime-oracle: producer-prefix symlink rejected: %s", current)
+		case err == nil && final:
+			return "", fmt.Errorf("runtime-oracle: producer child already exists: %s", current)
+		case err == nil && !info.IsDir():
+			return "", fmt.Errorf("runtime-oracle: producer-prefix non-directory rejected: %s", current)
+		case err == nil:
+			continue
+		case !os.IsNotExist(err):
+			return "", fmt.Errorf("runtime-oracle: stat producer component %s: %w", current, err)
+		}
+		if err := os.Mkdir(current, 0o755); err != nil {
+			return "", fmt.Errorf("runtime-oracle: create producer directory %s: %w", current, err)
+		}
+	}
+	return current, nil
+}
+
+// createAssetParents prepares every parent before the first asset file is
+// opened, using the same symlink and non-directory checks as producer paths.
+func createAssetParents(producerChild string, assets []generatedAsset) error {
+	for _, asset := range assets {
+		parts := strings.Split(asset.RelativePath, "/")
+		current := producerChild
+		for _, component := range parts[:len(parts)-1] {
+			if component == "" {
+				continue
+			}
+			current = filepath.Join(current, filepath.FromSlash(component))
+			info, err := os.Lstat(current)
+			switch {
+			case err == nil && info.Mode()&os.ModeSymlink != 0:
+				return fmt.Errorf("runtime-oracle: asset-prefix symlink rejected: %s", current)
+			case err == nil && !info.IsDir():
+				return fmt.Errorf("runtime-oracle: asset-prefix non-directory rejected: %s", current)
+			case err == nil:
+				continue
+			case !os.IsNotExist(err):
+				return fmt.Errorf("runtime-oracle: stat asset directory %s: %w", current, err)
+			}
+			if err := os.Mkdir(current, 0o755); err != nil {
+				return fmt.Errorf("runtime-oracle: create asset directory %s: %w", current, err)
+			}
+		}
+	}
+	return nil
+}
+
+// recheckExportContainment closes the component-walk phase by resolving the
+// created producer path again immediately before exclusive file creation.
+func recheckExportContainment(repoRoot, exportRoot, producerChild string) error {
+	resolvedExport, err := filepath.EvalSymlinks(exportRoot)
+	if err != nil {
+		return fmt.Errorf("runtime-oracle: resolve created export root %s: %w", exportRoot, err)
+	}
+	resolvedProducer, err := filepath.EvalSymlinks(producerChild)
+	if err != nil {
+		return fmt.Errorf("runtime-oracle: resolve created producer child %s: %w", producerChild, err)
+	}
+	rel, err := filepath.Rel(resolvedExport, resolvedProducer)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("runtime-oracle: producer child escaped export root: %s", producerChild)
+	}
+	live, err := isLivePath(repoRoot, resolvedProducer)
+	if err != nil {
+		return err
+	}
+	if live {
+		return fmt.Errorf("runtime-oracle: live-path write rejected: producer child %s is inside repository", producerChild)
+	}
+	return nil
+}
+
 func exportGeneratedAssets(
 	repoRoot string,
 	exportRoot string,
 	producerID string,
 	assets []generatedAsset,
 ) (string, error) {
+	producerComponents, err := validateProducerID(producerID)
+	if err != nil {
+		return "", err
+	}
 	if !validProducerIDs[producerID] {
 		return "", fmt.Errorf("runtime-oracle: unrecognized producer ID: %q", producerID)
 	}
 	if strings.TrimSpace(exportRoot) == "" {
 		return "", fmt.Errorf("runtime-oracle: export root cannot be empty")
+	}
+	if err := validateGeneratedAssets(assets); err != nil {
+		return "", err
 	}
 
 	absRoot, err := filepath.Abs(repoRoot)
@@ -127,59 +320,22 @@ func exportGeneratedAssets(
 		}
 	}
 
-	// Check and create the fixed producer child.
-	producerChild := filepath.Join(absExport, filepath.FromSlash(producerID))
-	if _, statErr := os.Lstat(producerChild); statErr == nil {
-		return "", fmt.Errorf("runtime-oracle: producer child already exists: %s", producerChild)
-	} else if !os.IsNotExist(statErr) {
-		return "", fmt.Errorf("runtime-oracle: stat producer child %s: %w", producerChild, statErr)
+	if err := createExportRoot(absExport, existing, missing); err != nil {
+		return "", err
 	}
-
-	if err := os.MkdirAll(producerChild, 0o755); err != nil {
-		return "", fmt.Errorf("runtime-oracle: create producer directory %s: %w", producerChild, err)
+	producerChild, err := createProducerChild(absExport, producerComponents)
+	if err != nil {
+		return "", err
+	}
+	if err := createAssetParents(producerChild, assets); err != nil {
+		return "", err
+	}
+	if err := recheckExportContainment(absRoot, absExport, producerChild); err != nil {
+		return "", err
 	}
 
 	for _, asset := range assets {
-		if strings.TrimSpace(asset.RelativePath) == "" {
-			return "", fmt.Errorf("runtime-oracle: empty asset relative path")
-		}
-		if strings.Contains(asset.RelativePath, "\\") {
-			return "", fmt.Errorf("runtime-oracle: backslash rejected in relative path: %s", asset.RelativePath)
-		}
-		if filepath.IsAbs(asset.RelativePath) || strings.HasPrefix(asset.RelativePath, "/") {
-			return "", fmt.Errorf("runtime-oracle: absolute path rejected: %s", asset.RelativePath)
-		}
-		for _, part := range strings.Split(asset.RelativePath, "/") {
-			if part == "." || part == ".." {
-				return "", fmt.Errorf("runtime-oracle: relative path contains ./..: %s", asset.RelativePath)
-			}
-		}
-		cleaned := filepath.Clean(asset.RelativePath)
-		if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
-			return "", fmt.Errorf("runtime-oracle: path escapes producer directory: %s", asset.RelativePath)
-		}
-
 		target := filepath.Join(producerChild, filepath.FromSlash(asset.RelativePath))
-		rel, relErr := filepath.Rel(producerChild, target)
-		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return "", fmt.Errorf("runtime-oracle: path escapes producer directory: %s", asset.RelativePath)
-		}
-
-		targetDir := filepath.Dir(target)
-		if err := os.MkdirAll(targetDir, 0o755); err != nil {
-			return "", fmt.Errorf("runtime-oracle: create asset directory %s: %w", targetDir, err)
-		}
-
-		for d := targetDir; d != producerChild && len(d) > len(producerChild); d = filepath.Dir(d) {
-			info, lstatErr := os.Lstat(d)
-			if lstatErr != nil {
-				return "", fmt.Errorf("runtime-oracle: stat asset dir %s: %w", d, lstatErr)
-			}
-			if info.Mode()&os.ModeSymlink != 0 {
-				return "", fmt.Errorf("runtime-oracle: symlink component rejected: %s", d)
-			}
-		}
-
 		f, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if err != nil {
 			return "", fmt.Errorf("runtime-oracle: create exclusive asset %s: %w", asset.RelativePath, err)
@@ -596,6 +752,77 @@ func TestExportGeneratedAssetsRejectsSymlinkedAncestor(t *testing.T) {
 	}
 }
 
+// TestExportGeneratedAssetsRejectsProducerPrefixSymlink pins that a fixed
+// producer prefix cannot redirect an export into either the repository or an
+// unrelated external directory.
+func TestExportGeneratedAssetsRejectsProducerPrefixSymlink(t *testing.T) {
+	tests := []struct {
+		name       string
+		targetRoot func(t *testing.T, repoRoot string) string
+	}{
+		{
+			name: "into_repository",
+			targetRoot: func(_ *testing.T, repoRoot string) string {
+				return repoRoot
+			},
+		},
+		{
+			name: "to_external_directory",
+			targetRoot: func(t *testing.T, _ string) string {
+				t.Helper()
+				return t.TempDir()
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repoRoot := t.TempDir()
+			exportRoot := filepath.Join(t.TempDir(), "export")
+			if err := os.Mkdir(exportRoot, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			targetRoot := tc.targetRoot(t, repoRoot)
+			if err := os.Symlink(targetRoot, filepath.Join(exportRoot, "runtime-oracle")); err != nil {
+				t.Fatal(err)
+			}
+
+			sentinel := filepath.Join(targetRoot, "domain-values", "sentinel.json")
+			assets := []generatedAsset{{RelativePath: "sentinel.json", Data: []byte("{}\n")}}
+			_, err := exportGeneratedAssets(repoRoot, exportRoot, "runtime-oracle/domain-values", assets)
+			if err == nil || !strings.Contains(err.Error(), "producer-prefix symlink") {
+				t.Fatalf("expected producer-prefix symlink rejection, got: %v", err)
+			}
+			if _, statErr := os.Lstat(sentinel); !os.IsNotExist(statErr) {
+				t.Fatalf("export wrote through producer-prefix symlink: %v", statErr)
+			}
+		})
+	}
+}
+
+// TestExportGeneratedAssetsRejectsNonDirectoryProducerPrefix pins that a
+// regular file cannot stand in for a shared producer-prefix directory.
+func TestExportGeneratedAssetsRejectsNonDirectoryProducerPrefix(t *testing.T) {
+	repoRoot := t.TempDir()
+	exportRoot := filepath.Join(t.TempDir(), "export")
+	if err := os.Mkdir(exportRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	prefix := filepath.Join(exportRoot, "runtime-oracle")
+	if err := os.WriteFile(prefix, []byte("sentinel\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	assets := []generatedAsset{{RelativePath: "sentinel.json", Data: []byte("{}\n")}}
+	_, err := exportGeneratedAssets(repoRoot, exportRoot, "runtime-oracle/domain-values", assets)
+	if err == nil || !strings.Contains(err.Error(), "producer-prefix non-directory") {
+		t.Fatalf("expected producer-prefix non-directory rejection, got: %v", err)
+	}
+	data, readErr := os.ReadFile(prefix)
+	if readErr != nil || string(data) != "sentinel\n" {
+		t.Fatalf("producer-prefix file changed: %q, err: %v", data, readErr)
+	}
+}
+
 // TestExportGeneratedAssetsRejectsEscapingRelativePath pins that asset paths
 // escaping the producer child, carrying backslashes, or containing ./.. are rejected.
 func TestExportGeneratedAssetsRejectsEscapingRelativePath(t *testing.T) {
@@ -603,22 +830,80 @@ func TestExportGeneratedAssetsRejectsEscapingRelativePath(t *testing.T) {
 	before := computeTrackedCorpusDigest(t, root)
 	defer assertTrackedCorpusUnchanged(t, root, before)
 
-	exportRoot := filepath.Join(t.TempDir(), "escaping-test")
-	badPaths := []string{
-		"../escaped.json",
-		"/absolute.json",
-		"sub/../../escaped.json",
-		"sub\\backslash.json",
-		"./current.json",
-		"sub/./current.json",
-		"sub/../escaped.json",
+	badPaths := []struct {
+		name    string
+		path    string
+		wantErr string
+	}{
+		{name: "parent", path: "../escaped.json", wantErr: "relative path contains ./.."},
+		{name: "absolute", path: "/absolute.json", wantErr: "absolute path rejected"},
+		{name: "nested_parent_escape", path: "sub/../../escaped.json", wantErr: "relative path contains ./.."},
+		{name: "backslash", path: "sub\\backslash.json", wantErr: "backslash rejected"},
+		{name: "current", path: "./current.json", wantErr: "relative path contains ./.."},
+		{name: "nested_current", path: "sub/./current.json", wantErr: "relative path contains ./.."},
+		{name: "nested_parent", path: "sub/../escaped.json", wantErr: "relative path contains ./.."},
+		{name: "empty_component", path: "sub//asset.json", wantErr: "asset relative path must be clean"},
+		{name: "trailing_slash", path: "sub/", wantErr: "asset relative path must be clean"},
+		{name: "nul", path: "sentinel\x00.json", wantErr: "asset relative path is not valid on this platform"},
 	}
-	for _, bad := range badPaths {
-		assets := []generatedAsset{{RelativePath: bad, Data: []byte("{}\n")}}
-		_, err := exportGeneratedAssets(root, exportRoot, "runtime-oracle/domain-values", assets)
-		if err == nil {
-			t.Errorf("expected rejection for escaping relative path %q, got nil", bad)
-		}
+	for _, tc := range badPaths {
+		t.Run(tc.name, func(t *testing.T) {
+			exportRoot := filepath.Join(t.TempDir(), "escaping-test")
+			producerChild := filepath.Join(exportRoot, "runtime-oracle", "domain-values")
+			assets := []generatedAsset{{RelativePath: tc.path, Data: []byte("{}\n")}}
+			_, err := exportGeneratedAssets(root, exportRoot, "runtime-oracle/domain-values", assets)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected %q rejection for relative path %q, got %v", tc.wantErr, tc.path, err)
+			}
+			if _, statErr := os.Lstat(producerChild); !os.IsNotExist(statErr) {
+				t.Fatalf("producer directory was created before asset validation: %v", statErr)
+			}
+			if _, statErr := os.Lstat(exportRoot); !os.IsNotExist(statErr) {
+				t.Fatalf("export root was created before asset validation: %v", statErr)
+			}
+		})
+	}
+}
+
+// TestExportGeneratedAssetsRejectsInvalidAssetSetBeforeCreation pins that
+// duplicate and file-as-parent asset sets fail before any export mutation.
+func TestExportGeneratedAssetsRejectsInvalidAssetSetBeforeCreation(t *testing.T) {
+	root := mustRepoRoot(t)
+	tests := []struct {
+		name    string
+		assets  []generatedAsset
+		wantErr string
+	}{
+		{
+			name: "duplicate",
+			assets: []generatedAsset{
+				{RelativePath: "same.json", Data: []byte("first\n")},
+				{RelativePath: "same.json", Data: []byte("second\n")},
+			},
+			wantErr: "duplicate asset relative path",
+		},
+		{
+			name: "file_is_parent",
+			assets: []generatedAsset{
+				{RelativePath: "node", Data: []byte("file\n")},
+				{RelativePath: "node/child.json", Data: []byte("{}\n")},
+			},
+			wantErr: "asset path conflicts",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			exportRoot := filepath.Join(t.TempDir(), "invalid-assets")
+			producerChild := filepath.Join(exportRoot, "runtime-oracle", "domain-values")
+			_, err := exportGeneratedAssets(root, exportRoot, "runtime-oracle/domain-values", tc.assets)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected %q rejection, got %v", tc.wantErr, err)
+			}
+			if _, statErr := os.Lstat(producerChild); !os.IsNotExist(statErr) {
+				t.Fatalf("producer directory was created before asset-set validation: %v", statErr)
+			}
+		})
 	}
 }
 
