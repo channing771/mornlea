@@ -1,19 +1,19 @@
 {
   "schema_version": 1,
   "name": "valid-session",
-  "description": "Canonical protocol v44 remote-session frames for login, initial world state, movement, authoritative correction, chunk updates, remote players, weather, HUD values, and disconnect.",
-  "summary_sha256": "240af789b47b07bdec9818e6b7666c18a7991f0bb6c716e96e4f20aa8d480198",
+  "description": "Canonical protocol v45 remote-session frames for login, initial world state, movement, authoritative correction, chunk updates, remote players, weather, HUD values, and disconnect.",
+  "summary_sha256": "c30391bb62f8db8643628adc828f2a3b7e86ae85fc1cfe9379fd5a1d6148781d",
   "frames": [
     {
       "label": "client-hello",
       "direction": "client_to_server",
       "state": "handshake",
       "packet_id": 0,
-      "payload_hex": "2c",
+      "payload_hex": "2d",
       "expect": {
         "result": "valid",
         "packet_type": "protocol.ClientHello",
-        "summary": "protocol=44"
+        "summary": "protocol=45"
       }
     },
     {
@@ -21,11 +21,11 @@
       "direction": "server_to_client",
       "state": "handshake",
       "packet_id": 0,
-      "payload_hex": "2c",
+      "payload_hex": "2d",
       "expect": {
         "result": "valid",
         "packet_type": "protocol.ServerHello",
-        "summary": "protocol=44"
+        "summary": "protocol=45"
       }
     },
     {

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "version-error",
-  "description": "A canonical handshake payload carrying protocol v43, which the protocol v44 decoder must reject before login.",
+  "description": "A canonical handshake payload carrying protocol v43, which the protocol v45 decoder must reject before login.",
   "summary_sha256": "cec804e31bfbcd167e9a44807e13b68797e1f11c6d0e799f9660205376a6aa97",
   "frames": [
     {
