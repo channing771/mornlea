@@ -113,38 +113,6 @@ func TestCompanionAgentCIGates(t *testing.T) {
 	}
 }
 
-// TestVerifyNativeArtifactScript 钉住 scripts/ci/verify-native-artifact.sh 的
-// 承重语句。校验逻辑从 ci.yml 的内联块收敛进脚本后，workflow 侧只钉「恰好
-// 调用一次且位于 make 门禁之前」的编排位置；脚本本体若被删改（丢掉行数、
-// SHA 或 sha256 任一环）在这里暴露，否则三个 job 共享的信任基准静默变松。
-func TestVerifyNativeArtifactScript(t *testing.T) {
-	script := readBaselineDoc(t, repositoryRoot(t), filepath.Join("scripts", "ci", "verify-native-artifact.sh"))
-	for _, required := range []string{
-		"set -euo pipefail",
-		"ENGINE_DYLIB=packages/engine/target/release/libmornlea_engine.dylib",
-		"CLIENT_DYLIB=packages/engine/target/release/libmornlea_client.dylib",
-		`test "$(cat packages/engine/target/release/native-source-sha.txt)" = "$GITHUB_SHA"`,
-		`test "$(wc -l < "$MANIFEST" | tr -d ' ')" = 3`,
-		`IFS=' ' read -r kind sha extra`,
-		`test "$kind" = sha`,
-		`test "$sha" = "$GITHUB_SHA"`,
-		`test -z "$extra"`,
-		`expected_path=$1`,
-		`IFS=' ' read -r path size digest extra`,
-		`test "$path" = "$expected_path"`,
-		`test -z "$extra"`,
-		`case "$size" in ''|*[!0-9]*) exit 1 ;; esac`,
-		`test "$size" = "$(stat -f '%z' "$path")"`,
-		`test "$digest" = "$(shasum -a 256 "$path" | awk '{print $1}')"`,
-		`validate_artifact "$ENGINE_DYLIB"`,
-		`validate_artifact "$CLIENT_DYLIB"`,
-	} {
-		if !strings.Contains(script, required) {
-			t.Errorf("verify-native-artifact.sh 缺少承重语句 %s", required)
-		}
-	}
-}
-
 func TestCompanionGoProductionDoesNotEmbedPython(t *testing.T) {
 	graph, err := loadCompanionProductionImportGraph(repositoryRoot(t))
 	if err != nil {

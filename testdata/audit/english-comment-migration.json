@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "total_files": 1243,
-  "total_comments": 38581,
+  "total_comments": 38577,
   "files": [
     {
       "path": "packages/audit/armor_domain_test.go",
@@ -25,8 +25,8 @@
     },
     {
       "path": "packages/audit/companion_agent_service_test.go",
-      "count": 8,
-      "digest": "72a694af64e539355b68f9360314cdfe849178eeeccf67a2852dbaae1e686fc2"
+      "count": 4,
+      "digest": "014f18ddb3ed7fcbcba39fcf599c5b9c594dedb71f481ce0d097e305a3199bfa"
     },
     {
       "path": "packages/audit/dependency_test.go",
