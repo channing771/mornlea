@@ -1,4 +1,3 @@
-use std::io::Write;
 use std::mem::{align_of, size_of};
 
 use crate::collision::{COLLISION_STEP_HEIGHT_OFFSET, resolve_collision};
@@ -486,11 +485,6 @@ unsafe fn physics_step_with(
         // SAFETY: input 非空，范围不超过 isize::MAX，地址加法不回绕且不与 output 重叠。
         let bytes = unsafe { std::slice::from_raw_parts(input, input_len) };
         if !physics_step_input_is_valid(bytes) {
-            let _ = writeln!(
-                std::io::stderr(),
-                "physics-step reject=decode len={}",
-                bytes.len()
-            );
             return Err(MORNLEA_STATUS_INPUT);
         }
         physics_step(bytes).map_err(|_| MORNLEA_STATUS_INPUT)

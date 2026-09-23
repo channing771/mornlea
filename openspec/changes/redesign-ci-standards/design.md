@@ -136,7 +136,8 @@ movement-direction helper is also consumed by sneak-edge probing; its resulting
 direction must continue to track the production Rust target and be regression
 tested. This is a parity correction, not a new movement or ABI policy. The
 temporary native stderr probe is removed after the Go-side regression passes,
-and the frozen source-provenance digest is restored before PR acceptance.
+and the frozen source-provenance digest is refrozen from the cleaned and
+accurately documented Rust source before PR acceptance.
 
 ### 8. Treat repository settings as an explicit migration step
 

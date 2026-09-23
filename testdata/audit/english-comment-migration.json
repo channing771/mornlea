@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "total_files": 1243,
-  "total_comments": 38577,
+  "total_comments": 38566,
   "files": [
     {
       "path": "packages/audit/armor_domain_test.go",
@@ -2480,8 +2480,8 @@
     },
     {
       "path": "packages/engine/crates/mornlea_engine/src/step.rs",
-      "count": 80,
-      "digest": "e541fe31df24a181cf41ba1c22b9f46359dbc754072f95b9bf2209271dc83dde"
+      "count": 70,
+      "digest": "9c43e4096fc0884e0d316e4b50506bd41f5fcc56c0b35f109972a887792b4398"
     },
     {
       "path": "packages/engine/crates/mornlea_engine/src/worldgen.rs",
@@ -5805,8 +5805,8 @@
     },
     {
       "path": "packages/shared/physics/step.go",
-      "count": 26,
-      "digest": "30eb31dde9caefdcbc0272cedce5b8b17dd8c9f83bed86b71747de631dd69a98"
+      "count": 25,
+      "digest": "03314abbe6b404b891a57433404bed2a592ed0778380def4933c855f729a01f6"
     },
     {
       "path": "packages/shared/physics/step_golden_vectors_test.go",

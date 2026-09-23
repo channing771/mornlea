@@ -63,7 +63,7 @@ func StepWithTunables(
 	return decodeStepOutput(output[:])
 }
 
-// stepVectorLength mirrors Rust's `vec3_len` for finite fixed-step inputs. The
+// stepVectorLength mirrors Rust's fused vector length for finite fixed-step inputs. The
 // explicit fused boundaries keep the sweep envelope aligned on architectures
 // where Go does not fuse the equivalent `mgl32.Vec3.Len` expression.
 func stepVectorLength(v mgl32.Vec3) float32 {
@@ -72,7 +72,7 @@ func stepVectorLength(v mgl32.Vec3) float32 {
 	return float32(math.Sqrt(float64(sum)))
 }
 
-// movementTargetFromYaw mirrors Rust's `movement_target` after the caller computes trigonometry.
+// movementTargetFromYaw mirrors the Rust movement target after the caller computes trigonometry.
 func movementTargetFromYaw(moveX, moveZ int8, walkSpeed, yawSin, yawCos float32) mgl32.Vec3 {
 	forward := mgl32.Vec3{-yawSin, 0, -yawCos}
 	right := mgl32.Vec3{yawCos, 0, -yawSin}
