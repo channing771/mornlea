@@ -212,3 +212,20 @@
 **Rollback:** revert `dde28196` and `1962f4c2` individually; the family returns to `cases: null` and the corpus index returns to 871.
 
 **Architecture skill: no change.**
+
+
+## Node 3.3 — 2026-09-24
+
+**Status:** complete. Commits `5daf6445` (`feat(protocol): qualify player and outcome packets`) + controller integration `ac0a3b1a` on top of `712e7d10`.
+
+**Deliverable:** the four owner-private families (`PlayerState` 3, `CommandRejected` 4, `PlaceBlockSucceeded` 20, `CombatHit` 25) on the common fallible surface; `reject_reason_to_wire`/`reject_reason_from_wire` exported as compile-time-exhaustive closed 15-row bidirectional matches aligned with domain `wire_id()` and Go `CommandRejectReasonID` (produced for node 4.2); PlayerState keeps the Go gate order (finite vecs → rotation → scalar ranges → mining union), never clips pitch/temperature, preserves `-0.0` bits, and pins the 93-byte field order. 32 corpus cases (14/6/4/8) through the real Go codec, producer `runtime-oracle/protocol-player-outcomes`; 8 routes registered and pinned (the large inventory diffs are gofmt realignment from longer family names); group test `tests/protocol_player_outcomes.rs` (15/15: both-direction reason matrix against domain `wire_id()`, full i8 temperature, mining-union edges incl. progress==required, mutation matrix, truncation/trailing).
+
+**Controller arithmetic slip (recorded, fourth occurrence):** the brief's prose said 13/31/915 while its enumerated PlayerState table carries 14 labels — the binding table governed: 32 cases, 884→916.
+
+**Evidence:** group 15/15; `runtime_contract` 134/134; Go producer 9/9 with 32/32 route observations; codec read-only confirmations ok; full oracle ok; audit ok; fmt/clippy/gofmt/vet clean. Corpus integrity: exactly 4 families changed, 884→916 strict superset (+32/−0), `source_revision` preserved. Post-integration whole protocol crate 284/284.
+
+**Review ruling:** Approved, 0 Crit/0 Imp/2 Minor. Deferred Minors: the interval predicate beside the closed reason match in `command_rejected.rs` (one-representation cleanup); the PlayerState corpus encode arm builds through the constructor while its siblings use public fields (comment contrast inconsistent).
+
+**Rollback:** revert `5daf6445` and `ac0a3b1a` individually; the four families return to `cases: null` and the corpus index returns to 884.
+
+**Architecture skill: no change.**
