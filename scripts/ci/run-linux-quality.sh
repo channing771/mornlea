@@ -21,9 +21,14 @@ packages=()
 for package in "${all_packages[@]}"; do
 	# Audit recomputes this exact unsupported set, including transitive Darwin imports.
 	case "$package" in
+	github.com/channing771/mornlea/packages/client/cmd/mornlea|\
 	github.com/channing771/mornlea/packages/client/cmd/mornlea/app|\
+	github.com/channing771/mornlea/packages/client/cmd/mornlea/benchmark|\
 	github.com/channing771/mornlea/packages/client/cmd/mornlea/capture|\
 	github.com/channing771/mornlea/packages/client/cmd/mornlea/devcapture|\
+	github.com/channing771/mornlea/packages/client/cmd/mornlea-godot-core|\
+	github.com/channing771/mornlea/packages/client/render|\
+	github.com/channing771/mornlea/packages/client/render/hud|\
 	github.com/channing771/mornlea/packages/tools/gfxspike) continue ;;
 	esac
 	packages+=("$package")

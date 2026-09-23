@@ -1,6 +1,7 @@
 package archcheck_test
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -108,47 +109,56 @@ func TestCIEntrypointsOwnRequiredCommands(t *testing.T) {
 
 func TestLinuxQualityPlatformExclusionsAreExact(t *testing.T) {
 	root := repositoryRoot(t)
-	inventory := func(platform string) map[string]bool {
-		result := map[string]bool{}
-		for _, module := range workspaceModules(t) {
-			cmd := exec.Command("go", "list", "-e", "-f", "{{if not .Error}}{{if not .DepsErrors}}{{.ImportPath}}{{end}}{{end}}", "./...")
-			cmd.Dir = filepath.Join(root, module)
-			arch := "amd64"
-			if platform == "darwin" {
-				arch = "arm64"
-			}
-			cmd.Env = ciEnvironment(os.Getenv("PATH"), []string{"GOOS=" + platform, "GOARCH=" + arch, "CGO_ENABLED=1"})
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				t.Fatalf("inventory %s: %v\n%s", module, err, output)
-			}
-			for _, path := range strings.Fields(string(output)) {
-				result[path] = true
-			}
-		}
-		return result
-	}
-	darwin, linux := inventory("darwin"), inventory("linux")
-	var difference []string
-	for path := range darwin {
-		if !linux[path] {
-			difference = append(difference, strings.TrimPrefix(path, "github.com/channing771/mornlea/packages/"))
-		}
-	}
-	slices.Sort(difference)
-	want := []string{"client/cmd/mornlea/app", "client/cmd/mornlea/capture", "client/cmd/mornlea/devcapture", "tools/gfxspike"}
-	if !slices.Equal(difference, want) {
-		t.Fatalf("Darwin minus Linux = %v, want %v", difference, want)
-	}
-	// Execute the real selector against the real universe so an extra exclusion loses coverage.
 	bin, log := ciCommandRecorder(t)
 	realGo, err := exec.LookPath("go")
 	if err != nil {
 		t.Fatal(err)
 	}
 	recorder := strings.TrimPrefix(ciRecorderSource("go"), "#!/usr/bin/env bash\n")
-	writeExecutable(t, filepath.Join(bin, "go"), fmt.Sprintf("#!/usr/bin/env bash\nif [[ $1 == list || $1 == work ]]; then exec %q \"$@\"; fi\n%s", realGo, recorder))
-	output, err := ciRunWithEnv(root, bin+":"+os.Getenv("PATH"), []string{"CI_TEST_LOG=" + log, "CI_TEST_ROOT=" + root, "CI_TEST_LINUX=1"}, filepath.Join(root, "scripts/ci/run-linux-quality.sh"))
+	writeExecutable(t, filepath.Join(bin, "go"), fmt.Sprintf("#!/usr/bin/env bash\nif [[ $1 == list ]]; then printf 'go: downloading example.com/module v1.0.0\\n' >&2; exec %q \"$@\"; fi\nif [[ $1 == work ]]; then exec %q \"$@\"; fi\n%s", realGo, realGo, recorder))
+	path := bin + ":" + os.Getenv("PATH")
+	inventory := func(args ...string) []string {
+		t.Helper()
+		cmd := exec.Command(filepath.Join(root, "scripts/ci/package-inventory.sh"), args...)
+		cmd.Dir = root
+		cmd.Env = ciEnvironment(path, nil)
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		output, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("package inventory %v: %v\n%s", args, err, stderr.String())
+		}
+		if !strings.Contains(stderr.String(), "go: downloading example.com/module v1.0.0") {
+			t.Fatalf("package inventory %v did not exercise stderr notice", args)
+		}
+		return strings.Fields(string(output))
+	}
+	all, client := inventory("--all"), inventory("--slice", "client")
+	const prefix = "github.com/channing771/mornlea/packages/"
+	excluded := []string{
+		"client/cmd/mornlea", "client/cmd/mornlea/app", "client/cmd/mornlea/benchmark",
+		"client/cmd/mornlea/capture", "client/cmd/mornlea/devcapture", "client/cmd/mornlea-godot-core",
+		"client/render", "client/render/hud", "tools/gfxspike",
+	}
+	for _, relative := range excluded {
+		for name, packages := range map[string][]string{"union": all, "client slice": client} {
+			if !slices.Contains(packages, prefix+relative) {
+				t.Errorf("%s lacks Darwin-owned package %s", name, relative)
+			}
+		}
+	}
+	excludedSet := make(map[string]bool, len(excluded))
+	for _, relative := range excluded {
+		excludedSet[prefix+relative] = true
+	}
+	var supported []string
+	for _, packagePath := range all {
+		if !excludedSet[packagePath] {
+			supported = append(supported, packagePath)
+		}
+	}
+	slices.Sort(supported)
+	output, err := ciRunWithEnv(root, path, []string{"CI_TEST_LOG=" + log, "CI_TEST_ROOT=" + root, "CI_TEST_LINUX=1"}, filepath.Join(root, "scripts/ci/run-linux-quality.sh"))
 	if err != nil {
 		t.Fatalf("real quality package selection: %v\n%s", err, output)
 	}
@@ -157,11 +167,6 @@ func TestLinuxQualityPlatformExclusionsAreExact(t *testing.T) {
 		t.Fatalf("quality commands = %q", commands)
 	}
 	compile, vet := strings.Fields(commands[0]), strings.Fields(commands[1])
-	var supported []string
-	for path := range linux {
-		supported = append(supported, path)
-	}
-	slices.Sort(supported)
 	if len(compile) < 5 || !slices.Equal(compile[2:len(compile)-3], supported) || !slices.Equal(vet[2:], supported) {
 		t.Fatalf("compile/vet differ from supported inventory: compile=%q vet=%q supported=%q", compile, vet, supported)
 	}
