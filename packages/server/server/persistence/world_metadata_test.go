@@ -162,14 +162,27 @@ func TestMetadataAutosaveFailureRetriesWithBoundedBackoff(t *testing.T) {
 func TestMetadataAutosaveDoesNotBlockStepWhenQueueIsFull(t *testing.T) {
 	store := newPersistenceTestStore()
 	release := make(chan struct{})
+	entered := make(chan struct{}, 1)
 	defer close(release)
 	store.metadataRespond = func(int, storage.Metadata) error {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
 		<-release
 		return nil
 	}
 	running := newPersistenceServer(t, store)
 	running.config.AutosaveTicks = 2
 
+	// Pin the only save worker before filling the queue so it cannot free a
+	// slot between the fullness check and the final autosave boundary.
+	running.world.saveJobs <- saveJob{Kind: saveKindMetadata}
+	select {
+	case <-entered:
+	case <-time.After(waitDeadline):
+		t.Fatal("save worker did not enter the blocked metadata store")
+	}
 	for len(running.world.saveJobs) < cap(running.world.saveJobs) {
 		running.world.saveJobs <- saveJob{Kind: saveKindMetadata}
 	}
