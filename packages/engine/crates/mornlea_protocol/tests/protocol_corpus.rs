@@ -137,6 +137,10 @@ const CRAFTING_STATE_FAMILY: &str = "protocol.server.CraftingState";
 const FURNACE_STATE_FAMILY: &str = "protocol.server.FurnaceState";
 const CHEST_STATE_FAMILY: &str = "protocol.server.ChestState";
 const CONTAINER_CLOSED_FAMILY: &str = "protocol.server.ContainerClosed";
+/// The three packet families the remote player producer group registers.
+const REMOTE_PLAYER_SPAWN_FAMILY: &str = "protocol.server.RemotePlayerSpawn";
+const REMOTE_PLAYER_DESPAWN_FAMILY: &str = "protocol.server.RemotePlayerDespawn";
+const REMOTE_PLAYER_STATES_FAMILY: &str = "protocol.server.RemotePlayerStates";
 /// The packet families' protocol version, matching the manifest family rows.
 const PACKET_VERSION: &str = "45";
 /// The category label every accepted control packet outcome publishes.
@@ -1242,6 +1246,267 @@ fn chest_state_fields(state: &mornlea_protocol::ChestState) -> serde_json::Value
 fn container_closed_fields(closed: &mornlea_protocol::ContainerClosed) -> serde_json::Value {
     serde_json::json!({
         "container": client_container_fields(&closed.container)
+    })
+}
+
+/// Renders one 16-byte identity as the 32-lowercase-hexadecimal text both
+/// directions publish.
+///
+/// The wire form is published as text rather than as a nested object, so a
+/// zero or non-UUIDv4 byte sequence stays observable instead of being
+/// pre-validated into a number the wire never carries.
+fn remote_player_id_text(player_id: &mornlea_protocol::PlayerId) -> String {
+    hex_lower(&player_id.bytes())
+}
+
+/// Renders one remote player spawn's semantic fields.
+///
+/// The tick is a decimal string so the full `u64` range stays lossless, the
+/// dimension is the plain wire integer, the pose publishes as the eight-digit
+/// hexadecimal bit strings that keep a negative zero distinct, and the name
+/// is verbatim because the codec performs no trimming.
+fn remote_player_spawn_fields(spawn: &mornlea_protocol::RemotePlayerSpawn) -> serde_json::Value {
+    serde_json::json!({
+        "player_id": remote_player_id_text(&spawn.player_id),
+        "display_name": spawn.display_name,
+        "server_tick": spawn.server_tick.to_string(),
+        "dimension": spawn.dimension.get(),
+        "position": [
+            float_bits_text(spawn.position[0]),
+            float_bits_text(spawn.position[1]),
+            float_bits_text(spawn.position[2])
+        ],
+        "yaw": float_bits_text(spawn.yaw),
+        "pitch": float_bits_text(spawn.pitch)
+    })
+}
+
+/// Renders one remote player state record's semantic fields.
+fn remote_player_state_fields(record: &mornlea_protocol::RemotePlayerState) -> serde_json::Value {
+    serde_json::json!({
+        "player_id": remote_player_id_text(&record.player_id),
+        "dimension": record.dimension.get(),
+        "position": [
+            float_bits_text(record.position[0]),
+            float_bits_text(record.position[1]),
+            float_bits_text(record.position[2])
+        ],
+        "yaw": float_bits_text(record.yaw),
+        "pitch": float_bits_text(record.pitch),
+        "reset": record.reset
+    })
+}
+
+/// Renders one remote player despawn's semantic fields.
+fn remote_player_despawn_fields(
+    despawn: &mornlea_protocol::RemotePlayerDespawn,
+) -> serde_json::Value {
+    serde_json::json!({
+        "player_id": remote_player_id_text(&despawn.player)
+    })
+}
+
+/// Renders one remote player state batch's semantic fields.
+///
+/// The records publish in wire order, never sorted, so a batch the authority
+/// ordered is observed in the order it carried.
+fn remote_player_states_fields(states: &mornlea_protocol::RemotePlayerStates) -> serde_json::Value {
+    let players: Vec<serde_json::Value> = states
+        .players
+        .iter()
+        .map(remote_player_state_fields)
+        .collect();
+    serde_json::json!({
+        "server_tick": states.server_tick.to_string(),
+        "players": players
+    })
+}
+
+/// Reads one identity field an encode case carries as its 32-hex text.
+fn remote_player_id_request(case: &FrozenCase, name: &str) -> mornlea_protocol::PlayerId {
+    let text = case
+        .input_json
+        .as_ref()
+        .expect("encode case carries JSON fields")
+        .get(name)
+        .and_then(|value| value.as_str())
+        .unwrap_or_else(|| panic!("case {} names no {name}", case.id));
+    let bytes: [u8; 16] = payload_bytes_from_text(case, text)
+        .try_into()
+        .unwrap_or_else(|_| panic!("case {} field {name} is not 16 bytes", case.id));
+    mornlea_protocol::PlayerId::try_from_bytes(bytes)
+        .unwrap_or_else(|_| panic!("case {} field {name} is not a player identity", case.id))
+}
+
+/// Reads one f32 bit-string array an encode case carries.
+fn float_bits_array_request(case: &FrozenCase, name: &str) -> [f32; 3] {
+    let entries = case
+        .input_json
+        .as_ref()
+        .expect("encode case carries JSON fields")
+        .get(name)
+        .and_then(|value| value.as_array())
+        .unwrap_or_else(|| panic!("case {} names no {name}", case.id));
+    let mut values = [0f32; 3];
+    for (index, slot) in values.iter_mut().enumerate() {
+        let text = entries
+            .get(index)
+            .and_then(|value| value.as_str())
+            .unwrap_or_else(|| panic!("case {} {name}[{index}] is not text", case.id));
+        let bits = u32::from_str_radix(text, 16)
+            .unwrap_or_else(|_| panic!("case {} {name}[{index}] is not hexadecimal bits", case.id));
+        *slot = f32::from_bits(bits);
+    }
+    values
+}
+
+/// Builds the remote player spawn one encode case names from its typed
+/// fields.
+///
+/// The record is built through its public fields, so a mutated or invalid
+/// case is refused by the production validation rather than by a constructor
+/// guard.
+fn remote_player_spawn_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::RemotePlayerSpawn, mornlea_protocol::ProtocolError> {
+    let player_id = remote_player_id_request(case, "player_id");
+    let display_name = display_name_field(case);
+    let server_tick = unsigned_field(case, "server_tick");
+    let dimension = remote_player_dimension_request(case, "dimension")?;
+    let position = float_bits_array_request(case, "position");
+    let yaw = float_bits_field(case, "yaw");
+    let pitch = float_bits_field(case, "pitch");
+    Ok(mornlea_protocol::RemotePlayerSpawn {
+        player_id,
+        display_name,
+        server_tick,
+        dimension,
+        position,
+        yaw,
+        pitch,
+    })
+}
+
+/// Builds the remote player despawn one encode case names from its typed
+/// fields.
+fn remote_player_despawn_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::RemotePlayerDespawn, mornlea_protocol::ProtocolError> {
+    Ok(mornlea_protocol::RemotePlayerDespawn::new(
+        remote_player_id_request(case, "player_id"),
+    ))
+}
+
+/// Reads one dimension field an encode case carries, mapping an unknown value
+/// to the enum boundary the decoder publishes for the same bytes.
+fn remote_player_dimension_request(
+    case: &FrozenCase,
+    name: &str,
+) -> Result<mornlea_domain::Dimension, mornlea_protocol::ProtocolError> {
+    let dimension = i32_field(case, name);
+    let narrowed = u8::try_from(dimension).unwrap_or(u8::MAX);
+    mornlea_domain::Dimension::new(narrowed)
+        .map_err(|_| mornlea_protocol::ProtocolError::InvalidEnum)
+}
+
+/// Builds one remote player state record its JSON object names.
+fn remote_player_state_request(
+    case: &FrozenCase,
+    name: &str,
+    index: usize,
+) -> Result<mornlea_protocol::RemotePlayerState, mornlea_protocol::ProtocolError> {
+    let entries = record_array(case, name);
+    let entry = entries
+        .get(index)
+        .unwrap_or_else(|| panic!("case {} {name}[{index}] is missing", case.id));
+    let player_id = {
+        let text = entry
+            .get("player_id")
+            .and_then(|value| value.as_str())
+            .unwrap_or_else(|| panic!("case {} {name}[{index}] names no player_id", case.id));
+        let bytes: [u8; 16] = payload_bytes_from_text(case, text)
+            .try_into()
+            .unwrap_or_else(|_| {
+                panic!("case {} {name}[{index}] player_id is not 16 bytes", case.id)
+            });
+        mornlea_protocol::PlayerId::try_from_bytes(bytes)
+            .map_err(|_| mornlea_protocol::ProtocolError::InvalidIdentity)?
+    };
+    let dimension = match entry.get("dimension").and_then(|value| value.as_i64()) {
+        Some(dimension) => {
+            let narrowed = u8::try_from(dimension).unwrap_or(u8::MAX);
+            mornlea_domain::Dimension::new(narrowed)
+                .map_err(|_| mornlea_protocol::ProtocolError::InvalidEnum)?
+        }
+        None => panic!("case {} {name}[{index}] names no dimension", case.id),
+    };
+    let position = {
+        let values = entry
+            .get("position")
+            .and_then(|value| value.as_array())
+            .unwrap_or_else(|| panic!("case {} {name}[{index}] names no position", case.id));
+        let mut parsed = [0f32; 3];
+        for (index, slot) in parsed.iter_mut().enumerate() {
+            let text = values
+                .get(index)
+                .and_then(|value| value.as_str())
+                .unwrap_or_else(|| {
+                    panic!(
+                        "case {} {name}[{index}] position[{index}] is not text",
+                        case.id
+                    )
+                });
+            let bits = u32::from_str_radix(text, 16).unwrap_or_else(|_| {
+                panic!(
+                    "case {} {name}[{index}] position[{index}] is not hexadecimal bits",
+                    case.id
+                )
+            });
+            *slot = f32::from_bits(bits);
+        }
+        parsed
+    };
+    let angle = |field: &str| -> f32 {
+        let text = entry
+            .get(field)
+            .and_then(|value| value.as_str())
+            .unwrap_or_else(|| panic!("case {} {name}[{index}] names no {field}", case.id));
+        let bits = u32::from_str_radix(text, 16).unwrap_or_else(|_| {
+            panic!(
+                "case {} {name}[{index}] {field} is not hexadecimal bits",
+                case.id
+            )
+        });
+        f32::from_bits(bits)
+    };
+    let reset = entry
+        .get("reset")
+        .and_then(|value| value.as_bool())
+        .unwrap_or_else(|| panic!("case {} {name}[{index}] names no reset", case.id));
+    Ok(mornlea_protocol::RemotePlayerState {
+        player_id,
+        dimension,
+        position,
+        yaw: angle("yaw"),
+        pitch: angle("pitch"),
+        reset,
+    })
+}
+
+/// Builds the remote player state batch one encode case names from its typed
+/// fields.
+fn remote_player_states_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::RemotePlayerStates, mornlea_protocol::ProtocolError> {
+    let server_tick = unsigned_field(case, "server_tick");
+    let records = record_array(case, "players");
+    let mut players = Vec::with_capacity(records.len());
+    for index in 0..records.len() {
+        players.push(remote_player_state_request(case, "players", index)?);
+    }
+    Ok(mornlea_protocol::RemotePlayerStates {
+        server_tick,
+        players,
     })
 }
 
@@ -2377,6 +2642,60 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
             }
             other => panic!("unsupported packet operation for {}: {other}", case.id),
         },
+        REMOTE_PLAYER_SPAWN_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::RemotePlayerSpawn::decode(&case.input) {
+                Ok(spawn) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": remote_player_spawn_fields(&spawn),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let spawn = match remote_player_spawn_request(case) {
+                    Ok(spawn) => spawn,
+                    Err(err) => return packet_error(err),
+                };
+                encode_ok_outcome(spawn.encode(), remote_player_spawn_fields(&spawn))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        REMOTE_PLAYER_DESPAWN_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::RemotePlayerDespawn::decode(&case.input) {
+                Ok(despawn) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": remote_player_despawn_fields(&despawn),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let despawn = match remote_player_despawn_request(case) {
+                    Ok(despawn) => despawn,
+                    Err(err) => return packet_error(err),
+                };
+                encode_ok_outcome(despawn.encode(), remote_player_despawn_fields(&despawn))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        REMOTE_PLAYER_STATES_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::RemotePlayerStates::decode(&case.input) {
+                Ok(states) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": remote_player_states_fields(&states),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let states = match remote_player_states_request(case) {
+                    Ok(states) => states,
+                    Err(err) => return packet_error(err),
+                };
+                encode_ok_outcome(states.encode(), remote_player_states_fields(&states))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
         other => panic!("unsupported packet family for {}: {other}", case.id),
     }
 }
@@ -2429,7 +2748,10 @@ fn dispatch_case(case: &FrozenCase) -> serde_json::Value {
         | CRAFTING_STATE_FAMILY
         | FURNACE_STATE_FAMILY
         | CHEST_STATE_FAMILY
-        | CONTAINER_CLOSED_FAMILY => dispatch_packet(case),
+        | CONTAINER_CLOSED_FAMILY
+        | REMOTE_PLAYER_SPAWN_FAMILY
+        | REMOTE_PLAYER_DESPAWN_FAMILY
+        | REMOTE_PLAYER_STATES_FAMILY => dispatch_packet(case),
         other => panic!("unregistered protocol family for {}: {other}", case.id),
     }
 }
@@ -3376,6 +3698,90 @@ fn protocol_corpus_packet_inventory_publication_cases_are_executed() {
         "the inventory and container publication selection executed zero cases"
     );
     for case in publications {
+        assert_eq!(
+            case.consumer,
+            CorpusConsumer::Protocol,
+            "case {} carries the wrong consumer",
+            case.id
+        );
+        assert!(
+            !case.operation.is_empty(),
+            "case {} names no operation",
+            case.id
+        );
+        assert_normalized(case, dispatch_packet(case));
+    }
+}
+
+/// The case identities the remote player producer group registers. They
+/// mirror the Go producer's registration, so a case that only one side names
+/// is a mismatch rather than a shared name. The merged manifest sorts case
+/// IDs, so the comparison sorts this list too.
+///
+/// The count is the reviewed table's enumerated labels: the spawn's canonical
+/// vector pair with its two name-bound refusals and the non-finite pitch the
+/// Go float primitive answers before the validator, the despawn's pair with
+/// its identity refusal and its trailing byte, and the batch's pair with the
+/// two boundary-admitting counts, the count-bound refusals, the two order
+/// refusals, the dimension, the non-finite coordinate and the trailing byte.
+/// The spawn's zero and wrong-version identity and its unknown dimension are
+/// deliberately absent: the Go validator folds them into one message, so they
+/// are pinned as Rust group-test boundaries instead of corpus cases.
+const REMOTE_PLAYERS_CASE_IDS: [&str; 20] = [
+    "protocol.server.RemotePlayerSpawn/45/decode-valid",
+    "protocol.server.RemotePlayerSpawn/45/encode-valid",
+    "protocol.server.RemotePlayerSpawn/45/decode-padded-name",
+    "protocol.server.RemotePlayerSpawn/45/encode-padded-name",
+    "protocol.server.RemotePlayerSpawn/45/decode-nan-pitch",
+    "protocol.server.RemotePlayerDespawn/45/decode-valid",
+    "protocol.server.RemotePlayerDespawn/45/encode-valid",
+    "protocol.server.RemotePlayerDespawn/45/decode-zero-uuid",
+    "protocol.server.RemotePlayerDespawn/45/decode-trailing-byte",
+    "protocol.server.RemotePlayerStates/45/decode-valid",
+    "protocol.server.RemotePlayerStates/45/encode-valid",
+    "protocol.server.RemotePlayerStates/45/decode-count-one",
+    "protocol.server.RemotePlayerStates/45/decode-count-seven",
+    "protocol.server.RemotePlayerStates/45/decode-count-zero",
+    "protocol.server.RemotePlayerStates/45/decode-count-eight",
+    "protocol.server.RemotePlayerStates/45/decode-duplicate-uuids",
+    "protocol.server.RemotePlayerStates/45/decode-reversed-uuids",
+    "protocol.server.RemotePlayerStates/45/decode-dimension-two",
+    "protocol.server.RemotePlayerStates/45/decode-infinite-coordinate",
+    "protocol.server.RemotePlayerStates/45/decode-trailing-byte",
+];
+
+/// Reports whether one family belongs to the remote player producer group.
+fn is_remote_players_family(family: &str) -> bool {
+    matches!(
+        family,
+        REMOTE_PLAYER_SPAWN_FAMILY | REMOTE_PLAYER_DESPAWN_FAMILY | REMOTE_PLAYER_STATES_FAMILY
+    )
+}
+
+#[test]
+fn protocol_corpus_packet_remote_players_cases_are_executed() {
+    // The case assets are exported by the Go producer and integrated by the
+    // controller, so before that merge the test reports the missing corpus
+    // cases instead of an empty selection that would look like a passing run.
+    let cases = load_cases_for_consumer(CorpusConsumer::Protocol);
+    let remote_players: Vec<&FrozenCase> = cases
+        .iter()
+        .filter(|case| is_remote_players_family(&case.family))
+        .collect();
+    let executed: Vec<&str> = remote_players.iter().map(|case| case.id.as_str()).collect();
+    let mut expected: Vec<&str> = REMOTE_PLAYERS_CASE_IDS.to_vec();
+    // The merged manifest sorts case IDs; compare as the reviewed set, not in
+    // the authoring order of this suite's constant.
+    expected.sort_unstable();
+    assert_eq!(
+        executed, expected,
+        "the remote player selection does not carry the reviewed case set"
+    );
+    assert!(
+        !remote_players.is_empty(),
+        "the remote player selection executed zero cases"
+    );
+    for case in remote_players {
         assert_eq!(
             case.consumer,
             CorpusConsumer::Protocol,

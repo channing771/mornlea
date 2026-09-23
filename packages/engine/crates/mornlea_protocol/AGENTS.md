@@ -844,6 +844,20 @@ rather than checking that it omits a few names.
   payloads and trailing bytes fail before publication
   (`remote_player_despawn_round_trip_preserves_golden_bytes`,
   `remote_player_despawn_rejects_invalid_identity_and_malformed_payload`).
+- The family carries the remote-player group's common fallible surface, and
+  its gate is total because the identity is the checked domain `PlayerId`:
+  a zero or non-UUIDv4 value cannot be constructed, so no field mutation
+  after construction can make the record unpublishable and the gate restates
+  no rule the domain type owns
+  (`remote_players_despawn_round_trips_through_the_fallible_surface`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.RemotePlayerDespawn` registers a decode and
+  an encode route under the `mornlea_protocol` consumer, produced by the real
+  Go codec in
+  `packages/tools/cmd/runtime-oracle/protocol_remote_players_test.go`. The
+  Go validator's identity message is family-specific, so the zero-identity
+  case classifies at the identity boundary both sides publish and the
+  trailing-byte case keeps its own category.
 - `ByteEncoder` / `ByteDecoder` `i8` helpers use two's-complement
   little-endian encoding, matching the Go primitive.
 - `ByteEncoder` / `ByteDecoder` `boolean` helpers copy the Go primitive:
@@ -1284,6 +1298,36 @@ rather than checking that it omits a few names.
   display name may legitimately contain spaces
   (`remote_player_spawn_round_trip_preserves_golden_bytes`,
   `remote_player_spawn_rejects_invalid_identity_name_and_pose`).
+- The family carries the remote-player group's common fallible surface, and
+  its gate keeps the Go `RemotePlayerSpawn.Validate` order: the canonical
+  display name first, then the pose finiteness. The pitch stays
+  unrestricted — a mirrored peer pose is published as observed — so the
+  companion vertical-look rule is deliberately not imported
+  (`remote_players_spawn_round_trips_through_the_fallible_surface`,
+  `remote_players_pitch_and_the_finite_range_stay_wire_valid`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.RemotePlayerSpawn` registers a decode and
+  an encode route under the `mornlea_protocol` consumer, produced by the real
+  Go codec in
+  `packages/tools/cmd/runtime-oracle/protocol_remote_players_test.go`. The
+  frozen cases are the boundaries where both implementations agree: the
+  canonical vector pair, the padded name (Go's combined validator message
+  resolves as a value boundary, matching `InvalidString`), and the non-finite
+  pitch (the Go float primitive fires before the validator, matching
+  `InvalidFloat`).
+- **Latent cross-implementation boundary class:** the Go validator folds the
+  identity, the name, the dimension and the finiteness into one predicate
+  with the single message `network: invalid remote player spawn`, so the zero
+  and wrong-version identity and the unknown dimension cannot publish
+  distinct categories on the Go side. Those three boundaries are pinned as
+  Rust group-test assertions instead of corpus cases — `InvalidIdentity` for
+  the two identity forms and `InvalidEnum` for the dimension, both on the
+  decode path — and the outbound surface cannot express either value at all
+  because `PlayerId` and `Dimension` are checked domain newtypes
+  (`remote_players_spawn_latent_boundaries_are_pinned_here_not_in_the_corpus`).
+  This is the same latent class the furnace family records for its
+  unregistered-item boundary, and it is recorded here rather than resolved by
+  weakening the Rust gates to match the Go message coarseness.
 
 ## Remote player states (`src/remote_player_states.rs`, `tests/runtime_contract.rs`)
 
@@ -1298,6 +1342,29 @@ rather than checking that it omits a few names.
   decoder applies before it allocates
   (`remote_player_states_round_trip_preserves_golden_bytes`,
   `remote_player_states_rejects_unsorted_invalid_and_malformed_payload`).
+- The family carries the remote-player group's common fallible surface, and
+  its gate keeps the Go `RemotePlayerStates.Validate` order: the count bound
+  first, then each record's finiteness, then the strictly increasing
+  identity order in the raw unsigned byte order the Go `bytes.Compare`
+  applies. A public-field batch mutated into an empty or over-full record
+  set, a duplicate or descending identity, or a non-finite pose after
+  construction is refused instead of silently published, and the fixed wire
+  ceiling refuses before any record is read while the count bound fires
+  before the record-length rule
+  (`remote_players_states_admit_the_full_batch_at_the_fixed_wire_ceiling`,
+  `remote_players_states_the_fixed_ceiling_refuses_before_any_record_is_read`,
+  `remote_players_invalid_value_wins_over_short_capacity`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.RemotePlayerStates` registers a decode and
+  an encode route under the `mornlea_protocol` consumer, produced by the real
+  Go codec in
+  `packages/tools/cmd/runtime-oracle/protocol_remote_players_test.go`. Every
+  boundary the Go decoder names is its own message — the count bound, the
+  remaining-length check, the strict-order rule and the per-record combined
+  predicate — so the count, duplicate, reversed, dimension and non-finite
+  cases each classify at the boundary both sides publish, and the two
+  boundary-admitting counts (one and seven records) freeze the count domain
+  beside the fixed wire ceiling.
 
 ## Passive spawn (`src/passive_spawn.rs`, `tests/runtime_contract.rs`)
 
@@ -1531,6 +1598,8 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_player_outcomes --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_inventory_publication --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_inventory_publication --locked -- --list
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_remote_players --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_remote_players --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
 
@@ -1616,6 +1685,23 @@ field wins over a short destination for every family, every proper truncation
 plus one trailing byte reject, and the packet IDs 10/21/13/15/14 stay pinned.
 It also needs no corpus files, so it runs before the controller integrates
 the exported candidates.
+
+`tests/protocol_remote_players.rs` pins the three remote-player publication
+records through that same surface: the reviewed 54/16/91/296-byte wire
+literals round-trip byte for byte with the negative-zero position components
+and the wire-valid pitch 2.0 preserved, the full seven-record batch admits at
+exactly the 296-byte fixed ceiling while one byte above it refuses
+`FrameTooLarge` before any record is read and a count of eight refuses at the
+count bound rather than the record-length rule, the identity order is the raw
+unsigned byte order (a byte-ascending pair admits and its descending twin is
+refused), the pitch carries no vertical-look rule, a mutated public field —
+padded name, non-finite pose, duplicate or descending identity, empty or
+over-full batch — wins over a short destination for every family, every
+proper truncation plus one trailing byte reject, and the packet IDs 7/8/9
+stay pinned. Its latent-boundary test pins the spawn's zero and wrong-version
+identity and its unknown dimension at their Rust variants because the Go
+validator's single message cannot separate them. It also needs no corpus
+files, so it runs before the controller integrates the exported candidates.
 
 `tests/protocol_corpus.rs` executes the corpus cases this crate owns through
 the real codec paths — `read_frame`/`write_frame` for framing,

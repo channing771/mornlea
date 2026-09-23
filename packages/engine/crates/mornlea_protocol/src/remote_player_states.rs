@@ -6,11 +6,15 @@
 //! the companion activity limit. The batch also carries a fixed wire ceiling
 //! that the Go decoder applies before it allocates, which the companion batch
 //! does not need because its own ceiling is reached through the count bound.
+//! A peer pose publishes whatever look angle the mirrored session carried, so
+//! the pitch is unrestricted here.
 
 use crate::batch::{UvarintCountBatch, strictly_increasing_ids};
-use crate::bytes::{ByteDecoder, ByteEncoder};
+use crate::bytes::{ByteDecoder, SliceWriter};
 use crate::error::ProtocolError;
 use crate::player_id::{self, PlayerId};
+use crate::server_hello::publish_packet;
+use crate::varint::canonical_uvarint_length;
 use mornlea_domain::Dimension;
 
 /// Maximum remote player states one payload may carry, copied from the Go
@@ -25,6 +29,9 @@ pub const REMOTE_PLAYER_STATE_WIRE_BYTES: usize = 16 + 4 + 12 + 4 + 4 + 1;
 /// Fixed wire upper bound of the whole payload.
 pub const REMOTE_PLAYER_STATES_MAX_WIRE_BYTES: usize =
     8 + 1 + MAX_REMOTE_PLAYER_STATES as usize * REMOTE_PLAYER_STATE_WIRE_BYTES;
+
+/// Fixed header stride before the records: the eight-byte server tick.
+const BATCH_TICK_WIRE_BYTES: usize = 8;
 
 /// One peer session body state for one tick.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -48,7 +55,54 @@ pub struct RemotePlayerStates {
 impl RemotePlayerStates {
     pub const PACKET_ID: u32 = 9;
 
-    fn valid(record: &RemotePlayerState) -> Result<(), ProtocolError> {
+    /// Builds a validated batch.
+    ///
+    /// Identity validity is enforced by `PlayerId` and the dimension by
+    /// `Dimension`, so this gate only checks the batch bounds, the pose
+    /// finiteness, and the identity order.
+    pub fn new(server_tick: u64, players: Vec<RemotePlayerState>) -> Result<Self, ProtocolError> {
+        let states = Self {
+            server_tick,
+            players,
+        };
+        states.valid()?;
+        Ok(states)
+    }
+
+    /// The single value gate shared by `new`, `encode_into` and `decode`.
+    ///
+    /// The fields are public, so the gate runs on every encode instead of only
+    /// at construction: a batch mutated into an empty or over-full record set,
+    /// a duplicate or descending identity, or a non-finite pose after
+    /// construction is refused instead of silently published. The order is the
+    /// Go `RemotePlayerStates.Validate` order — the count bound, then each
+    /// record's finiteness, then the strictly increasing identity order — and
+    /// the identity comparison is the raw unsigned byte order the Go
+    /// `bytes.Compare` applies, which is what `strictly_increasing_ids`
+    /// implements.
+    pub fn validate(&self) -> Result<(), ProtocolError> {
+        self.valid()
+    }
+
+    fn valid(&self) -> Result<(), ProtocolError> {
+        if self.players.is_empty() || self.players.len() > MAX_REMOTE_PLAYER_STATES as usize {
+            return Err(ProtocolError::InvalidRange);
+        }
+        let mut ids = Vec::with_capacity(self.players.len());
+        for record in &self.players {
+            Self::record_valid(record)?;
+            ids.push(record.player_id.bytes());
+        }
+        if !strictly_increasing_ids(&ids) {
+            return Err(ProtocolError::InvalidRange);
+        }
+        Ok(())
+    }
+
+    /// The per-record finite-pose gate. The identity and the dimension are
+    /// checked by their domain types, so the record carries no rule this
+    /// helper would restate.
+    fn record_valid(record: &RemotePlayerState) -> Result<(), ProtocolError> {
         if !record.position.iter().all(|value| value.is_finite())
             || !record.yaw.is_finite()
             || !record.pitch.is_finite()
@@ -58,49 +112,65 @@ impl RemotePlayerStates {
         Ok(())
     }
 
-    /// Builds a validated batch.
+    /// The exact encoded length: the eight-byte tick, the canonical uvarint
+    /// count and one fixed stride per record.
     ///
-    /// Identity validity is enforced by `PlayerId` and the dimension by
-    /// `Dimension`, so this gate only checks the batch bounds, the pose
-    /// finiteness, and the identity order.
-    pub fn new(server_tick: u64, players: Vec<RemotePlayerState>) -> Result<Self, ProtocolError> {
-        if players.is_empty() || players.len() > MAX_REMOTE_PLAYER_STATES as usize {
-            return Err(ProtocolError::InvalidRange);
-        }
-        let mut ids = Vec::with_capacity(players.len());
-        for record in &players {
-            Self::valid(record)?;
-            ids.push(record.player_id.bytes());
-        }
-        if !strictly_increasing_ids(&ids) {
-            return Err(ProtocolError::InvalidRange);
-        }
-        Ok(Self {
-            server_tick,
-            players,
+    /// The value gate runs first, so an invalid batch reports its count, pose
+    /// or order error here instead of reaching a size or capacity decision.
+    pub fn encoded_len(&self) -> Result<usize, ProtocolError> {
+        self.valid()?;
+        let count = self.players.len();
+        let records = count
+            .checked_mul(REMOTE_PLAYER_STATE_WIRE_BYTES)
+            .ok_or(ProtocolError::Allocation)?;
+        BATCH_TICK_WIRE_BYTES
+            .checked_add(canonical_uvarint_length(count as u32))
+            .and_then(|length| length.checked_add(records))
+            .ok_or(ProtocolError::Allocation)
+    }
+
+    /// Publishes the batch into a caller-owned buffer and returns the bytes
+    /// written.
+    ///
+    /// The field order is the Go encoder's — the server tick, the canonical
+    /// uvarint count and the per-record identity, dimension, position, yaw,
+    /// pitch and reset flag — and the destination is tested before the first
+    /// byte is written, so a short or invalid call leaves every destination
+    /// byte unchanged.
+    pub fn encode_into(&self, dst: &mut [u8]) -> Result<usize, ProtocolError> {
+        let length = self.encoded_len()?;
+        publish_packet(length, dst, |writer| {
+            writer.u64(self.server_tick);
+            writer.uvarint(self.players.len() as u32);
+            for player in &self.players {
+                writer.bytes(&player.player_id.bytes());
+                writer.i32(i32::from(player.dimension.get()));
+                for value in player.position {
+                    writer.f32(value);
+                }
+                writer.f32(player.yaw);
+                writer.f32(player.pitch);
+                writer.boolean(player.reset);
+            }
         })
     }
 
-    pub fn encode(&self) -> Vec<u8> {
-        let mut encoder = ByteEncoder::new();
-        UvarintCountBatch::write(&mut encoder, self.server_tick, self.players.len() as u32);
-        for player in &self.players {
-            encoder.bytes(&player.player_id.bytes());
-            encoder.i32(i32::from(player.dimension.get()));
-            for value in player.position {
-                encoder.f32(value);
-            }
-            encoder.f32(player.yaw);
-            encoder.f32(player.pitch);
-            encoder.boolean(player.reset);
-        }
-        encoder
-            .finish()
-            .expect("validated remote player states are encodable")
+    /// The allocating compatibility wrapper.
+    ///
+    /// It reserves exactly the validated length and publishes through
+    /// `encode_into`, so the two entry points always agree byte for byte.
+    pub fn encode(&self) -> Result<Vec<u8>, ProtocolError> {
+        let length = self.encoded_len()?;
+        let mut wire = vec![0u8; length];
+        let written = self.encode_into(&mut wire)?;
+        wire.truncate(written);
+        Ok(wire)
     }
 
     pub fn decode(payload: &[u8]) -> Result<Self, ProtocolError> {
         let mut decoder = ByteDecoder::new(payload);
+        // The fixed wire ceiling is a pre-allocation guard, so an oversized
+        // payload reports the capacity refusal before a single field is read.
         if payload.len() > REMOTE_PLAYER_STATES_MAX_WIRE_BYTES {
             return Err(ProtocolError::FrameTooLarge);
         }

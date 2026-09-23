@@ -397,6 +397,31 @@ and the isolated export helpers (`exportGeneratedAssets`,
   file: `message_inventory.go` for `InventoryState` and `CraftingState`,
   `message_container.go` for `FurnaceState`, `ChestState` and
   `ContainerClosed`.
+- The twelfth packet producer group is `protocol_remote_players_test.go`
+  (`protocol.server.RemotePlayerSpawn`, `protocol.server.RemotePlayerDespawn`
+  and `protocol.server.RemotePlayerStates`, decode and encode), the peer
+  session publications. It executes `codec.DecodeServer`/`EncodeServer` in the
+  play state with the case's own `PacketKey`, normalizes the identity as the
+  32-lowercase-hexadecimal text both directions share, the `server_tick` as a
+  decimal string, the dimension as the plain wire integer, the ordered
+  `position`/`yaw`/`pitch` as eight-digit lowercase-hexadecimal bit strings,
+  the name verbatim and `reset` as a JSON boolean; the batch's records publish
+  in wire order. Its category table resolves the boundaries the Go decoder
+  and validators actually name: the float primitive's `invalid float32` and
+  the validator messages to `invalid-value`, the batch's per-record combined
+  predicate to `invalid-enum` (only the dimension mutation reaches it, because
+  an infinite coordinate is answered by the float primitive first and a
+  duplicate or descending identity by the order rule), the despawn's
+  family-specific identity message to `invalid-identity`, the count bound and
+  the remaining-length check to `invalid-value` and `truncated`, the 296-byte
+  ceiling to `capacity`, and the structural pair to `truncated`/`trailing`.
+  The spawn's identity and dimension boundaries are registered nowhere: the
+  Go `RemotePlayerSpawn.Validate` folds identity, name, dimension and
+  finiteness into one message, so a corpus case could not distinguish them,
+  and they stay Rust group-test pins
+  (`protocol.server.RemotePlayerSpawn` carries only the name and finiteness
+  boundaries, which both sides publish as value violations). Provenance is
+  `codec_server.go` plus `message_player.go` for all three families.
 - `validProducerIDs` is the closed exporter allowlist. It carries the 18
   protocol group producer IDs the v45 packet plan names
   (`runtime-oracle/protocol-negotiation`, `-control`, `-client-control`,
@@ -667,6 +692,7 @@ go test ./packages/tools/cmd/runtime-oracle -run TestContractInventory -count=1
 go test ./packages/tools/cmd/runtime-oracle -list TestContractInventory
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolOracleFrame' -count=1
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolInventoryPublicationOracle' -count=1
+go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolRemotePlayersOracle' -count=1
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolCorpus' -count=1
 go test ./packages/tools/cmd/runtime-oracle -race -count=1
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked corpus_frame

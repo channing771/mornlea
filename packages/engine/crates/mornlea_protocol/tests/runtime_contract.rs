@@ -1983,7 +1983,7 @@ fn remote_player_despawn_round_trip_preserves_golden_bytes() {
     ])
     .expect("player");
     let despawn = mornlea_protocol::RemotePlayerDespawn::new(player);
-    let payload = despawn.encode();
+    let payload = despawn.encode().expect("encode despawn");
     assert_eq!(
         payload,
         [
@@ -3761,7 +3761,7 @@ fn remote_player_spawn_round_trip_preserves_golden_bytes() {
         -5.0,
     )
     .expect("spawn");
-    let payload = spawn.encode();
+    let payload = spawn.encode().expect("encode spawn");
     assert_eq!(mornlea_protocol::RemotePlayerSpawn::PACKET_ID, 7);
     // 16 identity + (1 length prefix + 3 name bytes) + 8 tick + 4 dimension
     // + 12 position + 4 yaw + 4 pitch.
@@ -3798,7 +3798,8 @@ fn remote_player_spawn_round_trip_preserves_golden_bytes() {
     )
     .expect("depths spawn");
     assert_eq!(
-        mornlea_protocol::RemotePlayerSpawn::decode(&depths.encode()).expect("decode"),
+        mornlea_protocol::RemotePlayerSpawn::decode(&depths.encode().expect("encode depths"))
+            .expect("decode"),
         depths
     );
 }
@@ -3853,7 +3854,7 @@ fn remote_player_spawn_rejects_invalid_identity_name_and_pose() {
         "accepted non-UUIDv4 player identity"
     );
 
-    let payload = spawn.encode();
+    let payload = spawn.encode().expect("encode spawn");
     for length in 0..payload.len() {
         assert!(
             mornlea_protocol::RemotePlayerSpawn::decode(&payload[..length]).is_err(),
@@ -3891,7 +3892,7 @@ fn remote_player_states_round_trip_preserves_golden_bytes() {
         }],
     )
     .expect("states");
-    let payload = states.encode();
+    let payload = states.encode().expect("encode states");
     assert_eq!(mornlea_protocol::RemotePlayerStates::PACKET_ID, 9);
     assert_eq!(payload.len(), 8 + 1 + 41);
     assert_eq!(&payload[..8], &2u64.to_le_bytes());
@@ -3922,7 +3923,8 @@ fn remote_player_states_round_trip_preserves_golden_bytes() {
     )
     .expect("depths states");
     assert_eq!(
-        mornlea_protocol::RemotePlayerStates::decode(&depths.encode()).expect("decode"),
+        mornlea_protocol::RemotePlayerStates::decode(&depths.encode().expect("encode depths"))
+            .expect("decode"),
         depths
     );
 }
@@ -4009,7 +4011,7 @@ fn remote_player_states_rejects_unsorted_invalid_and_malformed_payload() {
     );
 
     let valid = mornlea_protocol::RemotePlayerStates::new(1, vec![record]).expect("states");
-    let payload = valid.encode();
+    let payload = valid.encode().expect("encode states");
     for length in 0..payload.len() {
         assert!(
             mornlea_protocol::RemotePlayerStates::decode(&payload[..length]).is_err(),
