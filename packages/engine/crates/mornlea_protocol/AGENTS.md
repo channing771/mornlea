@@ -19,20 +19,52 @@ rather than checking that it omits a few names.
   and malformed-input cases; this crate must not infer parity from a covered
   subset.
 
-## Framing (`src/frame.rs`, `src/varint.rs`, `tests/runtime_contract.rs`)
+## Framing (`src/frame.rs`, `src/varint.rs`, `src/bytes.rs`, `tests/runtime_contract.rs`, `tests/protocol_frame.rs`)
 
-- `write_frame` / `read_frame` are the length-prefixed packet boundary.
-  The length is a canonical uvarint and does not include itself.
-- Empty, oversized, truncated, overlong, and non-canonical length prefixes
-  fail before a payload is published
+- `write_frame_into` / `read_frame_ref` are the caller-owned packet boundary.
+  `read_frame_ref` returns a borrowed
+  `FrameRef { packet_id, payload, consumed }` that aliases the caller's buffer
+  and allocates nothing; `write_frame_into` publishes into a caller-owned
+  slice and returns the bytes written. `write_frame` / `read_frame` stay the
+  allocating compatibility wrappers and delegate to the same validated sizes,
+  so the two entry points always agree byte for byte
+  (`allocating_wrappers_match_the_caller_owned_paths`).
+- The length is a canonical uvarint and does not include itself. Empty,
+  oversized, truncated, overlong, and non-canonical length prefixes fail
+  before a payload is published
   (`frame_read_rejects_invalid_lengths_before_payload`,
   `frame_read_rejects_truncated_and_noncanonical_packet_id`,
   `frame_write_enforces_maximum_payload`).
-- Capacity is `MAX_FRAME_BYTES`; do not copy that number here.
+- Capacity is `MAX_FRAME_BYTES`; do not copy that number here. The body size
+  is validated before the destination is tested, so an invalid frame size is
+  reported as such even when the buffer is also short
+  (`write_frame_into_reports_an_invalid_size_before_capacity`). A short
+  destination is `OutputTooSmall { needed, available }` and leaves every
+  destination byte unchanged, while a larger destination is written only in
+  `dst[..length]` (`write_frame_into_leaves_a_short_destination_unchanged`,
+  `write_frame_into_publishes_a_canonical_frame_into_an_exact_window`).
+- The publication order is the crate-wide packet pattern: private
+  `publish_packet(length, dst, write)` checks capacity, then hands
+  `SliceWriter` a window exactly `length` bytes wide and verifies the final
+  cursor in a debug assertion. `SliceWriter` (`src/bytes.rs`) is crate-private,
+  never allocates, and performs no semantic validation, so a packet module's
+  `validate` → checked `encoded_len` → capacity → publish chain cannot allocate
+  or publish half a record.
 - Canonical uvarint vectors are pinned by
-  `canonical_uvarint_round_trips_and_rejects_malformed`.
+  `canonical_uvarint_round_trips_and_rejects_malformed` and by
+  `canonical_uvarint_lengths_and_malformed_vectors_are_pinned`: the boundary
+  lengths are 1 for `0..127`, 2 for `128..16383`, 3 for `16384..2097151`, 4 for
+  `2097152..268435455` and 5 otherwise; a fifth data byte above `0x0f` and a
+  redundant zero group are refused.
 - Coalesced frames consume only one record
-  (`frame_round_trip_preserves_packet_id_and_payload`).
+  (`frame_round_trip_preserves_packet_id_and_payload`,
+  `frame_ref_borrows_the_payload_from_the_caller_buffer`).
+- The borrowed read costs no heap allocation after warm-up
+  (`borrowed_frame_read_does_not_allocate`). The same test asserts that the
+  allocating wrapper still allocates, so the counter cannot pass vacuously.
+- `ProtocolError` publishes `UnknownPacket`,
+  `OutputTooSmall { needed, available }` and `Allocation` beside the framing
+  variants; no localized message text is part of the contract.
 
 ## Client hello (`src/client_hello.rs`, `tests/runtime_contract.rs`)
 
@@ -799,6 +831,7 @@ rather than checking that it omits a few names.
 ```bash
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_frame --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
 

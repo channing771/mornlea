@@ -22,6 +22,32 @@ pub fn encode_uvarint(mut value: u32) -> Vec<u8> {
     encoded
 }
 
+/// Writes the canonical encoding of `value` into the front of `dst` and
+/// returns how many bytes it used.
+///
+/// The encoding length is derived from the value rather than accumulated, so
+/// the bytes are canonical by construction. A destination shorter than the
+/// encoding is refused with `OutputTooSmall` before any byte is written, which
+/// keeps a caller-owned buffer untouched on a capacity refusal.
+pub(crate) fn encode_uvarint_into(value: u32, dst: &mut [u8]) -> Result<usize, ProtocolError> {
+    let length = canonical_uvarint_length(value);
+    let available = dst.len();
+    let window = dst.get_mut(..length).ok_or(ProtocolError::OutputTooSmall {
+        needed: length,
+        available,
+    })?;
+    for (index, slot) in window.iter_mut().enumerate() {
+        let mut byte = ((value >> (7 * index)) & 0x7f) as u8;
+        // Every group but the last keeps the continuation bit set, so the
+        // shortest form is the only form this writes.
+        if index + 1 < length {
+            byte |= 0x80;
+        }
+        *slot = byte;
+    }
+    Ok(length)
+}
+
 /// Decodes a canonical unsigned varint and the number of bytes consumed.
 ///
 /// Truncated input, overlong encodings, and values that do not fit in 32 bits

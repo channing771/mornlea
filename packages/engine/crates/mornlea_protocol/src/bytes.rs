@@ -224,3 +224,127 @@ impl<'a> ByteDecoder<'a> {
         }
     }
 }
+
+/// Bounded writer that publishes fixed-width fields into a caller-owned slice.
+///
+/// This is the publication half of the packet pattern: the caller validates
+/// and sizes the record first, then `publish_packet` hands the writer a window
+/// that is exactly that many bytes long. It owns no heap buffer and never
+/// allocates, so an encoder on the authoritative hot path cannot allocate
+/// through it. It performs no semantic validation either: a value rule such
+/// as a finite rotation, a slot range or a string bound is an admission
+/// decision the packet validator owns, and the writer only lays out bytes the
+/// caller already admitted.
+pub(crate) struct SliceWriter<'a> {
+    dst: &'a mut [u8],
+    offset: usize,
+    err: Option<ProtocolError>,
+}
+
+impl<'a> SliceWriter<'a> {
+    pub(crate) fn new(dst: &'a mut [u8]) -> Self {
+        Self {
+            dst,
+            offset: 0,
+            err: None,
+        }
+    }
+
+    /// Bytes published into the caller's window so far.
+    pub(crate) fn written(&self) -> usize {
+        self.offset
+    }
+
+    /// Bytes left in the caller's window.
+    pub(crate) fn remaining(&self) -> usize {
+        self.dst.len().saturating_sub(self.offset)
+    }
+
+    /// Retains the first failure so a later write cannot overwrite it, exactly
+    /// like the allocating `ByteEncoder`.
+    fn fail(&mut self, err: ProtocolError) {
+        if self.err.is_none() {
+            self.err = Some(err);
+        }
+    }
+
+    fn put(&mut self, bytes: &[u8]) {
+        if self.err.is_some() {
+            return;
+        }
+        let Some(end) = self.offset.checked_add(bytes.len()) else {
+            self.fail(ProtocolError::Allocation);
+            return;
+        };
+        let Some(window) = self.dst.get_mut(self.offset..end) else {
+            // Only reachable when a caller-sized window disagrees with the
+            // bytes the record actually writes, which is a crate bug the
+            // `publish_packet` debug assertion catches.
+            self.fail(ProtocolError::OutputTooSmall {
+                needed: end,
+                available: self.dst.len(),
+            });
+            return;
+        };
+        window.copy_from_slice(bytes);
+        self.offset = end;
+    }
+
+    pub(crate) fn u8(&mut self, value: u8) {
+        self.put(&[value]);
+    }
+
+    pub(crate) fn i8(&mut self, value: i8) {
+        self.u8(value as u8);
+    }
+
+    pub(crate) fn u16(&mut self, value: u16) {
+        self.put(&value.to_le_bytes());
+    }
+
+    pub(crate) fn u32(&mut self, value: u32) {
+        self.put(&value.to_le_bytes());
+    }
+
+    pub(crate) fn i32(&mut self, value: i32) {
+        self.u32(value as u32);
+    }
+
+    pub(crate) fn u64(&mut self, value: u64) {
+        self.put(&value.to_le_bytes());
+    }
+
+    pub(crate) fn boolean(&mut self, value: bool) {
+        self.u8(u8::from(value));
+    }
+
+    pub(crate) fn bytes(&mut self, value: &[u8]) {
+        self.put(value);
+    }
+
+    pub(crate) fn uvarint(&mut self, value: u32) {
+        // Five bytes is the largest canonical u32 varint, so the scratch write
+        // below cannot fail and only the destination window is a limit.
+        let mut encoded = [0u8; 5];
+        match crate::varint::encode_uvarint_into(value, &mut encoded) {
+            Ok(length) => self.put(&encoded[..length]),
+            Err(err) => self.fail(err),
+        }
+    }
+
+    /// Publishes the exact IEEE-754 bits of an already-admitted rotation.
+    ///
+    /// Rejecting a non-finite value is the packet validator's decision, so this
+    /// writer does not test it and cannot silently clamp an admitted angle.
+    pub(crate) fn f32(&mut self, value: f32) {
+        self.u32(value.to_bits());
+    }
+
+    /// Completes the publication and reports how many bytes were written.
+    pub(crate) fn finish(self) -> Result<usize, ProtocolError> {
+        match self.err {
+            Some(err) => Err(err),
+            None => Ok(self.offset),
+        }
+    }
+}

@@ -132,7 +132,9 @@ pub use entity_id::{CompanionId, valid_companion_name, valid_display_name};
 pub use equip_armor::EquipArmor;
 pub use error::ProtocolError;
 pub use forget_chunks::{ForgetChunks, MAX_FORGET_CHUNKS};
-pub use frame::{MAX_FRAME_BYTES, read_frame, write_frame};
+pub use frame::{
+    FrameRef, MAX_FRAME_BYTES, read_frame, read_frame_ref, write_frame, write_frame_into,
+};
 pub use furnace_state::{
     FURNACE_BURN_TICKS, FURNACE_SMELT_TICKS, FurnaceState, is_smelting_product,
 };
