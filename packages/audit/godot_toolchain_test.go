@@ -10,11 +10,50 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 )
 
 var sha256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+func TestGodotExportProbeResolvesCachedEditor(t *testing.T) {
+	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
+		t.Skip("embedded Python export qualification targets macOS arm64")
+	}
+	fixture := t.TempDir()
+	root := filepath.Join(fixture, "repository")
+	scriptDir := filepath.Join(root, "scripts", "godot")
+	sourceRoot := repositoryRoot(t)
+	for _, relative := range []string{
+		"scripts/godot/python-runtime-check.sh",
+		"scripts/godot/godot.sh",
+		"scripts/godot/python-version.env",
+		"scripts/godot/py4godot/build-inputs.env",
+		"scripts/godot/version.env",
+	} {
+		writeFile(t, filepath.Join(root, relative), []byte(readBaselineDoc(t, sourceRoot, relative)))
+	}
+	writeExecutable(t, filepath.Join(scriptDir, "python-runtime-check.sh"), readBaselineDoc(t, sourceRoot, "scripts/godot/python-runtime-check.sh"))
+	writeExecutable(t, filepath.Join(scriptDir, "godot.sh"), readBaselineDoc(t, sourceRoot, "scripts/godot/godot.sh"))
+	writeExecutable(t, filepath.Join(scriptDir, "build-python-runtime.sh"), "#!/bin/sh\nexit 0\n")
+	python := filepath.Join(root, "apps/mornlea-godot/addons/py4godot/cpython-3.14.4-darwin64/python/bin/python3.14")
+	writeExecutable(t, python, "#!/bin/sh\ncase \"$*\" in *'-m pip'*) exit 1 ;; esac\nprintf 'arm64 3.14.4 1\\n'\n")
+	pythonCache := filepath.Join(fixture, "python-cache")
+	if err := os.MkdirAll(pythonCache, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	godotCache := filepath.Join(fixture, "godot-cache")
+	editor := filepath.Join(godotCache, "4.7.2-stable/darwin-universal/Godot.app/Contents/MacOS/Godot")
+	writeExecutable(t, editor, "#!/bin/sh\nprintf 'fixture.invalid\\n'\n")
+	command := exec.Command(filepath.Join(scriptDir, "python-runtime-check.sh"), "--exported", "--offline")
+	command.Env = append(os.Environ(), "MORNLEA_PY4GODOT_CACHE_DIR="+pythonCache, "MORNLEA_GODOT_CACHE_DIR="+godotCache, "MORNLEA_GODOT_BIN=")
+	outputBytes, err := command.CombinedOutput()
+	output := string(outputBytes)
+	if err == nil || !strings.Contains(output, "Godot version mismatch: got fixture.invalid") {
+		t.Fatalf("export probe did not resolve the cached editor before qualification: %v\n%s", err, output)
+	}
+}
 
 func TestGodotFetchMaterializesVerifiedEditor(t *testing.T) {
 	for _, test := range []struct {

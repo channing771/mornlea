@@ -311,13 +311,14 @@ var godotWorkflowPaths = []string{
 	"packages/audit/go.mod",
 	"packages/audit/go.sum",
 	"packages/client/assets/**",
+	"packages/client/client/**",
 	"packages/client/cmd/mornlea-godot-assets/**",
 	"packages/client/cmd/mornlea-godot-core/**",
 	"packages/client/go.mod",
 	"packages/client/go.sum",
 	"packages/client/mesh/**",
 	"packages/client/presentation/**",
-	"packages/client/render/assets/**",
+	"packages/client/render/**",
 	"packages/client/runtime/**",
 	"packages/contracts/**",
 	"packages/engine/**",
@@ -427,7 +428,7 @@ func godotWorkflowEntrypointViolations(required, optional string) []string {
 			wantOrder = append(wantOrder, "sudo apt-get update\nsudo apt-get install --yes ripgrep", "scripts/ci/doctor.sh godot-static", "make godot-project-check")
 		} else {
 			require(reflect.DeepEqual(job.Env, map[string]string{"DEVELOPER_DIR": "/Applications/Xcode_26.5.app/Contents/Developer"}), name+": runtime must select the qualified Xcode environment")
-			wantOrder = append(wantOrder, "brew install ripgrep", godotRustActivation, "scripts/ci/doctor.sh godot-runtime", godotModulePrefetch, "make rust", "make godot-asset-check", "scripts/godot/fetch.sh", "scripts/godot/build-python-runtime.sh --verify", "make godot-python-check", "make godot-smoke")
+			wantOrder = append(wantOrder, "brew install ripgrep", godotRustActivation, "scripts/ci/doctor.sh godot-runtime", godotModulePrefetch, "make rust", "make godot-asset-check", "scripts/godot/fetch.sh", "scripts/godot/build-python-runtime.sh --verify", "make godot-build", "make godot-python-check", "make godot-smoke", "scripts/godot/python-runtime-check.sh --exported --offline")
 		}
 		wantOrder = append(wantOrder, ciSummary(name))
 		var order []string
@@ -539,6 +540,8 @@ func testGodotEntrypointMutations(t *testing.T, makefile, workflow, optional str
 		{"deleted workspace definition", "      - 'go.work'", ""},
 		{"deleted workspace checksums", "      - 'go.work.sum'", ""},
 		{"deleted client dependencies", "      - 'packages/client/go.mod'", ""},
+		{"deleted client core dependency", "      - 'packages/client/client/**'", ""},
+		{"deleted client renderer dependency", "      - 'packages/client/render/**'", ""},
 		{"deleted client checksums", "      - 'packages/client/go.sum'", ""},
 		{"missing manual dispatch", "  workflow_dispatch:\n", ""},
 		{"moving runner", "runs-on: macos-26", "runs-on: macos-latest"},
@@ -554,6 +557,8 @@ func testGodotEntrypointMutations(t *testing.T, makefile, workflow, optional str
 		{"optional produces merge gate", "  godot-runtime:\n", "  merge-gate:\n"},
 		{"omitted asset gate", "run: make godot-asset-check", "run: true"},
 		{"omitted Python gate", "run: make godot-python-check", "run: true"},
+		{"omitted client core build", "run: make godot-build", "run: true"},
+		{"omitted exported runtime", "run: scripts/godot/python-runtime-check.sh --exported --offline", "run: true"},
 		{"Python checked before runtime materialization", "run: scripts/godot/build-python-runtime.sh --verify", "run: make godot-python-check"},
 		{"automatic retry", "run: make godot-smoke", "run: make godot-smoke || make godot-smoke"},
 		{"mutable action", ciCheckout, "actions/checkout@v5"},

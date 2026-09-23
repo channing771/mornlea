@@ -1,6 +1,6 @@
 ---
 doc_id: continuous-integration
-doc_revision: 2026-09-23.1
+doc_revision: 2026-09-23.2
 language: zh-CN
 counterpart: continuous-integration.md
 ---
@@ -27,4 +27,4 @@ counterpart: continuous-integration.md
 
 ## 可选 Godot 验证
 
-[`Godot CI`](../.github/workflows/godot.yml) 针对相关路径运行，也支持手动触发。它不属于 `merge-gate`，但自身失败仍会显示为红色并使可选工作流失败。`godot-static` 在 Linux 上检查项目闭包。成功后，`godot-runtime` 在 macOS 26 arm64 和 Xcode 26.5 上运行：在冷 runner 上预取六个工作区模块的外部 Go 依赖，先构建原生引擎再生成依赖 cgo 的确定性素材，获取固定版本的 Godot 编辑器，验证嵌入式 Python 运行时及工具，并执行不变的 100 次无界面生命周期 smoke。只有另行批准的切换变更才能将此工作流纳入合并权限。
+[`Godot CI`](../.github/workflows/godot.yml) 针对相关路径运行，也支持手动触发。它不属于 `merge-gate`，但自身失败仍会显示为红色并使可选工作流失败。`godot-static` 在 Linux 上检查项目闭包。成功后，`godot-runtime` 在 macOS 26 arm64 和 Xcode 26.5 上运行：在冷 runner 上预取六个工作区模块的外部 Go 依赖，先构建原生引擎再生成依赖 cgo 的确定性素材，并获取通过校验和验证的 Godot 编辑器。随后它验证嵌入式 Python 运行时，构建并验证 Go client-core/GDExtension 分发产物，检查 Python 工具，执行不变的 100 次无界面生命周期 smoke，最后离线导出并探测 macOS 应用。导出探针通过仓库的解析入口使用已获取的编辑器。只有另行批准的切换变更才能将此工作流纳入合并权限。

@@ -125,7 +125,8 @@ if "${bundled_python}" -I -s -E -m pip --version >/dev/null 2>&1; then
   fail "runtime package installer must be unavailable"
 fi
 
-godot_binary="${MORNLEA_GODOT_BIN:-/Applications/Godot.app/Contents/MacOS/Godot}"
+# Reuse the verified cached-editor resolver unless an explicit binary is given.
+godot_binary="${MORNLEA_GODOT_BIN:-${script_dir}/godot.sh}"
 [[ -x "${godot_binary}" ]] || fail "Godot executable is unavailable: ${godot_binary}"
 actual_godot_version="$("${godot_binary}" --version)"
 [[ "${actual_godot_version}" == 4.7.2.stable* ]] || \
