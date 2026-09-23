@@ -229,3 +229,22 @@
 **Rollback:** revert `5daf6445` and `ac0a3b1a` individually; the four families return to `cases: null` and the corpus index returns to 884.
 
 **Architecture skill: no change.**
+
+
+## Node 3.4 — 2026-09-24
+
+**Status:** complete. Commits `0865bb4b` (`feat(protocol): qualify inventory publication packets`) + controller integration `c36dead0` on top of `e21b7e5f`.
+
+**Deliverable:** the five inventory/container publication families (`InventoryState` 10, `CraftingState` 21, `FurnaceState` 13, `ChestState` 15, `ContainerClosed` 14) on the common fallible surface; `ContainerClosed` exported from `lib.rs` (the compile-error red); fixed arrays via `read_fixed` checked indexed reads; stacks through the shared domain `ItemStack` rule; 18 raw ref bytes preserved through one `wire_bytes` source; no invented timer/stack relation. 37 corpus cases (7/8/10/7/5) through the real Go codec, producer `runtime-oracle/protocol-inventory-publication`; 10 routes registered and pinned; group test 14/14 incl. residue/size pins and the no-invented-relation pin.
+
+**Category rulings frozen (implementer-applied, reviewer-verified against Go sources):** unknown crafting size (0/4) and furnace slot-whitelist violations report `InvalidRange`/`invalid-value` (the Go messages are numeric-domain, not enum-tag); the latent boundary where an UNREGISTERED item in a furnace/crafting slot classifies differently (Rust `InvalidEnum` at decode vs Go `invalid-value`) is documented and deliberately unexercised by any case — a future node wanting such a case returns to the controller.
+
+**Controller arithmetic slips (recorded, fifth/sixth):** prose said 36 cases (table carries 37, governed) and called the FurnaceState stride 39 bytes (true stride 36, verified against the Go encoder).
+
+**Evidence:** group 14/14; `runtime_contract` 134/134; Go producer 8/8; `TestProtocolV12ChestStateGolden|TestFurnace` ok; full oracle ok; audit ok; fmt/clippy/gofmt/vet clean; the 37 exported cases ran through the real Rust consumer against the merged manifest BEFORE commit (caught two consumer field-name bugs pre-review). Corpus integrity: exactly 5 families changed, 916→953 (+37/−0), `source_revision` preserved; merged family provenance rows carry the expected four-path union (the merge helper unions the two codec test-file sources). Post-integration whole protocol crate green.
+
+**Review ruling:** Approved, 0 Crit/0 Imp/2 Minor. Deferred Minors: the idle-timer no-relation pin uses empty stacks (a content-stacks-at-zero-timers record would also pin the zero-timer class); report wording on provenance row paths.
+
+**Rollback:** revert `0865bb4b` and `c36dead0` individually; the five families return to `cases: null` and the corpus index returns to 916.
+
+**Architecture skill: no change.**
