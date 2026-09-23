@@ -1,12 +1,12 @@
 ---
 doc_id: continuous-integration
-doc_revision: 2026-09-23.2
+doc_revision: 2026-09-23.3
 language: en
 counterpart: continuous-integration.zh.md
 ---
 # Continuous integration
 
-The required workflow is [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), named `Required CI`. It validates the checked-out candidate SHA for pull requests and pushes to `main`; a newer candidate cancels unfinished work for the older one. Run `make ci-preflight` from the repository root to reproduce the early policy checks locally. This checks tool prerequisites, formatting, OpenSpec, agent-hook policy, comment language, six-module package inventory, and repository audits before native artifacts are needed. A missing required tool fails the entry point.
+The required workflow is [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), named `Required CI`. It validates the checked-out candidate SHA for pull requests and pushes to `main`; a newer candidate cancels unfinished work for the older one. Run `make ci-preflight` from the repository root to reproduce the early policy checks locally. This checks tool prerequisites, formatting, OpenSpec, agent-hook policy, comment language, six-module package inventory, and artifact-free repository audits before native artifacts are needed. The native-backed Godot asset-sync audit runs with the complete audit suite in `linux-quality`, after Linux artifact verification. A missing required tool fails the entry point.
 
 ## Required layers
 

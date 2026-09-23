@@ -57,7 +57,7 @@ preflight   frontend   rust-quality   native-linux   native-macos
 
 The independent first wave starts immediately:
 
-- `preflight` checks repository policy, generated-file consistency, OpenSpec validity, workflow invariants, script syntax, package inventory, and required tool availability without requiring native artifacts;
+- `preflight` checks repository policy, OpenSpec validity, workflow invariants, script syntax, package inventory, and required tool availability without requiring native artifacts. It runs the audit suite except the deterministic Godot asset-sync test, whose generator reaches the cgo native engine ABI. The full audit suite, including that test and generated-file consistency, runs in `linux-quality` after the candidate-bound Linux native artifact is verified;
 - `frontend` runs the frontend formatting, lint, type, and unit gates;
 - `rust-quality` runs Rust formatting, linting, and unit tests that do not require platform-specific artifact handoff;
 - `native-linux` builds the Linux server/native bundle and publishes its manifest;

@@ -1,12 +1,12 @@
 ---
 doc_id: continuous-integration
-doc_revision: 2026-09-23.2
+doc_revision: 2026-09-23.3
 language: zh-CN
 counterpart: continuous-integration.md
 ---
 # 持续集成
 
-必需工作流是 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)，名称为 `Required CI`。它针对拉取请求及推送到 `main` 的事件验证实际检出的候选 SHA；新候选会取消旧候选尚未完成的运行。在仓库根目录执行 `make ci-preflight` 可在本地复现前期政策检查。这项命令在无需原生产物时检查工具依赖、格式、OpenSpec、Agent Hook 政策、注释语言、六模块包清单和仓库审计。缺少必需工具时，入口会失败。
+必需工作流是 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)，名称为 `Required CI`。它针对拉取请求及推送到 `main` 的事件验证实际检出的候选 SHA；新候选会取消旧候选尚未完成的运行。在仓库根目录执行 `make ci-preflight` 可在本地复现前期政策检查。这项命令在无需原生产物时检查工具依赖、格式、OpenSpec、Agent Hook 政策、注释语言、六模块包清单和不依赖原生产物的仓库审计。依赖原生库的 Godot 素材同步审计会在 Linux 产物验证后，随完整审计测试集于 `linux-quality` 中运行。缺少必需工具时，入口会失败。
 
 ## 必需层级
 

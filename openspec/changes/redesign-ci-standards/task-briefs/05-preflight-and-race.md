@@ -55,7 +55,7 @@ client: go test "${packages[@]}" -race -p=1 -skip '^TestScenarioV7EightSessionSe
 server/rest: go test "${packages[@]}" -race -p=1
 ```
 
-`make ci-preflight` runs, in order: `doctor.sh preflight`, gofmt cleanliness, `openspec validate --all --strict --no-interactive` through pinned `npx --yes @fission-ai/openspec@1.7.0`, `node --test scripts/agent-hooks/guard.test.mjs`, `make comment-language-check`, `package-inventory.sh --check`, and `go test ./packages/audit -count=1`. It never invokes Cargo, `make rust`, artifact download/verification, or a Godot runtime.
+`make ci-preflight` runs, in order: `doctor.sh preflight`, gofmt cleanliness, `openspec validate --all --strict --no-interactive` through pinned `npx --yes @fission-ai/openspec@1.7.0`, `node --test scripts/agent-hooks/guard.test.mjs`, `make comment-language-check`, `package-inventory.sh --check`, and `go test ./packages/audit -skip '^TestGodotAssetSyncIsDeterministicAndRejectsManualFiles$' -count=1`. The exact asset-sync test is deferred because its generator links the native engine. The full audit suite runs after Linux artifact verification in `linux-quality`. Preflight never invokes Cargo, `make rust`, artifact download/verification, or a Godot runtime.
 
 ## Test-first steps
 

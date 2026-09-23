@@ -379,7 +379,7 @@ func TestCIPreflightRecipeOrderAndBoundary(t *testing.T) {
 		"node --test scripts/agent-hooks/guard.test.mjs",
 		"$(MAKE) comment-language-check",
 		"scripts/ci/package-inventory.sh --check",
-		"$(GO) test ./packages/audit -count=1",
+		"$(GO) test ./packages/audit -skip '^TestGodotAssetSyncIsDeterministicAndRejectsManualFiles$$' -count=1",
 	}
 	last := -1
 	for _, command := range ordered {
@@ -392,6 +392,20 @@ func TestCIPreflightRecipeOrderAndBoundary(t *testing.T) {
 			t.Errorf("ci-preflight command order is wrong around %q: %q", command, recipe)
 		}
 		last = index
+	}
+	auditCommand := ordered[len(ordered)-1]
+	auditInvocations := 0
+	for _, line := range strings.Split(recipe, "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(line), "$(GO) test ./packages/audit ") {
+			continue
+		}
+		auditInvocations++
+		if strings.TrimSpace(line) != auditCommand {
+			t.Errorf("ci-preflight audit command = %q, want %q", strings.TrimSpace(line), auditCommand)
+		}
+	}
+	if auditInvocations != 1 {
+		t.Errorf("ci-preflight audit invocations = %d, want 1", auditInvocations)
 	}
 	for _, forbidden := range []string{"cargo", "make rust", "package-native-artifact", "verify-native-artifact", "scripts/godot", "godot-"} {
 		if strings.Contains(recipe, forbidden) {

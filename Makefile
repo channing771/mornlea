@@ -193,7 +193,7 @@ ci-preflight:
 	node --test scripts/agent-hooks/guard.test.mjs
 	$(MAKE) comment-language-check
 	scripts/ci/package-inventory.sh --check
-	$(GO) test ./packages/audit -count=1
+	$(GO) test ./packages/audit -skip '^TestGodotAssetSyncIsDeterministicAndRejectsManualFiles$$' -count=1
 
 ci-rust-quality:
 	scripts/ci/doctor.sh rust
