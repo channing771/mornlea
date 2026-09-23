@@ -125,6 +125,19 @@ The implementation starts with regression tests and then makes these narrow repa
 
 These fixes are independently testable and remain useful even if workflow orchestration is rolled back.
 
+The first hosted Linux candidate also exposed a two-ULP mismatch between the Go
+encoder's displacement envelope and the Rust integrator's fixed-step result.
+The native diagnostic identified displacement rejection, not malformed bytes.
+The repair keeps Rust as the sole production integrator and retains its one-ULP
+rejection contract and frozen output vectors. The Go envelope mirrors the
+Rust `vec3_len` square-and-add order with explicit fused operations only along
+the fixed-step target, acceleration, and airborne-clamp path. The shared
+movement-direction helper is also consumed by sneak-edge probing; its resulting
+direction must continue to track the production Rust target and be regression
+tested. This is a parity correction, not a new movement or ABI policy. The
+temporary native stderr probe is removed after the Go-side regression passes,
+and the frozen source-provenance digest is restored before PR acceptance.
+
 ### 8. Treat repository settings as an explicit migration step
 
 The repository-owned contract names `merge-gate` as the required check. After an exact-head required workflow is green, a repository owner may configure branch protection to require that check. Changing GitHub repository settings is an external state change and is performed only with explicit authorization. If permissions are unavailable, the missing protection is recorded as an external rollout blocker rather than hidden by workflow logic.
