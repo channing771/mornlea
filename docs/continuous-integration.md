@@ -1,6 +1,6 @@
 ---
 doc_id: continuous-integration
-doc_revision: 2026-09-23.4
+doc_revision: 2026-09-23.5
 language: en
 counterpart: continuous-integration.zh.md
 ---
@@ -17,7 +17,7 @@ The required workflow is [`.github/workflows/ci.yml`](../.github/workflows/ci.ym
 | Linux (`ubuntu-24.04`) | `linux-quality`, `race-server`, `race-rest`, `integration-server` | `make ci-linux-quality`, `make ci-race-server`, `make ci-race-rest`, `make ci-integration-server` |
 | macOS (`macos-15`) | `race-client`, `integration-client` | `make ci-race-client`, `make ci-integration-client` |
 
-The package inventory checks that the disjoint `client`, `server`, and `rest` race slices cover all packages across the six `go.work` modules. The macOS client slice includes `packages/tools/gfxspike`; server and rest run on Linux. Linux quality compiles and vets its supported source set, while the macOS client jobs cover graphical source that depends on Darwin. The independent server timing probe remains outside race testing.
+The package inventory checks that the disjoint `client`, `server`, and `rest` race slices cover all packages across the six `go.work` modules. The macOS client slice includes `packages/tools/gfxspike`; server and rest run on Linux. Linux quality compiles and vets its supported source set, while the macOS client jobs cover graphical source that depends on Darwin. Both Linux jobs that execute the full repository audit (`linux-quality` and `race-rest`) install ripgrep and check the audit dependency profile before package inventory or tests. The independent server timing probe remains outside race testing.
 
 Each local native producer and dependent entry point requires the same `CI_CANDIDATE_SHA` for the candidate being checked. The producer targets are `make ci-native-linux CI_CANDIDATE_SHA=<sha>` and `make ci-native-macos CI_CANDIDATE_SHA=<sha>` on their respective supported platforms. Downstream targets accept the same variable and verify the corresponding manifest before running their checks. See the `Makefile` and `scripts/ci/` for the executable contract.
 

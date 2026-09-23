@@ -1,6 +1,6 @@
 ---
 doc_id: continuous-integration
-doc_revision: 2026-09-23.4
+doc_revision: 2026-09-23.5
 language: zh-CN
 counterpart: continuous-integration.md
 ---
@@ -17,7 +17,7 @@ counterpart: continuous-integration.md
 | Linux（`ubuntu-24.04`） | `linux-quality`、`race-server`、`race-rest`、`integration-server` | `make ci-linux-quality`、`make ci-race-server`、`make ci-race-rest`、`make ci-integration-server` |
 | macOS（`macos-15`） | `race-client`、`integration-client` | `make ci-race-client`、`make ci-integration-client` |
 
-包清单检查互不重叠的 `client`、`server` 和 `rest` race 分片是否覆盖 `go.work` 六个模块的全部包。macOS client 分片包含 `packages/tools/gfxspike`；server 和 rest 在 Linux 上运行。Linux quality 编译并 vet 其受支持源码集，macOS client 任务覆盖依赖 Darwin 的图形源码。独立的服务端时序探针仍在 race 测试之外。
+包清单检查互不重叠的 `client`、`server` 和 `rest` race 分片是否覆盖 `go.work` 六个模块的全部包。macOS client 分片包含 `packages/tools/gfxspike`；server 和 rest 在 Linux 上运行。Linux quality 编译并 vet 其受支持源码集，macOS client 任务覆盖依赖 Darwin 的图形源码。执行完整仓库 audit 的两个 Linux 任务（`linux-quality` 与 `race-rest`）都会安装 ripgrep，并在包清单或测试运行前检查 audit 依赖配置。独立的服务端时序探针仍在 race 测试之外。
 
 本地原生产出和下游入口均需使用同一个候选 `CI_CANDIDATE_SHA`。在各自支持的平台上执行 `make ci-native-linux CI_CANDIDATE_SHA=<sha>` 或 `make ci-native-macos CI_CANDIDATE_SHA=<sha>`；下游目标接收相同变量，并在检查前验证对应清单。可执行契约以 `Makefile` 和 `scripts/ci/` 为准。
 
