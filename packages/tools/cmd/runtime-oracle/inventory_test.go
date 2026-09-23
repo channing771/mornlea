@@ -349,8 +349,12 @@ func TestContractInventoryRejectsKnownConsumerOnUnsupportedRoute(t *testing.T) {
 		"mornlea_protocol": {
 			Kind: ConsumerRust,
 			Routes: map[ConsumerRoute]struct{}{
-				{FamilyID: "protocol.frame", Version: "45", Operation: "decode"}: {},
-				{FamilyID: "protocol.frame", Version: "45", Operation: "encode"}: {},
+				{FamilyID: "protocol.frame", Version: "45", Operation: "decode"}:              {},
+				{FamilyID: "protocol.frame", Version: "45", Operation: "encode"}:              {},
+				{FamilyID: "protocol.client.ClientHello", Version: "45", Operation: "decode"}: {},
+				{FamilyID: "protocol.client.ClientHello", Version: "45", Operation: "encode"}: {},
+				{FamilyID: "protocol.client.LoginStart", Version: "45", Operation: "decode"}:  {},
+				{FamilyID: "protocol.client.LoginStart", Version: "45", Operation: "encode"}:  {},
 			},
 		},
 		"mornlea_domain": {

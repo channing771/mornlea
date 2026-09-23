@@ -6,6 +6,16 @@ use mornlea_domain::{DisplayName, trim_pinned_whitespace};
 const DISPLAY_NAME_MAX_BYTES: usize = 128;
 const DISPLAY_NAME_MAX_RUNES: usize = 32;
 
+/// The ceiling the Go codec applies to every small packet payload.
+///
+/// The inbound decoder enforces it before any field is read, exactly as the Go
+/// decoder refuses an oversized payload before it parses one, so an oversized
+/// payload is a size refusal rather than a field failure. It lives beside the
+/// login decoder because this node's inbound path is its first user; the packet
+/// dispatcher applies the same ceiling to every small family instead of each
+/// module restating the number.
+pub const MAX_SMALL_PAYLOAD_BYTES: usize = 64 * 1024;
+
 /// Closed interval copied from the Go `LoginViewDistanceMin` pin.
 pub const LOGIN_VIEW_DISTANCE_MIN: u8 = 2;
 /// Closed interval copied from the Go `LoginViewDistanceMax` pin.
@@ -59,6 +69,62 @@ impl LoginStart {
         let view_distance = decoder.u8()?;
         decoder.done()?;
         Self::new(player_id, display_name, view_distance)
+    }
+
+    /// Decodes one inbound login start structurally, keeping the raw fields.
+    ///
+    /// The inbound decoder applies the Go inbound decoder's bounds and nothing
+    /// else: a canonical length prefix, valid UTF-8, the declared view-distance
+    /// byte, and full consumption inside the 64 KiB small-payload ceiling. The
+    /// identity rule, the canonical name rule and the view-distance interval are
+    /// admission decisions, so a raw name longer than the canonical byte bound
+    /// survives here to be trimmed by
+    /// [`crate::admission::admit_login`], exactly as the Go login driver admits
+    /// it.
+    pub fn decode_inbound(payload: &[u8]) -> Result<InboundLoginStart, ProtocolError> {
+        if payload.len() > MAX_SMALL_PAYLOAD_BYTES {
+            return Err(ProtocolError::Allocation);
+        }
+        let mut decoder = ByteDecoder::new(payload);
+        let player_id = decoder.bytes::<16>()?;
+        let display_name = decoder.string(MAX_SMALL_PAYLOAD_BYTES, MAX_SMALL_PAYLOAD_BYTES)?;
+        let view_distance = decoder.u8()?;
+        decoder.done()?;
+        Ok(InboundLoginStart {
+            player_id,
+            display_name,
+            view_distance,
+        })
+    }
+}
+
+/// One structurally decoded login start, before any admission decision.
+///
+/// Every field keeps the peer's raw value: the 16 identity bytes, the display
+/// name as written, and the declared view distance. Admission is the only
+/// place those raw values become checked ones, so a rejection can name the
+/// earliest rule the record breaks.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InboundLoginStart {
+    player_id: [u8; 16],
+    display_name: String,
+    view_distance: u8,
+}
+
+impl InboundLoginStart {
+    /// The 16 identity bytes exactly as the peer wrote them.
+    pub fn player_id(&self) -> &[u8; 16] {
+        &self.player_id
+    }
+
+    /// The display name exactly as the peer wrote it, before any trim.
+    pub fn display_name(&self) -> &str {
+        &self.display_name
+    }
+
+    /// The view distance exactly as the peer declared it.
+    pub fn view_distance(&self) -> u8 {
+        self.view_distance
     }
 }
 

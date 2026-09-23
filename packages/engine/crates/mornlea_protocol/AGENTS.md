@@ -66,14 +66,23 @@ rather than checking that it omits a few names.
   `OutputTooSmall { needed, available }` and `Allocation` beside the framing
   variants; no localized message text is part of the contract.
 
-## Client hello (`src/client_hello.rs`, `tests/runtime_contract.rs`)
+## Client hello (`src/client_hello.rs`, `src/admission.rs`, `tests/runtime_contract.rs`, `tests/protocol_admission.rs`)
 
 - Handshake packet ID 0 payload is a canonical protocol-version uvarint.
 - `ClientHello::new` / `decode` accept only `Identities::current().protocol`.
   Other versions are `UnsupportedVersion`; trailing bytes and truncated
   varints fail before publication
   (`client_hello_round_trip_preserves_current_version_bytes`,
-  `client_hello_rejects_unknown_version_and_malformed_payload`).
+  `client_hello_rejects_unknown_version_and_malformed_payload`). The strict
+  `decode` is the outbound record's convenience path and is never the inbound
+  one.
+- `ClientHello::decode_inbound` is the structural inbound path: it applies the
+  canonical uvarint and full-consumption rules and keeps the peer's version in
+  `InboundHello`, because a peer running another version has to receive the
+  negotiated mismatch answer instead of a decode failure. Pure
+  `validate_hello` maps any other version to
+  `HandshakeRejection::VersionMismatch { server_version }`; no session,
+  deadline or send lives in that decision.
 
 ## Server hello (`src/server_hello.rs`, `tests/runtime_contract.rs`)
 
@@ -100,19 +109,48 @@ rather than checking that it omits a few names.
 - `ByteEncoder` / `ByteDecoder` are crate-private payload primitives shared
   by later packet families. They are not a public codec surface.
 
-## Login start (`src/login_start.rs`, `src/player_id.rs`, `tests/runtime_contract.rs`)
+## Login start (`src/login_start.rs`, `src/admission.rs`, `tests/runtime_contract.rs`, `tests/protocol_admission.rs`)
 
 - Login packet ID 0 payload is a 16-byte UUIDv4, a length-prefixed display
   name, and a trailing view-distance byte.
-- The identity is the checked domain `PlayerId`. The display name is
-  length-bounded on the raw payload, trimmed by the domain's pinned
-  whitespace set, and then admitted by the domain's canonical display-name
-  rule (`1..=32` runes, `<=128` bytes, no control characters), so the login
-  path shares one lexical rule with the other name carriers. View distance is
-  the closed interval `2..=64`. Failures are `InvalidIdentity`,
-  `InvalidString`, or `InvalidRange` before publication
+- The identity is the checked domain `PlayerId`. The outbound record applies
+  the raw 128-byte bound, then trims by the domain's pinned whitespace set, and
+  then admits by the domain's canonical display-name rule (`1..=32` runes,
+  `<=128` bytes, no control characters), so the login path shares one lexical
+  rule with the other name carriers. View distance is the closed interval
+  `2..=64`. Failures are `InvalidIdentity`, `InvalidString`, or `InvalidRange`
+  before publication
   (`login_start_round_trip_preserves_golden_bytes`,
   `login_start_rejects_invalid_identity_name_range_and_malformed_payload`).
+- `LoginStart::decode_inbound` is the structural inbound path: it checks the
+  64 KiB small-payload ceiling (`MAX_SMALL_PAYLOAD_BYTES`) before any field,
+  accepts a canonical length prefix and valid UTF-8 up to that ceiling, and
+  keeps the raw identity, name and distance in `InboundLoginStart`. It does not
+  apply the canonical name bound before the trim, so a raw name the Go driver
+  trims into a canonical name survives decoding.
+- Pure `admit_login` owns the inbound decision in the Go driver's order:
+  identity bytes first, pinned trim plus canonical display name second, view
+  distance third. An invalid identity or name is `LoginAdmissionError::InvalidIdentity`
+  and an out-of-domain distance is `ProtocolViolation`, matching the frozen
+  `LoginInvalidIdentity` / `LoginProtocolViolation` codes. `AdmittedLogin`
+  owns the checked `PlayerId`, the canonical `DisplayName` and the declared
+  distance unchanged; clamping is the admission point's decision.
+
+## Inbound admission (`src/admission.rs`, `tests/protocol_admission.rs`)
+
+- Splitting structural decoding from policy is what keeps an inbound record
+  answerable: `decode_inbound` never applies a semantic rule, so the peer
+  always learns why its record was refused rather than seeing a bare decode
+  failure.
+- `admission.rs` holds the pure decisions and nothing else: no session, no
+  deadline, no timeout, no transport send, no listener. The later server
+  chooses when to call `validate_hello` / `admit_login` and owns connection
+  lifecycle (F2).
+- `tests/protocol_admission.rs` and the package-local Go driver table in
+  `packages/shared/network/protocol_admission_oracle_test.go` carry the same
+  case identities, so a rejection-order change has to be made on both sides in
+  the same change. An old-version hello and an over-long raw name have no
+  two-way corpus case, because the Go outbound encoder refuses both.
 
 ## Login success (`src/login_success.rs`, `tests/runtime_contract.rs`)
 
@@ -907,6 +945,8 @@ rather than checking that it omits a few names.
 ```bash
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_values --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_values --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_admission --locked -- --list
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_admission --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_frame --locked
@@ -919,9 +959,21 @@ only absent reference, the item rules have the domain's single owner, the
 compact section conversions preserve palette and word order, and the pinned
 whitespace set is the only trim rule.
 
+`tests/protocol_admission.rs` pins the inbound split: a version-44 hello
+reaches `validate_hello` and answers with the negotiated version pair, a zero
+identity wins over an out-of-domain distance, a raw name trim reduces to the
+canonical name, and the structural boundaries (truncation, trailing bytes,
+invalid UTF-8, the 64 KiB payload ceiling) reject inside `decode_inbound`. Its
+case identities are shared with
+`packages/shared/network/protocol_admission_oracle_test.go`.
+
 `tests/protocol_corpus.rs` executes the corpus cases this crate owns through
-the real `read_frame`/`write_frame` path and compares the complete result
-against the outcome the independent Go producer recorded. It loads the
-`corpus_frame` selection and the `mornlea_protocol` selection the packet
-groups register into; the preexisting `runtime_contract` framing test stays a
-separate regression suite.
+the real codec paths — `read_frame`/`write_frame` for framing and
+`decode_inbound` plus the strict outbound encoders for the
+`protocol.client.ClientHello` and `protocol.client.LoginStart` packet families
+— and compares the complete result against the outcome the independent Go
+producer recorded. It loads the `corpus_frame` selection and the
+`mornlea_protocol` selection the packet groups register into; a packet family
+whose cases the controller has not integrated yet fails as a missing corpus
+case rather than as an empty selection. The preexisting `runtime_contract`
+framing test stays a separate regression suite.

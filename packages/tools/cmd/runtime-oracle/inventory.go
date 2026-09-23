@@ -104,13 +104,13 @@ type NegativeCoverageExceptions map[CoveragePoint]string
 // framing operations, because the framing family publishes a decode case and
 // an encode case that the frame reader and writer execute independently.
 //
-// The mornlea_protocol consumer is the Rust packet consumer. This node
-// establishes it with the routing the framing family already executes through
-// the packet corpus test; later packet groups append their own family, version
-// and operation routes here one node at a time, and the closed union is
-// verified at corpus closure. A registration never carries an empty route set,
-// so the packet consumer is created alongside the first routes that execute
-// under it.
+// The mornlea_protocol consumer is the Rust packet consumer. It is created
+// with the framing routes the packet corpus test already executes; the inbound
+// negotiation group then appends the `ClientHello` and `LoginStart` routes,
+// and later packet groups append their own family, version and operation
+// routes here one node at a time. The closed union is verified at corpus
+// closure. A registration never carries an empty route set, so a consumer is
+// always born alongside routes that execute under it.
 func BaselineConsumerRegistry() ConsumerRegistry {
 	return ConsumerRegistry{
 		"corpus_frame": {
@@ -123,8 +123,12 @@ func BaselineConsumerRegistry() ConsumerRegistry {
 		"mornlea_protocol": {
 			Kind: ConsumerRust,
 			Routes: map[ConsumerRoute]struct{}{
-				{FamilyID: "protocol.frame", Version: "45", Operation: "decode"}: {},
-				{FamilyID: "protocol.frame", Version: "45", Operation: "encode"}: {},
+				{FamilyID: "protocol.frame", Version: "45", Operation: "decode"}:              {},
+				{FamilyID: "protocol.frame", Version: "45", Operation: "encode"}:              {},
+				{FamilyID: "protocol.client.ClientHello", Version: "45", Operation: "decode"}: {},
+				{FamilyID: "protocol.client.ClientHello", Version: "45", Operation: "encode"}: {},
+				{FamilyID: "protocol.client.LoginStart", Version: "45", Operation: "decode"}:  {},
+				{FamilyID: "protocol.client.LoginStart", Version: "45", Operation: "encode"}:  {},
 			},
 		},
 		"mornlea_domain": {

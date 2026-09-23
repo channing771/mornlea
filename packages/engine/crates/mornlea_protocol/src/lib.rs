@@ -5,9 +5,15 @@
 //! Packet families are ported one inventory row at a time. Framing rejects
 //! empty, oversized, truncated, and non-canonical length prefixes before
 //! publishing a payload.
+//!
+//! Inbound negotiation is split in two: a packet family decodes a structurally
+//! valid record and keeps the peer's raw fields (`*_inbound` decoders), and the
+//! pure admission functions in [`admission`] decide whether those raw fields
+//! are usable. No admission function owns a session, a deadline or a transport.
 
 #![deny(unsafe_code)]
 
+mod admission;
 mod batch;
 mod block;
 mod block_changes;
@@ -76,6 +82,9 @@ mod take_crafting_output;
 mod till_soil;
 mod varint;
 
+pub use admission::{
+    AdmittedLogin, HandshakeRejection, LoginAdmissionError, admit_login, validate_hello,
+};
 pub use block::{
     BLOCKS_PER_SECTION, MAX_CHUNK_BLOCK_INDEX, MAX_Y, MIN_Y, SECTION_SIZE, SECTIONS_PER_CHUNK,
 };
@@ -96,7 +105,7 @@ pub use chunk_snapshot::{
     ChunkSnapshot, MAX_COMPRESSED_SNAPSHOT, MAX_DECODED_SNAPSHOT, SNAPSHOT_ENVELOPE_LENGTH,
     SectionData, SectionStorage, SnapshotEnvelope, compress_logical,
 };
-pub use client_hello::ClientHello;
+pub use client_hello::{ClientHello, InboundHello};
 pub use close_container::CloseContainer;
 pub use collect_water::CollectWater;
 pub use combat_hit::{
@@ -161,7 +170,10 @@ pub use login_reject::{
     LOGIN_ALREADY_ONLINE, LOGIN_INTERNAL_ERROR, LOGIN_INVALID_IDENTITY, LOGIN_PLAYER_DATA_CORRUPT,
     LOGIN_PROTOCOL_VIOLATION, LOGIN_SERVER_FULL, LOGIN_STORE_UNAVAILABLE, LoginReject,
 };
-pub use login_start::{LOGIN_VIEW_DISTANCE_MAX, LOGIN_VIEW_DISTANCE_MIN, LoginStart};
+pub use login_start::{
+    InboundLoginStart, LOGIN_VIEW_DISTANCE_MAX, LOGIN_VIEW_DISTANCE_MIN, LoginStart,
+    MAX_SMALL_PAYLOAD_BYTES,
+};
 pub use login_success::LoginSuccess;
 pub use move_container_stack::{
     CHEST_VIEW_SLOTS, FURNACE_OUTPUT_SLOT, FURNACE_VIEW_SLOTS, MoveContainerStack,

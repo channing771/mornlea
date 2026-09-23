@@ -578,7 +578,7 @@ func TestProtocolCorpusManifestMergeRejectsUnregisteredRoute(t *testing.T) {
 	selection.Routes = append(selection.Routes, ConsumerRoute{
 		FamilyID:  "protocol.client.ClientHello",
 		Version:   "45",
-		Operation: "decode",
+		Operation: "admit",
 	})
 
 	if _, err := mergeProtocolSelectionsChecked(root, base, selection); err == nil ||

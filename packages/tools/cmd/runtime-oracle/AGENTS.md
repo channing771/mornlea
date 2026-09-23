@@ -34,7 +34,9 @@ or Agent process packages. These boundaries are enforced by `packages/audit`
 - The baseline routes are `corpus_frame` → `protocol.frame/45/decode` and
   `protocol.frame/45/encode`; `mornlea_protocol` → the protocol packet routes
   (established with the framing routes it executes today and extended one
-  producer group at a time); `mornlea_domain` →
+  producer group at a time; the inbound negotiation group adds
+  `protocol.client.ClientHello/45/{decode,encode}` and
+  `protocol.client.LoginStart/45/{decode,encode}`); `mornlea_domain` →
   `domain.identity_values/current/admit`,
   `domain.values/current/admit`, `domain.command_control/current/admit`,
   `domain.command_inventory/current/admit`, and `domain.event/1/admit`;
@@ -152,6 +154,18 @@ and the isolated export helpers (`exportGeneratedAssets`,
   contract categories (`invalid-varint` for a non-canonical length prefix,
   `capacity` for the writer's own size refusal); an unclassified failure is an
   error rather than an unlabelled rejection.
+- The first packet producer group is `protocol_negotiation_test.go`
+  (`protocol.client.ClientHello` and `protocol.client.LoginStart`, decode and
+  encode). It executes `codec.DecodeClient`/`EncodeClient` with the case's own
+  `PacketKey`, normalizes the semantic fields of the DTO the decoder returned
+  (`display_name`, `player_id` as lowercase hexadecimal, `view_distance`,
+  `protocol_version`), and reads every encoded payload back through the
+  decoder before publishing it. Its cases are the ordinary structural ones
+  only: an old-version hello and an over-long raw name are admitted by the Go
+  inbound decoder and refused by the Go outbound encoder, so no case can carry
+  them both ways. Those values are pinned instead by the package-local
+  `packages/shared/network/protocol_admission_oracle_test.go` driver table and
+  by the Rust `tests/protocol_admission.rs` suite, whose case identities match.
 - `validProducerIDs` is the closed exporter allowlist. It carries the 18
   protocol group producer IDs the v45 packet plan names
   (`runtime-oracle/protocol-negotiation`, `-control`, `-client-control`,
@@ -202,7 +216,8 @@ and the isolated export helpers (`exportGeneratedAssets`,
   `TestProtocolCorpusFrameEncodeExpectedIDMutationFailsComparison`,
   `TestProtocolCorpusFrameCandidatesExportForReview`,
   `TestReadCaseInputUsesFormatBudget`,
-  `TestProtocolOracleFrameExport*`.
+  `TestProtocolOracleFrameExport*`,
+  `TestProtocolNegotiationOracle*`.
 
 ## Protocol manifest candidate (`protocol_manifest_test.go`)
 
@@ -232,7 +247,11 @@ and the isolated export helpers (`exportGeneratedAssets`,
   `TestProtocolCorpusManifestMergePreservesUnrelatedFamilies`,
   `TestProtocolCorpusManifestMergeRejectsDuplicateAndConflictingCases`,
   `TestProtocolCorpusManifestMergeRejectsUnregisteredRoute`,
-  `TestProtocolCorpusManifestMergeRejectsUnclaimedCaseRoute`.
+  `TestProtocolCorpusManifestMergeRejectsUnclaimedCaseRoute`,
+  `TestProtocolNegotiationOracleManifestMergeRegistersPacketRoutes`,
+  `TestProtocolNegotiationOracleRoutesExecuteEveryCase`,
+  `TestProtocolNegotiationOracleRunnerRejectsUnregisteredRoute`,
+  `TestProtocolNegotiationOracleCandidatesExportForReview`.
 
 ## Family evidence (`domain_*_test.go`, `agent_contract_test.go`)
 
