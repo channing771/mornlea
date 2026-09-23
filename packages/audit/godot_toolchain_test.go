@@ -17,6 +17,24 @@ import (
 
 var sha256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
+func TestGodotResolverPrintsCachedExecutablePath(t *testing.T) {
+	fixture := t.TempDir()
+	scriptDir := filepath.Join(fixture, "scripts", "godot")
+	sourceRoot := repositoryRoot(t)
+	writeFile(t, filepath.Join(scriptDir, "version.env"), []byte(readBaselineDoc(t, sourceRoot, "scripts/godot/version.env")))
+	resolver := filepath.Join(scriptDir, "godot.sh")
+	writeExecutable(t, resolver, readBaselineDoc(t, sourceRoot, "scripts/godot/godot.sh"))
+	cache := filepath.Join(fixture, "cache")
+	editor := filepath.Join(cache, "4.7.2-stable/darwin-universal/Godot.app/Contents/MacOS/Godot")
+	writeExecutable(t, editor, "#!/bin/sh\ncase \"$1\" in --version) printf '4.7.2.stable.fixture\\n' ;; *) printf 'unexpected editor invocation\\n' ;; esac\n")
+	command := exec.Command(resolver, "--print-path")
+	command.Env = append(os.Environ(), "MORNLEA_GODOT_CACHE_DIR="+cache, "MORNLEA_GODOT_BIN=")
+	output, err := command.CombinedOutput()
+	if err != nil || strings.TrimSpace(string(output)) != editor {
+		t.Fatalf("Godot resolver did not return the validated executable path: %v\n%s", err, output)
+	}
+}
+
 func TestGodotExportProbeResolvesCachedEditor(t *testing.T) {
 	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
 		t.Skip("embedded Python export qualification targets macOS arm64")
@@ -52,6 +70,46 @@ func TestGodotExportProbeResolvesCachedEditor(t *testing.T) {
 	output := string(outputBytes)
 	if err == nil || !strings.Contains(output, "Godot version mismatch: got fixture.invalid") {
 		t.Fatalf("export probe did not resolve the cached editor before qualification: %v\n%s", err, output)
+	}
+}
+
+func TestGodotIsolatedProbeUsesCachedEditorWithScrubbedPath(t *testing.T) {
+	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
+		t.Skip("embedded Python qualification targets macOS arm64")
+	}
+	fixture := t.TempDir()
+	root := filepath.Join(fixture, "repository")
+	scriptDir := filepath.Join(root, "scripts", "godot")
+	sourceRoot := repositoryRoot(t)
+	for _, relative := range []string{
+		"scripts/godot/python-runtime-check.sh",
+		"scripts/godot/godot.sh",
+		"scripts/godot/python-version.env",
+		"scripts/godot/py4godot/build-inputs.env",
+		"scripts/godot/version.env",
+	} {
+		writeFile(t, filepath.Join(root, relative), []byte(readBaselineDoc(t, sourceRoot, relative)))
+	}
+	writeExecutable(t, filepath.Join(scriptDir, "python-runtime-check.sh"), readBaselineDoc(t, sourceRoot, "scripts/godot/python-runtime-check.sh"))
+	writeExecutable(t, filepath.Join(scriptDir, "godot.sh"), readBaselineDoc(t, sourceRoot, "scripts/godot/godot.sh"))
+	writeExecutable(t, filepath.Join(scriptDir, "build-python-runtime.sh"), "#!/bin/sh\nexit 0\n")
+	writeExecutable(t, filepath.Join(scriptDir, "build-extension.sh"), "#!/bin/sh\nexit 0\n")
+	python := filepath.Join(root, "apps/mornlea-godot/addons/py4godot/cpython-3.14.4-darwin64/python/bin/python3.14")
+	writeExecutable(t, python, "#!/bin/sh\ncase \"$*\" in *'-m pip'*) exit 1 ;; esac\nprintf 'arm64 3.14.4 1\\n'\n")
+	pythonCache := filepath.Join(fixture, "python-cache")
+	if err := os.MkdirAll(pythonCache, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	godotCache := filepath.Join(fixture, "godot-cache")
+	editor := filepath.Join(godotCache, "4.7.2-stable/darwin-universal/Godot.app/Contents/MacOS/Godot")
+	writeExecutable(t, editor, "#!/bin/sh\ncase \"$*\" in *'--version'*) printf '4.7.2.stable.fixture\\n' ;; *) printf 'Python bridge host check passed.\\n' ;; esac\n")
+	bin := filepath.Join(fixture, "bin")
+	writeExecutable(t, filepath.Join(bin, "sandbox-exec"), "#!/bin/sh\n[ \"$1\" = '-p' ] || exit 2\nshift 2\nexec \"$@\"\n")
+	command := exec.Command(filepath.Join(scriptDir, "python-runtime-check.sh"), "--coexistence", "--offline")
+	command.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"), "MORNLEA_PY4GODOT_CACHE_DIR="+pythonCache, "MORNLEA_GODOT_CACHE_DIR="+godotCache, "MORNLEA_GODOT_BIN=")
+	outputBytes, err := command.CombinedOutput()
+	if err != nil || !strings.Contains(string(outputBytes), "Py4Godot and mornlea_godot coexist") {
+		t.Fatalf("isolated probe did not execute the cached editor with a scrubbed PATH: %v\n%s", err, outputBytes)
 	}
 }
 
