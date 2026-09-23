@@ -485,6 +485,7 @@ unsafe fn physics_step_with(
         // SAFETY: input 非空，范围不超过 isize::MAX，地址加法不回绕且不与 output 重叠。
         let bytes = unsafe { std::slice::from_raw_parts(input, input_len) };
         if !physics_step_input_is_valid(bytes) {
+            eprintln!("physics-step reject=decode len={}", bytes.len());
             return Err(MORNLEA_STATUS_INPUT);
         }
         physics_step(bytes).map_err(|_| MORNLEA_STATUS_INPUT)

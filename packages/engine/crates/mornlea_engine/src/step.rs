@@ -351,13 +351,20 @@ pub(crate) fn physics_step(bytes: &[u8]) -> Result<[u8; STEP_OUTPUT_BYTES], Step
     // 三轴 sweep bounds 自检带 1 ulp 余量：Go 在 amd64 不做 FMA 收缩，sweep bounds
     // 与积分位移可差 1 ulp。位移在界内或界外至多 1 ulp 均通过，物理正确性由 prism
     // 构建的 1e-5 epsilon 边距兜底；相差超过 1 ulp 仍拒绝。
-    for ((&minimum, &maximum), &offset) in input
+    for (axis, ((&minimum, &maximum), &offset)) in input
         .sweep_min
         .iter()
         .zip(&input.sweep_max)
         .zip(&displacement)
+        .enumerate()
     {
         if !(minimum.next_down() <= offset && offset <= maximum.next_up()) {
+            eprintln!(
+                "physics-step reject=displacement axis={axis} min={:08x} offset={:08x} max={:08x}",
+                minimum.to_bits(),
+                offset.to_bits(),
+                maximum.to_bits(),
+            );
             return Err(StepError::DisplacementOutOfBounds);
         }
     }
