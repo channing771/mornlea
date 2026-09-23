@@ -248,3 +248,20 @@
 **Rollback:** revert `0865bb4b` and `c36dead0` individually; the five families return to `cases: null` and the corpus index returns to 916.
 
 **Architecture skill: no change.**
+
+
+## Node 3.5 — 2026-09-24
+
+**Status:** complete. Commits `975b44c5` (`feat(protocol): qualify remote player packets`) + controller integration `d7e7b4b7` on top of `bff08510`.
+
+**Deliverable:** the three remote-player families (`RemotePlayerSpawn` 7, `RemotePlayerDespawn` 8, `RemotePlayerStates` 9) on the common fallible surface; pitch unrestricted (finite-only — the companion ±π/2 rule stays out); UUID strict order by unsigned byte comparison; States' count bound (1..=7) before the record-length rule and the fixed 296-byte wire ceiling before allocation (exact 296 admits, 297 → capacity); −0.0/finite f32 bit preservation. 20 corpus cases (Spawn 5, Despawn 4, States 11) through the real Go codec, producer `runtime-oracle/protocol-remote-players`; 6 routes; group test 14/14 incl. the latent-boundary section.
+
+**Controller ruling frozen (implementer NEEDS_CONTEXT, correctly escalated):** Go's `RemotePlayerSpawn.Validate` folds identity/name/dimension/finiteness into ONE message, so the Spawn corpus freezes only agreed boundaries (valid pair, padded-name pair → invalid-value, nan-pitch at the f32 primitive → invalid-value); zero-uuid/wrong-version-uuid/dimension-two are a LATENT cross-implementation class — pinned as Rust group-test boundaries with the coarsening documented, never corpus cases (the 3.4-furnace discipline).
+
+**Evidence:** group 14/14; `runtime_contract` 134/134; Go producer 8/8 (incl. `-race`); `TestProtocolV2RemotePlayerGolden` ok; full oracle ok; audit ok; fmt/clippy/gofmt/vet clean. Corpus integrity: 3 families changed, 953→973 (+20/−0), `source_revision` preserved. Post-integration whole protocol crate 314/314.
+
+**Review ruling:** Approved, 0 Crit/0 Imp/3 Minor (duplicated encode assertion; no dedicated truncation sweep on the 296-byte literal; the prefix-coarse `"remote player state "` classifier arm noted for future producers).
+
+**Rollback:** revert `975b44c5` and `d7e7b4b7` individually; corpus returns to 953.
+
+**Architecture skill: no change.**
