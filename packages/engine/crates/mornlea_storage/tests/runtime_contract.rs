@@ -23,7 +23,8 @@ use mornlea_storage::{
     decode_hostile_mobs, decode_passive_mobs, decode_player, decode_region_bank, decode_superblock,
     decode_world_metadata, encode_chunk, encode_chunk_at_schema, encode_chunk_logical,
     encode_companions, encode_hostile_mobs, encode_passive_mobs, encode_player, encode_region_bank,
-    encode_superblock, encode_world_metadata, item_max_durability, region_for, select_region_bank,
+    encode_region_bank_into, encode_superblock, encode_superblock_into, encode_world_metadata,
+    item_max_durability, region_for, select_region_bank,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -724,6 +725,122 @@ fn region_bank_constructor_preserves_valid_shape() {
     let decoded =
         decode_region_bank(key, &encoded, 16 * SECTOR_SIZE as i64).expect("decode region bank");
     assert_eq!(decoded, bank);
+}
+
+#[test]
+fn region_bank_into_is_atomic() {
+    let key = RegionKey {
+        dimension: -3,
+        x: -1,
+        z: 2,
+    };
+    let mut bank = RegionBank::empty();
+    bank.generation = 1;
+    bank.entries[0] = RegionEntry {
+        offset_sector: DATA_START_SECTOR,
+        sector_count: 1,
+        payload_length: 0,
+        revision: 1,
+        payload_crc32c: 0,
+    };
+
+    let mut short = vec![0xA5; BANK_SIZE - 1];
+    assert_eq!(
+        encode_region_bank_into(key, &bank, &mut short),
+        Err(StorageError::OutputTooSmall {
+            needed: BANK_SIZE,
+            available: BANK_SIZE - 1,
+        })
+    );
+    assert!(short.iter().all(|byte| *byte == 0xA5));
+
+    let mut invalid = bank.clone();
+    invalid.entries[0].offset_sector = DATA_START_SECTOR - 1;
+    assert!(matches!(
+        encode_region_bank_into(key, &invalid, &mut short),
+        Err(StorageError::Corrupt(_))
+    ));
+    assert!(short.iter().all(|byte| *byte == 0xA5));
+
+    let owned = encode_region_bank(key, &bank).expect("encode region bank");
+    let mut exact = vec![0xA5; BANK_SIZE];
+    assert_eq!(
+        encode_region_bank_into(key, &bank, &mut exact),
+        Ok(BANK_SIZE)
+    );
+    assert_eq!(exact, owned);
+
+    let mut larger = vec![0xA5; BANK_SIZE + 7];
+    assert_eq!(
+        encode_region_bank_into(key, &bank, &mut larger),
+        Ok(BANK_SIZE)
+    );
+    assert_eq!(&larger[..BANK_SIZE], &owned);
+    assert!(larger[BANK_SIZE..].iter().all(|byte| *byte == 0xA5));
+}
+
+#[test]
+fn region_superblock_into_preserves_tail() {
+    let key = RegionKey {
+        dimension: -3,
+        x: -1,
+        z: 2,
+    };
+    let mut short = vec![0xA5; SECTOR_SIZE as usize - 1];
+    assert_eq!(
+        encode_superblock_into(key, &mut short),
+        Err(StorageError::OutputTooSmall {
+            needed: SECTOR_SIZE as usize,
+            available: SECTOR_SIZE as usize - 1,
+        })
+    );
+    assert!(short.iter().all(|byte| *byte == 0xA5));
+
+    let owned = encode_superblock(key);
+    let mut exact = vec![0xA5; SECTOR_SIZE as usize];
+    assert_eq!(
+        encode_superblock_into(key, &mut exact),
+        Ok(SECTOR_SIZE as usize)
+    );
+    assert_eq!(exact, owned);
+
+    let mut larger = vec![0xA5; SECTOR_SIZE as usize + 7];
+    assert_eq!(
+        encode_superblock_into(key, &mut larger),
+        Ok(SECTOR_SIZE as usize)
+    );
+    assert_eq!(&larger[..SECTOR_SIZE as usize], &owned);
+    assert!(
+        larger[SECTOR_SIZE as usize..]
+            .iter()
+            .all(|byte| *byte == 0xA5)
+    );
+}
+
+#[test]
+fn region_go_crc_reference() {
+    let key = RegionKey {
+        dimension: -3,
+        x: -1,
+        z: 2,
+    };
+    let superblock = encode_superblock(key);
+    assert_eq!(u32_at(&superblock, 12), (-3i32) as u32);
+    assert_eq!(u32_at(&superblock, 16), (-1i32) as u32);
+    assert_eq!(u32_at(&superblock, 20), 2);
+    assert_eq!(u32_at(&superblock, 4092), 0xef55_4c52);
+
+    let mut bank = RegionBank::empty();
+    bank.generation = 1;
+    bank.entries[0] = RegionEntry {
+        offset_sector: DATA_START_SECTOR,
+        sector_count: 1,
+        payload_length: 0,
+        revision: 1,
+        payload_crc32c: 0,
+    };
+    let encoded = encode_region_bank(key, &bank).expect("encode region bank");
+    assert_eq!(u32_at(&encoded, 60), 0x24d2_71a5);
 }
 
 #[test]

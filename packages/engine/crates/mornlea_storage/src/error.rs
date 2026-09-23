@@ -11,6 +11,9 @@ pub enum StorageError {
     Corrupt(String),
     /// The record declares a version newer than the reader supports.
     FutureVersion(String),
+    /// The caller's output buffer cannot hold the complete canonical record.
+    /// Encoding leaves the buffer unchanged in this case.
+    OutputTooSmall { needed: usize, available: usize },
 }
 
 impl std::fmt::Display for StorageError {
@@ -18,6 +21,10 @@ impl std::fmt::Display for StorageError {
         match self {
             Self::Corrupt(detail) => write!(f, "save record is corrupt: {detail}"),
             Self::FutureVersion(detail) => write!(f, "save record is a future version: {detail}"),
+            Self::OutputTooSmall { needed, available } => write!(
+                f,
+                "save output buffer is too small: need {needed} bytes, have {available}"
+            ),
         }
     }
 }
