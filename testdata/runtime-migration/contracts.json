@@ -1454,15 +1454,37 @@
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
       "sources": [
         {
+          "path": "packages/shared/network/codec/codec_client.go",
+          "sha256": "sha256:572788394d3bc8b13b42d097beaa3fade87cdc4e9d5d022f7e5c92568c9c70de"
+        },
+        {
           "path": "packages/shared/network/codec/codec_golden_test.go",
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_companion.go",
+          "sha256": "sha256:03bbf95ee0651a09f89e0395b53cc448218f25a86a8da7cd6ef669ec52016395"
         },
         {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.client.ChatCommand/45/decode-control-text",
+        "protocol.client.ChatCommand/45/decode-empty-text",
+        "protocol.client.ChatCommand/45/decode-invalid-utf8",
+        "protocol.client.ChatCommand/45/decode-max-text",
+        "protocol.client.ChatCommand/45/decode-noncanonical-length",
+        "protocol.client.ChatCommand/45/decode-payload-above-wire-ceiling",
+        "protocol.client.ChatCommand/45/decode-trailing-byte",
+        "protocol.client.ChatCommand/45/decode-truncated",
+        "protocol.client.ChatCommand/45/decode-untrimmed-leading-nbsp",
+        "protocol.client.ChatCommand/45/decode-valid",
+        "protocol.client.ChatCommand/45/encode-empty-text",
+        "protocol.client.ChatCommand/45/encode-text-above-bound",
+        "protocol.client.ChatCommand/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.client.ClientHello",
@@ -16640,6 +16662,318 @@
       "expected": {
         "path": "testdata/runtime-migration/cases/protocol/BoneMeal/encode-valid.expected.json",
         "sha256": "sha256:dd4cb0463ce592b0e53ab0aaef199c862e444e80d6b0b915c75bd7030c85b7ad"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.ChatCommand/45/decode-control-text",
+      "family": "protocol.client.ChatCommand",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-control-text.input.bin",
+        "sha256": "sha256:0689c03acc7e96fccdc6eef983da6cdb5f034e97a2670faa325fcc3a0c92056d"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-control-text.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.ChatCommand/45/decode-empty-text",
+      "family": "protocol.client.ChatCommand",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-empty-text.input.bin",
+        "sha256": "sha256:6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-empty-text.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.ChatCommand/45/decode-invalid-utf8",
+      "family": "protocol.client.ChatCommand",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-invalid-utf8.input.bin",
+        "sha256": "sha256:04021e260d59bd52f7fa12f603f569dcb382d7c6c78771ebd2cfd825c3725565"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-invalid-utf8.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.ChatCommand/45/decode-max-text",
+      "family": "protocol.client.ChatCommand",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-max-text.input.bin",
+        "sha256": "sha256:0485127cd2bfe103e50d18c3423ea68c9da7febff4a044591c79e453952bc3b8"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-max-text.expected.json",
+        "sha256": "sha256:9ff243265ac1c7568e917f93221464441bb3c98413ae65a128ab7e064e805170"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.ChatCommand/45/decode-noncanonical-length",
+      "family": "protocol.client.ChatCommand",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-noncanonical-length.input.bin",
+        "sha256": "sha256:119ae05b7da2150db57ad7d25af8bf408919acce35d5299ad0cc4f6d9223836e"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-noncanonical-length.expected.json",
+        "sha256": "sha256:063f859b00cf8e79a09a0117be50a671e193abca2a4654b1b9f92a01d1bba454"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.ChatCommand/45/decode-payload-above-wire-ceiling",
+      "family": "protocol.client.ChatCommand",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-payload-above-wire-ceiling.input.bin",
+        "sha256": "sha256:e2a1e8ef46afc999d384520e9c1b2985169a9a990b9e108d935e4f6e02be6a58"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-payload-above-wire-ceiling.expected.json",
+        "sha256": "sha256:23157f4e9cdc29645bef06805ff2bec8e534e5d7de26e0ce55adde595fda17f1"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.ChatCommand/45/decode-trailing-byte",
+      "family": "protocol.client.ChatCommand",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-trailing-byte.input.bin",
+        "sha256": "sha256:e62ea3b390bb12e2ad4663bd07a9928f4416e794b9e5a83aefb6c88600c1bf44"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-trailing-byte.expected.json",
+        "sha256": "sha256:e86ced1efbf7a5d21ad5044581d2db90ba5286a5cd992edbe27e12b051dd3f85"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.ChatCommand/45/decode-truncated",
+      "family": "protocol.client.ChatCommand",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-truncated.input.bin",
+        "sha256": "sha256:e096db02ffc5eea49dc83d3a96fff19169b0908341afe987c541b2eeb535efd8"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-truncated.expected.json",
+        "sha256": "sha256:6a6aba5322f6bb08d116cc9b314494e850b3adbad2801f6f0078ec3215fd5f44"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.ChatCommand/45/decode-untrimmed-leading-nbsp",
+      "family": "protocol.client.ChatCommand",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-untrimmed-leading-nbsp.input.bin",
+        "sha256": "sha256:e33426e003917bc7d7be734383c445df46a1b621a9d8e744c051fc7439ccc510"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-untrimmed-leading-nbsp.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.ChatCommand/45/decode-valid",
+      "family": "protocol.client.ChatCommand",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-valid.input.bin",
+        "sha256": "sha256:3a5cb290948bc69c9107d459a978c2d4b677ed94106dfcf06c75972aca7963c2"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/decode-valid.expected.json",
+        "sha256": "sha256:6b67942a812a2742de4d0f16ea88e40396b6991e787b81923d6c86a5b9ae745d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.ChatCommand/45/encode-empty-text",
+      "family": "protocol.client.ChatCommand",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/encode-empty-text.input.json",
+        "sha256": "sha256:33780dfdb55b34cbbe4e576c6ccff3997d822d1c72cea4c945e970eb2fb6ba22"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/encode-empty-text.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.ChatCommand/45/encode-text-above-bound",
+      "family": "protocol.client.ChatCommand",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/encode-text-above-bound.input.json",
+        "sha256": "sha256:f0b7b25b8ae81fe7d2c5fff326d6a9bdec3e0cbbce38afc3aef2a339c182f1b3"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/encode-text-above-bound.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.ChatCommand/45/encode-valid",
+      "family": "protocol.client.ChatCommand",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/encode-valid.input.json",
+        "sha256": "sha256:79cd84c7bd3de93cd34010691ebe48bfe1e5b8269e27194916a3ae492f019e8e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChatCommand/encode-valid.expected.json",
+        "sha256": "sha256:2d3ad22674878608a09f45dbe269d04cf908e5f9987c0d474c74778c5554d87a"
       },
       "checkpoints": [
         "0"

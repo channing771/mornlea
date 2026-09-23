@@ -216,7 +216,7 @@ func TestContractInventoryWorkingReportsZeroCaseFamilies(t *testing.T) {
 	}
 
 	zeroCasePoint := CoveragePoint{
-		FamilyID: "protocol.client.ChatCommand",
+		FamilyID: "protocol.server.ChatEvent",
 		Version:  "45",
 	}
 	foundUncovered := false
@@ -264,7 +264,7 @@ func TestContractInventoryCompleteRejectsZeroCaseFamilies(t *testing.T) {
 	}
 
 	zeroCasePoint := CoveragePoint{
-		FamilyID: "protocol.client.ChatCommand",
+		FamilyID: "protocol.server.ChatEvent",
 		Version:  "45",
 	}
 	foundInError := false

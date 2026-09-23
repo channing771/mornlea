@@ -1,0 +1,9 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:3a5cb290948bc69c9107d459a978c2d4b677ed94106dfcf06c75972aca7963c2",
+  "fields": {
+    "text": "@mira follow"
+  },
+  "kind": "ok"
+}
+
