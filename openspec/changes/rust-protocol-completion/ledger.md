@@ -175,3 +175,21 @@
 **Rollback:** revert `c3c36945` and `9b217547` individually; the family returns to `cases: null` and the corpus index returns to 836 (the fixture move returns with them).
 
 **Architecture skill: no change.**
+
+## Node 3.1 — 2026-09-23
+
+**Status:** complete. Commits `9afe565a` (`feat(protocol): qualify world delta packets`) + controller integration `5f9fbe41` (`chore(corpus): integrate world delta evidence`) on top of `75650d9c`. First server-to-client node of group 3.
+
+**Deliverable:** the two world delta families (`BlockChanges` S/Play/1, `ForgetChunks` S/Play/2) on the common fallible surface as the first variable-count batch families the corpus suite executes: count bound (≤4096; ≥1 for ForgetChunks) fires before any record scan/reservation on decode and inside the gate before the content loop, verified against the Go decode arms' own order; empty BlockChanges stays the legal revision barrier; ForgetChunks preserves submitted wire order and rejects duplicates via a fallible reserved scratch (`Allocation` on failure, no publication); `encoded_len` = 28 + varint + 14×count / 4 + varint + 8×count with checked arithmetic. 22 corpus cases (14 BlockChanges + 8 ForgetChunks: valid pairs incl. the empty barrier, base-zero/revision-gap/y-above-world/wrong-chunk/unregistered-block-90/unsorted-index/count-above-max, forget zero-count/duplicate/dimension-two, encode twins, truncation/trailing) through the real Go codec, producer `runtime-oracle/protocol-world-delta`; 4 routes registered and pinned; group test `tests/protocol_world_delta.rs` (4096/4097 boundary pins, u64::MAX−1/MAX revision pins, order-preservation pin, variant-split pin); mechanical `runtime_contract.rs` updates; AGENTS.md sync.
+
+**Controller rulings frozen:** (1) the collapsed constructor check split — unregistered block → `InvalidEnum`/`invalid-enum`, out-of-world Y → `InvalidRange`/`invalid-value` (the pre-existing collapse was a genuine category divergence the corpus `decode-y-above-world` case now pins closed); (2) the decode-side count bound precedes the exact-record-length rule on both sides; (3) 4096/4097 boundary admits/rejects are group-test pins, keeping the frozen corpus small.
+
+**Controller arithmetic slips (recorded):** the brief's prose said "13/21/870" while its binding BlockChanges table enumerates 14 labels (22 cases, 849→871 registered verbatim), and called the ForgetChunks literal 25 bytes where the Go encoder publishes 21; the implementer followed the binding table and the encoder in both cases.
+
+**Evidence:** group test 15/15; `runtime_contract` 134/134; Go producer 9/9; `TestBlockChanges|TestForgetChunks` ok; full oracle package `ok`; audit `ok`; fmt/clippy/gofmt/vet clean. Corpus integrity: exactly 2 families changed, 849→871 strict superset (+22/−0), `source_revision` preserved; controller spot-checked the 43-byte BlockChanges literal, the 29-byte empty barrier, the 21-byte ForgetChunks literal and the y-above-world category agreement. Post-integration whole protocol crate 258/258 with the 22 cases executed.
+
+**Review ruling:** Approved, 0 Crit/0 Imp/4 Minor. Deferred Minors: the "first variable-count batch families in this crate" phrasing in three docs overstates (pre-existing uvarint-count families predate the fallible surface — scope to "the corpus suite executes"); the BlockChanges gate runs per-record field rules across the whole loop before the sortedness relation where Go interleaves per record (no corpus case combines violations; flagged for the later semantic-adapter node); a dead `let _ = needed;` and unused fixture fields; the template's double value gate in `encode`.
+
+**Rollback:** revert `9afe565a` and the integration commit individually; the two families return to `cases: null` and the corpus index returns to 849.
+
+**Architecture skill: no change.**
