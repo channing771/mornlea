@@ -99,12 +99,32 @@ type CoverageReport struct {
 type NegativeCoverageExceptions map[CoveragePoint]string
 
 // BaselineConsumerRegistry returns the closed baseline consumer registry.
+//
+// The corpus_frame consumer is the Rust framing consumer and carries both
+// framing operations, because the framing family publishes a decode case and
+// an encode case that the frame reader and writer execute independently.
+//
+// The mornlea_protocol consumer is the Rust packet consumer. This node
+// establishes it with the routing the framing family already executes through
+// the packet corpus test; later packet groups append their own family, version
+// and operation routes here one node at a time, and the closed union is
+// verified at corpus closure. A registration never carries an empty route set,
+// so the packet consumer is created alongside the first routes that execute
+// under it.
 func BaselineConsumerRegistry() ConsumerRegistry {
 	return ConsumerRegistry{
 		"corpus_frame": {
 			Kind: ConsumerRust,
 			Routes: map[ConsumerRoute]struct{}{
 				{FamilyID: "protocol.frame", Version: "45", Operation: "decode"}: {},
+				{FamilyID: "protocol.frame", Version: "45", Operation: "encode"}: {},
+			},
+		},
+		"mornlea_protocol": {
+			Kind: ConsumerRust,
+			Routes: map[ConsumerRoute]struct{}{
+				{FamilyID: "protocol.frame", Version: "45", Operation: "decode"}: {},
+				{FamilyID: "protocol.frame", Version: "45", Operation: "encode"}: {},
 			},
 		},
 		"mornlea_domain": {

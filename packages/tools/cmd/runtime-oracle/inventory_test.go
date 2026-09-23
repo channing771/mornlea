@@ -343,6 +343,14 @@ func TestContractInventoryRejectsKnownConsumerOnUnsupportedRoute(t *testing.T) {
 			Kind: ConsumerRust,
 			Routes: map[ConsumerRoute]struct{}{
 				{FamilyID: "protocol.frame", Version: "45", Operation: "decode"}: {},
+				{FamilyID: "protocol.frame", Version: "45", Operation: "encode"}: {},
+			},
+		},
+		"mornlea_protocol": {
+			Kind: ConsumerRust,
+			Routes: map[ConsumerRoute]struct{}{
+				{FamilyID: "protocol.frame", Version: "45", Operation: "decode"}: {},
+				{FamilyID: "protocol.frame", Version: "45", Operation: "encode"}: {},
 			},
 		},
 		"mornlea_domain": {
@@ -392,13 +400,16 @@ func TestContractInventoryRejectsKnownConsumerOnUnsupportedRoute(t *testing.T) {
 			},
 		},
 		{
+			// `protocol.frame` now publishes both a decode and an encode
+			// operation, so the unsupported operation has to be one the closed
+			// vocabulary carries but the frame family does not execute.
 			name: "wrong_operation",
 			inventory: mutateInventoryCase(frozen, frameIndex, func(c *CaseSpec) {
-				c.Operation = "encode"
+				c.Operation = "admit"
 			}),
 			registry: BaselineConsumerRegistry(),
 			wantRoute: ConsumerRoute{
-				FamilyID: "protocol.frame", Version: "45", Operation: "encode",
+				FamilyID: "protocol.frame", Version: "45", Operation: "admit",
 			},
 		},
 		{

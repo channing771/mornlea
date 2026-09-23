@@ -27,6 +27,7 @@ pub enum CorpusConsumer {
     Domain,
     ExternalAgentContract,
     ExternalRuntimeAuthority,
+    Protocol,
 }
 
 impl CorpusConsumer {
@@ -37,6 +38,7 @@ impl CorpusConsumer {
             CorpusConsumer::Domain => "mornlea_domain",
             CorpusConsumer::ExternalAgentContract => "external:agent-contract",
             CorpusConsumer::ExternalRuntimeAuthority => "external:runtime-authority",
+            CorpusConsumer::Protocol => "mornlea_protocol",
         }
     }
 
@@ -46,6 +48,7 @@ impl CorpusConsumer {
             "mornlea_domain" => Some(CorpusConsumer::Domain),
             "external:agent-contract" => Some(CorpusConsumer::ExternalAgentContract),
             "external:runtime-authority" => Some(CorpusConsumer::ExternalRuntimeAuthority),
+            "mornlea_protocol" => Some(CorpusConsumer::Protocol),
             _ => None,
         }
     }

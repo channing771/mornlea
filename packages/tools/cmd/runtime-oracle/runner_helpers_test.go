@@ -28,20 +28,38 @@ type generatedAsset struct {
 }
 
 var validProducerIDs = map[string]bool{
-	"runtime-oracle/protocol-frame":           true,
-	"runtime-oracle/domain-identity-values":   true,
-	"runtime-oracle/domain-values":            true,
-	"runtime-oracle/domain-command-control":   true,
-	"runtime-oracle/domain-command-inventory": true,
-	"runtime-oracle/domain-event-player":      true,
-	"runtime-oracle/domain-event-world":       true,
-	"runtime-oracle/domain-event-inventory":   true,
-	"runtime-oracle/domain-event-people":      true,
-	"runtime-oracle/domain-event-mobs":        true,
-	"runtime-oracle/domain-event-objects":     true,
-	"runtime-oracle/domain-event-chat":        true,
-	"runtime-oracle/domain-event-manifest":    true,
-	"companion/agent-contract":                true,
+	"runtime-oracle/protocol-frame":                 true,
+	"runtime-oracle/protocol-negotiation":           true,
+	"runtime-oracle/protocol-control":               true,
+	"runtime-oracle/protocol-client-control":        true,
+	"runtime-oracle/protocol-client-rays":           true,
+	"runtime-oracle/protocol-client-inventory":      true,
+	"runtime-oracle/protocol-client-stack-views":    true,
+	"runtime-oracle/protocol-client-chat":           true,
+	"runtime-oracle/protocol-world-delta":           true,
+	"runtime-oracle/protocol-snapshot":              true,
+	"runtime-oracle/protocol-player-outcomes":       true,
+	"runtime-oracle/protocol-inventory-publication": true,
+	"runtime-oracle/protocol-remote-players":        true,
+	"runtime-oracle/protocol-companions":            true,
+	"runtime-oracle/protocol-drops":                 true,
+	"runtime-oracle/protocol-hostiles":              true,
+	"runtime-oracle/protocol-passives":              true,
+	"runtime-oracle/protocol-projectiles":           true,
+	"runtime-oracle/protocol-chat-event":            true,
+	"runtime-oracle/domain-identity-values":         true,
+	"runtime-oracle/domain-values":                  true,
+	"runtime-oracle/domain-command-control":         true,
+	"runtime-oracle/domain-command-inventory":       true,
+	"runtime-oracle/domain-event-player":            true,
+	"runtime-oracle/domain-event-world":             true,
+	"runtime-oracle/domain-event-inventory":         true,
+	"runtime-oracle/domain-event-people":            true,
+	"runtime-oracle/domain-event-mobs":              true,
+	"runtime-oracle/domain-event-objects":           true,
+	"runtime-oracle/domain-event-chat":              true,
+	"runtime-oracle/domain-event-manifest":          true,
+	"companion/agent-contract":                      true,
 }
 
 // validateProducerID and validateGeneratedAssets complete all deterministic
@@ -440,31 +458,58 @@ func runDomainAdmit(c CaseSpec, input []byte) (Outcome, []byte, error) {
 // executed observation from the values the producer returned. Expected outcomes
 // are never read or handed to a producer, so an independent execution cannot
 // be shaped by the recorded expectation.
+//
+// This entry keeps the historical single-operation-per-family contract: one
+// family is executed as exactly one operation. A family that publishes more
+// than one operation, as the framing family now does, is executed through
+// `RunProtocolCases`, which resolves each case's route instead of binding the
+// whole family to one operation name.
 func RunCases(root string, manifest Inventory, operations map[string]GoOperation, familyOperations map[string]string) ([]ExecutedObservation, error) {
-	if len(manifest.Cases) == 0 {
-		return nil, fmt.Errorf("runtime-oracle: manifest selection is empty")
-	}
 	if len(operations) == 0 || len(familyOperations) == 0 {
 		return nil, fmt.Errorf("runtime-oracle: no registered Go producers")
+	}
+	return runCasesByRoute(root, manifest, func(family, version, operation string) (GoOperation, error) {
+		bound, supported := familyOperations[family]
+		if !supported {
+			return nil, fmt.Errorf("family %s has no registered Go producer", family)
+		}
+		producer, registered := operations[bound]
+		if !registered {
+			return nil, fmt.Errorf("operation %q has no registered Go producer", bound)
+		}
+		if operation != bound {
+			return nil, fmt.Errorf("case declares operation %q but family %s is executed as %q", operation, family, bound)
+		}
+		return producer, nil
+	})
+}
+
+// runCasesByRoute is the shared execution loop every runner uses. The lookup
+// resolves one case's family, version and operation to its producer, so the
+// route policy lives in the runner's own entry point while the evidence
+// boundary, the checkpoint discipline and the observation builder stay in one
+// place.
+func runCasesByRoute(root string, manifest Inventory, lookup routeLookup) ([]ExecutedObservation, error) {
+	if len(manifest.Cases) == 0 {
+		return nil, fmt.Errorf("runtime-oracle: manifest selection is empty")
 	}
 
 	var produced []ExecutedObservation
 	for _, c := range manifest.Cases {
-		operation, supported := familyOperations[c.Family]
-		if !supported {
-			return nil, fmt.Errorf("runtime-oracle: family %s has no registered Go producer", c.Family)
-		}
-		producer, registered := operations[operation]
-		if !registered {
-			return nil, fmt.Errorf("runtime-oracle: operation %q has no registered Go producer", operation)
-		}
-		if c.Operation != operation {
-			return nil, fmt.Errorf("runtime-oracle: case %s declares operation %q but family %s is executed as %q", c.ID, c.Operation, c.Family, operation)
+		producer, err := lookup(c.Family, c.Version, c.Operation)
+		if err != nil {
+			return nil, fmt.Errorf("runtime-oracle: case %s: %w", c.ID, err)
 		}
 		if len(c.Checkpoints) == 0 {
 			return nil, fmt.Errorf("runtime-oracle: case %s declares no checkpoints", c.ID)
 		}
-
+		seenCheckpoints := make(map[string]bool, len(c.Checkpoints))
+		for _, checkpoint := range c.Checkpoints {
+			if seenCheckpoints[checkpoint] {
+				return nil, fmt.Errorf("runtime-oracle: case %s declares duplicate checkpoint %q", c.ID, checkpoint)
+			}
+			seenCheckpoints[checkpoint] = true
+		}
 		input, err := readCaseInput(root, c)
 		if err != nil {
 			return nil, fmt.Errorf("runtime-oracle: case %s input: %w", c.ID, err)

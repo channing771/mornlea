@@ -799,4 +799,12 @@ rather than checking that it omits a few names.
 ```bash
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
+
+`tests/protocol_corpus.rs` executes the corpus cases this crate owns through
+the real `read_frame`/`write_frame` path and compares the complete result
+against the outcome the independent Go producer recorded. It loads the
+`corpus_frame` selection and the `mornlea_protocol` selection the packet
+groups register into; the preexisting `runtime_contract` framing test stays a
+separate regression suite.

@@ -31,8 +31,11 @@ or Agent process packages. These boundaries are enforced by `packages/audit`
   `BaselineConsumerRegistry()`. A consumer registration binds its implementation
   kind to executable routes; empty names, invalid kinds, empty route sets, and
   known consumers used on unsupported routes fail closed.
-- The baseline routes are `corpus_frame` → `protocol.frame/45/decode`;
-  `mornlea_domain` → `domain.identity_values/current/admit`,
+- The baseline routes are `corpus_frame` → `protocol.frame/45/decode` and
+  `protocol.frame/45/encode`; `mornlea_protocol` → the protocol packet routes
+  (established with the framing routes it executes today and extended one
+  producer group at a time); `mornlea_domain` →
+  `domain.identity_values/current/admit`,
   `domain.values/current/admit`, `domain.command_control/current/admit`,
   `domain.command_inventory/current/admit`, and `domain.event/1/admit`;
   `external:agent-contract` → `agent.http/v1/agent-contract` and
@@ -123,17 +126,40 @@ and the isolated export helpers (`exportGeneratedAssets`,
   returns the normalized outcome, its own encoded bytes, and an error. The
   recorded expected outcome is never handed to a producer, so an independent
   execution cannot be shaped by the evidence it is supposed to reproduce.
-- `RunCases` enumerates the manifest selection, resolves each input under the
-  input-format-specific corpus byte budget shared with reconciliation, proves
-  the input digest matches the manifest, invokes the registered producer once
-  per declared checkpoint, and derives every
+- `RunCases` keeps the historical single-operation-per-family contract: it
+  binds each family to one operation name and delegates to the private
+  `runCasesByRoute` loop. A family that publishes more than one operation, as
+  the framing family does with `decode` and `encode`, is executed by
+  `RunProtocolCases` instead.
+- `RunProtocolCases(root, selection, routes)` in
+  `protocol_corpus_helpers_test.go` is the protocol-only runner: it takes a
+  closed `map[ConsumerRoute]GoOperation`, rejects an empty selection, a missing
+  route map, an unregistered `{family, version, operation}` route before the
+  case input is read, and a duplicate checkpoint. Every producer group that
+  registers a packet family executes its cases through it, so a case can never
+  claim coverage from its name alone.
+- `runCasesByRoute` is the shared loop both runners use: it resolves the input
+  under the input-format-specific corpus byte budget shared with
+  reconciliation, proves the input digest matches the manifest, invokes the
+  registered producer once per declared checkpoint, and derives every
   observation from the returned values. An unknown family, an unregistered
   operation, an operation that disagrees with its family's binding, a missing
-  checkpoint, or a tampered input digest is a hard error.
+  or duplicated checkpoint, or a tampered input digest is a hard error.
 - Protocol producers use the real production codec. The framing producer calls
-  `codec.ReadFrame` and classifies a rejection into one of the frozen execution
-  contract categories (`invalid-varint` for a non-canonical length prefix); an
-  unclassified failure is an error rather than an unlabelled rejection.
+  `codec.ReadFrame` for the decode route and `codec.WriteFrame` for the encode
+  route, reads the encoded frame back through `codec.ReadFrame` before
+  publishing it, and classifies a rejection into one of the frozen execution
+  contract categories (`invalid-varint` for a non-canonical length prefix,
+  `capacity` for the writer's own size refusal); an unclassified failure is an
+  error rather than an unlabelled rejection.
+- `validProducerIDs` is the closed exporter allowlist. It carries the 18
+  protocol group producer IDs the v45 packet plan names
+  (`runtime-oracle/protocol-negotiation`, `-control`, `-client-control`,
+  `-client-rays`, `-client-inventory`, `-client-stack-views`, `-client-chat`,
+  `-world-delta`, `-snapshot`, `-player-outcomes`, `-inventory-publication`,
+  `-remote-players`, `-companions`, `-drops`, `-hostiles`, `-passives`,
+  `-projectiles`, `-chat-event`) beside the existing frame and domain
+  identities; an unrecognized ID is rejected before any directory is created.
 - Every committed `*.expected.json` under `testdata/runtime-migration/cases/`
   publishes the frozen outcome vocabulary: `kind` is `ok` or `error`, and an
   `error` category is one of the structural, login admission, or storage values
@@ -166,8 +192,48 @@ and the isolated export helpers (`exportGeneratedAssets`,
   `TestProtocolOracleFrameRunnerRejects*`,
   `TestProtocolOracleFrameRunnerHandsProducerOnlyCaseAndInput`,
   `TestProtocolOracleFrameRunnerInvokesProducerOncePerCheckpoint`,
+  `TestProtocolCorpusFrameEncodeRouteIsRegistered`,
+  `TestProtocolCorpusRoutesExecuteTwoOperationsForOneFamily`,
+  `TestProtocolCorpusRunnerRejectsUnregisteredRoute`,
+  `TestProtocolCorpusRunnerRejectsEmptySelection`,
+  `TestProtocolCorpusRunnerRejectsMissingRoutes`,
+  `TestProtocolCorpusRunnerRejectsDuplicateCheckpoints`,
+  `TestProtocolCorpusFrameEncodeProducesCanonicalBytes`,
+  `TestProtocolCorpusFrameEncodeRejectsOversizedPayload`,
+  `TestProtocolCorpusFrameEncodeExpectedIDMutationFailsComparison`,
+  `TestProtocolCorpusFrameCandidatesExportForReview`,
   `TestReadCaseInputUsesFormatBudget`,
   `TestProtocolOracleFrameExport*`.
+
+## Protocol manifest candidate (`protocol_manifest_test.go`)
+
+- `ProtocolSelection` is one packet producer group's exact reviewed
+  registration: its producer ID, its case specifications, the repository-
+  relative Go source paths its rules are read from, and the executable routes
+  it claims. `mergeProtocolSelections(root, base, groups...)` clones the frozen
+  manifest, rejects a duplicate or conflicting case, a case or route no
+  consumer registration carries, a case route its own selection does not
+  claim, an unrecognized producer ID, a non-protocol family and a missing
+  provenance file, updates only the selected protocol families' case lists and
+  source hashes, sorts case IDs and source paths, preserves `source_revision`,
+  and reconciles the merged and the reloaded value against the production
+  `Discover`/`ReconcileWorking` path.
+- A candidate whose assets the controller has not integrated yet is accepted
+  only through `verifyProtocolManifest`: the sole tolerated reconciliation
+  failure is a problem naming an asset path of a case the base manifest does
+  not register and that is absent from disk. A digest mismatch, a missing
+  provenance source or a registration error keeps the file present or names a
+  tracked value, so none of them can be classified as pending. The reviewed
+  assets and the complete merged manifest are exported create-exclusively
+  through `RUNTIME_ORACLE_EXPORT_DIR` under `runtime-oracle/protocol-frame`,
+  reviewed by the controller, and then copied into the tracked corpus
+  mechanically; the single global `source_revision` refresh stays the closure
+  node's act.
+- Enforcement: `TestProtocolCorpusManifestMergeRegistersFrameEncodeRoute`,
+  `TestProtocolCorpusManifestMergePreservesUnrelatedFamilies`,
+  `TestProtocolCorpusManifestMergeRejectsDuplicateAndConflictingCases`,
+  `TestProtocolCorpusManifestMergeRejectsUnregisteredRoute`,
+  `TestProtocolCorpusManifestMergeRejectsUnclaimedCaseRoute`.
 
 ## Family evidence (`domain_*_test.go`, `agent_contract_test.go`)
 
@@ -351,6 +417,8 @@ only discriminator the manifest carries.
 go test ./packages/tools/cmd/runtime-oracle -run TestContractInventory -count=1
 go test ./packages/tools/cmd/runtime-oracle -list TestContractInventory
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolOracleFrame' -count=1
+go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolCorpus' -count=1
 go test ./packages/tools/cmd/runtime-oracle -race -count=1
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked corpus_frame
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```

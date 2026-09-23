@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -10,7 +11,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -23,14 +26,25 @@ const (
 	// corpusCasesRelDir is the repository-relative directory holding every
 	// committed corpus case asset.
 	corpusCasesRelDir = "testdata/runtime-migration/cases"
+	// frameCorpusRelDir is the repository-relative directory holding this
+	// family's committed case assets.
+	frameCorpusRelDir = corpusCasesRelDir + "/frame"
 	// frameVersion is the protocol version the framing contract is pinned to.
 	frameVersion = "45"
+	// frameProducerID is the exporter's producer identity for the framing
+	// evidence: the executed decode evidence and the reviewed encode
+	// candidate.
+	frameProducerID = "runtime-oracle/protocol-frame"
 	// frameValidCaseID is the frozen case committed with the corpus.
 	frameValidCaseID = frameFamily + "/" + frameVersion + "/valid"
 	// frameNoncanonicalCaseID is the second frozen framing case: its manifest
 	// entry landed with the corpus merge, so the runner reads it from the frozen
 	// manifest like every other case instead of building an entry itself.
 	frameNoncanonicalCaseID = frameFamily + "/" + frameVersion + "/noncanonical-length"
+	// frameEncodeCaseID is the framing encode case this node registers. Its
+	// asset bytes are exported for review and integrated by the controller
+	// alongside the merged manifest candidate.
+	frameEncodeCaseID = frameFamily + "/" + frameVersion + "/encode-id-128"
 )
 
 // frameRejectionCategory resolves the language-neutral rejection category for
@@ -48,6 +62,80 @@ func frameRejectionCategory(err error) (string, bool) {
 		return "invalid-varint", true
 	}
 	return "", false
+}
+
+// frameEncodeRequest is the canonical JSON field input one framing encode case
+// carries. The frame writer owns the wire layout, so the input names the typed
+// fields only and never a length prefix or an encoded byte sequence.
+type frameEncodeRequest struct {
+	PacketID uint32 `json:"packet_id"`
+	Payload  string `json:"payload"`
+}
+
+// frameEncodeWire is the exact frame the encode case has to publish: the
+// canonical length prefix 5, the two-byte canonical uvarint packet ID 128 and
+// the three-byte payload. It is a review-contract literal rather than a value
+// derived from the producer, so the case fails when the production writer
+// disagrees with the reviewed encoding.
+var frameEncodeWire = []byte{5, 0x80, 0x01, 1, 2, 3}
+
+// runFrameEncode executes one framing encode case through the real Go frame
+// writer.
+//
+// The producer reads the typed fields, calls `codec.WriteFrame`, and then reads
+// the produced frame back through `codec.ReadFrame`: it never writes a length
+// prefix itself, so the recorded evidence is whatever the production codec
+// encodes. The read-back guards the other direction, because a writer that
+// published bytes its own reader rejects would otherwise become frozen
+// evidence.
+func runFrameEncode(c CaseSpec, input []byte) (Outcome, []byte, error) {
+	var request frameEncodeRequest
+	dec := json.NewDecoder(bytes.NewReader(input))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&request); err != nil {
+		return Outcome{}, nil, fmt.Errorf("runtime-oracle: case %s: decode encode fields: %w", c.ID, err)
+	}
+	var trailing any
+	if err := dec.Decode(&trailing); err != io.EOF {
+		return Outcome{}, nil, fmt.Errorf("runtime-oracle: case %s: encode input carries trailing content", c.ID)
+	}
+	payload, err := hex.DecodeString(request.Payload)
+	if err != nil {
+		return Outcome{}, nil, fmt.Errorf("runtime-oracle: case %s: payload is not hexadecimal: %w", c.ID, err)
+	}
+
+	var buf bytes.Buffer
+	if err := codec.WriteFrame(&buf, request.PacketID, payload); err != nil {
+		// The writer refuses an empty or oversized frame before any byte is
+		// published, which is a size violation of the declared frame rather
+		// than a decoding failure.
+		return Outcome{Kind: "error", Category: "capacity"}, nil, nil
+	}
+	wire := buf.Bytes()
+
+	packetID, decoded, err := codec.ReadFrame(bytes.NewReader(wire))
+	if err != nil || packetID != request.PacketID || !bytes.Equal(decoded, payload) {
+		return Outcome{}, nil, fmt.Errorf("runtime-oracle: case %s: encoded frame does not round-trip: %v", c.ID, err)
+	}
+	return Outcome{
+		Kind:     "ok",
+		Category: "frame",
+		Fields: map[string]any{
+			"packet_id":   request.PacketID,
+			"payload":     hex.EncodeToString(payload),
+			"payload_len": len(payload),
+		},
+	}, wire, nil
+}
+
+// frameCorpusRoutes is the closed route map the framing family executes. One
+// family publishes both a decode and an encode operation, which is the case the
+// old single-operation-per-family runner could not express.
+func frameCorpusRoutes() map[ConsumerRoute]GoOperation {
+	return map[ConsumerRoute]GoOperation{
+		{FamilyID: frameFamily, Version: frameVersion, Operation: "decode"}: runFrameDecode,
+		{FamilyID: frameFamily, Version: frameVersion, Operation: "encode"}: runFrameEncode,
+	}
 }
 
 // runFrameDecode executes one framing case through the real Go frame reader.
@@ -141,6 +229,9 @@ func frameWorkingManifest(t *testing.T, root string) Inventory {
 // registration, so both are checked: a case executed without a family entry, or
 // listed in a family without a case record, is a registration break that would
 // otherwise surface as a confusing coverage failure instead of a precise one.
+// The encode case is optional here because this node exports it as a reviewed
+// candidate and the controller integrates it later; once it is tracked it has
+// to be exactly that candidate and nothing else.
 func assertFrameCasesAreFrozen(t *testing.T, manifest Inventory) {
 	t.Helper()
 	want := []string{frameValidCaseID, frameNoncanonicalCaseID}
@@ -155,35 +246,48 @@ func assertFrameCasesAreFrozen(t *testing.T, manifest Inventory) {
 	if family == nil {
 		t.Fatalf("frozen manifest has no %s family", frameFamily)
 	}
-	if len(family.Cases) != len(want) {
-		t.Fatalf("%s family lists %v, want %v", frameFamily, family.Cases, want)
-	}
-	for i, id := range want {
-		if family.Cases[i] != id {
-			t.Fatalf("%s family lists %v, want %v", frameFamily, family.Cases, want)
+	extra := 0
+	for _, id := range family.Cases {
+		switch id {
+		case frameValidCaseID, frameNoncanonicalCaseID:
+		case frameEncodeCaseID:
+			extra++
+		default:
+			t.Fatalf("%s family lists %v, want %v with the optional %s", frameFamily, family.Cases, want, frameEncodeCaseID)
 		}
+	}
+	if extra > 1 {
+		t.Fatalf("%s family lists %s more than once", frameFamily, frameEncodeCaseID)
+	}
+	if len(family.Cases) != len(want)+extra {
+		t.Fatalf("%s family lists %v, want %v plus the optional %s", frameFamily, family.Cases, want, frameEncodeCaseID)
 	}
 
-	for _, id := range want {
-		found := false
-		for _, c := range manifest.Cases {
-			if c.ID == id {
-				found = true
-				break
-			}
+	indexed := make(map[string]bool, len(manifest.Cases))
+	for _, c := range manifest.Cases {
+		if c.Family == frameFamily {
+			indexed[c.ID] = true
 		}
-		if !found {
+	}
+	for _, id := range append(append([]string(nil), want...), frameEncodeCaseID) {
+		if id == frameEncodeCaseID && extra == 0 {
+			continue
+		}
+		if !indexed[id] {
 			t.Fatalf("case %s is missing from the frozen manifest case index", id)
 		}
 	}
 }
 
-// frameCases selects the frozen manifest's framing cases, preserving the
-// manifest's own case order.
+// frameCases selects the frozen manifest's decoding framing cases, preserving
+// the manifest's own case order.
 //
 // The order matters because the scoped family case list is built from the same
 // selection, so the working manifest reproduces the frozen manifest's framing
-// family list exactly rather than re-deriving a different one.
+// family list exactly rather than re-deriving a different one. Only decode
+// cases are selected: the single-operation runner this working manifest feeds
+// binds the family to `decode`, so an encode case would be handed to it as a
+// family/operation mismatch instead of being executed by its own route.
 func frameCases(manifest Inventory) []CaseSpec {
 	// The selection follows the family's declared case list rather than the
 	// manifest's top-level order, so the manifest-candidate merge sorting the
@@ -198,7 +302,7 @@ func frameCases(manifest Inventory) []CaseSpec {
 	}
 	byID := make(map[string]CaseSpec, len(manifest.Cases))
 	for _, c := range manifest.Cases {
-		if c.Family == frameFamily {
+		if c.Family == frameFamily && c.Operation == "decode" {
 			byID[c.ID] = c
 		}
 	}
@@ -457,7 +561,13 @@ func TestProtocolOracleFrameRunnerHandsProducerOnlyCaseAndInput(t *testing.T) {
 
 // TestProtocolOracleFrameRunnerInvokesProducerOncePerCheckpoint pins that a
 // multi-checkpoint case produces one observation and one invocation per
-// checkpoint, in the deterministic (tick, case) order.
+// checkpoint, in the manifest's own case-then-checkpoint order.
+//
+// The order is asserted against the selection's own case and checkpoint lists
+// rather than against a globally sorted tick sequence: the runner walks the
+// cases it is handed and each case's declared checkpoints, so the executed
+// sequence is a deterministic function of the selection. A second run has to
+// reproduce it exactly.
 func TestProtocolOracleFrameRunnerInvokesProducerOncePerCheckpoint(t *testing.T) {
 	root := mustRepoRoot(t)
 	manifest := frameWorkingManifest(t, root)
@@ -467,6 +577,17 @@ func TestProtocolOracleFrameRunnerInvokesProducerOncePerCheckpoint(t *testing.T)
 		}
 	}
 	spy := &recordingOperation{outcome: Outcome{Kind: "ok", Category: "spy"}}
+
+	want := make([]ExecutedObservation, 0, 3)
+	for _, c := range manifest.Cases {
+		for _, checkpoint := range c.Checkpoints {
+			tick, err := strconv.ParseUint(checkpoint, 10, 64)
+			if err != nil {
+				t.Fatalf("checkpoint %q: %v", checkpoint, err)
+			}
+			want = append(want, ExecutedObservation{Tick: tick, CaseID: c.ID, Outcome: spy.outcome})
+		}
+	}
 
 	observations, err := RunCases(root, manifest,
 		map[string]GoOperation{"decode": spy.run},
@@ -480,9 +601,25 @@ func TestProtocolOracleFrameRunnerInvokesProducerOncePerCheckpoint(t *testing.T)
 	if len(observations) != 3 {
 		t.Fatalf("produced %d observations, want 3", len(observations))
 	}
-	for i := 1; i < len(observations); i++ {
-		if observations[i].Tick < observations[i-1].Tick {
-			t.Fatalf("observations are not ordered by tick: %d after %d", observations[i].Tick, observations[i-1].Tick)
+	for index := range want {
+		if observations[index].Tick != want[index].Tick || observations[index].CaseID != want[index].CaseID {
+			t.Fatalf("observation %d is (%d, %s), want (%d, %s)",
+				index, observations[index].Tick, observations[index].CaseID,
+				want[index].Tick, want[index].CaseID)
+		}
+	}
+
+	repeated, err := RunCases(root, manifest,
+		map[string]GoOperation{"decode": spy.run},
+		map[string]string{frameFamily: "decode"})
+	if err != nil {
+		t.Fatalf("repeat RunCases: %v", err)
+	}
+	for index := range want {
+		if repeated[index].Tick != want[index].Tick || repeated[index].CaseID != want[index].CaseID {
+			t.Fatalf("repeat run observation %d is (%d, %s), want (%d, %s)",
+				index, repeated[index].Tick, repeated[index].CaseID,
+				want[index].Tick, want[index].CaseID)
 		}
 	}
 }
@@ -749,4 +886,419 @@ func frameObservation(t *testing.T, observations []ExecutedObservation, id strin
 	}
 	t.Fatalf("no observation was produced for case %s", id)
 	return ExecutedObservation{}
+}
+
+// frameProtocolCandidate is the framing encode case this node registers: its
+// manifest specification, the exact asset bytes it publishes, and the
+// expectation an independent execution has to reproduce.
+//
+// The expectation is built from the review contract rather than from a producer
+// result: the packet ID, the payload and the encoded digest all come from the
+// literal frame the case names. A producer that encoded anything else fails the
+// comparison instead of the candidate quietly agreeing with itself.
+type frameEncodeCandidate struct {
+	Spec   CaseSpec
+	Assets map[string][]byte
+	Expect Outcome
+}
+
+// frameProtocolCandidate builds the encode candidate for the framing family.
+//
+// The candidate is derived from the repository state: when the tracked corpus
+// already carries the case, its bytes must equal this candidate exactly, so an
+// integration that drifted from the reviewed evidence fails here instead of
+// silently changing what the case means.
+func frameProtocolCandidate(t *testing.T, root string) frameEncodeCandidate {
+	t.Helper()
+
+	request := frameEncodeRequest{PacketID: 128, Payload: hex.EncodeToString([]byte{1, 2, 3})}
+	input, err := json.MarshalIndent(request, "", "  ")
+	if err != nil {
+		t.Fatalf("encode candidate input: %v", err)
+	}
+	sum := sha256.Sum256(frameEncodeWire)
+	expect := Outcome{
+		Kind:                 "ok",
+		Category:             "frame",
+		EncodedPayloadDigest: fmt.Sprintf("sha256:%x", sum),
+		Fields: map[string]any{
+			"packet_id":   uint32(128),
+			"payload":     "010203",
+			"payload_len": 3,
+		},
+	}
+	// The expectation is rendered the way the committed corpus renders it:
+	// recursively sorted keys, two-space indentation and one terminal newline,
+	// so a reviewed candidate and the asset that replaces it differ by nothing
+	// but their location on disk.
+	expected, err := marshalIndentedOutcome(expect)
+	if err != nil {
+		t.Fatalf("encode candidate expectation: %v", err)
+	}
+
+	inputPath := filepath.ToSlash(filepath.Join(frameCorpusRelDir, "encode-id-128.input.json"))
+	expectedPath := filepath.ToSlash(filepath.Join(frameCorpusRelDir, "encode-id-128.expected.json"))
+	assets := map[string][]byte{
+		inputPath:    append(input, '\n'),
+		expectedPath: append(expected, '\n'),
+	}
+
+	spec := CaseSpec{
+		ID:           frameEncodeCaseID,
+		Family:       frameFamily,
+		Version:      frameVersion,
+		Operation:    "encode",
+		Input:        AssetRef{Path: inputPath, SHA256: digestOf(t, assets[inputPath])},
+		InputFormat:  "json",
+		Expected:     AssetRef{Path: expectedPath, SHA256: digestOf(t, assets[expectedPath])},
+		Checkpoints:  []string{"0"},
+		RustConsumer: "corpus_frame",
+	}
+
+	// A tracked asset this node does not own is a reviewed value: the candidate
+	// has to match it byte for byte, otherwise the integrated corpus no longer
+	// carries the evidence that was reviewed.
+	for relative, want := range assets {
+		tracked, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(relative)))
+		if readErr != nil {
+			if !os.IsNotExist(readErr) {
+				t.Fatalf("read tracked asset %s: %v", relative, readErr)
+			}
+			continue
+		}
+		if !bytes.Equal(tracked, want) {
+			t.Fatalf("tracked asset %s differs from the reviewed candidate", relative)
+		}
+	}
+	frozen := loadRealManifest(t, root)
+	for _, c := range frozen.Cases {
+		if c.ID != frameEncodeCaseID {
+			continue
+		}
+		if !reflect.DeepEqual(c, spec) {
+			t.Fatalf("tracked case %s is %#v, want the reviewed candidate %#v", frameEncodeCaseID, c, spec)
+		}
+	}
+
+	return frameEncodeCandidate{Spec: spec, Assets: assets, Expect: expect}
+}
+
+// digestOf renders one asset's content digest in the manifest's sha256 form.
+func digestOf(t *testing.T, data []byte) string {
+	t.Helper()
+	sum := sha256.Sum256(data)
+	return fmt.Sprintf("sha256:%x", sum)
+}
+
+// marshalIndentedOutcome renders one normalized outcome with recursively
+// sorted keys, two-space indentation and one terminal newline, which is the
+// committed corpus asset layout.
+func marshalIndentedOutcome(outcome Outcome) ([]byte, error) {
+	raw, err := json.Marshal(outcome)
+	if err != nil {
+		return nil, err
+	}
+	var generic any
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	if err := dec.Decode(&generic); err != nil {
+		return nil, err
+	}
+	rendered, err := json.MarshalIndent(generic, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(rendered, '\n'), nil
+}
+
+// frameProtocolSelection is the framing producer's registration: the encode
+// case, the Go sources the framing rules are read from, and the two routes the
+// family executes.
+func frameProtocolSelection(t *testing.T, root string) ProtocolSelection {
+	t.Helper()
+	return ProtocolSelection{
+		ProducerID: frameProducerID,
+		Cases:      []CaseSpec{frameProtocolCandidate(t, root).Spec},
+		SourcePaths: map[string][]string{
+			frameFamily: {
+				"packages/shared/network/codec/frame.go",
+				"packages/shared/network/codec/frame_test.go",
+			},
+		},
+		Routes: []ConsumerRoute{
+			{FamilyID: frameFamily, Version: frameVersion, Operation: "decode"},
+			{FamilyID: frameFamily, Version: frameVersion, Operation: "encode"},
+		},
+	}
+}
+
+// frameProtocolManifest assembles the family-scoped selection the route runner
+// executes: the two frozen decode cases plus the encode candidate, with every
+// other family cleared so reconciliation accepts the scoped manifest.
+func frameProtocolManifest(t *testing.T, root string, encode CaseSpec) Inventory {
+	t.Helper()
+	frozen := loadRealManifest(t, root)
+
+	cases := append(frameCases(frozen), encode)
+	caseIDs := frameFamilyCaseIDs(cases, frameFamily)
+	sort.Strings(caseIDs)
+
+	cloned := Inventory{
+		SchemaVersion:  frozen.SchemaVersion,
+		SourceRevision: frozen.SourceRevision,
+		Identities:     frozen.Identities,
+		Families:       append([]Family(nil), frozen.Families...),
+		Cases:          cases,
+	}
+	for index := range cloned.Families {
+		if cloned.Families[index].ID != frameFamily {
+			cloned.Families[index].Cases = nil
+			continue
+		}
+		cloned.Families[index].Cases = caseIDs
+	}
+
+	encoded, err := encodeInventory(cloned)
+	if err != nil {
+		t.Fatalf("encode protocol working manifest: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "contracts.json")
+	if err := os.WriteFile(path, append(encoded, '\n'), 0o644); err != nil {
+		t.Fatalf("write protocol working manifest: %v", err)
+	}
+	loaded, err := LoadInventory(path)
+	if err != nil {
+		t.Fatalf("load protocol working manifest: %v", err)
+	}
+	return loaded
+}
+
+// frameProtocolScratchRoot stages the framing case assets in a harness-owned
+// temporary directory.
+//
+// The encode candidate's assets are not tracked yet, and a corpus case has to
+// resolve under the root the runner is given. The two frozen decode cases are
+// copied byte for byte from the tracked corpus, so the decode evidence the
+// runner executes is the frozen evidence and not a local restatement of it.
+func frameProtocolScratchRoot(t *testing.T, root string, candidate frameEncodeCandidate) string {
+	t.Helper()
+	staged := t.TempDir()
+	frozenDir := filepath.Join(staged, filepath.FromSlash(frameCorpusRelDir))
+	if err := os.MkdirAll(frozenDir, 0o755); err != nil {
+		t.Fatalf("create staged frame directory: %v", err)
+	}
+	for _, name := range []string{
+		"valid.bin", "valid.expected.json",
+		"noncanonical-length.bin", "noncanonical-length.expected.json",
+	} {
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(frameCorpusRelDir), name))
+		if err != nil {
+			t.Fatalf("read frozen frame asset %s: %v", name, err)
+		}
+		if err := os.WriteFile(filepath.Join(frozenDir, name), data, 0o644); err != nil {
+			t.Fatalf("stage frozen frame asset %s: %v", name, err)
+		}
+	}
+	for relative, data := range candidate.Assets {
+		target := filepath.Join(staged, filepath.FromSlash(relative))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			t.Fatalf("create staged parent for %s: %v", relative, err)
+		}
+		if err := os.WriteFile(target, data, 0o644); err != nil {
+			t.Fatalf("stage candidate asset %s: %v", relative, err)
+		}
+	}
+	return staged
+}
+
+// frameProtocolExportPublished guards the single publication per test process,
+// because the exporter's producer child is create-exclusive and more than one
+// test in this package observes the same framing candidate.
+var frameProtocolExportPublished bool
+
+// frameProtocolCandidates publishes the reviewed encode candidate and the
+// complete merged manifest candidate through the existing external exporter and
+// returns the published producer directory. An unset export variable publishes
+// nothing and returns "", so an ordinary test run never writes outside its own
+// temporary storage.
+func frameProtocolCandidates(t *testing.T, root string, candidate frameEncodeCandidate, merged Inventory) string {
+	t.Helper()
+	exportRoot := strings.TrimSpace(os.Getenv(runtimeOracleExportDirEnv))
+	if exportRoot == "" {
+		return ""
+	}
+	if frameProtocolExportPublished {
+		return filepath.Join(exportRoot, "runtime-oracle", "protocol-frame")
+	}
+	frameProtocolExportPublished = true
+
+	manifest, err := encodeInventory(merged)
+	if err != nil {
+		t.Fatalf("encode manifest candidate: %v", err)
+	}
+	assets := []generatedAsset{
+		{RelativePath: "contracts.json", Data: append(manifest, '\n')},
+	}
+	relatives := make([]string, 0, len(candidate.Assets))
+	for relative := range candidate.Assets {
+		relatives = append(relatives, relative)
+	}
+	sort.Strings(relatives)
+	for _, relative := range relatives {
+		assets = append(assets, generatedAsset{RelativePath: relative, Data: candidate.Assets[relative]})
+	}
+	published, err := exportGeneratedAssets(root, exportRoot, frameProducerID, assets)
+	if err != nil {
+		t.Fatalf("export protocol candidates: %v", err)
+	}
+	return published
+}
+
+// TestProtocolCorpusFrameEncodeProducesCanonicalBytes pins the encode producer
+// against the reviewed wire literal: packet ID 128 with payload [1,2,3] encodes
+// to the canonical length-prefixed frame `[5,0x80,0x01,1,2,3]`.
+func TestProtocolCorpusFrameEncodeProducesCanonicalBytes(t *testing.T) {
+	input, err := json.Marshal(frameEncodeRequest{PacketID: 128, Payload: "010203"})
+	if err != nil {
+		t.Fatalf("marshal encode input: %v", err)
+	}
+	outcome, encoded, err := runFrameEncode(CaseSpec{ID: frameEncodeCaseID}, input)
+	if err != nil {
+		t.Fatalf("runFrameEncode: %v", err)
+	}
+	if !bytes.Equal(encoded, frameEncodeWire) {
+		t.Fatalf("encoded frame = %x, want %x", encoded, frameEncodeWire)
+	}
+	if outcome.Kind != "ok" || outcome.Category != "frame" {
+		t.Fatalf("encode outcome = %#v, want an accepted frame", outcome)
+	}
+	if got := outcome.Fields["packet_id"]; got != uint32(128) {
+		t.Fatalf("packet_id = %#v, want 128", got)
+	}
+	if got := outcome.Fields["payload"]; got != "010203" {
+		t.Fatalf("payload = %#v, want 010203", got)
+	}
+	if got := outcome.Fields["payload_len"]; got != 3 {
+		t.Fatalf("payload_len = %#v, want 3", got)
+	}
+}
+
+// TestProtocolCorpusFrameEncodeRejectsOversizedPayload pins that the producer
+// classifies the production writer's own size refusal instead of recording an
+// accepted frame the writer never produces.
+func TestProtocolCorpusFrameEncodeRejectsOversizedPayload(t *testing.T) {
+	request := frameEncodeRequest{PacketID: 0, Payload: hex.EncodeToString(make([]byte, codec.MaxFrameBytes))}
+	input, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal encode input: %v", err)
+	}
+	outcome, encoded, err := runFrameEncode(CaseSpec{ID: frameEncodeCaseID}, input)
+	if err != nil {
+		t.Fatalf("runFrameEncode: %v", err)
+	}
+	if len(encoded) != 0 {
+		t.Fatalf("oversized encode published %d bytes", len(encoded))
+	}
+	if outcome.Kind != "error" || outcome.Category != "capacity" {
+		t.Fatalf("oversized encode outcome = %#v, want a capacity rejection", outcome)
+	}
+}
+
+// TestProtocolCorpusFrameEncodeExpectedIDMutationFailsComparison pins that the
+// recorded expectation is a byte-level commitment: replacing the expected
+// packet ID 128 with 127, even together with a digest computed for that
+// different frame, still fails comparison against what the producer encoded.
+func TestProtocolCorpusFrameEncodeExpectedIDMutationFailsComparison(t *testing.T) {
+	root := mustRepoRoot(t)
+	candidate := frameProtocolCandidate(t, root)
+
+	var wire bytes.Buffer
+	if err := codec.WriteFrame(&wire, 127, []byte{1, 2, 3}); err != nil {
+		t.Fatalf("write mutated frame: %v", err)
+	}
+	mutatedSum := sha256.Sum256(wire.Bytes())
+	mutated := candidate.Expect
+	mutated.EncodedPayloadDigest = fmt.Sprintf("sha256:%x", mutatedSum)
+	fields := make(map[string]any, len(candidate.Expect.Fields))
+	for key, value := range candidate.Expect.Fields {
+		fields[key] = value
+	}
+	fields["packet_id"] = uint32(127)
+	mutated.Fields = fields
+
+	if outcomesEqual(mutated, candidate.Expect) {
+		t.Fatal("mutated expectation compares equal to the reviewed expectation")
+	}
+
+	input, err := json.Marshal(frameEncodeRequest{PacketID: 128, Payload: "010203"})
+	if err != nil {
+		t.Fatalf("marshal encode input: %v", err)
+	}
+	produced, encoded, err := runFrameEncode(CaseSpec{ID: frameEncodeCaseID}, input)
+	if err != nil {
+		t.Fatalf("runFrameEncode: %v", err)
+	}
+	if bytes.Equal(encoded, wire.Bytes()) {
+		t.Fatal("producer encoded the mutated packet id")
+	}
+	if outcomesEqual(produced, mutated) {
+		t.Fatal("produced outcome compares equal to the mutated expectation")
+	}
+}
+
+// TestProtocolCorpusFrameCandidatesExportForReview publishes the reviewed
+// candidate when the harness names an external export directory and proves the
+// published manifest reloads and reconciles. With no directory named, nothing
+// is published and the tracked corpus is untouched.
+func TestProtocolCorpusFrameCandidatesExportForReview(t *testing.T) {
+	root := mustRepoRoot(t)
+	before := computeTrackedCorpusDigest(t, root)
+	defer assertTrackedCorpusUnchanged(t, root, before)
+
+	candidate := frameProtocolCandidate(t, root)
+	merged, err := mergeProtocolSelections(root, loadRealManifest(t, root), frameProtocolSelection(t, root))
+	if err != nil {
+		t.Fatalf("mergeProtocolSelections: %v", err)
+	}
+
+	published := frameProtocolCandidates(t, root, candidate, merged)
+	if strings.TrimSpace(os.Getenv(runtimeOracleExportDirEnv)) == "" {
+		if published != "" {
+			t.Fatalf("published %s with the export variable unset", published)
+		}
+		return
+	}
+	if published == "" {
+		t.Fatal("no candidate was published")
+	}
+	for _, relative := range []string{"contracts.json"} {
+		path := filepath.Join(published, filepath.FromSlash(relative))
+		if _, statErr := os.Lstat(path); statErr != nil {
+			t.Fatalf("candidate %s is missing: %v", relative, statErr)
+		}
+	}
+	for relative := range candidate.Assets {
+		path := filepath.Join(published, filepath.FromSlash(relative))
+		if _, statErr := os.Lstat(path); statErr != nil {
+			t.Fatalf("candidate asset %s is missing: %v", relative, statErr)
+		}
+	}
+	written, err := os.ReadFile(filepath.Join(published, "contracts.json"))
+	if err != nil {
+		t.Fatalf("read manifest candidate: %v", err)
+	}
+	encoded, err := encodeInventory(merged)
+	if err != nil {
+		t.Fatalf("encode merged manifest: %v", err)
+	}
+	if !bytes.Equal(written, append(encoded, '\n')) {
+		t.Fatal("manifest candidate is not the encoded merged manifest")
+	}
+	reloaded, err := LoadInventory(filepath.Join(published, "contracts.json"))
+	if err != nil {
+		t.Fatalf("reload manifest candidate: %v", err)
+	}
+	if err := verifyProtocolManifest(root, loadRealManifest(t, root), reloaded); err != nil {
+		t.Fatalf("manifest candidate does not reconcile: %v", err)
+	}
 }
