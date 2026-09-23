@@ -1,0 +1,10 @@
+{
+  "category": "packet",
+  "fields": {
+    "pitch": "3fc00000",
+    "sequence": "0",
+    "yaw": "80000000"
+  },
+  "kind": "ok"
+}
+

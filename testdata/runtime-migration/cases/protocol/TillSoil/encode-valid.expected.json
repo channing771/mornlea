@@ -1,0 +1,11 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:8ea6368ecb8f0916da3ab55e7d83191c170065c756fc8e83f649ec0e1bfbaed8",
+  "fields": {
+    "pitch": "3fc00000",
+    "sequence": "0",
+    "yaw": "80000000"
+  },
+  "kind": "ok"
+}
+
