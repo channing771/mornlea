@@ -639,7 +639,7 @@ fn command_rejected_rejects_unknown_reason_and_malformed_payload() {
 #[test]
 fn select_hotbar_round_trip_preserves_golden_bytes() {
     let select = mornlea_protocol::SelectHotbar::new(9, 8).expect("select");
-    let payload = select.encode();
+    let payload = select.encode().expect("encode select");
     assert_eq!(
         payload,
         [0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08]
@@ -673,7 +673,8 @@ fn select_hotbar_rejects_invalid_slot_and_malformed_payload() {
     let first = mornlea_protocol::SelectHotbar::new(0, 0).expect("slot zero");
     assert_eq!(first.slot, 0);
     assert_eq!(
-        mornlea_protocol::SelectHotbar::decode(&first.encode()).expect("decode slot zero"),
+        mornlea_protocol::SelectHotbar::decode(&first.encode().expect("encode slot zero"))
+            .expect("decode slot zero"),
         first
     );
 }
@@ -908,7 +909,7 @@ fn close_container_rejects_malformed_payload_and_accepts_zero_sequence() {
 #[test]
 fn place_block_round_trip_preserves_golden_bytes() {
     let place = mornlea_protocol::PlaceBlock::new(3, 2.0, -1.0, 4).expect("place");
-    let payload = place.encode();
+    let payload = place.encode().expect("encode place");
     assert_eq!(
         payload,
         [
@@ -969,7 +970,8 @@ fn place_block_rejects_invalid_slot_non_finite_and_malformed_payload() {
     assert_eq!(first.slot, 0);
     assert_eq!(last.slot, 8);
     assert_eq!(
-        mornlea_protocol::PlaceBlock::decode(&first.encode()).expect("decode slot zero"),
+        mornlea_protocol::PlaceBlock::decode(&first.encode().expect("encode slot zero"))
+            .expect("decode slot zero"),
         first
     );
 }
@@ -1037,7 +1039,7 @@ fn request_chunk_resync_round_trip_preserves_golden_bytes() {
         3,
         5,
     );
-    let payload = resync.encode();
+    let payload = resync.encode().expect("encode resync");
     assert_eq!(
         payload,
         [
@@ -1054,7 +1056,8 @@ fn request_chunk_resync_round_trip_preserves_golden_bytes() {
     let depths =
         mornlea_protocol::RequestChunkResync::new(0, mornlea_domain::Dimension::DEPTHS, -1, -1, 0);
     assert_eq!(
-        mornlea_protocol::RequestChunkResync::decode(&depths.encode()).expect("decode depths"),
+        mornlea_protocol::RequestChunkResync::decode(&depths.encode().expect("encode depths"))
+            .expect("decode depths"),
         depths
     );
 }
@@ -1775,7 +1778,7 @@ fn player_input_round_trip_preserves_golden_bytes() {
     let input =
         mornlea_protocol::PlayerInput::new(1, -1, 1, true, 1.5, -0.5, true, false, false, false)
             .expect("input");
-    let payload = input.encode();
+    let payload = input.encode().expect("encode input");
     assert_eq!(
         payload,
         [
@@ -1797,7 +1800,8 @@ fn player_input_round_trip_preserves_golden_bytes() {
         mornlea_protocol::PlayerInput::new(2, 0, 0, false, 0.0, 0.0, false, true, false, false)
             .expect("eating input");
     assert_eq!(
-        mornlea_protocol::PlayerInput::decode(&eating.encode()).expect("decode eating"),
+        mornlea_protocol::PlayerInput::decode(&eating.encode().expect("encode eating"))
+            .expect("decode eating"),
         eating
     );
 }

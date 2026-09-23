@@ -183,6 +183,22 @@ and the isolated export helpers (`exportGeneratedAssets`,
   invalid-string rejection as `invalid-value`. The Rust control message reader
   reports the same boundary as its `Truncated` error, so both implementations
   publish one category.
+- The third packet producer group is `protocol_client_control_test.go`
+  (`protocol.client.PlayerInput`, `protocol.client.PlaceBlock`,
+  `protocol.client.RequestChunkResync` and `protocol.client.SelectHotbar`,
+  decode and encode). It executes `codec.DecodeClient`/`EncodeClient` in the
+  play state with the case's own `PacketKey`, normalizes the DTO fields
+  (`sequence` and `have_revision` as decimal strings, the `i8` axes, chunk
+  coordinates and slot as declared integers, the four action flags as
+  booleans, and the two look angles as eight-digit lowercase-hexadecimal bit
+  strings), and reads every encoded payload back through the decoder before
+  publishing it. The bit-string encoding is what carries a `-0.0` angle
+  through the JSON encode requests unchanged. Its category table resolves the
+  primitive and validator failures the Go codec names for these families:
+  `invalid boolean` is the one invalid-enum boundary, while a non-finite
+  angle, an out-of-range hotbar slot and an unknown resync dimension classify
+  at their own boundaries, so the Rust consumer publishes the same category
+  from its `ProtocolError` variants.
 - `validProducerIDs` is the closed exporter allowlist. It carries the 18
   protocol group producer IDs the v45 packet plan names
   (`runtime-oracle/protocol-negotiation`, `-control`, `-client-control`,

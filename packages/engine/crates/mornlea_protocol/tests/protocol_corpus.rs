@@ -14,7 +14,11 @@
 //! `LoginStart::decode_inbound` and the strict outbound record encoders. The
 //! second group is the seven non-gameplay control families, executed here
 //! through their common fallible surface (`validate` → checked `encoded_len`
-//! → capacity check → `encode_into`).
+//! → capacity check → `encode_into`). The third group is the four Play
+//! client-to-server control families (`PlayerInput`, `PlaceBlock`,
+//! `RequestChunkResync` and `SelectHotbar`), executed here through the same
+//! fallible surface, with the look angles published as their exact IEEE-754
+//! bits.
 //! `CorpusConsumer::Protocol` is registered here as `mornlea_protocol` so a
 //! packet case can name it, while the framing cases stay with the separate
 //! `corpus_frame` consumer the frame regression suite keeps using.
@@ -47,6 +51,11 @@ const LOGIN_REJECT_FAMILY: &str = "protocol.server.LoginReject";
 const KEEP_ALIVE_FAMILY: &str = "protocol.server.KeepAlive";
 const KEEP_ALIVE_REPLY_FAMILY: &str = "protocol.client.KeepAliveReply";
 const DISCONNECT_FAMILY: &str = "protocol.server.Disconnect";
+/// The four packet families the client control producer group registers.
+const PLAYER_INPUT_FAMILY: &str = "protocol.client.PlayerInput";
+const PLACE_BLOCK_FAMILY: &str = "protocol.client.PlaceBlock";
+const REQUEST_CHUNK_RESYNC_FAMILY: &str = "protocol.client.RequestChunkResync";
+const SELECT_HOTBAR_FAMILY: &str = "protocol.client.SelectHotbar";
 /// The packet families' protocol version, matching the manifest family rows.
 const PACKET_VERSION: &str = "45";
 /// The category label every accepted control packet outcome publishes.
@@ -284,6 +293,80 @@ fn text_field(case: &FrozenCase, name: &str) -> String {
         .get(name)
         .and_then(|value| value.as_str().map(str::to_owned))
         .unwrap_or_else(|| panic!("case {} names no {name}", case.id))
+}
+
+/// Renders one f32 as its eight-digit lowercase-hexadecimal bit string.
+///
+/// The corpus's canonical float encoding is the bit pattern rather than the
+/// numeric value, so a negative zero and a positive zero stay distinguishable
+/// after a JSON round trip.
+fn float_bits_text(value: f32) -> String {
+    format!("{:08x}", value.to_bits())
+}
+
+/// Reads one f32 bit-string field one encode case carries.
+fn float_bits_field(case: &FrozenCase, name: &str) -> f32 {
+    let text = case
+        .input_json
+        .as_ref()
+        .expect("encode case carries JSON fields")
+        .get(name)
+        .and_then(|value| value.as_str())
+        .unwrap_or_else(|| panic!("case {} names no {name}", case.id));
+    let bits = u32::from_str_radix(text, 16)
+        .unwrap_or_else(|_| panic!("case {} field {name} is not hexadecimal bits", case.id));
+    f32::from_bits(bits)
+}
+
+/// Reads one signed move-axis field one encode case carries.
+fn signed_axis_field(case: &FrozenCase, name: &str) -> i8 {
+    let value = case
+        .input_json
+        .as_ref()
+        .expect("encode case carries JSON fields")
+        .get(name)
+        .and_then(|value| value.as_i64())
+        .unwrap_or_else(|| panic!("case {} names no {name}", case.id));
+    i8::try_from(value).unwrap_or_else(|_| panic!("case {} field {name} exceeds i8", case.id))
+}
+
+/// Reads one boolean field one encode case carries.
+fn bool_field(case: &FrozenCase, name: &str) -> bool {
+    case.input_json
+        .as_ref()
+        .expect("encode case carries JSON fields")
+        .get(name)
+        .and_then(|value| value.as_bool())
+        .unwrap_or_else(|| panic!("case {} names no {name}", case.id))
+}
+
+/// Reads one signed 32-bit chunk coordinate field one encode case carries.
+fn i32_field(case: &FrozenCase, name: &str) -> i32 {
+    let value = case
+        .input_json
+        .as_ref()
+        .expect("encode case carries JSON fields")
+        .get(name)
+        .and_then(|value| value.as_i64())
+        .unwrap_or_else(|| panic!("case {} names no {name}", case.id));
+    i32::try_from(value).unwrap_or_else(|_| panic!("case {} field {name} exceeds i32", case.id))
+}
+
+/// Renders one player input record's semantic fields, shared by the decode and
+/// encode arms so both publish the same canonical field encoding.
+fn player_input_fields(input: &mornlea_protocol::PlayerInput) -> serde_json::Value {
+    serde_json::json!({
+        "sequence": input.sequence.to_string(),
+        "move_x": input.move_x,
+        "move_z": input.move_z,
+        "jump": input.jump,
+        "yaw": float_bits_text(input.yaw),
+        "pitch": float_bits_text(input.pitch),
+        "mining": input.mining,
+        "eating": input.eating,
+        "sprinting": input.sprinting,
+        "sneaking": input.sneaking
+    })
 }
 
 /// Digests one produced payload the way the corpus records an encode outcome.
@@ -567,6 +650,153 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
             }
             other => panic!("unsupported packet operation for {}: {other}", case.id),
         },
+        PLAYER_INPUT_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::PlayerInput::decode(&case.input) {
+                Ok(input) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": {
+                        "sequence": input.sequence.to_string(),
+                        "move_x": input.move_x,
+                        "move_z": input.move_z,
+                        "jump": input.jump,
+                        "yaw": float_bits_text(input.yaw),
+                        "pitch": float_bits_text(input.pitch),
+                        "mining": input.mining,
+                        "eating": input.eating,
+                        "sprinting": input.sprinting,
+                        "sneaking": input.sneaking
+                    },
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                // The record is built through its public fields, so an invalid
+                // angle is refused by the production validation rather than by
+                // a constructor guard.
+                let input = mornlea_protocol::PlayerInput {
+                    sequence: unsigned_field(case, "sequence"),
+                    move_x: signed_axis_field(case, "move_x"),
+                    move_z: signed_axis_field(case, "move_z"),
+                    jump: bool_field(case, "jump"),
+                    yaw: float_bits_field(case, "yaw"),
+                    pitch: float_bits_field(case, "pitch"),
+                    mining: bool_field(case, "mining"),
+                    eating: bool_field(case, "eating"),
+                    sprinting: bool_field(case, "sprinting"),
+                    sneaking: bool_field(case, "sneaking"),
+                };
+                encode_ok_outcome(input.encode(), player_input_fields(&input))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        PLACE_BLOCK_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::PlaceBlock::decode(&case.input) {
+                Ok(place) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": {
+                        "sequence": place.sequence.to_string(),
+                        "yaw": float_bits_text(place.yaw),
+                        "pitch": float_bits_text(place.pitch),
+                        "slot": place.slot
+                    },
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let place = mornlea_protocol::PlaceBlock {
+                    sequence: unsigned_field(case, "sequence"),
+                    yaw: float_bits_field(case, "yaw"),
+                    pitch: float_bits_field(case, "pitch"),
+                    slot: byte_field(case, "slot"),
+                };
+                encode_ok_outcome(
+                    place.encode(),
+                    serde_json::json!({
+                        "sequence": place.sequence.to_string(),
+                        "yaw": float_bits_text(place.yaw),
+                        "pitch": float_bits_text(place.pitch),
+                        "slot": place.slot
+                    }),
+                )
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        REQUEST_CHUNK_RESYNC_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::RequestChunkResync::decode(&case.input) {
+                Ok(resync) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": {
+                        "sequence": resync.sequence.to_string(),
+                        "dimension": resync.dimension.get(),
+                        "chunk_x": resync.chunk_x,
+                        "chunk_z": resync.chunk_z,
+                        "have_revision": resync.have_revision.to_string()
+                    },
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                // The dimension field is the checked domain value, so an
+                // unknown raw dimension cannot be constructed at all: the
+                // observable rejection is published directly, which keeps the
+                // category identical to the Go validator's.
+                let dimension = match u8::try_from(unsigned_field(case, "dimension"))
+                    .ok()
+                    .and_then(|value| mornlea_domain::Dimension::new(value).ok())
+                {
+                    Some(dimension) => dimension,
+                    None => return packet_error(mornlea_protocol::ProtocolError::InvalidEnum),
+                };
+                let resync = mornlea_protocol::RequestChunkResync::new(
+                    unsigned_field(case, "sequence"),
+                    dimension,
+                    i32_field(case, "chunk_x"),
+                    i32_field(case, "chunk_z"),
+                    unsigned_field(case, "have_revision"),
+                );
+                encode_ok_outcome(
+                    resync.encode(),
+                    serde_json::json!({
+                        "sequence": resync.sequence.to_string(),
+                        "dimension": resync.dimension.get(),
+                        "chunk_x": resync.chunk_x,
+                        "chunk_z": resync.chunk_z,
+                        "have_revision": resync.have_revision.to_string()
+                    }),
+                )
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        SELECT_HOTBAR_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::SelectHotbar::decode(&case.input) {
+                Ok(select) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": {
+                        "sequence": select.sequence.to_string(),
+                        "slot": select.slot
+                    },
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let select = mornlea_protocol::SelectHotbar {
+                    sequence: unsigned_field(case, "sequence"),
+                    slot: byte_field(case, "slot"),
+                };
+                encode_ok_outcome(
+                    select.encode(),
+                    serde_json::json!({
+                        "sequence": select.sequence.to_string(),
+                        "slot": select.slot
+                    }),
+                )
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
         other => panic!("unsupported packet family for {}: {other}", case.id),
     }
 }
@@ -587,7 +817,11 @@ fn dispatch_case(case: &FrozenCase) -> serde_json::Value {
         | LOGIN_REJECT_FAMILY
         | KEEP_ALIVE_FAMILY
         | KEEP_ALIVE_REPLY_FAMILY
-        | DISCONNECT_FAMILY => dispatch_packet(case),
+        | DISCONNECT_FAMILY
+        | PLAYER_INPUT_FAMILY
+        | PLACE_BLOCK_FAMILY
+        | REQUEST_CHUNK_RESYNC_FAMILY
+        | SELECT_HOTBAR_FAMILY => dispatch_packet(case),
         other => panic!("unregistered protocol family for {}: {other}", case.id),
     }
 }
@@ -742,6 +976,82 @@ fn protocol_corpus_packet_control_cases_are_executed() {
         "the control selection does not carry the reviewed case set"
     );
     for case in control {
+        assert_eq!(
+            case.consumer,
+            CorpusConsumer::Protocol,
+            "case {} carries the wrong consumer",
+            case.id
+        );
+        assert!(
+            !case.operation.is_empty(),
+            "case {} names no operation",
+            case.id
+        );
+        assert_normalized(case, dispatch_packet(case));
+    }
+}
+
+/// The case identities the client control group registers. They mirror the Go
+/// producer's registration, so a case that only one side names is a mismatch
+/// rather than a shared name. The merged manifest sorts case IDs, so the
+/// comparison sorts this list too.
+const CLIENT_CONTROL_CASE_IDS: [&str; 19] = [
+    "protocol.client.PlaceBlock/45/decode-infinite-pitch",
+    "protocol.client.PlaceBlock/45/decode-slot-nine",
+    "protocol.client.PlaceBlock/45/decode-valid",
+    "protocol.client.PlaceBlock/45/encode-slot-nine",
+    "protocol.client.PlaceBlock/45/encode-valid",
+    "protocol.client.PlayerInput/45/decode-bool-two",
+    "protocol.client.PlayerInput/45/decode-nan-yaw",
+    "protocol.client.PlayerInput/45/decode-trailing-byte",
+    "protocol.client.PlayerInput/45/decode-valid",
+    "protocol.client.PlayerInput/45/encode-nan-yaw",
+    "protocol.client.PlayerInput/45/encode-valid",
+    "protocol.client.RequestChunkResync/45/decode-dimension-two",
+    "protocol.client.RequestChunkResync/45/decode-valid",
+    "protocol.client.RequestChunkResync/45/encode-dimension-two",
+    "protocol.client.RequestChunkResync/45/encode-valid",
+    "protocol.client.SelectHotbar/45/decode-slot-nine",
+    "protocol.client.SelectHotbar/45/decode-valid",
+    "protocol.client.SelectHotbar/45/encode-slot-nine",
+    "protocol.client.SelectHotbar/45/encode-valid",
+];
+
+/// Reports whether one family belongs to the client control producer group.
+fn is_client_control_family(family: &str) -> bool {
+    matches!(
+        family,
+        PLAYER_INPUT_FAMILY
+            | PLACE_BLOCK_FAMILY
+            | REQUEST_CHUNK_RESYNC_FAMILY
+            | SELECT_HOTBAR_FAMILY
+    )
+}
+
+#[test]
+fn protocol_corpus_packet_client_control_cases_are_executed() {
+    // The case assets are exported by the Go producer and integrated by the
+    // controller, so before that merge this test reports the missing corpus
+    // cases instead of an empty selection that would look like a passing run.
+    let cases = load_cases_for_consumer(CorpusConsumer::Protocol);
+    let client_control: Vec<&FrozenCase> = cases
+        .iter()
+        .filter(|case| is_client_control_family(&case.family))
+        .collect();
+    let executed: Vec<&str> = client_control.iter().map(|case| case.id.as_str()).collect();
+    let mut expected: Vec<&str> = CLIENT_CONTROL_CASE_IDS.to_vec();
+    // The merged manifest sorts case IDs; compare as the reviewed set, not in
+    // the authoring order of this suite's constant.
+    expected.sort_unstable();
+    assert_eq!(
+        executed, expected,
+        "the client control selection does not carry the reviewed case set"
+    );
+    assert!(
+        !client_control.is_empty(),
+        "the client control selection executed zero cases"
+    );
+    for case in client_control {
         assert_eq!(
             case.consumer,
             CorpusConsumer::Protocol,

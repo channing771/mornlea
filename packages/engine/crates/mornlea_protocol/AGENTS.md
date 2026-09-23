@@ -107,6 +107,42 @@ rather than checking that it omits a few names.
   consumer, produced by the real Go codec in
   `packages/tools/cmd/runtime-oracle/protocol_control_test.go`.
 
+## Client control packets (`src/player_input.rs`, `src/place_block.rs`, `src/request_chunk_resync.rs`, `src/select_hotbar.rs`, `tests/protocol_client_control.rs`)
+
+- The four Play client-to-server control families share the common fallible
+  surface in design §4: `validate(&self)` rechecks every public field on each
+  call, checked `encoded_len(&self)` sizes the validated record,
+  `encode_into(&self, dst)` publishes into a caller-owned buffer,
+  `encode(&self)` is the allocating wrapper over it, and `decode(payload)`
+  stays a bounded read plus `done()` plus validation. The infallible
+  `encode`-returning-`Vec` signatures are gone, so a record mutated into an
+  invalid value after construction is refused instead of silently published,
+  and a short destination reports `OutputTooSmall { needed, available }`
+  with every destination byte unchanged. An invalid value always wins over a
+  short destination.
+- The shared publication half is the control group's crate-private
+  `publish_packet(length, dst, write)` in `server_hello.rs`; `SliceWriter`
+  (`src/bytes.rs`) performs no semantic validation and publishes the look
+  angles as their exact IEEE-754 bits, so a `-0.0` yaw or pitch survives the
+  round trip where an `f32 ==` comparison cannot tell the two zeros apart.
+- The validation order follows the Go validators: `PlayerInput` checks the
+  finite rotation through the domain `LookAngles` and leaves the move axes
+  and the pitch unrestricted at the protocol boundary; `PlaceBlock` checks
+  the finite rotation and then the domain `HotbarSlot` range; `SelectHotbar`
+  checks the slot range; `RequestChunkResync::validate` is total because the
+  dimension is the checked domain `Dimension` and the coordinates and the
+  held revision carry no rule. The resync decoder matches the raw `i32`
+  dimension against the known IDs instead of narrowing it to a `u8`, so a
+  value such as `256` is an `InvalidEnum` rather than a reinterpreted
+  dimension.
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.client.{PlayerInput, PlaceBlock,
+  RequestChunkResync, SelectHotbar}` each register a decode and an encode
+  route under the `mornlea_protocol` consumer, produced by the real Go codec
+  in `packages/tools/cmd/runtime-oracle/protocol_client_control_test.go`. The
+  look angles are published and requested as eight-digit hexadecimal bit
+  strings, so the corpus carries the bit pattern rather than the number.
+
 ## Client hello (`src/client_hello.rs`, `src/admission.rs`, `tests/runtime_contract.rs`, `tests/protocol_admission.rs`)
 
 - Handshake packet ID 0 payload is a canonical protocol-version uvarint.
@@ -254,13 +290,16 @@ rather than checking that it omits a few names.
   `command_rejected_round_trip_preserves_frozen_reason_ids`,
   `command_rejected_rejects_unknown_reason_and_malformed_payload`).
 
-## Select hotbar (`src/select_hotbar.rs`, `tests/runtime_contract.rs`)
+## Select hotbar (`src/select_hotbar.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_control.rs`)
 
 - Play packet ID 5 payload is a little-endian `u64` sequence followed by a
   hotbar slot u8. Slot must be inside domain `HotbarSlot` (`0..=8`).
   Out-of-range slots are `InvalidRange`; trailing bytes fail before
   publication (`select_hotbar_round_trip_preserves_golden_bytes`,
   `select_hotbar_rejects_invalid_slot_and_malformed_payload`).
+- The family carries the client control group's fallible surface, so a record
+  mutated into slot 9 after construction is refused instead of silently
+  published (`client_control_invalid_value_wins_over_short_capacity`).
 
 ## Drop selected item (`src/drop_selected_item.rs`, `tests/runtime_contract.rs`)
 
@@ -314,7 +353,7 @@ rather than checking that it omits a few names.
   (`close_container_round_trip_preserves_golden_bytes`,
   `close_container_rejects_malformed_payload_and_accepts_zero_sequence`).
 
-## Place block (`src/place_block.rs`, `src/bytes.rs`, `tests/runtime_contract.rs`)
+## Place block (`src/place_block.rs`, `src/bytes.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_control.rs`)
 
 - Play packet ID 2 payload is a little-endian `u64` sequence, two
   little-endian `f32` look angles, and a hotbar slot byte. Slot must be
@@ -322,6 +361,10 @@ rather than checking that it omits a few names.
   `InvalidFloat`; out-of-range slots are `InvalidRange`; trailing bytes
   fail before publication (`place_block_round_trip_preserves_golden_bytes`,
   `place_block_rejects_invalid_slot_non_finite_and_malformed_payload`).
+- The family carries the client control group's fallible surface, so a record
+  mutated into an out-of-range slot or a non-finite angle after construction
+  is refused instead of silently published
+  (`client_control_invalid_value_wins_over_short_capacity`).
 - `ByteEncoder` / `ByteDecoder` `f32` helpers copy the Go primitive: NaN
   and Inf fail before a payload is published.
 
@@ -336,7 +379,7 @@ rather than checking that it omits a few names.
   (`open_container_round_trip_preserves_golden_bytes`,
   `open_container_rejects_non_finite_and_malformed_payload`).
 
-## Request chunk resync (`src/request_chunk_resync.rs`, `tests/runtime_contract.rs`)
+## Request chunk resync (`src/request_chunk_resync.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_control.rs`)
 
 - Play packet ID 3 payload is a little-endian `u64` sequence, the target
   dimension, two little-endian chunk coordinates, and the revision the
@@ -346,6 +389,12 @@ rather than checking that it omits a few names.
   Truncated payloads and trailing bytes fail before publication
   (`request_chunk_resync_round_trip_preserves_golden_bytes`,
   `request_chunk_resync_rejects_unknown_dimension_and_malformed_payload`).
+- The decoder matches the raw wire `i32` against the two known dimension IDs
+  instead of narrowing it to a `u8`, so a value such as `256` is an
+  `InvalidEnum` rather than a reinterpreted dimension
+  (`client_control_decode_rejects_the_pinned_invalid_values`), and
+  `validate` stays total because the dimension is the checked domain value
+  (`client_control_request_chunk_resync_has_no_invalid_value_to_mutate_into`).
 - `ByteEncoder` / `ByteDecoder` `i32` helpers use two's-complement
   little-endian encoding, matching the Go primitive.
 
@@ -484,7 +533,7 @@ rather than checking that it omits a few names.
   `CommandText` is the chat node's change, so the local copy stays until then
   and must not drift from the domain bounds.
 
-## Player input (`src/player_input.rs`, `tests/runtime_contract.rs`)
+## Player input (`src/player_input.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_control.rs`)
 
 - Play packet ID 0 payload is the highest-frequency record: a `u64`
   sequence, two `i8` move axes, four action flags around two `f32` look
@@ -495,6 +544,12 @@ rather than checking that it omits a few names.
   byte is `InvalidEnum`; truncated payloads and trailing bytes fail
   before publication (`player_input_round_trip_preserves_golden_bytes`,
   `player_input_rejects_non_finite_and_malformed_payload`).
+- The family carries the client control group's fallible surface, so a record
+  mutated into a non-finite rotation after construction is refused instead of
+  silently published (`client_control_invalid_value_wins_over_short_capacity`).
+  The move axes and the pitch stay unrestricted at the protocol boundary, and
+  the angles are published as their exact IEEE-754 bits, so a `-0.0` yaw
+  survives the round trip (`client_control_negative_zero_and_wide_values_keep_their_wire_shapes`).
 
 ## Combat hit (`src/combat_hit.rs`, `tests/runtime_contract.rs`)
 
@@ -992,6 +1047,7 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_frame --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_control --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_client_control --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
 
@@ -1017,6 +1073,14 @@ destination for every mutable field, every proper truncation of every canonical
 payload rejects, one trailing byte rejects, and an incomplete message payload
 reports `Truncated`. It needs no corpus files, so it runs before the
 controller integrates the exported candidates.
+
+`tests/protocol_client_control.rs` pins the four Play client-to-server control
+records through the same surface: the reviewed wire bytes round-trip through
+`validate`/`encoded_len`/`encode_into`/`encode`, a `-0.0` look angle keeps its
+`0x80000000` bit pattern, the full `i8` axes and the unrestricted pitch are not
+clamped, the resync family's total gate survives extreme legal field values,
+and the resync dimension is refused by ID match rather than by a `u8` narrowing
+cast. It also needs no corpus files.
 
 `tests/protocol_corpus.rs` executes the corpus cases this crate owns through
 the real codec paths — `read_frame`/`write_frame` for framing and
