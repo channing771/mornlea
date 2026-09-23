@@ -139,3 +139,21 @@
 **Rollback:** revert `136811d7` and `13ea634e` individually; the six families return to `cases: null` and the corpus index returns to 779.
 
 **Architecture skill: no change.**
+
+## Node 2.4 — 2026-09-23
+
+**Status:** complete. Commits `b348b0e5` (`fix(protocol): validate all stack-view references`) + review-fix `734564bf` (`docs(protocol): correct stack-view reference wording`) + controller integration `1143189e` (`chore(corpus): integrate stack-view command evidence`) on top of `b4c6f70a`.
+
+**Deliverable:** the four container and view-addressed families (`MoveContainerStack` 9, `MoveStackPartial` 19, `QuickMoveStack` 20, `DropStack` 21) on the common fallible surface with real container-reference validation: the shared private `validate_stack_view` requires the exact all-zero `NONE` sentinel in views 0/1 and runs `to_domain_present` in view 2 before index bounds; `MoveContainerStack`'s gate reorders to ref → same-slot → per-kind range → furnace-output-target, matching Go; `ContainerRef::read` keeps the raw i32 dimension untouched (the node-1.3 raw-fidelity contract now pinned at the conversion layer — `to_domain_present` refuses 256/−1 — with the packet gate refusing at the boundary). 29 corpus cases (10/9/5/5) through the real Go codec, producer `runtime-oracle/protocol-client-stack-views`; 8 routes registered and pinned; group test `tests/protocol_client_stack_views.rs`; mechanical `runtime_contract.rs` updates (no fixture repair needed); AGENTS.md sync.
+
+**Controller ruling frozen by this node:** every corpus case and group-test negative carries exactly ONE violation — kind∉{0,1} combined with a nonzero dimension classifies differently on the two sides (Go kind-first → invalid-enum; Rust neutral conversion dimension-first → invalid-value) — the ruling node 1.3 deferred to this node.
+
+**Controller arithmetic slips (recorded):** the brief's stride prose said 28/31/27/27; the binding wire literals and Go codec publish 28/30/28/28, which the implementer pinned. The brief's parenthetical mutation bytes for two MoveStackPartial cases described a different single-violation mutation than implemented; the implemented bytes are single-violation and category-identical (reviewer verified).
+
+**Evidence:** group test 14/14; `runtime_contract` 134/134; `protocol_values` 8/8 with the renamed pin; Go producer 8/8 over 29 cases; `TestStackSplit|TestDropStack` 6/6; fmt/clippy/gofmt/vet clean; full oracle package `ok`; audit `ok`. Corpus integrity: exactly 4 families changed, 807→836 strict superset (+29/−0), `source_revision` preserved; controller spot-checked the furnace ref literal, the NONE-sentinel QuickMove vector, the single-violation unknown-view mutation and the nested zero-object encode request. Post-integration whole protocol crate 230/230 with the 29 cases executed.
+
+**Review ruling:** initially Needs fixes on two Important documentation defects (a stale "until their node lands" clause and a kind-first claim contradicting `validate_any`'s dimension-first delegation); controller applied the reviewer's prescribed one-line corrections plus three same-file doc Minors (stale phrasing in `protocol_values.rs`' module doc and the guide summary, missing Focused Verification entry) as commit `734564bf` — re-review dispensed with as proportionate for verbatim one-line doc fixes; grep evidence shows the stale clauses gone and both suites green. Deferred Minors for final review: the either-variant matcher in one pinned-invalid test (exact variants pinned elsewhere); two stale dispatch styles coexisting in `MoveContainerStack::valid`; report-file inaccuracies about two case bytes.
+
+**Rollback:** revert `b348b0e5`, `734564bf` and `1143189e` individually; the four families return to `cases: null` and the corpus index returns to 807.
+
+**Architecture skill: no change.**
