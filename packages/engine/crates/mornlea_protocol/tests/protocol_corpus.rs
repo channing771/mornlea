@@ -77,7 +77,13 @@
 //! total order, where the raw wire dimension comes first and is never
 //! narrowed, both apply the minimum-records batch rule so a padded payload
 //! answers at the trailing-byte boundary, and the exact empty stack triple
-//! stays wire-valid.
+//! stays wire-valid. The twelfth group is the three hostile-mob publication
+//! families (`HostileSpawn`, `HostileState` and `HostileDespawn`), executed
+//! through the same fallible surface; all three order their records by the
+//! checked domain `HostileId`, all three apply the exact-remaining-length
+//! batch rule so a padded payload answers at the truncation boundary, and the
+//! spawn record carries the dimension the state record omits while the state
+//! record carries the velocity the spawn record omits.
 //!
 //! A packet case whose assets the controller has not integrated yet fails
 //! here as a missing corpus case rather than as a silently empty selection,
@@ -162,6 +168,10 @@ const COMPANION_STATES_FAMILY: &str = "protocol.server.CompanionStates";
 /// The two packet families the item drop producer group registers.
 const ITEM_DROP_UPSERTS_FAMILY: &str = "protocol.server.ItemDropUpserts";
 const ITEM_DROP_REMOVES_FAMILY: &str = "protocol.server.ItemDropRemoves";
+/// The three packet families the hostile mob producer group registers.
+const HOSTILE_SPAWN_FAMILY: &str = "protocol.server.HostileSpawn";
+const HOSTILE_STATE_FAMILY: &str = "protocol.server.HostileState";
+const HOSTILE_DESPAWN_FAMILY: &str = "protocol.server.HostileDespawn";
 /// The packet families' protocol version, matching the manifest family rows.
 const PACKET_VERSION: &str = "45";
 /// The category label every accepted control packet outcome publishes.
@@ -1924,6 +1934,247 @@ fn item_drop_removes_request(case: &FrozenCase) -> mornlea_protocol::ItemDropRem
     mornlea_protocol::ItemDropRemoves { server_tick, ids }
 }
 
+/// Renders one hostile spawn record's semantic fields.
+///
+/// The identity publishes as a decimal string so the full `u64` range stays
+/// lossless, the dimension as the plain wire integer, the pose as bit strings so
+/// a negative zero stays distinct, and the health and kind as JSON numbers.
+fn hostile_spawn_record_fields(record: &mornlea_protocol::HostileSpawnRecord) -> serde_json::Value {
+    serde_json::json!({
+        "id": record.id.get().to_string(),
+        "dimension": i32::from(record.dimension.get()),
+        "position": [
+            float_bits_text(record.position[0]),
+            float_bits_text(record.position[1]),
+            float_bits_text(record.position[2])
+        ],
+        "yaw": float_bits_text(record.yaw),
+        "health": record.health,
+        "kind": record.kind
+    })
+}
+
+/// Renders one hostile spawn batch's semantic fields.
+///
+/// The records publish in wire order, never sorted, so a batch the authority
+/// ordered is observed in the order it carried.
+fn hostile_spawn_fields(spawn: &mornlea_protocol::HostileSpawn) -> serde_json::Value {
+    let records: Vec<serde_json::Value> = spawn
+        .spawns
+        .iter()
+        .map(hostile_spawn_record_fields)
+        .collect();
+    serde_json::json!({
+        "server_tick": spawn.server_tick.to_string(),
+        "spawns": records
+    })
+}
+
+/// Renders one hostile state record's semantic fields, which carry the velocity
+/// the spawn record never carries and no dimension at all.
+fn hostile_state_record_fields(record: &mornlea_protocol::HostileStateRecord) -> serde_json::Value {
+    serde_json::json!({
+        "id": record.id.get().to_string(),
+        "position": [
+            float_bits_text(record.position[0]),
+            float_bits_text(record.position[1]),
+            float_bits_text(record.position[2])
+        ],
+        "velocity": [
+            float_bits_text(record.velocity[0]),
+            float_bits_text(record.velocity[1]),
+            float_bits_text(record.velocity[2])
+        ],
+        "yaw": float_bits_text(record.yaw),
+        "health": record.health,
+        "kind": record.kind
+    })
+}
+
+/// Renders one hostile state batch's semantic fields.
+fn hostile_state_fields(state: &mornlea_protocol::HostileState) -> serde_json::Value {
+    let records: Vec<serde_json::Value> = state
+        .states
+        .iter()
+        .map(hostile_state_record_fields)
+        .collect();
+    serde_json::json!({
+        "server_tick": state.server_tick.to_string(),
+        "states": records
+    })
+}
+
+/// Renders one hostile despawn batch's semantic fields.
+fn hostile_despawn_fields(despawn: &mornlea_protocol::HostileDespawn) -> serde_json::Value {
+    let ids: Vec<String> = despawn.ids.iter().map(|id| id.get().to_string()).collect();
+    serde_json::json!({
+        "server_tick": despawn.server_tick.to_string(),
+        "ids": ids
+    })
+}
+
+/// Reads one hostile identity an encode case carries.
+///
+/// The identity is the checked domain `HostileId`, so a zero value is refused at
+/// the identity boundary rather than being reinterpreted.
+fn hostile_id_field(value: &serde_json::Value) -> Result<mornlea_protocol::HostileId, ()> {
+    let id = value.as_u64().ok_or(())?;
+    mornlea_protocol::HostileId::try_new(id).map_err(|_| ())
+}
+
+/// Reads one dimension an encode case carries, mapping an unknown value to the
+/// enum boundary the decoder publishes for the same bytes.
+fn hostile_dimension_field(
+    value: &serde_json::Value,
+) -> Result<mornlea_domain::Dimension, mornlea_protocol::ProtocolError> {
+    let dimension = value
+        .as_i64()
+        .ok_or(mornlea_protocol::ProtocolError::InvalidEnum)?;
+    let narrowed = u8::try_from(dimension).unwrap_or(u8::MAX);
+    mornlea_domain::Dimension::new(narrowed)
+        .map_err(|_| mornlea_protocol::ProtocolError::InvalidEnum)
+}
+
+/// Reads one three-component bit-string array an encode case carries.
+fn hostile_bits_array(entry: &serde_json::Value, name: &str) -> Result<[f32; 3], ()> {
+    let values = entry
+        .get(name)
+        .and_then(|value| value.as_array())
+        .ok_or(())?;
+    let mut parsed = [0f32; 3];
+    for (index, slot) in parsed.iter_mut().enumerate() {
+        let text = values
+            .get(index)
+            .and_then(|value| value.as_str())
+            .ok_or(())?;
+        let bits = u32::from_str_radix(text, 16).map_err(|_| ())?;
+        *slot = f32::from_bits(bits);
+    }
+    Ok(parsed)
+}
+
+/// Reads one single bit-string field an encode case carries.
+fn hostile_bits_text(entry: &serde_json::Value, name: &str) -> Result<f32, ()> {
+    let text = entry.get(name).and_then(|value| value.as_str()).ok_or(())?;
+    let bits = u32::from_str_radix(text, 16).map_err(|_| ())?;
+    Ok(f32::from_bits(bits))
+}
+
+/// Reads one unsigned record byte an encode case carries.
+fn hostile_byte(entry: &serde_json::Value, name: &str) -> Result<u8, ()> {
+    u8::try_from(entry.get(name).and_then(|value| value.as_u64()).ok_or(())?).map_err(|_| ())
+}
+
+/// Builds one hostile spawn record its JSON object names.
+fn hostile_spawn_record_request(
+    entry: &serde_json::Value,
+) -> Result<mornlea_protocol::HostileSpawnRecord, mornlea_protocol::ProtocolError> {
+    let id = hostile_id_field(
+        entry
+            .get("id")
+            .ok_or(mornlea_protocol::ProtocolError::InvalidIdentity)?,
+    )
+    .map_err(|_| mornlea_protocol::ProtocolError::InvalidIdentity)?;
+    let dimension = hostile_dimension_field(
+        entry
+            .get("dimension")
+            .ok_or(mornlea_protocol::ProtocolError::InvalidEnum)?,
+    )?;
+    let position = hostile_bits_array(entry, "position")
+        .map_err(|_| mornlea_protocol::ProtocolError::InvalidFloat)?;
+    let yaw = hostile_bits_text(entry, "yaw")
+        .map_err(|_| mornlea_protocol::ProtocolError::InvalidFloat)?;
+    let health =
+        hostile_byte(entry, "health").map_err(|_| mornlea_protocol::ProtocolError::InvalidRange)?;
+    let kind =
+        hostile_byte(entry, "kind").map_err(|_| mornlea_protocol::ProtocolError::InvalidEnum)?;
+    Ok(mornlea_protocol::HostileSpawnRecord {
+        id,
+        dimension,
+        position,
+        yaw,
+        health,
+        kind,
+    })
+}
+
+/// Builds one hostile state record its JSON object names.
+fn hostile_state_record_request(
+    entry: &serde_json::Value,
+) -> Result<mornlea_protocol::HostileStateRecord, mornlea_protocol::ProtocolError> {
+    let id = hostile_id_field(
+        entry
+            .get("id")
+            .ok_or(mornlea_protocol::ProtocolError::InvalidIdentity)?,
+    )
+    .map_err(|_| mornlea_protocol::ProtocolError::InvalidIdentity)?;
+    let position = hostile_bits_array(entry, "position")
+        .map_err(|_| mornlea_protocol::ProtocolError::InvalidFloat)?;
+    let velocity = hostile_bits_array(entry, "velocity")
+        .map_err(|_| mornlea_protocol::ProtocolError::InvalidFloat)?;
+    let yaw = hostile_bits_text(entry, "yaw")
+        .map_err(|_| mornlea_protocol::ProtocolError::InvalidFloat)?;
+    let health =
+        hostile_byte(entry, "health").map_err(|_| mornlea_protocol::ProtocolError::InvalidRange)?;
+    let kind =
+        hostile_byte(entry, "kind").map_err(|_| mornlea_protocol::ProtocolError::InvalidEnum)?;
+    Ok(mornlea_protocol::HostileStateRecord {
+        id,
+        position,
+        velocity,
+        yaw,
+        health,
+        kind,
+    })
+}
+
+/// Builds the hostile spawn batch one encode case names from its typed fields.
+///
+/// The record is built through its public fields, so a mutated or invalid case
+/// is refused by the production validation rather than by a constructor guard.
+fn hostile_spawn_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::HostileSpawn, mornlea_protocol::ProtocolError> {
+    let server_tick = unsigned_field(case, "server_tick");
+    let mut spawns = Vec::new();
+    for entry in record_array(case, "spawns") {
+        spawns.push(hostile_spawn_record_request(entry)?);
+    }
+    Ok(mornlea_protocol::HostileSpawn {
+        server_tick,
+        spawns,
+    })
+}
+
+/// Builds the hostile state batch one encode case names from its typed fields.
+fn hostile_state_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::HostileState, mornlea_protocol::ProtocolError> {
+    let server_tick = unsigned_field(case, "server_tick");
+    let mut states = Vec::new();
+    for entry in record_array(case, "states") {
+        states.push(hostile_state_record_request(entry)?);
+    }
+    Ok(mornlea_protocol::HostileState {
+        server_tick,
+        states,
+    })
+}
+
+/// Builds the hostile despawn batch one encode case names from its typed fields.
+fn hostile_despawn_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::HostileDespawn, mornlea_protocol::ProtocolError> {
+    let server_tick = unsigned_field(case, "server_tick");
+    let mut ids = Vec::new();
+    for entry in record_array(case, "ids") {
+        let id = hostile_id_field(entry)
+            .map_err(|_| mornlea_protocol::ProtocolError::InvalidIdentity)?;
+        ids.push(id);
+    }
+    Ok(mornlea_protocol::HostileDespawn { server_tick, ids })
+}
+
 /// Builds the inventory state one encode case names from its typed fields.
 ///
 /// The record is built through its public fields, so a mutated or invalid
@@ -3194,6 +3445,60 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
             }
             other => panic!("unsupported packet operation for {}: {other}", case.id),
         },
+        HOSTILE_SPAWN_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::HostileSpawn::decode(&case.input) {
+                Ok(spawn) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": hostile_spawn_fields(&spawn),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let spawn = match hostile_spawn_request(case) {
+                    Ok(spawn) => spawn,
+                    Err(err) => return packet_error(err),
+                };
+                encode_ok_outcome(spawn.encode(), hostile_spawn_fields(&spawn))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        HOSTILE_STATE_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::HostileState::decode(&case.input) {
+                Ok(state) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": hostile_state_fields(&state),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let state = match hostile_state_request(case) {
+                    Ok(state) => state,
+                    Err(err) => return packet_error(err),
+                };
+                encode_ok_outcome(state.encode(), hostile_state_fields(&state))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        HOSTILE_DESPAWN_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::HostileDespawn::decode(&case.input) {
+                Ok(despawn) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": hostile_despawn_fields(&despawn),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let despawn = match hostile_despawn_request(case) {
+                    Ok(despawn) => despawn,
+                    Err(err) => return packet_error(err),
+                };
+                encode_ok_outcome(despawn.encode(), hostile_despawn_fields(&despawn))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
         other => panic!("unsupported packet family for {}: {other}", case.id),
     }
 }
@@ -3254,7 +3559,10 @@ fn dispatch_case(case: &FrozenCase) -> serde_json::Value {
         | COMPANION_DESPAWN_FAMILY
         | COMPANION_STATES_FAMILY
         | ITEM_DROP_UPSERTS_FAMILY
-        | ITEM_DROP_REMOVES_FAMILY => dispatch_packet(case),
+        | ITEM_DROP_REMOVES_FAMILY
+        | HOSTILE_SPAWN_FAMILY
+        | HOSTILE_STATE_FAMILY
+        | HOSTILE_DESPAWN_FAMILY => dispatch_packet(case),
         other => panic!("unregistered protocol family for {}: {other}", case.id),
     }
 }
@@ -4447,6 +4755,97 @@ fn protocol_corpus_packet_item_drops_cases_are_executed() {
         "the item drop selection executed zero cases"
     );
     for case in drops {
+        assert_eq!(
+            case.consumer,
+            CorpusConsumer::Protocol,
+            "case {} carries the wrong consumer",
+            case.id
+        );
+        assert!(
+            !case.operation.is_empty(),
+            "case {} names no operation",
+            case.id
+        );
+        assert_normalized(case, dispatch_packet(case));
+    }
+}
+
+/// The case identities the hostile mob producer group registers. They mirror
+/// the Go producer's registration, so a case that only one side names is a
+/// mismatch rather than a shared name. The merged manifest sorts case IDs, so
+/// the comparison sorts this list too.
+///
+/// The count is the reviewed table's enumerated labels: each family's canonical
+/// vector pair, the spawn's identity, dimension, health and kind boundaries
+/// with its encode twin, the spawn's nonfinite-pose and order refusals, the
+/// state's identity, velocity, health and kind boundaries with its duplicate and
+/// count refusals, the despawn's identity and order refusals, and one
+/// full-record admit and one trailing-byte refusal per family.
+const HOSTILES_CASE_IDS: [&str; 30] = [
+    "protocol.server.HostileDespawn/45/decode-valid",
+    "protocol.server.HostileDespawn/45/encode-valid",
+    "protocol.server.HostileDespawn/45/decode-id-zero",
+    "protocol.server.HostileDespawn/45/decode-duplicate-ids",
+    "protocol.server.HostileDespawn/45/decode-reversed-ids",
+    "protocol.server.HostileDespawn/45/decode-count-above",
+    "protocol.server.HostileDespawn/45/decode-count-sixty-four",
+    "protocol.server.HostileDespawn/45/decode-trailing-byte",
+    "protocol.server.HostileSpawn/45/decode-valid",
+    "protocol.server.HostileSpawn/45/encode-valid",
+    "protocol.server.HostileSpawn/45/decode-count-sixty-four",
+    "protocol.server.HostileSpawn/45/decode-id-zero",
+    "protocol.server.HostileSpawn/45/decode-dimension-depths",
+    "protocol.server.HostileSpawn/45/decode-health-zero",
+    "protocol.server.HostileSpawn/45/decode-health-above",
+    "protocol.server.HostileSpawn/45/decode-kind-two",
+    "protocol.server.HostileSpawn/45/encode-kind-two",
+    "protocol.server.HostileSpawn/45/decode-nan-position",
+    "protocol.server.HostileSpawn/45/decode-reversed-ids",
+    "protocol.server.HostileSpawn/45/decode-trailing-byte",
+    "protocol.server.HostileState/45/decode-valid",
+    "protocol.server.HostileState/45/encode-valid",
+    "protocol.server.HostileState/45/decode-id-zero",
+    "protocol.server.HostileState/45/decode-nan-velocity",
+    "protocol.server.HostileState/45/decode-health-above",
+    "protocol.server.HostileState/45/decode-kind-two",
+    "protocol.server.HostileState/45/decode-duplicate-ids",
+    "protocol.server.HostileState/45/decode-count-above",
+    "protocol.server.HostileState/45/decode-count-sixty-four",
+    "protocol.server.HostileState/45/decode-trailing-byte",
+];
+
+/// Reports whether one family belongs to the hostile mob producer group.
+fn is_hostiles_family(family: &str) -> bool {
+    matches!(
+        family,
+        HOSTILE_SPAWN_FAMILY | HOSTILE_STATE_FAMILY | HOSTILE_DESPAWN_FAMILY
+    )
+}
+
+#[test]
+fn protocol_corpus_packet_hostiles_cases_are_executed() {
+    // The case assets are exported by the Go producer and integrated by the
+    // controller, so before this merge the test reports the missing corpus
+    // cases instead of an empty selection that would look like a passing run.
+    let cases = load_cases_for_consumer(CorpusConsumer::Protocol);
+    let hostiles: Vec<&FrozenCase> = cases
+        .iter()
+        .filter(|case| is_hostiles_family(&case.family))
+        .collect();
+    let executed: Vec<&str> = hostiles.iter().map(|case| case.id.as_str()).collect();
+    let mut expected: Vec<&str> = HOSTILES_CASE_IDS.to_vec();
+    // The merged manifest sorts case IDs; compare as the reviewed set, not in
+    // the authoring order of this suite's constant.
+    expected.sort_unstable();
+    assert_eq!(
+        executed, expected,
+        "the hostile selection does not carry the reviewed case set"
+    );
+    assert!(
+        !hostiles.is_empty(),
+        "the hostile selection executed zero cases"
+    );
+    for case in hostiles {
         assert_eq!(
             case.consumer,
             CorpusConsumer::Protocol,

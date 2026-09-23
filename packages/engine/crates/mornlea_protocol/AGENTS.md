@@ -1027,16 +1027,48 @@ rather than checking that it omits a few names.
   trailing-byte case classifies at the capacity boundary because both
   implementations refuse the oversized payload before any field is read.
 
-## Hostile despawn (`src/hostile_despawn.rs`, `tests/runtime_contract.rs`)
+## Hostile despawn (`src/hostile_despawn.rs`, `tests/runtime_contract.rs`, `tests/protocol_hostiles.rs`)
 
 - Play packet ID 24 payload is a `u64` server tick, a one-byte record count,
   and the fixed 8-byte hostile IDs. The count is bounded by
-  `MAX_HOSTILE_RECORDS` (`64`), a zero count and zero IDs are
-  `InvalidRange`, records must be strictly ascending, and a remaining length
-  that is not exactly `count` records is `Truncated` before publication;
-  trailing bytes fail after the last ID
+  `MAX_HOSTILE_RECORDS` (`64`), a zero count is `InvalidRange`, records must
+  be strictly ascending, and a remaining length that is not exactly `count`
+  records is `Truncated` before publication
   (`hostile_despawn_round_trip_preserves_batch_bytes`,
   `hostile_despawn_rejects_unsorted_zero_and_malformed_payload`).
+- The identity is the checked domain `HostileId` re-exported from
+  `src/hostile_id.rs`, which also owns the fixed eight-byte wire read and
+  write the three hostile families share. Zero is the absent form of every
+  entity family, so it is refused where the identity is read
+  (`InvalidIdentity`) and cannot be constructed on the outbound surface at
+  all, which is the boundary the Go `network: hostile despawn %d ID is zero`
+  message names. The order comparison is over the typed identity, so no batch
+  rule compares a reinterpreted byte string.
+- The family carries the hostile group's common fallible surface
+  (`validate(&self)` → private `valid` → checked `encoded_len` →
+  `encode_into` through the crate-private `publish_packet` → allocating
+  `encode`), and its gate is count-first: the batch count bound, then the
+  strictly increasing identity order. A batch mutated into an empty or
+  over-full record set or an unordered identity after construction is refused
+  instead of silently published, and a short destination reports
+  `OutputTooSmall { needed, available }` with every destination byte
+  unchanged (`hostile_despawn_round_trips_through_the_fallible_surface`,
+  `hostile_despawn_invalid_value_wins_over_short_capacity`,
+  `hostile_mutated_public_fields_are_never_published`).
+- The batch applies the exact-remaining-length rule rather than the
+  minimum-records rule, because the Go decoder rejects a payload whose
+  remaining length is not exactly `count` records before it reads one, so a
+  padded payload answers at the truncation boundary on both sides
+  (`hostile_decode_rejects_one_trailing_byte`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.HostileDespawn` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real Go
+  codec in
+  `packages/tools/cmd/runtime-oracle/protocol_hostiles_test.go`. The frozen
+  cases are the canonical vector pair, the 64-record ceiling, the zero
+  identity, the duplicate and descending order refusals, the count-bound
+  refusal, and the padding refusal the exact-length rule answers at the
+  truncation category.
 
 ## Projectile despawn (`src/projectile_despawn.rs`, `tests/runtime_contract.rs`)
 
@@ -1180,7 +1212,7 @@ rather than checking that it omits a few names.
   Go codec in
   `packages/tools/cmd/runtime-oracle/protocol_inventory_publication_test.go`.
 
-## Hostile spawn (`src/hostile_spawn.rs`, `tests/runtime_contract.rs`)
+## Hostile spawn (`src/hostile_spawn.rs`, `tests/runtime_contract.rs`, `tests/protocol_hostiles.rs`)
 
 - Play packet ID 22 payload is a `u64` server tick, a one-byte record count,
   and the fixed 30-byte spawn records: ID, dimension, position, yaw, health,
@@ -1190,8 +1222,40 @@ rather than checking that it omits a few names.
   `HOSTILE_KIND_NIGHTWALKER` or `HOSTILE_KIND_BONE_THROWER`
   (`hostile_spawn_round_trip_preserves_batch_bytes`,
   `hostile_spawn_rejects_invalid_records_and_malformed_payload`).
+- The family carries the hostile group's common fallible surface, and its
+  record gate keeps the Go `HostileSpawnRecord.validate` order: the
+  dimension, the pose finiteness, the health span and the closed kind match.
+  The identity is already checked by the domain `HostileId`, so the record
+  gate restates no identity rule, and the batch gate adds the count bound and
+  the strict identity order in the Go batch order. A record mutated into a
+  foreign dimension, a non-finite pose, an out-of-range health or an unknown
+  kind after construction is refused instead of silently published, and a
+  short destination reports `OutputTooSmall { needed, available }` with every
+  destination byte unchanged
+  (`hostile_spawn_round_trips_through_the_fallible_surface`,
+  `hostile_spawn_invalid_value_wins_over_short_capacity`,
+  `hostile_kind_is_a_closed_match`, `hostile_health_span_is_one_to_twenty`).
+- The dimension is the raw wire `i32` matched against the two known dimension
+  IDs rather than narrowed to a `u8`, so a value such as `256` is an
+  `InvalidEnum` instead of a reinterpreted dimension, and the negative-zero
+  pose bits survive the round trip
+  (`hostile_spawn_dimension_is_matched_against_the_known_ids`,
+  `hostile_records_preserve_negative_zero_pose_bits`).
+- The batch applies the exact-remaining-length rule, the count bound fires
+  before it on both sides, and the 64-record ceiling is admitted on all three
+  hostile families (`hostile_count_bound_fires_before_the_record_rule`,
+  `hostile_batches_admit_the_full_record_ceiling`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.HostileSpawn` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real Go
+  codec in
+  `packages/tools/cmd/runtime-oracle/protocol_hostiles_test.go`. The frozen
+  cases are the canonical vector pair, the 64-record ceiling, the zero
+  identity, the depths dimension, the two health boundaries, the kind refusal
+  and its encode twin, the non-finite position, the descending order refusal,
+  and the padding refusal at the truncation category.
 
-## Hostile state (`src/hostile_state.rs`, `tests/runtime_contract.rs`)
+## Hostile state (`src/hostile_state.rs`, `tests/runtime_contract.rs`, `tests/protocol_hostiles.rs`)
 
 - Play packet ID 23 payload is a `u64` server tick, a one-byte record count,
   and the fixed 38-byte state records: ID, position, velocity, yaw, health,
@@ -1200,6 +1264,25 @@ rather than checking that it omits a few names.
   and kind bounds as the spawn batch apply
   (`hostile_state_round_trip_preserves_batch_bytes`,
   `hostile_state_rejects_invalid_records_and_malformed_payload`).
+- The family carries the hostile group's common fallible surface. Its record
+  is the spawn record with the dimension exchanged for the velocity, so the
+  gate order is the finiteness of the position, the velocity and the yaw as
+  one message, then the health span, then the closed kind match, with the
+  count bound and the strict identity order in the batch gate. The 8-byte
+  difference between the two strides is the dimension-for-velocity exchange,
+  which the group test pins directly
+  (`hostile_state_round_trips_through_the_fallible_surface`,
+  `hostile_state_invalid_value_wins_over_short_capacity`,
+  `hostile_state_omits_dimension_and_spawn_omits_velocity`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.HostileState` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real Go
+  codec in
+  `packages/tools/cmd/runtime-oracle/protocol_hostiles_test.go`. The frozen
+  cases are the canonical vector pair, the 64-record ceiling, the zero
+  identity, the non-finite velocity, the health-above boundary, the kind
+  refusal, the duplicate identity refusal, the count-bound refusal, and the
+  padding refusal at the truncation category.
 
 ## Player state (`src/player_state.rs`, `tests/runtime_contract.rs`)
 
@@ -1754,6 +1837,8 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_companions --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_drops --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_drops --locked -- --list
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_hostiles --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_hostiles --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
 
@@ -1895,6 +1980,24 @@ and its mutation test quotes the silent publishes the previous surface
 allowed: an out-of-range block index, an empty batch and a duplicate or
 descending identity pair. It also needs no corpus files, so it runs before
 the controller integrates the exported candidates.
+
+`tests/protocol_hostiles.rs` pins the three hostile-mob publication records
+through that same surface: the reviewed 69-byte spawn and 85-byte state
+literals round-trip byte for byte with the negative-zero pose bits preserved,
+the 25-byte despawn literal round-trips through the checked identity, the
+record strides 30/38/8 with the dimension-for-velocity exchange that
+distinguishes them, the closed kind match and the inclusive 1..=20 health
+span, the raw-`i32` dimension match that refuses 256 as an enum violation,
+the 64-record ceiling on all three families with the count bound firing
+before the record rule, the exact-remaining-length batch rule (every proper
+truncation plus one padded byte reject at the same boundary), and the packet
+IDs 22/23/24. Its mutation test quotes the silent publishes the previous
+surface allowed: a spawn record mutated into kind 2, the depths dimension,
+health 21, a zero identity, a descending pair or an empty batch published
+those values byte for byte, while a non-finite pose reached the primitive's
+own refusal and became a panic at the previous encoder's `expect`. It also
+needs no corpus files, so it runs before the controller integrates the
+exported candidates.
 
 `tests/protocol_corpus.rs` executes the corpus cases this crate owns through
 the real codec paths — `read_frame`/`write_frame` for framing,

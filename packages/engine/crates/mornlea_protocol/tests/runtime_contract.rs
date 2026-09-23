@@ -2337,11 +2337,19 @@ fn companion_despawn_rejects_invalid_identity_and_malformed_payload() {
     );
 }
 
+/// Wraps one nonzero hostile identity the domain rule admits.
+fn hostile_id(id: u64) -> mornlea_protocol::HostileId {
+    mornlea_protocol::HostileId::try_new(id).expect("reviewed nonzero hostile identity")
+}
+
 #[test]
 fn hostile_despawn_round_trip_preserves_batch_bytes() {
-    let despawn = mornlea_protocol::HostileDespawn::new(0x0102_0304_0506_0708, vec![7, 9, 12])
-        .expect("batch");
-    let payload = despawn.encode();
+    let despawn = mornlea_protocol::HostileDespawn::new(
+        0x0102_0304_0506_0708,
+        vec![hostile_id(7), hostile_id(9), hostile_id(12)],
+    )
+    .expect("batch");
+    let payload = despawn.encode().expect("encode");
     assert_eq!(
         payload,
         [
@@ -2361,14 +2369,23 @@ fn hostile_despawn_round_trip_preserves_batch_bytes() {
 #[test]
 fn hostile_despawn_rejects_unsorted_zero_and_malformed_payload() {
     assert!(mornlea_protocol::HostileDespawn::new(1, Vec::new()).is_err());
-    assert!(mornlea_protocol::HostileDespawn::new(1, vec![0]).is_err());
-    assert!(mornlea_protocol::HostileDespawn::new(1, vec![7, 7]).is_err());
-    assert!(mornlea_protocol::HostileDespawn::new(1, vec![9, 7]).is_err());
+    assert!(mornlea_protocol::HostileDespawn::new(1, vec![hostile_id(7), hostile_id(7)]).is_err());
+    assert!(mornlea_protocol::HostileDespawn::new(1, vec![hostile_id(9), hostile_id(7)]).is_err());
+    // A zero identity is refused where the identity is read, because the
+    // checked domain `HostileId` has no zero form to construct.
+    let mut zero_id = vec![1, 0, 0, 0, 0, 0, 0, 0, 0x01];
+    zero_id.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(
+        mornlea_protocol::HostileDespawn::decode(&zero_id),
+        Err(mornlea_protocol::ProtocolError::InvalidIdentity)
+    );
     let mut over = Vec::new();
     for id in 1..=mornlea_protocol::MAX_HOSTILE_RECORDS {
-        over.push(u64::from(id));
+        over.push(hostile_id(u64::from(id)));
     }
-    over.push(u64::from(mornlea_protocol::MAX_HOSTILE_RECORDS) + 1);
+    over.push(hostile_id(
+        u64::from(mornlea_protocol::MAX_HOSTILE_RECORDS) + 1,
+    ));
     assert!(mornlea_protocol::HostileDespawn::new(1, over).is_err());
     // A payload whose length disagrees with the count is rejected whole.
     let mut short = vec![1, 0, 0, 0, 0, 0, 0, 0, 0x02];
@@ -2861,7 +2878,7 @@ fn hostile_spawn_round_trip_preserves_batch_bytes() {
         0x0102_0304_0506_0708,
         vec![
             mornlea_protocol::HostileSpawnRecord {
-                id: 7,
+                id: hostile_id(7),
                 dimension: mornlea_domain::Dimension::OVERWORLD,
                 position: [2.5, 1.0, -3.25],
                 yaw: 1.25,
@@ -2869,7 +2886,7 @@ fn hostile_spawn_round_trip_preserves_batch_bytes() {
                 kind: mornlea_protocol::HOSTILE_KIND_BONE_THROWER,
             },
             mornlea_protocol::HostileSpawnRecord {
-                id: 9,
+                id: hostile_id(9),
                 dimension: mornlea_domain::Dimension::OVERWORLD,
                 position: [-8.5, 65.5, 12.75],
                 yaw: -2.5,
@@ -2879,7 +2896,7 @@ fn hostile_spawn_round_trip_preserves_batch_bytes() {
         ],
     )
     .expect("spawn");
-    let payload = spawn.encode();
+    let payload = spawn.encode().expect("encode");
     assert_eq!(mornlea_protocol::HostileSpawn::PACKET_ID, 22);
     assert_eq!(payload.len(), 9 + 2 * 30);
     assert_eq!(
@@ -2906,7 +2923,7 @@ fn hostile_spawn_round_trip_preserves_batch_bytes() {
 #[test]
 fn hostile_spawn_rejects_invalid_records_and_malformed_payload() {
     let record = mornlea_protocol::HostileSpawnRecord {
-        id: 7,
+        id: hostile_id(7),
         dimension: mornlea_domain::Dimension::OVERWORLD,
         position: [1.0, 2.0, 3.0],
         yaw: 0.5,
@@ -2916,8 +2933,6 @@ fn hostile_spawn_rejects_invalid_records_and_malformed_payload() {
     let base = |record: mornlea_protocol::HostileSpawnRecord| {
         mornlea_protocol::HostileSpawnRecord { ..record }
     };
-    let mut zero_id = base(record);
-    zero_id.id = 0;
     let mut foreign = base(record);
     foreign.dimension = mornlea_domain::Dimension::DEPTHS;
     let mut bad_health = base(record);
@@ -2928,13 +2943,21 @@ fn hostile_spawn_rejects_invalid_records_and_malformed_payload() {
     bad_kind.kind = 2;
     let mut bad_yaw = base(record);
     bad_yaw.yaw = f32::NAN;
-    for bad in [zero_id, foreign, bad_health, over_health, bad_kind, bad_yaw] {
+    for bad in [foreign, bad_health, over_health, bad_kind, bad_yaw] {
         assert!(mornlea_protocol::HostileSpawn::new(1, vec![bad]).is_err());
     }
     assert!(mornlea_protocol::HostileSpawn::new(1, vec![base(record), base(record)]).is_err());
     assert!(mornlea_protocol::HostileSpawn::new(1, Vec::new()).is_err());
+    // A zero identity is refused where the identity is read, because the
+    // checked domain `HostileId` has no zero form to construct.
+    let mut zero_id = vec![0, 0, 0, 0, 0, 0, 0, 0, 0x01];
+    zero_id.extend_from_slice(&[0u8; 30]);
+    assert_eq!(
+        mornlea_protocol::HostileSpawn::decode(&zero_id),
+        Err(mornlea_protocol::ProtocolError::InvalidIdentity)
+    );
     let valid = mornlea_protocol::HostileSpawn::new(1, vec![record]).expect("spawn");
-    let payload = valid.encode();
+    let payload = valid.encode().expect("encode");
     assert!(mornlea_protocol::HostileSpawn::decode(&payload[..payload.len() - 1]).is_err());
     let mut padded = payload.clone();
     padded.push(0x00);
@@ -2949,7 +2972,7 @@ fn hostile_state_round_trip_preserves_batch_bytes() {
     let state = mornlea_protocol::HostileState::new(
         0x0102_0304_0506_0708,
         vec![mornlea_protocol::HostileStateRecord {
-            id: 7,
+            id: hostile_id(7),
             position: [2.5, 1.0, -3.25],
             velocity: [0.5, -1.25, 0.0],
             yaw: 1.25,
@@ -2958,7 +2981,7 @@ fn hostile_state_round_trip_preserves_batch_bytes() {
         }],
     )
     .expect("state");
-    let payload = state.encode();
+    let payload = state.encode().expect("encode");
     assert_eq!(mornlea_protocol::HostileState::PACKET_ID, 23);
     assert_eq!(payload.len(), 9 + 38);
     assert_eq!(
@@ -2983,28 +3006,34 @@ fn hostile_state_round_trip_preserves_batch_bytes() {
 #[test]
 fn hostile_state_rejects_invalid_records_and_malformed_payload() {
     let record = mornlea_protocol::HostileStateRecord {
-        id: 7,
+        id: hostile_id(7),
         position: [1.0, 2.0, 3.0],
         velocity: [0.0, 0.0, 0.0],
         yaw: 0.5,
         health: 10,
         kind: mornlea_protocol::HOSTILE_KIND_NIGHTWALKER,
     };
-    let mut zero_id = record;
-    zero_id.id = 0;
     let mut bad_velocity = record;
     bad_velocity.velocity = [f32::INFINITY, 0.0, 0.0];
     let mut bad_health = record;
     bad_health.health = 21;
     let mut bad_kind = record;
     bad_kind.kind = 2;
-    for bad in [zero_id, bad_velocity, bad_health, bad_kind] {
+    for bad in [bad_velocity, bad_health, bad_kind] {
         assert!(mornlea_protocol::HostileState::new(1, vec![bad]).is_err());
     }
     assert!(mornlea_protocol::HostileState::new(1, vec![record, record]).is_err());
     assert!(mornlea_protocol::HostileState::new(1, Vec::new()).is_err());
+    // A zero identity is refused where the identity is read, because the
+    // checked domain `HostileId` has no zero form to construct.
+    let mut zero_id = vec![0, 0, 0, 0, 0, 0, 0, 0, 0x01];
+    zero_id.extend_from_slice(&[0u8; 38]);
+    assert_eq!(
+        mornlea_protocol::HostileState::decode(&zero_id),
+        Err(mornlea_protocol::ProtocolError::InvalidIdentity)
+    );
     let valid = mornlea_protocol::HostileState::new(1, vec![record]).expect("state");
-    let payload = valid.encode();
+    let payload = valid.encode().expect("encode");
     assert!(mornlea_protocol::HostileState::decode(&payload[..payload.len() - 1]).is_err());
     let mut padded = payload.clone();
     padded.push(0x00);
