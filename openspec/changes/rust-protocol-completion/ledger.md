@@ -31,3 +31,17 @@
 **Rollback:** revert `9e9f3bfb..6e398222` as one unit; the two preexisting frame cases and their digests are untouched, so revert restores the exact pre-node corpus.
 
 **Architecture skill: no change** (route-runner split and closed consumer registry are already recorded in the runtime-oracle guide).
+
+## Node 1.2 — 2026-09-23
+
+**Status:** complete. Commit `d2f715e5` (`feat(protocol): add bounded caller-buffer framing`) on top of `41527e4c`.
+
+**Deliverable:** `FrameRef<'a>` borrowed first-frame read (`read_frame_ref`: canonical prefix, nonzero body, 2 MiB ceiling, exact `consumed`, borrow at original offset), `write_frame_into` caller-buffer write with size-before-capacity ordering, private `SliceWriter`/`publish_packet` exact-prefix publication, new `ProtocolError::{UnknownPacket, OutputTooSmall{needed,available}, Allocation}`; allocating wrappers retained as delegating compatibility paths.
+
+**Evidence:** `protocol_frame` 13/13 (two reds first: missing-API compile failure + baseline allocating reader); `runtime_contract` 134/134 unchanged; `protocol_corpus` 3/3; whole crate ok; Go `TestFrame|TestCanonicalUvarint` ok; fmt + clippy `-D warnings` clean. Allocation: borrowed read 0 allocs over 256 reads after warm-up, allocating contrast ≥1 (counting GlobalAlloc, thread-local; repo precedent followed). Boundary matrix (2,097,152 admits / 2,097,153 rejects; varint lengths 1/2/3/4/5; fifth byte 0x0f max; `[0xa5;5]` untouched with `OutputTooSmall{6,5}`) all pinned.
+
+**Review ruling:** Approved, 0 Crit/0 Imp. Controller rulings from review: (1) corpus category mapping — `ProtocolError::Allocation` maps to the frozen `capacity` category ("declared size or destination shortage") when packet nodes freeze negative encode cases; (2) `SliceWriter::f32` deliberately publishes raw bits — packet modules must reject non-finite values in `validate()` before any write, per design §4 ordering; the first packet node adds an explicit non-finite encode rejection case. Deferred Minors for final review triage: unused `written()`/`remaining()` writer surface until first packet consumer, unused `encode_uvarint` import (crate allows unused_imports), double `frame_sizes` on the compatibility write path, AGENTS.md half-open range wording, debug-only cursor assertion (all crate gates run debug).
+
+**Rollback:** revert `d2f715e5`; wrappers' byte output is provably identical to the pre-node encoder, so `runtime_contract` and the corpus stay valid on either side.
+
+**Architecture skill: no change.**
