@@ -1,0 +1,18 @@
+{
+  "category": "packet",
+  "fields": {
+    "chunks": [
+      {
+        "x": 1,
+        "z": 0
+      },
+      {
+        "x": -1,
+        "z": 0
+      }
+    ],
+    "dimension": 1
+  },
+  "kind": "ok"
+}
+

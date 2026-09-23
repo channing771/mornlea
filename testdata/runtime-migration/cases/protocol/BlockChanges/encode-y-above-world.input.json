@@ -1,0 +1,15 @@
+{
+  "dimension": 1,
+  "chunk_x": -1,
+  "chunk_z": 0,
+  "base_revision": 1,
+  "new_revision": 2,
+  "changes": [
+    {
+      "x": -1,
+      "y": 320,
+      "z": 0,
+      "block": 1
+    }
+  ]
+}

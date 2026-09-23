@@ -1,0 +1,21 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:6aa617c46289cad6dc61bd43fc02b357f3e253c652e1aa7317e9faa102c6b99d",
+  "fields": {
+    "base_revision": "1",
+    "changes": [
+      {
+        "block": 1,
+        "x": -1,
+        "y": -64,
+        "z": 0
+      }
+    ],
+    "chunk_x": -1,
+    "chunk_z": 0,
+    "dimension": 1,
+    "new_revision": "2"
+  },
+  "kind": "ok"
+}
+

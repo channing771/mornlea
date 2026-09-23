@@ -1,0 +1,13 @@
+{
+  "category": "packet",
+  "fields": {
+    "base_revision": "1",
+    "changes": [],
+    "chunk_x": -1,
+    "chunk_z": 0,
+    "dimension": 1,
+    "new_revision": "2"
+  },
+  "kind": "ok"
+}
+
