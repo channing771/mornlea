@@ -560,7 +560,7 @@ fn keep_alive_reply_rejects_zero_token_and_malformed_payload() {
 #[test]
 fn place_block_succeeded_round_trip_preserves_golden_bytes() {
     let ack = mornlea_protocol::PlaceBlockSucceeded::new(0x1122_3344_5566_7788);
-    let payload = ack.encode();
+    let payload = ack.encode().expect("encode ack");
     assert_eq!(payload, [0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11]);
     assert_eq!(mornlea_protocol::PlaceBlockSucceeded::PACKET_ID, 20);
     let decoded = mornlea_protocol::PlaceBlockSucceeded::decode(&payload).expect("decode");
@@ -580,7 +580,8 @@ fn place_block_succeeded_rejects_malformed_payload_and_accepts_zero_sequence() {
     let zero = mornlea_protocol::PlaceBlockSucceeded::new(0);
     assert_eq!(zero.sequence, 0);
     assert_eq!(
-        mornlea_protocol::PlaceBlockSucceeded::decode(&zero.encode()).expect("decode zero"),
+        mornlea_protocol::PlaceBlockSucceeded::decode(&zero.encode().expect("encode zero"))
+            .expect("decode zero"),
         zero
     );
 }
@@ -588,7 +589,7 @@ fn place_block_succeeded_rejects_malformed_payload_and_accepts_zero_sequence() {
 #[test]
 fn command_rejected_round_trip_preserves_golden_bytes() {
     let rejected = mornlea_protocol::CommandRejected::new(7, 6).expect("occupied");
-    let payload = rejected.encode();
+    let payload = rejected.encode().expect("encode occupied");
     assert_eq!(
         payload,
         [0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06]
@@ -605,7 +606,7 @@ fn command_rejected_round_trip_preserves_frozen_reason_ids() {
     for reason in 1u8..=15 {
         let rejected = mornlea_protocol::CommandRejected::new(1, reason).expect("reason");
         let mut want = vec![0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, reason];
-        let payload = rejected.encode();
+        let payload = rejected.encode().expect("encode reason");
         assert_eq!(payload, want, "reason {reason}");
         let decoded = mornlea_protocol::CommandRejected::decode(&payload).expect("decode");
         assert_eq!(decoded.reason, reason);
@@ -1913,7 +1914,7 @@ fn player_input_rejects_non_finite_and_malformed_payload() {
 #[test]
 fn combat_hit_round_trip_preserves_golden_bytes() {
     let hit = mornlea_protocol::CombatHit::new(0x0102_0304_0506_0708, 6, 2).expect("hit");
-    let payload = hit.encode();
+    let payload = hit.encode().expect("encode hit");
     assert_eq!(
         payload,
         [0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x06, 0x02]
@@ -1955,7 +1956,8 @@ fn combat_hit_rejects_invalid_range_and_malformed_payload() {
     ] {
         let full = mornlea_protocol::CombatHit::new(1, 1, kind).expect("kind");
         assert_eq!(
-            mornlea_protocol::CombatHit::decode(&full.encode()).expect("decode full"),
+            mornlea_protocol::CombatHit::decode(&full.encode().expect("encode full"))
+                .expect("decode full"),
             full
         );
     }
@@ -3042,7 +3044,7 @@ fn player_state_round_trip_preserves_golden_bytes() {
         0,
     )
     .expect("active player state");
-    let payload = active.encode();
+    let payload = active.encode().expect("encode active");
     assert_eq!(mornlea_protocol::PlayerState::PACKET_ID, 3);
     assert_eq!(payload.len(), 93);
     // Mining state sits after the four boolean phase bits.
@@ -3093,7 +3095,7 @@ fn player_state_round_trip_preserves_golden_bytes() {
         0,
     )
     .expect("drowned player state");
-    let payload = drowned.encode();
+    let payload = drowned.encode().expect("encode drowned");
     assert_eq!(payload.len(), 93);
     assert_eq!(&payload[74..76], &[0x01, 0x01]);
     assert_eq!(&payload[78..80], &[0x01, 0x01]);
@@ -3133,7 +3135,7 @@ fn player_state_round_trip_preserves_golden_bytes() {
         15,
     )
     .expect("seasonal player state");
-    let payload = seasonal.encode();
+    let payload = seasonal.encode().expect("encode seasonal");
     assert_eq!(payload.len(), 93);
     assert_eq!(payload[76], 12);
     assert_eq!(payload[88], mornlea_protocol::WEATHER_RAIN);
@@ -3227,7 +3229,7 @@ fn player_state_rejects_out_of_range_fields_and_malformed_payload() {
     finished_progress.mining_progress_ticks = 15;
     assert!(finished_progress.validate().is_err());
 
-    let payload = active.encode();
+    let payload = active.encode().expect("encode active");
     for length in 0..payload.len() {
         assert!(
             mornlea_protocol::PlayerState::decode(&payload[..length]).is_err(),

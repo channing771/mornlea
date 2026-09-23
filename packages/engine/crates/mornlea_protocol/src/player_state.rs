@@ -6,9 +6,10 @@
 //! ranges live here rather than in a shared value module because no other
 //! ported family carries them; promoting them later is a one-line move.
 
-use crate::bytes::{ByteDecoder, ByteEncoder};
+use crate::bytes::{ByteDecoder, SliceWriter};
 use crate::combat_hit::MAX_HEALTH;
 use crate::error::ProtocolError;
+use crate::server_hello::publish_packet;
 use mornlea_domain::Dimension;
 
 /// Exclusive upper bound of the day phase offset. The display phase is
@@ -165,12 +166,20 @@ impl PlayerState {
         Ok(state)
     }
 
-    /// The single validation gate shared by `new` and `decode`.
+    /// The single validation gate shared by `new`, `encode_into` and `decode`.
     ///
     /// The mining block is validated as one unit: an inactive block must be
     /// entirely empty so a client never has to guess whether a stale target
     /// still applies, and an active block must report progress strictly below
     /// the requirement so a completed swing is published as inactive instead.
+    ///
+    /// The dimension carries no check here because the field is the checked
+    /// domain value: an unknown dimension cannot be constructed, which is the
+    /// same situation the Go validator's first branch guards against on the
+    /// wire. The remaining order is the Go validator's — position, velocity,
+    /// rotation, health, oxygen, hunger, day phase offset, weather, season,
+    /// armor, then the mining union — and both sides publish one category for
+    /// the same bytes.
     pub fn validate(&self) -> Result<(), ProtocolError> {
         if !self
             .position
@@ -213,43 +222,71 @@ impl PlayerState {
         Ok(())
     }
 
-    pub fn encode(&self) -> Vec<u8> {
-        let mut encoder = ByteEncoder::new();
-        encoder.u64(self.server_tick);
-        encoder.u64(self.last_input_sequence);
-        encoder.i32(i32::from(self.dimension.get()));
-        for value in self.position {
-            encoder.f32(value);
-        }
-        for value in self.velocity {
-            encoder.f32(value);
-        }
-        encoder.f32(self.yaw);
-        encoder.f32(self.pitch);
-        encoder.boolean(self.on_ground);
-        encoder.boolean(self.ready);
-        encoder.boolean(self.reset);
-        encoder.boolean(self.mining_active);
-        encoder.i32(self.mining_target.x);
-        encoder.i32(self.mining_target.y);
-        encoder.i32(self.mining_target.z);
-        encoder.u16(self.mining_progress_ticks);
-        encoder.u16(self.mining_required_ticks);
-        encoder.boolean(self.mining_harvestable);
-        encoder.u8(self.health);
-        encoder.u16(self.oxygen);
-        encoder.u8(self.hunger);
-        encoder.boolean(self.saturation_zero);
-        encoder.u16(self.day_phase_offset);
-        encoder.u64(self.world_time_ticks);
-        encoder.u8(self.weather_kind);
-        encoder.u8(self.season);
-        encoder.u8(self.season_progress);
-        encoder.i8(self.temperature);
-        encoder.u8(self.armor_points);
-        encoder
-            .finish()
-            .expect("validated player state is encodable")
+    /// The exact encoded length, which is the fixed payload stride.
+    ///
+    /// The value gate runs first, so an invalid record reports its union,
+    /// range or float error here instead of reaching a size or capacity
+    /// decision.
+    pub fn encoded_len(&self) -> Result<usize, ProtocolError> {
+        self.validate()?;
+        Ok(PLAYER_STATE_WIRE_BYTES)
+    }
+
+    /// Publishes the record into a caller-owned buffer and returns the bytes
+    /// written.
+    ///
+    /// The field order is the Go encoder's, and the destination is tested
+    /// before the first byte is written, so a short call leaves every
+    /// destination byte unchanged. The look angles are published as their
+    /// exact IEEE-754 bits, so a `-0.0` yaw or pitch survives the round trip.
+    pub fn encode_into(&self, dst: &mut [u8]) -> Result<usize, ProtocolError> {
+        let length = self.encoded_len()?;
+        publish_packet(length, dst, |writer| {
+            writer.u64(self.server_tick);
+            writer.u64(self.last_input_sequence);
+            writer.i32(i32::from(self.dimension.get()));
+            for value in self.position {
+                writer.f32(value);
+            }
+            for value in self.velocity {
+                writer.f32(value);
+            }
+            writer.f32(self.yaw);
+            writer.f32(self.pitch);
+            writer.boolean(self.on_ground);
+            writer.boolean(self.ready);
+            writer.boolean(self.reset);
+            writer.boolean(self.mining_active);
+            writer.i32(self.mining_target.x);
+            writer.i32(self.mining_target.y);
+            writer.i32(self.mining_target.z);
+            writer.u16(self.mining_progress_ticks);
+            writer.u16(self.mining_required_ticks);
+            writer.boolean(self.mining_harvestable);
+            writer.u8(self.health);
+            writer.u16(self.oxygen);
+            writer.u8(self.hunger);
+            writer.boolean(self.saturation_zero);
+            writer.u16(self.day_phase_offset);
+            writer.u64(self.world_time_ticks);
+            writer.u8(self.weather_kind);
+            writer.u8(self.season);
+            writer.u8(self.season_progress);
+            writer.i8(self.temperature);
+            writer.u8(self.armor_points);
+        })
+    }
+
+    /// The allocating compatibility wrapper.
+    ///
+    /// It reserves exactly the validated length and publishes through
+    /// `encode_into`, so the two entry points always agree byte for byte.
+    pub fn encode(&self) -> Result<Vec<u8>, ProtocolError> {
+        let length = self.encoded_len()?;
+        let mut wire = vec![0u8; length];
+        let written = self.encode_into(&mut wire)?;
+        wire.truncate(written);
+        Ok(wire)
     }
 
     pub fn decode(payload: &[u8]) -> Result<Self, ProtocolError> {

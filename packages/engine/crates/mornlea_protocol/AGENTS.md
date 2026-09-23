@@ -273,14 +273,29 @@ rather than checking that it omits a few names.
   publication (`keep_alive_reply_round_trip_preserves_golden_bytes`,
   `keep_alive_reply_rejects_zero_token_and_malformed_payload`).
 
-## Place block succeeded (`src/place_block_succeeded.rs`, `tests/runtime_contract.rs`)
+## Place block succeeded (`src/place_block_succeeded.rs`, `tests/runtime_contract.rs`, `tests/protocol_player_outcomes.rs`)
 
 - Play packet ID 20 payload is a little-endian `u64` sequence. Zero
   sequences are legal. Truncated payloads and trailing bytes fail before
   publication (`place_block_succeeded_round_trip_preserves_golden_bytes`,
   `place_block_succeeded_rejects_malformed_payload_and_accepts_zero_sequence`).
+- The family carries the player and private outcome group's common fallible
+  surface with a total value gate: `validate(&self)` rechecks the record on
+  every call, checked `encoded_len(&self)` sizes the fixed 8-byte stride,
+  `encode_into(&self, dst)` publishes into a caller-owned buffer through the
+  crate-private `publish_packet`, `encode(&self)` is the allocating wrapper
+  over it, and `decode(payload)` stays a bounded read plus `done()`. The Go
+  packet expresses no rule the wire could violate, so the gate admits every
+  field state — including a `u64::MAX` sequence — and stays on the surface so
+  a later field arrives with a refusal path already in place
+  (`player_outcomes_place_block_succeeded_round_trips_through_the_fallible_surface`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.PlaceBlockSucceeded` registers a decode and
+  an encode route under the `mornlea_protocol` consumer, produced by the real
+  Go codec in
+  `packages/tools/cmd/runtime-oracle/protocol_player_outcomes_test.go`.
 
-## Command rejected (`src/command_rejected.rs`, `tests/runtime_contract.rs`)
+## Command rejected (`src/command_rejected.rs`, `tests/runtime_contract.rs`, `tests/protocol_player_outcomes.rs`)
 
 - Play packet ID 4 payload is a little-endian `u64` sequence followed by a
   one-byte reject reason. Published reasons are the closed interval
@@ -289,6 +304,29 @@ rather than checking that it omits a few names.
   (`command_rejected_round_trip_preserves_golden_bytes`,
   `command_rejected_round_trip_preserves_frozen_reason_ids`,
   `command_rejected_rejects_unknown_reason_and_malformed_payload`).
+- The family carries the player and private outcome group's common fallible
+  surface, so a record mutated into an unregistered reason after construction
+  is refused instead of silently published with the retired zero byte the Go
+  encoder would have written for it
+  (`player_outcomes_invalid_value_wins_over_short_capacity`).
+- `reject_reason_to_wire(domain::RejectReason) -> Result<u8, ProtocolError>`
+  and `reject_reason_from_wire(u8) -> Result<domain::RejectReason,
+  ProtocolError>` are the explicit bidirectional translation the Go
+  internal-enum/wire-enum split requires: the internal enum runs `0..14`
+  while the wire enum runs `1..15`, so the wire value is never a discriminant
+  cast. The outbound half is a closed match over the fifteen domain variants
+  with no catch-all arm, so a new domain variant fails to compile here; the
+  inbound half is a closed match over the fifteen published wire values and
+  answers every other byte — including the retired zero and the first number
+  above the interval — with `InvalidEnum`. The mapping is the same one the
+  domain `RejectReason::wire_id` publishes, and the group test pins both
+  directions against the Go table row by row
+  (`player_outcomes_the_reject_reason_matrix_translates_both_ways`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.CommandRejected` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real
+  Go codec in
+  `packages/tools/cmd/runtime-oracle/protocol_player_outcomes_test.go`.
 
 ## Select hotbar (`src/select_hotbar.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_control.rs`)
 
@@ -774,7 +812,7 @@ rather than checking that it omits a few names.
   the angles are published as their exact IEEE-754 bits, so a `-0.0` yaw
   survives the round trip (`client_control_negative_zero_and_wide_values_keep_their_wire_shapes`).
 
-## Combat hit (`src/combat_hit.rs`, `tests/runtime_contract.rs`)
+## Combat hit (`src/combat_hit.rs`, `tests/runtime_contract.rs`, `tests/protocol_player_outcomes.rs`)
 
 - Play packet ID 25 payload is a fixed 10-byte confirmation: a
   little-endian `u64` server tick, a damage byte, and a target kind byte.
@@ -785,6 +823,18 @@ rather than checking that it omits a few names.
   payloads and trailing bytes fail before publication
   (`combat_hit_round_trip_preserves_golden_bytes`,
   `combat_hit_rejects_invalid_range_and_malformed_payload`).
+- The family carries the player and private outcome group's common fallible
+  surface, and the gate keeps the Go validator's order — tick, then the
+  damage range, then the kind — so both implementations refuse the same bytes
+  with the same error variant and a record mutated into a zero tick, an
+  out-of-range damage or an unknown kind after construction is refused instead
+  of silently published
+  (`player_outcomes_invalid_value_wins_over_short_capacity`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.CombatHit` registers a decode and an encode
+  route under the `mornlea_protocol` consumer, produced by the real Go codec
+  in
+  `packages/tools/cmd/runtime-oracle/protocol_player_outcomes_test.go`.
 
 ## Remote player despawn (`src/remote_player_despawn.rs`, `tests/runtime_contract.rs`)
 
@@ -1053,6 +1103,33 @@ rather than checking that it omits a few names.
   requirement, so a completed swing is published as inactive
   (`player_state_round_trip_preserves_golden_bytes`,
   `player_state_rejects_out_of_range_fields_and_malformed_payload`).
+- The family carries the player and private outcome group's common fallible
+  surface: `validate(&self)` rechecks every public field on each call,
+  checked `encoded_len(&self)` sizes the fixed 93-byte stride,
+  `encode_into(&self, dst)` publishes into a caller-owned buffer through the
+  crate-private `publish_packet`, `encode(&self)` is the allocating wrapper
+  over it, and `decode(payload)` stays a bounded read plus `done()` plus
+  validation. The dimension field is the checked domain value, so it carries
+  no protocol check and the gate's remaining order is the Go validator's; a
+  record mutated into an out-of-range scalar, a non-finite vector or a dirty
+  mining block after construction is refused instead of silently published,
+  and a short destination reports `OutputTooSmall { needed, available }` with
+  every destination byte unchanged
+  (`player_outcomes_player_state_round_trips_through_the_fallible_surface`,
+  `player_outcomes_the_mining_union_is_validated_as_one_unit`).
+- The temperature is the full `i8` range and the pitch is never clipped: the
+  protocol layer publishes the exact bits the wire carries, so a `-0.0`
+  angle and a full-range temperature survive the round trip
+  (`player_outcomes_temperature_and_pitch_are_never_clipped`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.PlayerState` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real
+  Go codec in
+  `packages/tools/cmd/runtime-oracle/protocol_player_outcomes_test.go`. The
+  ticks and the input sequence render as decimal strings, the position,
+  velocity and look angles as eight-digit lowercase-hexadecimal bit strings
+  so a negative zero stays distinguishable, and the mining target as its
+  ordered integer triple.
 
 ## Companion spawn (`src/companion_spawn.rs`, `tests/runtime_contract.rs`)
 
@@ -1367,6 +1444,8 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_world_delta --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_snapshot --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_snapshot --locked -- --list
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_player_outcomes --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_player_outcomes --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
 
@@ -1426,6 +1505,17 @@ out-of-range physical slot) refuses at the packet boundary, the
 `MoveStackPartial` family keeps the authority-only crafting and
 furnace-output rules off the wire, and every proper truncation plus one
 trailing byte reject. It also needs no corpus files.
+
+`tests/protocol_player_outcomes.rs` pins the four owner-private records
+through that same fallible surface: the reviewed 93/9/8/10-byte wire literals
+round-trip byte for byte with the negative-zero bits preserved, the reject
+reason translates through the explicit closed matrix in both directions with
+the interval boundaries refused, the temperature covers the full `i8` range
+and the pitch is never clipped, the mining union refuses any inactive residue
+and any completed or unstarted swing, a mutated public field wins over a short
+destination for every family, every proper truncation plus one trailing byte
+reject, and the packet IDs 3/4/20/25 stay pinned. It also needs no corpus
+files, so it runs before the controller integrates the exported candidates.
 
 `tests/protocol_corpus.rs` executes the corpus cases this crate owns through
 the real codec paths — `read_frame`/`write_frame` for framing,

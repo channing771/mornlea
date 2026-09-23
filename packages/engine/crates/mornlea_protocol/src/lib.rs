@@ -118,6 +118,7 @@ pub use command_rejected::{
     REJECT_DROP_CAPACITY, REJECT_HOTBAR_FULL, REJECT_INVALID_BLOCK, REJECT_INVALID_INPUT,
     REJECT_INVALID_RAY, REJECT_INVALID_SLOT, REJECT_NO_TARGET, REJECT_NOT_ARMOR,
     REJECT_NOT_FLUID_SOURCE, REJECT_OCCUPIED, REJECT_PLAYER_NOT_READY, REJECT_PROTECTED_BLOCK,
+    reject_reason_from_wire, reject_reason_to_wire,
 };
 pub use companion_despawn::CompanionDespawn;
 pub use companion_spawn::{COMPANION_SPAWN_MAX_WIRE_BYTES, CompanionSpawn};

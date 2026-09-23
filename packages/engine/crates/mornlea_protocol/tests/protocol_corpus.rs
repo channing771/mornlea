@@ -118,6 +118,12 @@ const CHAT_COMMAND_FAMILY: &str = "protocol.client.ChatCommand";
 const BLOCK_CHANGES_FAMILY: &str = "protocol.server.BlockChanges";
 const FORGET_CHUNKS_FAMILY: &str = "protocol.server.ForgetChunks";
 const CHUNK_SNAPSHOT_FAMILY: &str = "protocol.server.ChunkSnapshot";
+/// The four packet families the player and private outcome producer group
+/// registers.
+const PLAYER_STATE_FAMILY: &str = "protocol.server.PlayerState";
+const COMMAND_REJECTED_FAMILY: &str = "protocol.server.CommandRejected";
+const PLACE_BLOCK_SUCCEEDED_FAMILY: &str = "protocol.server.PlaceBlockSucceeded";
+const COMBAT_HIT_FAMILY: &str = "protocol.server.CombatHit";
 /// The packet families' protocol version, matching the manifest family rows.
 const PACKET_VERSION: &str = "45";
 /// The category label every accepted control packet outcome publishes.
@@ -942,6 +948,186 @@ fn snapshot_encode_outcome(case: &FrozenCase) -> serde_json::Value {
     }
 }
 
+/// Reads one unsigned 16-bit field one encode case carries.
+fn u16_field(case: &FrozenCase, name: &str) -> u16 {
+    u16::try_from(unsigned_field(case, name))
+        .unwrap_or_else(|_| panic!("case {} field {name} exceeds u16", case.id))
+}
+
+/// Reads one signed 8-bit field one encode case carries, so the full range
+/// stays lossless in both directions.
+fn i8_field(case: &FrozenCase, name: &str) -> i8 {
+    let value = case
+        .input_json
+        .as_ref()
+        .expect("encode case carries JSON fields")
+        .get(name)
+        .and_then(|value| value.as_i64())
+        .unwrap_or_else(|| panic!("case {} names no {name}", case.id));
+    i8::try_from(value).unwrap_or_else(|_| panic!("case {} field {name} exceeds i8", case.id))
+}
+
+/// Reads one three-component bit-string vector field one encode case
+/// carries.
+fn vec3_bits_field(case: &FrozenCase, name: &str) -> [f32; 3] {
+    let entries = record_array(case, name);
+    if entries.len() != 3 {
+        panic!(
+            "case {} field {name} carries {} components",
+            case.id,
+            entries.len()
+        );
+    }
+    let mut vector = [0f32; 3];
+    for (slot, entry) in vector.iter_mut().zip(entries) {
+        let text = entry
+            .as_str()
+            .unwrap_or_else(|| panic!("case {} field {name} is not a bit string", case.id));
+        let bits = u32::from_str_radix(text, 16)
+            .unwrap_or_else(|_| panic!("case {} field {name} is not hexadecimal", case.id));
+        *slot = f32::from_bits(bits);
+    }
+    vector
+}
+
+/// Reads one integer-triple object field one encode case carries.
+fn triple_i32_field(case: &FrozenCase, name: &str) -> [i32; 3] {
+    let object = case
+        .input_json
+        .as_ref()
+        .expect("encode case carries JSON fields")
+        .get(name)
+        .and_then(|value| value.as_object())
+        .unwrap_or_else(|| panic!("case {} names no {name} object", case.id));
+    let mut triple = [0i32; 3];
+    for (index, axis) in ["x", "y", "z"].iter().enumerate() {
+        triple[index] = i32::try_from(
+            object
+                .get(*axis)
+                .and_then(|value| value.as_i64())
+                .unwrap_or_else(|| panic!("case {} field {name} names no {axis}", case.id)),
+        )
+        .unwrap_or_else(|_| panic!("case {} field {name}.{axis} exceeds i32", case.id));
+    }
+    triple
+}
+
+/// Renders the semantic fields one player state publishes, shared by the
+/// decode and encode arms so both publish the same canonical field encoding.
+///
+/// The ticks and the input sequence render as decimal strings so the full u64
+/// range stays lossless, the position, velocity and look angles render as
+/// their eight-digit hexadecimal bit strings so a negative zero survives the
+/// round trip, and the temperature renders as the signed integer the wire
+/// carries: the full i8 range is legal and never clipped.
+fn player_state_fields(state: &mornlea_protocol::PlayerState) -> serde_json::Value {
+    let vector = |values: &[f32; 3]| -> Vec<String> {
+        values.iter().map(|value| float_bits_text(*value)).collect()
+    };
+    serde_json::json!({
+        "server_tick": state.server_tick.to_string(),
+        "last_input_sequence": state.last_input_sequence.to_string(),
+        "dimension": state.dimension.get(),
+        "position": vector(&state.position),
+        "velocity": vector(&state.velocity),
+        "yaw": float_bits_text(state.yaw),
+        "pitch": float_bits_text(state.pitch),
+        "on_ground": state.on_ground,
+        "ready": state.ready,
+        "reset": state.reset,
+        "mining_active": state.mining_active,
+        "mining_target": {
+            "x": state.mining_target.x,
+            "y": state.mining_target.y,
+            "z": state.mining_target.z
+        },
+        "mining_progress_ticks": state.mining_progress_ticks,
+        "mining_required_ticks": state.mining_required_ticks,
+        "mining_harvestable": state.mining_harvestable,
+        "health": state.health,
+        "oxygen": state.oxygen,
+        "hunger": state.hunger,
+        "saturation_zero": state.saturation_zero,
+        "day_phase_offset": state.day_phase_offset,
+        "world_time_ticks": state.world_time_ticks.to_string(),
+        "weather_kind": state.weather_kind,
+        "season": state.season,
+        "season_progress": state.season_progress,
+        "temperature": state.temperature,
+        "armor_points": state.armor_points
+    })
+}
+
+/// Renders the semantic fields one command rejection publishes: the sequence
+/// as a decimal string and the reason as its frozen wire number, which is the
+/// value both implementations answer with rather than an internal cast.
+fn command_rejected_fields(rejected: &mornlea_protocol::CommandRejected) -> serde_json::Value {
+    serde_json::json!({
+        "sequence": rejected.sequence.to_string(),
+        "reason": rejected.reason
+    })
+}
+
+/// Renders the semantic fields one placement acknowledgement publishes.
+fn place_block_succeeded_fields(ack: &mornlea_protocol::PlaceBlockSucceeded) -> serde_json::Value {
+    serde_json::json!({
+        "sequence": ack.sequence.to_string()
+    })
+}
+
+/// Renders the semantic fields one combat hit publishes: the server tick as a
+/// decimal string and the damage and target kind as the plain integers the
+/// wire carries.
+fn combat_hit_fields(hit: &mornlea_protocol::CombatHit) -> serde_json::Value {
+    serde_json::json!({
+        "server_tick": hit.server_tick.to_string(),
+        "damage": hit.damage,
+        "target_kind": hit.target_kind
+    })
+}
+
+/// Builds the player state one encode case names from its typed fields, so a
+/// mutated or invalid case is refused by the production validation rather
+/// than by a constructor guard.
+fn player_state_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::PlayerState, mornlea_protocol::ProtocolError> {
+    let dimension = dimension_field(case)?;
+    let mining_target = triple_i32_field(case, "mining_target");
+    mornlea_protocol::PlayerState::new(
+        unsigned_field(case, "server_tick"),
+        unsigned_field(case, "last_input_sequence"),
+        dimension,
+        vec3_bits_field(case, "position"),
+        vec3_bits_field(case, "velocity"),
+        float_bits_field(case, "yaw"),
+        float_bits_field(case, "pitch"),
+        bool_field(case, "on_ground"),
+        bool_field(case, "ready"),
+        bool_field(case, "reset"),
+        bool_field(case, "mining_active"),
+        mornlea_protocol::BlockPos {
+            x: mining_target[0],
+            y: mining_target[1],
+            z: mining_target[2],
+        },
+        u16_field(case, "mining_progress_ticks"),
+        u16_field(case, "mining_required_ticks"),
+        bool_field(case, "mining_harvestable"),
+        byte_field(case, "health"),
+        u16_field(case, "oxygen"),
+        byte_field(case, "hunger"),
+        bool_field(case, "saturation_zero"),
+        u16_field(case, "day_phase_offset"),
+        unsigned_field(case, "world_time_ticks"),
+        byte_field(case, "weather_kind"),
+        byte_field(case, "season"),
+        byte_field(case, "season_progress"),
+        i8_field(case, "temperature"),
+        byte_field(case, "armor_points"),
+    )
+}
+
 /// Executes one packet case through the real Rust path its operation names.
 ///
 /// A decode case runs the family's inbound decoder, which applies only the
@@ -1764,6 +1950,82 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
             "encode" => snapshot_encode_outcome(case),
             other => panic!("unsupported packet operation for {}: {other}", case.id),
         },
+        PLAYER_STATE_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::PlayerState::decode(&case.input) {
+                Ok(state) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": player_state_fields(&state),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => match player_state_request(case) {
+                Ok(state) => encode_ok_outcome(state.encode(), player_state_fields(&state)),
+                Err(err) => packet_error(err),
+            },
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        COMMAND_REJECTED_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::CommandRejected::decode(&case.input) {
+                Ok(rejected) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": command_rejected_fields(&rejected),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                // The record is built through its public fields, so a reason
+                // outside the frozen interval is refused by the production
+                // validation rather than by a constructor guard.
+                let rejected = mornlea_protocol::CommandRejected {
+                    sequence: unsigned_field(case, "sequence"),
+                    reason: byte_field(case, "reason"),
+                };
+                encode_ok_outcome(rejected.encode(), command_rejected_fields(&rejected))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        PLACE_BLOCK_SUCCEEDED_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::PlaceBlockSucceeded::decode(&case.input) {
+                Ok(ack) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": place_block_succeeded_fields(&ack),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let ack = mornlea_protocol::PlaceBlockSucceeded {
+                    sequence: unsigned_field(case, "sequence"),
+                };
+                encode_ok_outcome(ack.encode(), place_block_succeeded_fields(&ack))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        COMBAT_HIT_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::CombatHit::decode(&case.input) {
+                Ok(hit) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": combat_hit_fields(&hit),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                // The record is built through its public fields, so a zero
+                // tick, an out-of-range damage or an unknown kind is refused
+                // by the production validation rather than by a constructor
+                // guard.
+                let hit = mornlea_protocol::CombatHit {
+                    server_tick: unsigned_field(case, "server_tick"),
+                    damage: byte_field(case, "damage"),
+                    target_kind: byte_field(case, "target_kind"),
+                };
+                encode_ok_outcome(hit.encode(), combat_hit_fields(&hit))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
         other => panic!("unsupported packet family for {}: {other}", case.id),
     }
 }
@@ -1807,7 +2069,11 @@ fn dispatch_case(case: &FrozenCase) -> serde_json::Value {
         | CHAT_COMMAND_FAMILY
         | BLOCK_CHANGES_FAMILY
         | FORGET_CHUNKS_FAMILY
-        | CHUNK_SNAPSHOT_FAMILY => dispatch_packet(case),
+        | CHUNK_SNAPSHOT_FAMILY
+        | PLAYER_STATE_FAMILY
+        | COMMAND_REJECTED_FAMILY
+        | PLACE_BLOCK_SUCCEEDED_FAMILY
+        | COMBAT_HIT_FAMILY => dispatch_packet(case),
         other => panic!("unregistered protocol family for {}: {other}", case.id),
     }
 }
@@ -2565,6 +2831,99 @@ fn protocol_corpus_packet_chunk_snapshot_cases_are_executed() {
         "the chunk snapshot selection executed zero cases"
     );
     for case in snapshot {
+        assert_eq!(
+            case.consumer,
+            CorpusConsumer::Protocol,
+            "case {} carries the wrong consumer",
+            case.id
+        );
+        assert!(
+            !case.operation.is_empty(),
+            "case {} names no operation",
+            case.id
+        );
+        assert_normalized(case, dispatch_packet(case));
+    }
+}
+
+/// The case identities the player and private outcome group registers. They
+/// mirror the Go producer's registration, so a case that only one side names
+/// is a mismatch rather than a shared name. The merged manifest sorts case
+/// IDs, so the comparison sorts this list too.
+///
+/// The count is the reviewed table's enumerated labels: the canonical player
+/// state vector and its active mining variant, the nine one-boundary player
+/// state rejections beside their encode twin, the frozen reject-reason
+/// interval boundaries, the acknowledgement's structural pair and the combat
+/// hit's range and kind boundaries.
+const PLAYER_OUTCOMES_CASE_IDS: [&str; 32] = [
+    "protocol.server.PlayerState/45/decode-valid",
+    "protocol.server.PlayerState/45/encode-valid",
+    "protocol.server.PlayerState/45/decode-active-mining",
+    "protocol.server.PlayerState/45/decode-mining-combination-invalid",
+    "protocol.server.PlayerState/45/decode-nan-position",
+    "protocol.server.PlayerState/45/decode-health-above",
+    "protocol.server.PlayerState/45/encode-health-above",
+    "protocol.server.PlayerState/45/decode-oxygen-above",
+    "protocol.server.PlayerState/45/decode-hunger-above",
+    "protocol.server.PlayerState/45/decode-day-offset-above",
+    "protocol.server.PlayerState/45/decode-weather-three",
+    "protocol.server.PlayerState/45/decode-season-four",
+    "protocol.server.PlayerState/45/decode-armor-above",
+    "protocol.server.PlayerState/45/decode-trailing-byte",
+    "protocol.server.CommandRejected/45/decode-valid",
+    "protocol.server.CommandRejected/45/encode-valid",
+    "protocol.server.CommandRejected/45/decode-reason-fifteen",
+    "protocol.server.CommandRejected/45/decode-reason-zero",
+    "protocol.server.CommandRejected/45/encode-reason-zero",
+    "protocol.server.CommandRejected/45/decode-reason-sixteen",
+    "protocol.server.PlaceBlockSucceeded/45/decode-valid",
+    "protocol.server.PlaceBlockSucceeded/45/encode-valid",
+    "protocol.server.PlaceBlockSucceeded/45/decode-truncated",
+    "protocol.server.PlaceBlockSucceeded/45/decode-trailing-byte",
+    "protocol.server.CombatHit/45/decode-valid",
+    "protocol.server.CombatHit/45/encode-valid",
+    "protocol.server.CombatHit/45/decode-kind-three",
+    "protocol.server.CombatHit/45/decode-tick-zero",
+    "protocol.server.CombatHit/45/decode-damage-zero",
+    "protocol.server.CombatHit/45/decode-damage-above",
+    "protocol.server.CombatHit/45/decode-kind-zero",
+    "protocol.server.CombatHit/45/decode-kind-four",
+];
+
+/// Reports whether one family belongs to the player and private outcome
+/// producer group.
+fn is_player_outcomes_family(family: &str) -> bool {
+    family == PLAYER_STATE_FAMILY
+        || family == COMMAND_REJECTED_FAMILY
+        || family == PLACE_BLOCK_SUCCEEDED_FAMILY
+        || family == COMBAT_HIT_FAMILY
+}
+
+#[test]
+fn protocol_corpus_packet_player_outcomes_cases_are_executed() {
+    // The case assets are exported by the Go producer and integrated by the
+    // controller, so before that merge this test reports the missing corpus
+    // cases instead of an empty selection that would look like a passing run.
+    let cases = load_cases_for_consumer(CorpusConsumer::Protocol);
+    let outcomes: Vec<&FrozenCase> = cases
+        .iter()
+        .filter(|case| is_player_outcomes_family(&case.family))
+        .collect();
+    let executed: Vec<&str> = outcomes.iter().map(|case| case.id.as_str()).collect();
+    let mut expected: Vec<&str> = PLAYER_OUTCOMES_CASE_IDS.to_vec();
+    // The merged manifest sorts case IDs; compare as the reviewed set, not in
+    // the authoring order of this suite's constant.
+    expected.sort_unstable();
+    assert_eq!(
+        executed, expected,
+        "the player and private outcome selection does not carry the reviewed case set"
+    );
+    assert!(
+        !outcomes.is_empty(),
+        "the player and private outcome selection executed zero cases"
+    );
+    for case in outcomes {
         assert_eq!(
             case.consumer,
             CorpusConsumer::Protocol,

@@ -338,6 +338,34 @@ and the isolated export helpers (`exportGeneratedAssets`,
   256 KiB JSON case budget. Provenance is `codec_server.go` plus
   `chunk_codec.go`, which owns the envelope and the logical layers, and
   `snapshot.go`, which owns the validators.
+- The tenth packet producer group is `protocol_player_outcomes_test.go`
+  (`protocol.server.PlayerState`, `protocol.server.CommandRejected`,
+  `protocol.server.PlaceBlockSucceeded` and `protocol.server.CombatHit`,
+  decode and encode), the four owner-private records an authoritative tick
+  addresses to the session that caused them. It executes
+  `codec.DecodeServer`/`EncodeServer` in the play state with the case's own
+  `PacketKey`, normalizes the ticks, sequences and revisions as decimal
+  strings, the position, velocity and look angles as eight-digit
+  lowercase-hexadecimal bit strings, the mining target as its ordered integer
+  triple, and every closed enum as the declared integer it carries; the
+  temperature renders as the signed integer the wire carries, because the
+  full `i8` range is legal and never clipped. **The reject reason is carried
+  as its frozen wire number, never as an internal enum cast**: the Go internal
+  enum runs `0..14` while the wire enum runs `1..15`, so the producer requests
+  and publishes the wire value and the Rust consumer owns the explicit
+  bidirectional translation its group test pins row by row. The category table
+  resolves the dimension, weather, season, reject-reason and combat-kind
+  boundaries (`unknown command rejection reason`, `combat hit target kind`)
+  to `invalid-enum`; the survival ranges, the day phase offset, the armor
+  points, the mining-union messages, the combat tick and damage ranges and
+  the float primitive's own non-finite rejection to `invalid-value`; the
+  exact-length combat check plus `short input` to `truncated`; and `trailing
+  bytes` to `trailing`. An unregistered wire reason never becomes a silent
+  zero publication on the encode path, because the outbound validator runs
+  before the reason byte is written. Provenance is `codec_server.go` plus the
+  family's own message file: `message_player.go` for `PlayerState`,
+  `CommandRejected` and `PlaceBlockSucceeded`, and `message_combat.go` for
+  `CombatHit`.
 - `validProducerIDs` is the closed exporter allowlist. It carries the 18
   protocol group producer IDs the v45 packet plan names
   (`runtime-oracle/protocol-negotiation`, `-control`, `-client-control`,
