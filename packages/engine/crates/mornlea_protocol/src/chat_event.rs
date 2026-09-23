@@ -13,7 +13,7 @@ use crate::bytes::{ByteDecoder, ByteEncoder};
 use crate::chat_command::{CHAT_COMMAND_TEXT_MAX_BYTES, valid_bounded_text, valid_command_text};
 use crate::entity_id::{CompanionId, valid_companion_name, valid_display_name};
 use crate::error::ProtocolError;
-use crate::player_id::PlayerId;
+use crate::player_id::{self, PlayerId};
 
 /// Companion display-name byte ceiling shared with the other companion
 /// name-carrying families.
@@ -73,19 +73,28 @@ fn valid_task_fail_reason(reason: u8) -> bool {
     (TASK_FAIL_PLANNER_UNAVAILABLE..=TASK_FAIL_INVENTORY_FULL).contains(&reason)
 }
 
-/// Reports whether the event names a companion identity that is present and
-/// well formed, as opposed to the absent form a never-addressed event carries.
-fn names_companion(id: CompanionId) -> bool {
-    !id.is_none() && CompanionId::new(id.bytes()).is_ok()
+/// Reports whether the raw wire identity names a companion that is present
+/// and well formed, as opposed to the absent form a never-addressed event
+/// carries. The absent form is the exact zero bytes; the domain companion
+/// identity has no zero member, so this predicate is the only place the raw
+/// form is interpreted and it never becomes a domain identity.
+fn names_companion(id: &[u8; 16]) -> bool {
+    *id != [0; 16] && CompanionId::try_from_bytes(*id).is_ok()
 }
 
 /// Play ChatEvent payload: the confirmed outcome of one chat addressing.
+///
+/// The companion identity is the raw 16 wire bytes rather than a checked
+/// identity: the two rejection branches that never addressed a companion
+/// carry the exact zero form, and the domain deliberately publishes no zero
+/// companion identity. `names_companion` interprets the raw form, so absence
+/// stays a wire-only representation.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ChatEvent {
     pub event_id: u64,
     pub player_id: PlayerId,
     pub player_name: String,
-    pub companion_id: CompanionId,
+    pub companion_id: [u8; 16],
     pub companion_name: String,
     pub kind: u8,
     pub reject_reason: u8,
@@ -120,7 +129,7 @@ impl ChatEvent {
         match self.kind {
             CHAT_EVENT_ACCEPTED => {
                 if self.reject_reason != CHAT_REJECT_NONE
-                    || !names_companion(self.companion_id)
+                    || !names_companion(&self.companion_id)
                     || !valid_companion_name(&self.companion_name)
                     || !valid_command_text(&self.command)
                 {
@@ -131,7 +140,7 @@ impl ChatEvent {
                 CHAT_REJECT_INVALID_FORMAT => {
                     // A malformed command never addressed a companion, so no
                     // identity, name, or command may survive.
-                    if !self.companion_id.is_none()
+                    if self.companion_id != [0; 16]
                         || !self.command.is_empty()
                         || !self.companion_name.is_empty()
                     {
@@ -141,7 +150,7 @@ impl ChatEvent {
                 CHAT_REJECT_UNKNOWN_COMPANION => {
                     // Only a legal target name survives, so the player can
                     // check the spelling.
-                    if !self.companion_id.is_none()
+                    if self.companion_id != [0; 16]
                         || !self.command.is_empty()
                         || !valid_companion_name(&self.companion_name)
                     {
@@ -149,7 +158,7 @@ impl ChatEvent {
                     }
                 }
                 CHAT_REJECT_QUEUE_FULL | CHAT_REJECT_NOT_FOLLOWING => {
-                    if !names_companion(self.companion_id)
+                    if !names_companion(&self.companion_id)
                         || !valid_companion_name(&self.companion_name)
                         || !valid_command_text(&self.command)
                     {
@@ -166,7 +175,7 @@ impl ChatEvent {
                 // Task progress events restate the original command and keep
                 // the reason slot empty.
                 if self.reject_reason != CHAT_REJECT_NONE
-                    || !names_companion(self.companion_id)
+                    || !names_companion(&self.companion_id)
                     || !valid_companion_name(&self.companion_name)
                     || !valid_command_text(&self.command)
                 {
@@ -175,7 +184,7 @@ impl ChatEvent {
             }
             CHAT_EVENT_TASK_FAILED => {
                 if !valid_task_fail_reason(self.reject_reason)
-                    || !names_companion(self.companion_id)
+                    || !names_companion(&self.companion_id)
                     || !valid_companion_name(&self.companion_name)
                     || !valid_command_text(&self.command)
                 {
@@ -185,7 +194,7 @@ impl ChatEvent {
             CHAT_EVENT_COMPANION_SPEECH => {
                 if self.reject_reason != CHAT_REJECT_NONE
                     || !self.command.is_empty()
-                    || !names_companion(self.companion_id)
+                    || !names_companion(&self.companion_id)
                     || !valid_companion_name(&self.companion_name)
                     || !valid_bounded_text(&self.speech, CHAT_SPEECH_TEXT_MAX_BYTES)
                 {
@@ -202,7 +211,7 @@ impl ChatEvent {
         encoder.u64(self.event_id);
         encoder.bytes(&self.player_id.bytes());
         encoder.string(&self.player_name, PLAYER_NAME_MAX_BYTES);
-        encoder.bytes(&self.companion_id.bytes());
+        encoder.bytes(&self.companion_id);
         encoder.string(&self.companion_name, COMPANION_NAME_MAX_BYTES);
         encoder.u8(self.kind);
         encoder.u8(self.reject_reason);
@@ -220,12 +229,14 @@ impl ChatEvent {
             return Err(ProtocolError::FrameTooLarge);
         }
         let event_id = decoder.u64()?;
-        let player_id = PlayerId::new(decoder.bytes()?)?;
+        let player_id = player_id::read(&mut decoder)?;
         let player_name = decoder.string(PLAYER_NAME_MAX_BYTES, PLAYER_NAME_MAX_RUNES)?;
-        // The companion identity is read unvalidated: a rejection that never
-        // addressed a companion carries the absent zero form, and the
+        // The companion identity is read as raw wire bytes: a rejection that
+        // never addressed a companion carries the absent zero form, and the
         // kind-specific validation decides whether that form is acceptable.
-        let companion_id = CompanionId::from_bytes(decoder.bytes()?);
+        // The domain companion identity has no zero member, so the raw form
+        // never becomes a domain identity here.
+        let companion_id = decoder.bytes::<16>()?;
         let companion_name = decoder.string(COMPANION_NAME_MAX_BYTES, COMPANION_NAME_MAX_RUNES)?;
         let kind = decoder.u8()?;
         let reject_reason = decoder.u8()?;

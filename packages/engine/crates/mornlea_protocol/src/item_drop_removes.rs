@@ -7,7 +7,7 @@
 
 use crate::batch::{UvarintCountBatch, strictly_increasing};
 use crate::bytes::{ByteDecoder, ByteEncoder};
-use crate::drop_id::{DROP_ID_WIRE_BYTES, DropId, MAX_ITEM_DROP_BATCH};
+use crate::drop_id::{self, DROP_ID_WIRE_BYTES, DropId, MAX_ITEM_DROP_BATCH};
 use crate::error::ProtocolError;
 
 /// Play ItemDropRemoves payload: the drop identities a session must drop,
@@ -37,7 +37,7 @@ impl ItemDropRemoves {
         let mut encoder = ByteEncoder::new();
         UvarintCountBatch::write(&mut encoder, self.server_tick, self.ids.len() as u32);
         for id in &self.ids {
-            id.write(&mut encoder);
+            drop_id::write(*id, &mut encoder);
         }
         encoder
             .finish()
@@ -50,7 +50,7 @@ impl ItemDropRemoves {
         batch.require_minimum_records(&decoder, DROP_ID_WIRE_BYTES)?;
         let mut ids = Vec::with_capacity(batch.count as usize);
         for _ in 0..batch.count {
-            ids.push(DropId::read(&mut decoder)?);
+            ids.push(drop_id::read(&mut decoder)?);
         }
         decoder.done()?;
         Self::new(batch.server_tick, ids)

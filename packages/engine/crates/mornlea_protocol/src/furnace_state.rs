@@ -3,7 +3,8 @@ use crate::bytes::{ByteDecoder, ByteEncoder};
 use crate::container_ref::ContainerRef;
 use crate::error::ProtocolError;
 use crate::item_stack::{
-    ITEM_COAL, ITEM_NONE, ItemStack, smelting_output, valid_furnace_input, valid_furnace_output,
+    self, ITEM_COAL, ITEM_NONE, ItemStack, smelting_output, valid_furnace_input,
+    valid_furnace_output,
 };
 
 /// Smelt progress ceiling, copied from the Go `core.FurnaceSmeltTicks` pin.
@@ -64,7 +65,7 @@ impl FurnaceState {
         self.furnace.write(&mut encoder);
         let slots = [self.input, self.fuel, self.output];
         for stack in &slots {
-            stack.write(&mut encoder);
+            item_stack::write(*stack, &mut encoder);
         }
         encoder.u8(self.progress_ticks);
         encoder.u16(self.burn_ticks);
@@ -76,7 +77,7 @@ impl FurnaceState {
     pub fn decode(payload: &[u8]) -> Result<Self, ProtocolError> {
         let mut decoder = ByteDecoder::new(payload);
         let furnace = ContainerRef::read(&mut decoder)?;
-        let slots: [ItemStack; 3] = read_fixed(&mut decoder, ItemStack::read)?;
+        let slots: [ItemStack; 3] = read_fixed(&mut decoder, item_stack::read)?;
         let progress_ticks = decoder.u8()?;
         let burn_ticks = decoder.u16()?;
         decoder.done()?;

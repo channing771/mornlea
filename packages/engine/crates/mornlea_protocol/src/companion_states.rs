@@ -7,7 +7,7 @@
 
 use crate::batch::{UvarintCountBatch, strictly_increasing_ids};
 use crate::bytes::{ByteDecoder, ByteEncoder};
-use crate::entity_id::CompanionId;
+use crate::entity_id::{self, CompanionId};
 use crate::error::ProtocolError;
 use mornlea_domain::Dimension;
 
@@ -110,7 +110,7 @@ impl CompanionStates {
         batch.require_records(&decoder, COMPANION_STATE_WIRE_BYTES)?;
         let mut states = Vec::with_capacity(batch.count as usize);
         for _ in 0..batch.count {
-            let companion_id = CompanionId::new(decoder.bytes()?)?;
+            let companion_id = entity_id::read(&mut decoder)?;
             let dimension = Dimension::new(u8::try_from(decoder.i32()?).unwrap_or(u8::MAX))
                 .map_err(|_| ProtocolError::InvalidEnum)?;
             let mut position = [0f32; 3];

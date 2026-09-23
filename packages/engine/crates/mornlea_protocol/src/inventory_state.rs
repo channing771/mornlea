@@ -1,7 +1,7 @@
 use crate::batch::read_fixed;
 use crate::bytes::{ByteDecoder, ByteEncoder};
 use crate::error::ProtocolError;
-use crate::item_stack::ItemStack;
+use crate::item_stack::{self, ItemStack};
 use mornlea_domain::HotbarSlot;
 
 /// Fixed hotbar slot count, copied from the Go `core.HotbarSlots` pin.
@@ -43,7 +43,7 @@ impl InventoryState {
         let mut encoder = ByteEncoder::new();
         encoder.u8(self.selected);
         for stack in self.hotbar.iter().chain(self.backpack.iter()) {
-            stack.write(&mut encoder);
+            item_stack::write(*stack, &mut encoder);
         }
         encoder
             .finish()
@@ -53,8 +53,8 @@ impl InventoryState {
     pub fn decode(payload: &[u8]) -> Result<Self, ProtocolError> {
         let mut decoder = ByteDecoder::new(payload);
         let selected = decoder.u8()?;
-        let hotbar: [ItemStack; HOTBAR_SLOTS] = read_fixed(&mut decoder, ItemStack::read)?;
-        let backpack: [ItemStack; BACKPACK_SLOTS] = read_fixed(&mut decoder, ItemStack::read)?;
+        let hotbar: [ItemStack; HOTBAR_SLOTS] = read_fixed(&mut decoder, item_stack::read)?;
+        let backpack: [ItemStack; BACKPACK_SLOTS] = read_fixed(&mut decoder, item_stack::read)?;
         decoder.done()?;
         Self::new(selected, hotbar, backpack)
     }

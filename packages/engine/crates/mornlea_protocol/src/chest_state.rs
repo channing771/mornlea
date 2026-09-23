@@ -2,7 +2,7 @@ use crate::batch::read_fixed;
 use crate::bytes::{ByteDecoder, ByteEncoder};
 use crate::container_ref::ContainerRef;
 use crate::error::ProtocolError;
-use crate::item_stack::ItemStack;
+use crate::item_stack::{self, ItemStack};
 
 /// Fixed chest slot count carried by one payload, copied from the Go
 /// `core.ChestSlots` pin.
@@ -25,8 +25,9 @@ impl ChestState {
         items: [ItemStack; CHEST_SLOTS],
     ) -> Result<Self, ProtocolError> {
         chest.validate_chest()?;
-        // `ItemStack::new` is the single slot-value gate: chest slots accept
-        // every registered item, so no further whitelist applies here.
+        // The domain `ItemStack` rule is the single slot-value gate: chest
+        // slots accept every registered item, so no further whitelist applies
+        // here.
         Ok(Self { chest, items })
     }
 
@@ -34,7 +35,7 @@ impl ChestState {
         let mut encoder = ByteEncoder::new();
         self.chest.write(&mut encoder);
         for stack in &self.items {
-            stack.write(&mut encoder);
+            item_stack::write(*stack, &mut encoder);
         }
         encoder
             .finish()
@@ -44,7 +45,7 @@ impl ChestState {
     pub fn decode(payload: &[u8]) -> Result<Self, ProtocolError> {
         let mut decoder = ByteDecoder::new(payload);
         let chest = ContainerRef::read(&mut decoder)?;
-        let items = read_fixed(&mut decoder, ItemStack::read)?;
+        let items = read_fixed(&mut decoder, item_stack::read)?;
         decoder.done()?;
         Self::new(chest, items)
     }

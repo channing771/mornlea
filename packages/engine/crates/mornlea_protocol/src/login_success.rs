@@ -1,6 +1,6 @@
 use crate::bytes::{ByteDecoder, ByteEncoder};
 use crate::error::ProtocolError;
-use crate::player_id::PlayerId;
+use crate::player_id::{self, PlayerId};
 
 /// Login LoginSuccess payload. The player identity must already be a
 /// published UUIDv4; a zero world seed is legal and is copied as-is.
@@ -31,7 +31,7 @@ impl LoginSuccess {
 
     pub fn decode(payload: &[u8]) -> Result<Self, ProtocolError> {
         let mut decoder = ByteDecoder::new(payload);
-        let player_id = PlayerId::new(decoder.bytes()?)?;
+        let player_id = player_id::read(&mut decoder)?;
         let world_seed = decoder.u64()?;
         decoder.done()?;
         Ok(Self::new(player_id, world_seed))

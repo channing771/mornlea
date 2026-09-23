@@ -275,7 +275,7 @@ const GOLDEN_PLAYER_ID: [u8; 16] = [
 
 #[test]
 fn login_start_round_trip_preserves_golden_bytes() {
-    let id = mornlea_protocol::PlayerId::new(GOLDEN_PLAYER_ID).expect("uuid v4");
+    let id = mornlea_protocol::PlayerId::try_from_bytes(GOLDEN_PLAYER_ID).expect("uuid v4");
     let login = mornlea_protocol::LoginStart::new(id, "Chen", 32).expect("login");
     let payload = login.encode();
     assert_eq!(
@@ -296,16 +296,16 @@ fn login_start_round_trip_preserves_golden_bytes() {
 #[test]
 fn login_start_rejects_invalid_identity_name_range_and_malformed_payload() {
     assert_eq!(
-        mornlea_protocol::PlayerId::new([0; 16]),
-        Err(mornlea_protocol::ProtocolError::InvalidIdentity)
+        mornlea_protocol::PlayerId::try_from_bytes([0; 16]),
+        Err(mornlea_domain::DomainError::InvalidIdentity)
     );
     let mut not_v4 = GOLDEN_PLAYER_ID;
     not_v4[6] = 0x55;
     assert_eq!(
-        mornlea_protocol::PlayerId::new(not_v4),
-        Err(mornlea_protocol::ProtocolError::InvalidIdentity)
+        mornlea_protocol::PlayerId::try_from_bytes(not_v4),
+        Err(mornlea_domain::DomainError::InvalidIdentity)
     );
-    let id = mornlea_protocol::PlayerId::new(GOLDEN_PLAYER_ID).expect("uuid v4");
+    let id = mornlea_protocol::PlayerId::try_from_bytes(GOLDEN_PLAYER_ID).expect("uuid v4");
     assert_eq!(
         mornlea_protocol::LoginStart::new(id, "Chen\nName", 32),
         Err(mornlea_protocol::ProtocolError::InvalidString)
@@ -331,7 +331,7 @@ fn login_start_rejects_invalid_identity_name_range_and_malformed_payload() {
 
 #[test]
 fn login_success_round_trip_preserves_golden_bytes() {
-    let id = mornlea_protocol::PlayerId::new(GOLDEN_PLAYER_ID).expect("uuid v4");
+    let id = mornlea_protocol::PlayerId::try_from_bytes(GOLDEN_PLAYER_ID).expect("uuid v4");
     let success = mornlea_protocol::LoginSuccess::new(id, 0x1122_3344_5566_7788);
     let payload = success.encode();
     assert_eq!(
@@ -359,7 +359,7 @@ fn login_success_rejects_invalid_identity_and_malformed_payload() {
         mornlea_protocol::LoginSuccess::decode(&trailing),
         Err(mornlea_protocol::ProtocolError::TrailingBytes)
     );
-    let id = mornlea_protocol::PlayerId::new(GOLDEN_PLAYER_ID).expect("uuid v4");
+    let id = mornlea_protocol::PlayerId::try_from_bytes(GOLDEN_PLAYER_ID).expect("uuid v4");
     let zero_seed = mornlea_protocol::LoginSuccess::new(id, 0);
     assert_eq!(zero_seed.world_seed, 0);
     assert_eq!(
@@ -1293,7 +1293,14 @@ fn place_water_rejects_non_finite_and_malformed_payload() {
 
 #[test]
 fn move_container_stack_round_trip_preserves_golden_bytes() {
-    let container = mornlea_protocol::ContainerRef::new(0, -3, 7, 0, 5, 9).expect("container");
+    let container = mornlea_protocol::ContainerRef {
+        dimension: 0,
+        chunk_x: -3,
+        chunk_z: 7,
+        kind: 0,
+        slot: 5,
+        generation: 9,
+    };
     let move_stack = mornlea_protocol::MoveContainerStack::new(4, container, 0, 36).expect("move");
     let payload = move_stack.encode();
     assert_eq!(
@@ -1310,7 +1317,14 @@ fn move_container_stack_round_trip_preserves_golden_bytes() {
     assert_eq!(decoded.container, container);
     assert_eq!(decoded.from, 0);
     assert_eq!(decoded.to, 36);
-    let chest = mornlea_protocol::ContainerRef::new(0, 1, -2, 1, 3, 4).expect("chest");
+    let chest = mornlea_protocol::ContainerRef {
+        dimension: 0,
+        chunk_x: 1,
+        chunk_z: -2,
+        kind: 1,
+        slot: 3,
+        generation: 4,
+    };
     let chest_move =
         mornlea_protocol::MoveContainerStack::new(5, chest, 62, 3).expect("chest move");
     assert_eq!(
@@ -1321,7 +1335,14 @@ fn move_container_stack_round_trip_preserves_golden_bytes() {
 
 #[test]
 fn move_container_stack_rejects_invalid_container_and_malformed_payload() {
-    let container = mornlea_protocol::ContainerRef::new(0, -3, 7, 0, 5, 9).expect("container");
+    let container = mornlea_protocol::ContainerRef {
+        dimension: 0,
+        chunk_x: -3,
+        chunk_z: 7,
+        kind: 0,
+        slot: 5,
+        generation: 9,
+    };
     assert_eq!(
         mornlea_protocol::MoveContainerStack::new(1, container, 0, 0),
         Err(mornlea_protocol::ProtocolError::InvalidRange)
@@ -1334,29 +1355,76 @@ fn move_container_stack_rejects_invalid_container_and_malformed_payload() {
         mornlea_protocol::MoveContainerStack::new(1, container, 39, 0),
         Err(mornlea_protocol::ProtocolError::InvalidRange)
     );
-    let chest = mornlea_protocol::ContainerRef::new(0, 1, -2, 1, 3, 4).expect("chest");
+    let chest = mornlea_protocol::ContainerRef {
+        dimension: 0,
+        chunk_x: 1,
+        chunk_z: -2,
+        kind: 1,
+        slot: 3,
+        generation: 4,
+    };
     assert_eq!(
         mornlea_protocol::MoveContainerStack::new(1, chest, 0, 63),
         Err(mornlea_protocol::ProtocolError::InvalidRange)
     );
     assert_eq!(
-        mornlea_protocol::ContainerRef::new(0, 1, 2, 2, 0, 1),
+        mornlea_protocol::ContainerRef {
+            dimension: 0,
+            chunk_x: 1,
+            chunk_z: 2,
+            kind: 2,
+            slot: 0,
+            generation: 1,
+        }
+        .to_domain_present(),
         Err(mornlea_protocol::ProtocolError::InvalidEnum)
     );
     assert_eq!(
-        mornlea_protocol::ContainerRef::new(0, 1, 2, 0, 32, 1),
+        mornlea_protocol::ContainerRef {
+            dimension: 0,
+            chunk_x: 1,
+            chunk_z: 2,
+            kind: 0,
+            slot: 32,
+            generation: 1,
+        }
+        .to_domain_present(),
         Err(mornlea_protocol::ProtocolError::InvalidRange)
     );
     assert_eq!(
-        mornlea_protocol::ContainerRef::new(0, 1, 2, 1, 16, 1),
+        mornlea_protocol::ContainerRef {
+            dimension: 0,
+            chunk_x: 1,
+            chunk_z: 2,
+            kind: 1,
+            slot: 16,
+            generation: 1,
+        }
+        .to_domain_present(),
         Err(mornlea_protocol::ProtocolError::InvalidRange)
     );
     assert_eq!(
-        mornlea_protocol::ContainerRef::new(0, 1, 2, 0, 0, 0),
+        mornlea_protocol::ContainerRef {
+            dimension: 0,
+            chunk_x: 1,
+            chunk_z: 2,
+            kind: 0,
+            slot: 0,
+            generation: 0,
+        }
+        .to_domain_present(),
         Err(mornlea_protocol::ProtocolError::InvalidRange)
     );
     assert_eq!(
-        mornlea_protocol::ContainerRef::new(1, 1, 2, 0, 0, 1),
+        mornlea_protocol::ContainerRef {
+            dimension: 1,
+            chunk_x: 1,
+            chunk_z: 2,
+            kind: 0,
+            slot: 0,
+            generation: 1,
+        }
+        .to_domain_present(),
         Err(mornlea_protocol::ProtocolError::InvalidRange)
     );
     assert!(mornlea_protocol::MoveContainerStack::decode(&[0x04]).is_err());
@@ -1373,7 +1441,14 @@ fn move_container_stack_rejects_invalid_container_and_malformed_payload() {
 
 #[test]
 fn move_stack_partial_round_trip_preserves_golden_bytes() {
-    let container = mornlea_protocol::ContainerRef::new(0, -3, 7, 1, 5, 9).expect("chest");
+    let container = mornlea_protocol::ContainerRef {
+        dimension: 0,
+        chunk_x: -3,
+        chunk_z: 7,
+        kind: 1,
+        slot: 5,
+        generation: 9,
+    };
     let partial =
         mornlea_protocol::MoveStackPartial::new(19, container, 2, 10, 34, true).expect("partial");
     let payload = partial.encode();
@@ -1408,7 +1483,14 @@ fn move_stack_partial_round_trip_preserves_golden_bytes() {
 
 #[test]
 fn move_stack_partial_rejects_invalid_view_and_malformed_payload() {
-    let container = mornlea_protocol::ContainerRef::new(0, -3, 7, 1, 5, 9).expect("chest");
+    let container = mornlea_protocol::ContainerRef {
+        dimension: 0,
+        chunk_x: -3,
+        chunk_z: 7,
+        kind: 1,
+        slot: 5,
+        generation: 9,
+    };
     assert_eq!(
         mornlea_protocol::MoveStackPartial::new(1, container, 2, 0, 0, true),
         Err(mornlea_protocol::ProtocolError::InvalidRange)
@@ -1478,7 +1560,14 @@ fn move_stack_partial_rejects_invalid_view_and_malformed_payload() {
 
 #[test]
 fn quick_move_stack_round_trip_preserves_golden_bytes() {
-    let container = mornlea_protocol::ContainerRef::new(0, 4, -2, 0, 3, 5).expect("furnace");
+    let container = mornlea_protocol::ContainerRef {
+        dimension: 0,
+        chunk_x: 4,
+        chunk_z: -2,
+        kind: 0,
+        slot: 3,
+        generation: 5,
+    };
     let quick = mornlea_protocol::QuickMoveStack::new(20, container, 2, 38).expect("quick");
     let payload = quick.encode();
     assert_eq!(
@@ -1508,7 +1597,14 @@ fn quick_move_stack_round_trip_preserves_golden_bytes() {
 
 #[test]
 fn quick_move_stack_rejects_invalid_view_and_malformed_payload() {
-    let container = mornlea_protocol::ContainerRef::new(0, 4, -2, 0, 3, 5).expect("furnace");
+    let container = mornlea_protocol::ContainerRef {
+        dimension: 0,
+        chunk_x: 4,
+        chunk_z: -2,
+        kind: 0,
+        slot: 3,
+        generation: 5,
+    };
     assert_eq!(
         mornlea_protocol::QuickMoveStack::new(1, container, 2, 39),
         Err(mornlea_protocol::ProtocolError::InvalidRange)
@@ -1543,7 +1639,14 @@ fn quick_move_stack_rejects_invalid_view_and_malformed_payload() {
 
 #[test]
 fn drop_stack_round_trip_preserves_golden_bytes() {
-    let container = mornlea_protocol::ContainerRef::new(0, -3, 7, 1, 5, 9).expect("chest");
+    let container = mornlea_protocol::ContainerRef {
+        dimension: 0,
+        chunk_x: -3,
+        chunk_z: 7,
+        kind: 1,
+        slot: 5,
+        generation: 9,
+    };
     let drop = mornlea_protocol::DropStack::new(21, container, 2, 62).expect("drop");
     let payload = drop.encode();
     assert_eq!(
@@ -1570,7 +1673,14 @@ fn drop_stack_round_trip_preserves_golden_bytes() {
 
 #[test]
 fn drop_stack_rejects_invalid_view_and_malformed_payload() {
-    let container = mornlea_protocol::ContainerRef::new(0, -3, 7, 1, 5, 9).expect("chest");
+    let container = mornlea_protocol::ContainerRef {
+        dimension: 0,
+        chunk_x: -3,
+        chunk_z: 7,
+        kind: 1,
+        slot: 5,
+        generation: 9,
+    };
     assert_eq!(
         mornlea_protocol::DropStack::new(1, container, 2, 63),
         Err(mornlea_protocol::ProtocolError::InvalidRange)
@@ -1821,7 +1931,7 @@ fn combat_hit_rejects_invalid_range_and_malformed_payload() {
 
 #[test]
 fn remote_player_despawn_round_trip_preserves_golden_bytes() {
-    let player = mornlea_protocol::PlayerId::new([
+    let player = mornlea_protocol::PlayerId::try_from_bytes([
         0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x67, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
         0xff,
     ])
@@ -2128,7 +2238,7 @@ fn forget_chunks_rejects_empty_duplicate_and_malformed_payload() {
 
 #[test]
 fn companion_despawn_round_trip_preserves_identity_bytes() {
-    let companion = mornlea_protocol::CompanionId::new([
+    let companion = mornlea_protocol::CompanionId::try_from_bytes([
         0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x67, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
         0xff,
     ])
@@ -2322,18 +2432,17 @@ fn passive_despawn_rejects_unsorted_zero_reason_and_malformed_payload() {
 
 #[test]
 fn chest_state_round_trip_preserves_slot_bytes() {
-    let chest = mornlea_protocol::ContainerRef::new(
-        0,
-        5,
-        -6,
-        mornlea_protocol::CONTAINER_KIND_CHEST,
-        3,
-        11,
-    )
-    .expect("chest");
+    let chest = mornlea_protocol::ContainerRef {
+        dimension: 0,
+        chunk_x: 5,
+        chunk_z: -6,
+        kind: mornlea_protocol::CONTAINER_KIND_CHEST,
+        slot: 3,
+        generation: 11,
+    };
     let mut items = [mornlea_protocol::ItemStack::EMPTY; mornlea_protocol::CHEST_SLOTS];
-    items[0] = mornlea_protocol::ItemStack::new(1, 5, 0).expect("stone");
-    items[26] = mornlea_protocol::ItemStack::new(2, 1, 0).expect("dirt");
+    items[0] = mornlea_protocol::ItemStack::try_new(1, 5, 0).expect("stone");
+    items[26] = mornlea_protocol::ItemStack::try_new(2, 1, 0).expect("dirt");
     let state = mornlea_protocol::ChestState::new(chest, items).expect("state");
     let payload = state.encode();
     assert_eq!(mornlea_protocol::ChestState::PACKET_ID, 15);
@@ -2349,30 +2458,28 @@ fn chest_state_round_trip_preserves_slot_bytes() {
 
 #[test]
 fn chest_state_rejects_wrong_reference_and_malformed_payload() {
-    let furnace = mornlea_protocol::ContainerRef::new(
-        0,
-        5,
-        -6,
-        mornlea_protocol::CONTAINER_KIND_FURNACE,
-        3,
-        11,
-    )
-    .expect("furnace");
+    let furnace = mornlea_protocol::ContainerRef {
+        dimension: 0,
+        chunk_x: 5,
+        chunk_z: -6,
+        kind: mornlea_protocol::CONTAINER_KIND_FURNACE,
+        slot: 3,
+        generation: 11,
+    };
     let items = [mornlea_protocol::ItemStack::EMPTY; mornlea_protocol::CHEST_SLOTS];
     // A chest state must name a chest, not a furnace.
     assert!(mornlea_protocol::ChestState::new(furnace, items).is_err());
     assert!(
         mornlea_protocol::ChestState::new(mornlea_protocol::ContainerRef::NONE, items).is_err()
     );
-    let chest = mornlea_protocol::ContainerRef::new(
-        0,
-        5,
-        -6,
-        mornlea_protocol::CONTAINER_KIND_CHEST,
-        3,
-        11,
-    )
-    .expect("chest");
+    let chest = mornlea_protocol::ContainerRef {
+        dimension: 0,
+        chunk_x: 5,
+        chunk_z: -6,
+        kind: mornlea_protocol::CONTAINER_KIND_CHEST,
+        slot: 3,
+        generation: 11,
+    };
     let state = mornlea_protocol::ChestState::new(chest, items).expect("state");
     let payload = state.encode();
     // A registered chest reference is accepted and round-trips.
@@ -2392,20 +2499,19 @@ fn chest_state_rejects_wrong_reference_and_malformed_payload() {
 
 #[test]
 fn furnace_state_round_trip_preserves_golden_bytes() {
-    let furnace = mornlea_protocol::ContainerRef::new(
-        0,
-        1,
-        -1,
-        mornlea_protocol::CONTAINER_KIND_FURNACE,
-        5,
-        7,
-    )
-    .expect("furnace");
+    let furnace = mornlea_protocol::ContainerRef {
+        dimension: 0,
+        chunk_x: 1,
+        chunk_z: -1,
+        kind: mornlea_protocol::CONTAINER_KIND_FURNACE,
+        slot: 5,
+        generation: 7,
+    };
     let state = mornlea_protocol::FurnaceState::new(
         furnace,
-        mornlea_protocol::ItemStack::new(6, 3, 0).expect("raw iron"),
+        mornlea_protocol::ItemStack::try_new(6, 3, 0).expect("raw iron"),
         mornlea_protocol::ItemStack::EMPTY,
-        mornlea_protocol::ItemStack::new(7, 1, 0).expect("iron ingot"),
+        mornlea_protocol::ItemStack::try_new(7, 1, 0).expect("iron ingot"),
         120,
         1600,
     )
@@ -2438,23 +2544,27 @@ fn furnace_state_round_trip_preserves_golden_bytes() {
 
 #[test]
 fn furnace_state_rejects_invalid_slots_timers_and_malformed_payload() {
-    let furnace = mornlea_protocol::ContainerRef::new(
-        0,
-        1,
-        -1,
-        mornlea_protocol::CONTAINER_KIND_FURNACE,
-        5,
-        7,
-    )
-    .expect("furnace");
-    let chest =
-        mornlea_protocol::ContainerRef::new(0, 1, -1, mornlea_protocol::CONTAINER_KIND_CHEST, 5, 7)
-            .expect("chest");
+    let furnace = mornlea_protocol::ContainerRef {
+        dimension: 0,
+        chunk_x: 1,
+        chunk_z: -1,
+        kind: mornlea_protocol::CONTAINER_KIND_FURNACE,
+        slot: 5,
+        generation: 7,
+    };
+    let chest = mornlea_protocol::ContainerRef {
+        dimension: 0,
+        chunk_x: 1,
+        chunk_z: -1,
+        kind: mornlea_protocol::CONTAINER_KIND_CHEST,
+        slot: 5,
+        generation: 7,
+    };
     let base = mornlea_protocol::FurnaceState::new(
         furnace,
-        mornlea_protocol::ItemStack::new(6, 3, 0).expect("raw iron"),
+        mornlea_protocol::ItemStack::try_new(6, 3, 0).expect("raw iron"),
         mornlea_protocol::ItemStack::EMPTY,
-        mornlea_protocol::ItemStack::new(7, 1, 0).expect("iron ingot"),
+        mornlea_protocol::ItemStack::try_new(7, 1, 0).expect("iron ingot"),
         120,
         1600,
     )
@@ -2499,7 +2609,7 @@ fn furnace_state_rejects_invalid_slots_timers_and_malformed_payload() {
     assert!(
         mornlea_protocol::FurnaceState::new(
             furnace,
-            mornlea_protocol::ItemStack::new(1, 1, 0).expect("stone"),
+            mornlea_protocol::ItemStack::try_new(1, 1, 0).expect("stone"),
             mornlea_protocol::ItemStack::EMPTY,
             mornlea_protocol::ItemStack::EMPTY,
             0,
@@ -2511,7 +2621,7 @@ fn furnace_state_rejects_invalid_slots_timers_and_malformed_payload() {
         mornlea_protocol::FurnaceState::new(
             furnace,
             mornlea_protocol::ItemStack::EMPTY,
-            mornlea_protocol::ItemStack::new(1, 1, 0).expect("stone"),
+            mornlea_protocol::ItemStack::try_new(1, 1, 0).expect("stone"),
             mornlea_protocol::ItemStack::EMPTY,
             0,
             0,
@@ -2523,7 +2633,7 @@ fn furnace_state_rejects_invalid_slots_timers_and_malformed_payload() {
             furnace,
             mornlea_protocol::ItemStack::EMPTY,
             mornlea_protocol::ItemStack::EMPTY,
-            mornlea_protocol::ItemStack::new(1, 1, 0).expect("stone"),
+            mornlea_protocol::ItemStack::try_new(1, 1, 0).expect("stone"),
             0,
             0,
         )
@@ -2534,7 +2644,7 @@ fn furnace_state_rejects_invalid_slots_timers_and_malformed_payload() {
         mornlea_protocol::FurnaceState::new(
             furnace,
             mornlea_protocol::ItemStack::EMPTY,
-            mornlea_protocol::ItemStack::new(5, 1, 0).expect("coal"),
+            mornlea_protocol::ItemStack::try_new(5, 1, 0).expect("coal"),
             mornlea_protocol::ItemStack::EMPTY,
             0,
             0,
@@ -2554,12 +2664,12 @@ fn furnace_state_rejects_invalid_slots_timers_and_malformed_payload() {
 #[test]
 fn crafting_state_round_trip_preserves_golden_bytes() {
     let mut slots = [mornlea_protocol::ItemStack::EMPTY; 9];
-    slots[0] = mornlea_protocol::ItemStack::new(1, 2, 0).expect("stone");
-    slots[4] = mornlea_protocol::ItemStack::new(37, 1, 0).expect("stick");
+    slots[0] = mornlea_protocol::ItemStack::try_new(1, 2, 0).expect("stone");
+    slots[4] = mornlea_protocol::ItemStack::try_new(37, 1, 0).expect("stick");
     let state = mornlea_protocol::CraftingState::new(
         3,
         slots,
-        mornlea_protocol::ItemStack::new(4, 4, 0).expect("stone brick"),
+        mornlea_protocol::ItemStack::try_new(4, 4, 0).expect("stone brick"),
     )
     .expect("state");
     let payload = state.encode();
@@ -2591,7 +2701,7 @@ fn crafting_state_rejects_unknown_size_residue_and_malformed_payload() {
         );
     }
     let mut personal = empty;
-    personal[0] = mornlea_protocol::ItemStack::new(1, 1, 0).expect("stone");
+    personal[0] = mornlea_protocol::ItemStack::try_new(1, 1, 0).expect("stone");
     assert!(
         mornlea_protocol::CraftingState::new(
             mornlea_protocol::CRAFTING_GRID_SIZE_PERSONAL,
@@ -2600,7 +2710,7 @@ fn crafting_state_rejects_unknown_size_residue_and_malformed_payload() {
         )
         .is_ok()
     );
-    personal[4] = mornlea_protocol::ItemStack::new(1, 1, 0).expect("stone");
+    personal[4] = mornlea_protocol::ItemStack::try_new(1, 1, 0).expect("stone");
     // A personal grid may not carry residue beyond its own size.
     assert!(
         mornlea_protocol::CraftingState::new(
@@ -2631,12 +2741,12 @@ fn crafting_state_rejects_unknown_size_residue_and_malformed_payload() {
 #[test]
 fn inventory_state_round_trip_preserves_golden_bytes() {
     let mut hotbar = [mornlea_protocol::ItemStack::EMPTY; mornlea_protocol::HOTBAR_SLOTS];
-    hotbar[0] = mornlea_protocol::ItemStack::new(1, 5, 0).expect("stone");
-    hotbar[4] = mornlea_protocol::ItemStack::new(3, 64, 0).expect("grass");
+    hotbar[0] = mornlea_protocol::ItemStack::try_new(1, 5, 0).expect("stone");
+    hotbar[4] = mornlea_protocol::ItemStack::try_new(3, 64, 0).expect("grass");
     let mut backpack = [mornlea_protocol::ItemStack::EMPTY; mornlea_protocol::BACKPACK_SLOTS];
-    backpack[0] = mornlea_protocol::ItemStack::new(2, 1, 0).expect("dirt");
+    backpack[0] = mornlea_protocol::ItemStack::try_new(2, 1, 0).expect("dirt");
     backpack[mornlea_protocol::BACKPACK_SLOTS - 1] =
-        mornlea_protocol::ItemStack::new(1, 9, 0).expect("stone");
+        mornlea_protocol::ItemStack::try_new(1, 9, 0).expect("stone");
     let state = mornlea_protocol::InventoryState::new(2, hotbar, backpack).expect("state");
     let payload = state.encode();
     assert_eq!(mornlea_protocol::InventoryState::PACKET_ID, 10);
@@ -2678,9 +2788,9 @@ fn inventory_state_rejects_unknown_selected_and_malformed_payload() {
     );
     // An unregistered item number in any slot is rejected.
     // Item 66 is the exclusive upper bound of registered item numbers.
-    assert!(mornlea_protocol::ItemStack::new(66, 1, 0).is_err());
+    assert!(mornlea_protocol::ItemStack::try_new(66, 1, 0).is_err());
     let mut hotbar = empty_hotbar;
-    hotbar[3] = mornlea_protocol::ItemStack::new(65, 1, 0).expect("item");
+    hotbar[3] = mornlea_protocol::ItemStack::try_new(65, 1, 0).expect("item");
     let encoded = mornlea_protocol::InventoryState::new(0, hotbar, empty_backpack)
         .expect("state")
         .encode();
@@ -3089,7 +3199,7 @@ fn player_state_rejects_out_of_range_fields_and_malformed_payload() {
 #[test]
 fn companion_spawn_round_trip_preserves_golden_bytes() {
     let spawn = mornlea_protocol::CompanionSpawn::new(
-        mornlea_protocol::CompanionId::new([
+        mornlea_protocol::CompanionId::try_from_bytes([
             0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
             0xee, 0xff,
         ])
@@ -3126,7 +3236,7 @@ fn companion_spawn_round_trip_preserves_golden_bytes() {
 #[test]
 fn companion_spawn_rejects_invalid_identity_name_and_pose() {
     let spawn = mornlea_protocol::CompanionSpawn::new(
-        mornlea_protocol::CompanionId::new([
+        mornlea_protocol::CompanionId::try_from_bytes([
             0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
             0xee, 0xff,
         ])
@@ -3166,7 +3276,7 @@ fn companion_spawn_rejects_invalid_identity_name_and_pose() {
         );
     }
     assert!(
-        mornlea_protocol::CompanionId::new([0xff; 16]).is_err(),
+        mornlea_protocol::CompanionId::try_from_bytes([0xff; 16]).is_err(),
         "accepted non-UUIDv4 companion identity"
     );
 
@@ -3192,12 +3302,12 @@ fn companion_spawn_rejects_invalid_identity_name_and_pose() {
 
 #[test]
 fn companion_states_round_trip_preserves_batch_bytes() {
-    let first = mornlea_protocol::CompanionId::new([
+    let first = mornlea_protocol::CompanionId::try_from_bytes([
         0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
         0xf0,
     ])
     .expect("first companion id");
-    let second = mornlea_protocol::CompanionId::new([
+    let second = mornlea_protocol::CompanionId::try_from_bytes([
         0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
         0xff,
     ])
@@ -3246,12 +3356,12 @@ fn companion_states_round_trip_preserves_batch_bytes() {
 
 #[test]
 fn companion_states_rejects_unsorted_invalid_and_malformed_payload() {
-    let first = mornlea_protocol::CompanionId::new([
+    let first = mornlea_protocol::CompanionId::try_from_bytes([
         0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
         0xf0,
     ])
     .expect("first companion id");
-    let second = mornlea_protocol::CompanionId::new([
+    let second = mornlea_protocol::CompanionId::try_from_bytes([
         0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
         0xff,
     ])
@@ -3300,7 +3410,7 @@ fn companion_states_rejects_unsorted_invalid_and_malformed_payload() {
     let mut full = Vec::new();
     for index in 0..mornlea_protocol::MAX_COMPANION_STATES {
         full.push(mornlea_protocol::CompanionState {
-            companion_id: mornlea_protocol::CompanionId::new([
+            companion_id: mornlea_protocol::CompanionId::try_from_bytes([
                 0,
                 0,
                 0,
@@ -3363,14 +3473,16 @@ fn item_drop_upserts_round_trip_preserves_batch_bytes() {
         0x0102_0304_0506_0708,
         vec![
             mornlea_protocol::ItemDrop {
-                id: mornlea_protocol::DropId::new(0, 0, 0, 1, 1).expect("first drop id"),
+                id: mornlea_protocol::DropId::try_new(0, mornlea_domain::ChunkPos::new(0, 0), 1, 1)
+                    .expect("first drop id"),
                 block_index: 100,
                 item: mornlea_protocol::ITEM_STONE,
                 count: 5,
                 durability: 0,
             },
             mornlea_protocol::ItemDrop {
-                id: mornlea_protocol::DropId::new(0, 0, 0, 2, 1).expect("second drop id"),
+                id: mornlea_protocol::DropId::try_new(0, mornlea_domain::ChunkPos::new(0, 0), 2, 1)
+                    .expect("second drop id"),
                 block_index: 200,
                 item: mornlea_protocol::ITEM_COAL,
                 count: 10,
@@ -3408,7 +3520,8 @@ fn item_drop_upserts_round_trip_preserves_batch_bytes() {
 #[test]
 fn item_drop_upserts_rejects_invalid_records_and_malformed_payload() {
     let drop = mornlea_protocol::ItemDrop {
-        id: mornlea_protocol::DropId::new(0, 0, 0, 1, 1).expect("drop id"),
+        id: mornlea_protocol::DropId::try_new(0, mornlea_domain::ChunkPos::new(0, 0), 1, 1)
+            .expect("drop id"),
         block_index: 100,
         item: mornlea_protocol::ITEM_STONE,
         count: 5,
@@ -3416,11 +3529,11 @@ fn item_drop_upserts_rejects_invalid_records_and_malformed_payload() {
     };
 
     assert!(
-        mornlea_protocol::DropId::new(0, 0, 0, 32, 1).is_err(),
+        mornlea_protocol::DropId::try_new(0, mornlea_domain::ChunkPos::new(0, 0), 32, 1).is_err(),
         "accepted a drop slot outside the fixed per-chunk array"
     );
     assert!(
-        mornlea_protocol::DropId::new(0, 0, 0, 1, 0).is_err(),
+        mornlea_protocol::DropId::try_new(0, mornlea_domain::ChunkPos::new(0, 0), 1, 0).is_err(),
         "accepted a drop identity with a zero generation"
     );
     let bad_block_index = mornlea_protocol::ItemDrop {
@@ -3459,7 +3572,8 @@ fn item_drop_upserts_rejects_invalid_records_and_malformed_payload() {
         "accepted duplicate item drop identities"
     );
     let later = mornlea_protocol::ItemDrop {
-        id: mornlea_protocol::DropId::new(0, 0, 0, 2, 1).expect("drop id"),
+        id: mornlea_protocol::DropId::try_new(0, mornlea_domain::ChunkPos::new(0, 0), 2, 1)
+            .expect("drop id"),
         ..drop
     };
     assert!(
@@ -3502,8 +3616,10 @@ fn item_drop_removes_round_trip_preserves_batch_bytes() {
     let removes = mornlea_protocol::ItemDropRemoves::new(
         0x0102_0304_0506_0708,
         vec![
-            mornlea_protocol::DropId::new(0, 0, 0, 1, 1).expect("first drop id"),
-            mornlea_protocol::DropId::new(0, 0, 0, 2, 7).expect("second drop id"),
+            mornlea_protocol::DropId::try_new(0, mornlea_domain::ChunkPos::new(0, 0), 1, 1)
+                .expect("first drop id"),
+            mornlea_protocol::DropId::try_new(0, mornlea_domain::ChunkPos::new(0, 0), 2, 7)
+                .expect("second drop id"),
         ],
     )
     .expect("removes");
@@ -3526,8 +3642,10 @@ fn item_drop_removes_round_trip_preserves_batch_bytes() {
 
 #[test]
 fn item_drop_removes_rejects_invalid_ids_and_malformed_payload() {
-    let first = mornlea_protocol::DropId::new(0, 0, 0, 1, 1).expect("first drop id");
-    let second = mornlea_protocol::DropId::new(0, 0, 0, 2, 1).expect("second drop id");
+    let first = mornlea_protocol::DropId::try_new(0, mornlea_domain::ChunkPos::new(0, 0), 1, 1)
+        .expect("first drop id");
+    let second = mornlea_protocol::DropId::try_new(0, mornlea_domain::ChunkPos::new(0, 0), 2, 1)
+        .expect("second drop id");
 
     assert!(mornlea_protocol::ItemDropRemoves::new(1, Vec::new()).is_err());
     assert!(
@@ -3541,7 +3659,7 @@ fn item_drop_removes_rejects_invalid_ids_and_malformed_payload() {
     // The same identity space as the upsert batch, so the slot and generation
     // rules are enforced by `DropId` itself.
     assert!(
-        mornlea_protocol::DropId::new(0, 0, 0, 32, 1).is_err(),
+        mornlea_protocol::DropId::try_new(0, mornlea_domain::ChunkPos::new(0, 0), 32, 1).is_err(),
         "accepted a drop slot outside the fixed per-chunk array"
     );
 
@@ -3576,7 +3694,7 @@ fn item_drop_removes_rejects_invalid_ids_and_malformed_payload() {
 #[test]
 fn remote_player_spawn_round_trip_preserves_golden_bytes() {
     let spawn = mornlea_protocol::RemotePlayerSpawn::new(
-        mornlea_protocol::PlayerId::new([
+        mornlea_protocol::PlayerId::try_from_bytes([
             0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
             0xee, 0xff,
         ])
@@ -3634,7 +3752,7 @@ fn remote_player_spawn_round_trip_preserves_golden_bytes() {
 #[test]
 fn remote_player_spawn_rejects_invalid_identity_name_and_pose() {
     let spawn = mornlea_protocol::RemotePlayerSpawn::new(
-        mornlea_protocol::PlayerId::new([
+        mornlea_protocol::PlayerId::try_from_bytes([
             0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
             0xee, 0xff,
         ])
@@ -3677,7 +3795,7 @@ fn remote_player_spawn_rejects_invalid_identity_name_and_pose() {
         );
     }
     assert!(
-        mornlea_protocol::PlayerId::new([0xff; 16]).is_err(),
+        mornlea_protocol::PlayerId::try_from_bytes([0xff; 16]).is_err(),
         "accepted non-UUIDv4 player identity"
     );
 
@@ -3706,7 +3824,7 @@ fn remote_player_states_round_trip_preserves_golden_bytes() {
     let states = mornlea_protocol::RemotePlayerStates::new(
         2,
         vec![mornlea_protocol::RemotePlayerState {
-            player_id: mornlea_protocol::PlayerId::new([
+            player_id: mornlea_protocol::PlayerId::try_from_bytes([
                 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
                 0xee, 0xff,
             ])
@@ -3757,12 +3875,12 @@ fn remote_player_states_round_trip_preserves_golden_bytes() {
 
 #[test]
 fn remote_player_states_rejects_unsorted_invalid_and_malformed_payload() {
-    let first = mornlea_protocol::PlayerId::new([
+    let first = mornlea_protocol::PlayerId::try_from_bytes([
         0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
         0xf0,
     ])
     .expect("first player id");
-    let second = mornlea_protocol::PlayerId::new([
+    let second = mornlea_protocol::PlayerId::try_from_bytes([
         0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
         0xff,
     ])
@@ -3809,7 +3927,7 @@ fn remote_player_states_rejects_unsorted_invalid_and_malformed_payload() {
     // activity limit.
     let full: Vec<_> = (0..mornlea_protocol::MAX_REMOTE_PLAYER_STATES)
         .map(|index| mornlea_protocol::RemotePlayerState {
-            player_id: mornlea_protocol::PlayerId::new([
+            player_id: mornlea_protocol::PlayerId::try_from_bytes([
                 0,
                 0,
                 0,
@@ -4278,17 +4396,16 @@ fn projectile_state_rejects_invalid_records_and_malformed_payload() {
 fn chat_event_round_trip_preserves_golden_bytes() {
     let accepted = mornlea_protocol::ChatEvent::new(mornlea_protocol::ChatEvent {
         event_id: 0x0102_0304_0506_0708,
-        player_id: mornlea_protocol::PlayerId::new([
+        player_id: mornlea_protocol::PlayerId::try_from_bytes([
             0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
             0xee, 0xff,
         ])
         .expect("player id"),
         player_name: "陈".to_owned(),
-        companion_id: mornlea_protocol::CompanionId::new([
+        companion_id: [
             0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
             0xee, 0xfe,
-        ])
-        .expect("companion id"),
+        ],
         companion_name: "Mira".to_owned(),
         kind: mornlea_protocol::CHAT_EVENT_ACCEPTED,
         reject_reason: mornlea_protocol::CHAT_REJECT_NONE,
@@ -4305,7 +4422,7 @@ fn chat_event_round_trip_preserves_golden_bytes() {
     assert_eq!(&payload[8..24], &accepted.player_id.bytes());
     assert_eq!(payload[24], 3);
     assert_eq!(&payload[25..28], &[0xe9, 0x99, 0x88]);
-    assert_eq!(&payload[28..44], &accepted.companion_id.bytes());
+    assert_eq!(&payload[28..44], &accepted.companion_id);
     assert_eq!(payload[44], 4);
     assert_eq!(&payload[45..49], b"Mira");
     assert_eq!(payload[49], mornlea_protocol::CHAT_EVENT_ACCEPTED);
@@ -4339,7 +4456,7 @@ fn chat_event_round_trip_preserves_golden_bytes() {
     // A rejection that never addressed a companion carries the absent identity
     // and no text at all, which is why the identity needs an absent form.
     let unaddressed = mornlea_protocol::ChatEvent::new(mornlea_protocol::ChatEvent {
-        companion_id: mornlea_protocol::CompanionId::NONE,
+        companion_id: [0u8; 16],
         companion_name: String::new(),
         kind: mornlea_protocol::CHAT_EVENT_REJECTED,
         reject_reason: mornlea_protocol::CHAT_REJECT_INVALID_FORMAT,
@@ -4365,17 +4482,16 @@ fn chat_event_round_trip_preserves_golden_bytes() {
 fn chat_event_rejects_invalid_kind_combinations_and_malformed_payload() {
     let base = mornlea_protocol::ChatEvent {
         event_id: 0x0102_0304_0506_0708,
-        player_id: mornlea_protocol::PlayerId::new([
+        player_id: mornlea_protocol::PlayerId::try_from_bytes([
             0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
             0xee, 0xff,
         ])
         .expect("player id"),
         player_name: "陈".to_owned(),
-        companion_id: mornlea_protocol::CompanionId::new([
+        companion_id: [
             0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
             0xee, 0xfe,
-        ])
-        .expect("companion id"),
+        ],
         companion_name: "Mira".to_owned(),
         kind: mornlea_protocol::CHAT_EVENT_ACCEPTED,
         reject_reason: mornlea_protocol::CHAT_REJECT_NONE,
@@ -4432,7 +4548,7 @@ fn chat_event_rejects_invalid_kind_combinations_and_malformed_payload() {
         "accepted a format rejection that keeps a companion identity"
     );
     let clean_format = mornlea_protocol::ChatEvent {
-        companion_id: mornlea_protocol::CompanionId::NONE,
+        companion_id: [0u8; 16],
         kind: mornlea_protocol::CHAT_EVENT_REJECTED,
         reject_reason: mornlea_protocol::CHAT_REJECT_INVALID_FORMAT,
         companion_name: String::new(),
@@ -4449,7 +4565,7 @@ fn chat_event_rejects_invalid_kind_combinations_and_malformed_payload() {
     let mut anonymous_queue_full = base.clone();
     anonymous_queue_full.kind = mornlea_protocol::CHAT_EVENT_REJECTED;
     anonymous_queue_full.reject_reason = mornlea_protocol::CHAT_REJECT_QUEUE_FULL;
-    anonymous_queue_full.companion_id = mornlea_protocol::CompanionId::NONE;
+    anonymous_queue_full.companion_id = [0u8; 16];
     assert!(anonymous_queue_full.validate().is_err());
 
     // Task events restate the command and keep the reason slot empty.

@@ -8,7 +8,7 @@
 use crate::bytes::{ByteDecoder, ByteEncoder};
 use crate::entity_id::valid_display_name;
 use crate::error::ProtocolError;
-use crate::player_id::PlayerId;
+use crate::player_id::{self, PlayerId};
 use mornlea_domain::Dimension;
 
 /// Display-name byte ceiling, copied from the Go `RemotePlayerSpawn` string
@@ -100,7 +100,7 @@ impl RemotePlayerSpawn {
 
     pub fn decode(payload: &[u8]) -> Result<Self, ProtocolError> {
         let mut decoder = ByteDecoder::new(payload);
-        let player_id = PlayerId::new(decoder.bytes()?)?;
+        let player_id = player_id::read(&mut decoder)?;
         let display_name = decoder.string(DISPLAY_NAME_MAX_BYTES, DISPLAY_NAME_MAX_RUNES)?;
         let server_tick = decoder.u64()?;
         let dimension = Dimension::new(u8::try_from(decoder.i32()?).unwrap_or(u8::MAX))

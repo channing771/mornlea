@@ -1,6 +1,6 @@
 use crate::bytes::{ByteDecoder, ByteEncoder};
 use crate::error::ProtocolError;
-use crate::player_id::PlayerId;
+use crate::player_id::{self, PlayerId};
 
 /// Play RemotePlayerDespawn payload: a 16-byte UUIDv4 identity of the
 /// remote player the authoritative world removed. The remaining players
@@ -25,7 +25,7 @@ impl RemotePlayerDespawn {
 
     pub fn decode(payload: &[u8]) -> Result<Self, ProtocolError> {
         let mut decoder = ByteDecoder::new(payload);
-        let player = PlayerId::new(decoder.bytes()?).map_err(|_| ProtocolError::InvalidIdentity)?;
+        let player = player_id::read(&mut decoder)?;
         decoder.done()?;
         Ok(Self::new(player))
     }

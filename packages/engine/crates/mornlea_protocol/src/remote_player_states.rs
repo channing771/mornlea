@@ -10,7 +10,7 @@
 use crate::batch::{UvarintCountBatch, strictly_increasing_ids};
 use crate::bytes::{ByteDecoder, ByteEncoder};
 use crate::error::ProtocolError;
-use crate::player_id::PlayerId;
+use crate::player_id::{self, PlayerId};
 use mornlea_domain::Dimension;
 
 /// Maximum remote player states one payload may carry, copied from the Go
@@ -108,7 +108,7 @@ impl RemotePlayerStates {
         batch.require_minimum_records(&decoder, REMOTE_PLAYER_STATE_WIRE_BYTES)?;
         let mut players = Vec::with_capacity(batch.count as usize);
         for _ in 0..batch.count {
-            let player_id = PlayerId::new(decoder.bytes()?)?;
+            let player_id = player_id::read(&mut decoder)?;
             let dimension = Dimension::new(u8::try_from(decoder.i32()?).unwrap_or(u8::MAX))
                 .map_err(|_| ProtocolError::InvalidEnum)?;
             let mut position = [0f32; 3];

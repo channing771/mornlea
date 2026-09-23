@@ -1,19 +1,18 @@
+//! The checked player identity, owned by `mornlea_domain`.
+//!
+//! A player identity is the same UUIDv4 rule everywhere it appears, so the
+//! rule lives once in the domain and this module is only the wire edge: it
+//! re-exports the domain value and reads one through the decoder with the
+//! protocol error mapping. Keeping a second checked constructor here would
+//! let the two rules drift apart.
+
+use crate::bytes::ByteDecoder;
 use crate::error::ProtocolError;
+pub use mornlea_domain::PlayerId;
 
-/// Stable UUIDv4 player identity. Zero and non-v4 values fail before the
-/// identifier is published.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PlayerId([u8; 16]);
-
-impl PlayerId {
-    pub fn new(bytes: [u8; 16]) -> Result<Self, ProtocolError> {
-        if bytes == [0; 16] || bytes[6] >> 4 != 4 || bytes[8] & 0xc0 != 0x80 {
-            return Err(ProtocolError::InvalidIdentity);
-        }
-        Ok(Self(bytes))
-    }
-
-    pub fn bytes(self) -> [u8; 16] {
-        self.0
-    }
+/// Reads one 16-byte identity and runs the domain rule. The wire failure is
+/// the protocol's identity rejection; the domain's own error stays inside
+/// the domain value type.
+pub(crate) fn read(decoder: &mut ByteDecoder<'_>) -> Result<PlayerId, ProtocolError> {
+    PlayerId::try_from_bytes(decoder.bytes()?).map_err(|_| ProtocolError::InvalidIdentity)
 }

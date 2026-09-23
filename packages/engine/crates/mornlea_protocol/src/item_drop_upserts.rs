@@ -10,9 +10,9 @@
 use crate::batch::{UvarintCountBatch, strictly_increasing};
 use crate::block::MAX_CHUNK_BLOCK_INDEX;
 use crate::bytes::{ByteDecoder, ByteEncoder};
-use crate::drop_id::{DROP_ID_WIRE_BYTES, DropId, MAX_ITEM_DROP_BATCH};
+use crate::drop_id::{self, DROP_ID_WIRE_BYTES, DropId, MAX_ITEM_DROP_BATCH};
 use crate::error::ProtocolError;
-use crate::item_stack::ItemStack;
+use crate::item_stack::{self, ItemStack};
 
 /// Fixed encoded length of one drop record: the drop identity, a `u32` block
 /// index, and the fixed 5-byte item stack.
@@ -51,7 +51,7 @@ impl ItemDropUpserts {
             if drop.block_index >= MAX_CHUNK_BLOCK_INDEX {
                 return Err(ProtocolError::InvalidRange);
             }
-            ItemStack::new(drop.item, drop.count, drop.durability)?;
+            item_stack::checked(drop.item, drop.count, drop.durability)?;
         }
         let ids: Vec<DropId> = drops.iter().map(|drop| drop.id).collect();
         if !strictly_increasing(&ids) {
@@ -64,11 +64,13 @@ impl ItemDropUpserts {
         let mut encoder = ByteEncoder::new();
         UvarintCountBatch::write(&mut encoder, self.server_tick, self.drops.len() as u32);
         for drop in &self.drops {
-            drop.id.write(&mut encoder);
+            drop_id::write(drop.id, &mut encoder);
             encoder.u32(drop.block_index);
-            ItemStack::new(drop.item, drop.count, drop.durability)
-                .expect("validated item drop is encodable")
-                .write(&mut encoder);
+            item_stack::write(
+                item_stack::checked(drop.item, drop.count, drop.durability)
+                    .expect("validated item drop is encodable"),
+                &mut encoder,
+            );
         }
         encoder
             .finish()
@@ -81,9 +83,9 @@ impl ItemDropUpserts {
         batch.require_minimum_records(&decoder, ITEM_DROP_WIRE_BYTES)?;
         let mut drops = Vec::with_capacity(batch.count as usize);
         for _ in 0..batch.count {
-            let id = DropId::read(&mut decoder)?;
+            let id = drop_id::read(&mut decoder)?;
             let block_index = decoder.u32()?;
-            let stack = ItemStack::read(&mut decoder)?;
+            let stack = item_stack::read(&mut decoder)?;
             drops.push(ItemDrop {
                 id,
                 block_index,

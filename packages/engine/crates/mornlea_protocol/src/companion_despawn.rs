@@ -1,5 +1,5 @@
 use crate::bytes::{ByteDecoder, ByteEncoder};
-use crate::entity_id::CompanionId;
+use crate::entity_id::{self, CompanionId};
 use crate::error::ProtocolError;
 
 /// Play CompanionDespawn payload: the 16-byte companion identity the
@@ -26,7 +26,7 @@ impl CompanionDespawn {
 
     pub fn decode(payload: &[u8]) -> Result<Self, ProtocolError> {
         let mut decoder = ByteDecoder::new(payload);
-        let companion = CompanionId::new(decoder.bytes()?)?;
+        let companion = entity_id::read(&mut decoder)?;
         decoder.done()?;
         Ok(Self::new(companion))
     }

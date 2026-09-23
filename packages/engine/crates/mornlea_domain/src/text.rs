@@ -68,6 +68,20 @@ fn has_surrounding_whitespace(text: &str) -> bool {
         || text.chars().next_back().is_some_and(is_pinned_whitespace)
 }
 
+/// Trims the pinned whitespace set from both ends and borrows the remainder.
+///
+/// The Go admission path trims a raw name before it validates the result, so
+/// the trim set and the validation set have to be the one this crate already
+/// pins. Delegating to `str::trim` instead would read the standard library's
+/// Unicode tables, whose contents can move with a Unicode-version bump, so
+/// the trim runs over the same explicit ranges as `is_pinned_whitespace` and
+/// returns a borrow of the caller's text. Callers that then construct a
+/// canonical value feed the trimmed slice back through the same crate, so
+/// one lexical rule decides both steps.
+pub fn trim_pinned_whitespace(text: &str) -> &str {
+    text.trim_matches(is_pinned_whitespace)
+}
+
 /// Applies the Go display-name admission rule to a canonical text: 1..=32
 /// scalars, at most 128 bytes, no surrounding whitespace, and no control
 /// character. Normalization is deliberately not performed here; the caller
@@ -224,5 +238,18 @@ mod tests {
             0,
             "the byte bound must reject before any scalar is inspected"
         );
+    }
+
+    /// The trim helper borrows its input and trims exactly the pinned Go
+    /// whitespace set: the whole set at both ends, nothing else. A format
+    /// character the Go baseline keeps stays in the returned slice, which is
+    /// what keeps the trim from widening with a Unicode-version bump.
+    #[test]
+    fn trim_pinned_whitespace_trims_only_the_pinned_set() {
+        assert_eq!(trim_pinned_whitespace("\u{0009}n\u{000A}"), "n");
+        assert_eq!(trim_pinned_whitespace("\u{00A0}n\u{3000}"), "n");
+        assert_eq!(trim_pinned_whitespace("\u{200B}n"), "\u{200B}n");
+        assert_eq!(trim_pinned_whitespace(""), "");
+        assert_eq!(trim_pinned_whitespace("plain"), "plain");
     }
 }

@@ -1,31 +1,32 @@
-//! Fixed 5-byte item stack wire value shared by every inventory-carrying
+//! The fixed 5-byte item stack wire value shared by every inventory-carrying
 //! packet family.
 //!
-//! The layout is `u16` item, `u8` count, `u16` durability in that order. It
-//! encodes an authoritative slot, so this module also owns the registered
-//! item table the Go side uses for `ItemStack.Valid`: stack limits, tool and
-//! armor durability maxima, and the empty-stack canonical form. Duplicating
-//! those rules per family would let the families disagree about which slot
-//! values are publishable.
+//! The layout is `u16` item, `u8` count, `u16` durability in that order, and
+//! the value is the domain's checked `ItemStack`, re-exported here so the
+//! packet families, the domain events and the save codec all admit the same
+//! slot values. The stack limits, durability maxima and smelting table the Go
+//! `core.ItemStack.Valid` rule applies live once in `mornlea_domain`; this
+//! module is the wire edge — it reads and writes the fixed stride and maps the
+//! domain rejection into the protocol error vocabulary — plus the frozen item
+//! numbering and the furnace slot predicates, which compose the domain table
+//! instead of copying it.
 
 use crate::bytes::{ByteDecoder, ByteEncoder};
 use crate::error::ProtocolError;
+pub use mornlea_domain::ItemStack;
 
 /// Empty slot item number. A slot holding it must carry a zero count and a
 /// zero durability; any other combination is not a canonical empty stack.
 pub const ITEM_NONE: u16 = 0;
 
-/// Exclusive upper bound of registered item numbers, copied from the Go
-/// `ItemIDMax` sentinel.
+/// Exclusive upper bound of registered item numbers, the Go `ItemIDMax`
+/// sentinel. Item IDs themselves are frozen wire data: the numbering is
+/// protocol-stable, so the named constants below stay as they are while the
+/// per-item rules come from the domain predicates.
 pub const ITEM_ID_MAX: u16 = 66;
 
-/// Per-slot upper bound shared by every stackable item.
-pub const MAX_STACK_COUNT: u8 = 64;
-
 /// Item numbers referenced by the shared validation tables and by the
-/// packet-family fixtures. The numbering itself is frozen wire data: item
-/// IDs are protocol-stable values and reordering them would break saved and
-/// in-flight bytes.
+/// packet-family fixtures.
 pub const ITEM_STONE: u16 = 1;
 pub const ITEM_DIRT: u16 = 2;
 pub const ITEM_GRASS: u16 = 3;
@@ -45,171 +46,46 @@ pub const ITEM_STONE_PICKAXE: u16 = 10;
 pub const ITEM_IRON_PICKAXE: u16 = 11;
 pub const ITEM_BOW: u16 = 62;
 
-/// Items whose per-slot limit is one because they are held as a single worn
-/// or carried piece: tools, broken tool forms, hoes, swords, buckets, armor
-/// pieces, and the bow.
-const SINGLE_SLOT_ITEMS: [u16; 22] = [
-    ITEM_STONE_PICKAXE,
-    ITEM_IRON_PICKAXE,
-    12,
-    13,
-    30,
-    31,
-    32,
-    33,
-    47,
-    48,
-    49,
-    50,
-    51,
-    52,
-    55,
-    56,
-    58,
-    59,
-    60,
-    61,
-    ITEM_BOW,
-    65,
-];
-
-/// Durability maxima for the items that carry a durability budget. Broken
-/// tool forms deliberately have no entry: they are already spent.
-const DURABILITY_MAXIMA: [(u16, u16); 12] = [
-    (ITEM_STONE_PICKAXE, 131),
-    (ITEM_IRON_PICKAXE, 250),
-    (30, 131),
-    (31, 250),
-    (47, 59),
-    (48, 131),
-    (49, 250),
-    (ITEM_BOW, 120),
-    (58, 165),
-    (59, 240),
-    (60, 225),
-    (61, 195),
-];
-
-/// Smelting inputs and their single fixed product, copied from the Go
-/// `SmeltingOutput` table.
-const SMELTING_OUTPUTS: [(u16, u16); 4] = [
-    (ITEM_RAW_IRON, ITEM_IRON_INGOT),
-    (ITEM_SAND, ITEM_GLASS),
-    (ITEM_CLAY, ITEM_BRICK),
-    (ITEM_RAW_BEEF, ITEM_COOKED_BEEF),
-];
-
-/// Reports the fixed smelting product of a registered furnace input. Unknown
-/// inputs have no product and therefore cannot occupy a furnace input slot.
-pub fn smelting_output(item: u16) -> Option<u16> {
-    SMELTING_OUTPUTS
-        .iter()
-        .find(|(input, _)| *input == item)
-        .map(|(_, output)| *output)
+/// Wraps wire fields through the domain rule.
+///
+/// Unregistered item numbers are `InvalidEnum`; the count, durability and
+/// canonical-empty rejections are `InvalidRange`, which is the mapping the
+/// packet families published before the domain owned the rule.
+pub(crate) fn checked(item: u16, count: u8, durability: u16) -> Result<ItemStack, ProtocolError> {
+    ItemStack::try_new(item, count, durability).map_err(|error| match error {
+        mornlea_domain::DomainError::InvalidItem => ProtocolError::InvalidEnum,
+        _ => ProtocolError::InvalidRange,
+    })
 }
 
+/// Reads one fixed-stride stack and runs the domain rule.
+pub(crate) fn read(decoder: &mut ByteDecoder<'_>) -> Result<ItemStack, ProtocolError> {
+    let item = decoder.u16()?;
+    let count = decoder.u8()?;
+    let durability = decoder.u16()?;
+    checked(item, count, durability)
+}
+
+/// Writes one fixed-stride stack. The value is already checked, so the write
+/// cannot fail.
+pub(crate) fn write(stack: ItemStack, encoder: &mut ByteEncoder) {
+    encoder.u16(stack.item());
+    encoder.u8(stack.count());
+    encoder.u16(stack.durability());
+}
+
+/// Reports the fixed smelting product of a registered furnace input, read from
+/// the domain table so the wire predicate and the semantic rule cannot drift.
+pub use mornlea_domain::smelting_output;
+
 /// Reports whether a stack may occupy a furnace output slot. The whitelist
-/// covers every product `smelting_output` can produce plus the empty stack.
+/// is the domain's product set plus the empty stack.
 pub fn valid_furnace_output(stack: ItemStack) -> bool {
-    match stack.item() {
-        ITEM_NONE => true,
-        ITEM_IRON_INGOT | ITEM_GLASS | ITEM_BRICK | ITEM_COOKED_BEEF => true,
-        _ => false,
-    }
+    stack.item() == ITEM_NONE || mornlea_domain::is_smelting_product(stack.item())
 }
 
 /// Reports whether a stack may occupy a furnace input slot: either the empty
 /// stack or a registered smelting input.
 pub fn valid_furnace_input(stack: ItemStack) -> bool {
-    stack.item() == ITEM_NONE || smelting_output(stack.item()).is_some()
-}
-
-/// One authoritative slot value. The empty stack is the zero value, so an
-/// absent slot needs no sentinel item number.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ItemStack {
-    item: u16,
-    count: u8,
-    durability: u16,
-}
-
-impl ItemStack {
-    /// The canonical empty stack.
-    pub const EMPTY: Self = Self {
-        item: ITEM_NONE,
-        count: 0,
-        durability: 0,
-    };
-
-    /// Builds a stack from wire fields.
-    ///
-    /// Unregistered item numbers are `InvalidEnum`; a non-canonical empty
-    /// stack, a zero or over-limit count, and a durability outside the item's
-    /// budget are `InvalidRange`. Items without a durability concept must
-    /// carry a zero durability.
-    pub fn new(item: u16, count: u8, durability: u16) -> Result<Self, ProtocolError> {
-        if item == ITEM_NONE {
-            if count == 0 && durability == 0 {
-                return Ok(Self::EMPTY);
-            }
-            return Err(ProtocolError::InvalidRange);
-        }
-        if item >= ITEM_ID_MAX {
-            return Err(ProtocolError::InvalidEnum);
-        }
-        let limit = if SINGLE_SLOT_ITEMS.contains(&item) {
-            1
-        } else {
-            MAX_STACK_COUNT
-        };
-        if count == 0 || count > limit {
-            return Err(ProtocolError::InvalidRange);
-        }
-        match DURABILITY_MAXIMA
-            .iter()
-            .find(|(durable, _)| *durable == item)
-            .map(|(_, maximum)| *maximum)
-        {
-            Some(maximum) => {
-                if durability < 1 || durability > maximum {
-                    return Err(ProtocolError::InvalidRange);
-                }
-            }
-            None => {
-                if durability != 0 {
-                    return Err(ProtocolError::InvalidRange);
-                }
-            }
-        }
-        Ok(Self {
-            item,
-            count,
-            durability,
-        })
-    }
-
-    pub fn item(self) -> u16 {
-        self.item
-    }
-
-    pub fn count(self) -> u8 {
-        self.count
-    }
-
-    pub fn durability(self) -> u16 {
-        self.durability
-    }
-
-    pub(crate) fn write(&self, encoder: &mut ByteEncoder) {
-        encoder.u16(self.item);
-        encoder.u8(self.count);
-        encoder.u16(self.durability);
-    }
-
-    pub(crate) fn read(decoder: &mut ByteDecoder<'_>) -> Result<Self, ProtocolError> {
-        let item = decoder.u16()?;
-        let count = decoder.u8()?;
-        let durability = decoder.u16()?;
-        Self::new(item, count, durability)
-    }
+    stack.item() == ITEM_NONE || mornlea_domain::smelting_output(stack.item()).is_some()
 }

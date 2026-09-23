@@ -1,11 +1,11 @@
 use crate::batch::read_fixed;
 use crate::bytes::{ByteDecoder, ByteEncoder};
 use crate::error::ProtocolError;
+use crate::item_stack::{self, ItemStack};
 use crate::move_crafting_stack::CRAFTING_GRID_SLOTS;
 
 /// Array length form of the shared grid slot count.
 const CRAFTING_GRID_SLOTS_USIZE: usize = CRAFTING_GRID_SLOTS as usize;
-use crate::item_stack::ItemStack;
 
 /// Fixed crafting grid slot count carried by one payload. The grid command
 /// family already pins this count, so this module reuses that constant instead
@@ -56,9 +56,9 @@ impl CraftingState {
         let mut encoder = ByteEncoder::new();
         encoder.u8(self.size);
         for stack in &self.slots {
-            stack.write(&mut encoder);
+            item_stack::write(*stack, &mut encoder);
         }
-        self.output.write(&mut encoder);
+        item_stack::write(self.output, &mut encoder);
         encoder
             .finish()
             .expect("validated crafting state is encodable")
@@ -68,8 +68,8 @@ impl CraftingState {
         let mut decoder = ByteDecoder::new(payload);
         let size = decoder.u8()?;
         let slots: [ItemStack; CRAFTING_GRID_SLOTS_USIZE] =
-            read_fixed(&mut decoder, ItemStack::read)?;
-        let output = ItemStack::read(&mut decoder)?;
+            read_fixed(&mut decoder, item_stack::read)?;
+        let output = item_stack::read(&mut decoder)?;
         decoder.done()?;
         Self::new(size, slots, output)
     }

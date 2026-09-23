@@ -5,7 +5,7 @@
 //! `valid_companion_name` instead of being restated here.
 
 use crate::bytes::{ByteDecoder, ByteEncoder};
-use crate::entity_id::{CompanionId, valid_companion_name};
+use crate::entity_id::{self, CompanionId, valid_companion_name};
 use crate::error::ProtocolError;
 use mornlea_domain::Dimension;
 
@@ -114,7 +114,7 @@ impl CompanionSpawn {
         if payload.len() > COMPANION_SPAWN_MAX_WIRE_BYTES {
             return Err(ProtocolError::FrameTooLarge);
         }
-        let companion_id = CompanionId::new(decoder.bytes()?)?;
+        let companion_id = entity_id::read(&mut decoder)?;
         let name = decoder.string(COMPANION_NAME_MAX_BYTES, COMPANION_NAME_MAX_RUNES)?;
         let tick = decoder.u64()?;
         let dimension = Dimension::new(u8::try_from(decoder.i32()?).unwrap_or(u8::MAX))

@@ -104,10 +104,13 @@ rather than checking that it omits a few names.
 
 - Login packet ID 0 payload is a 16-byte UUIDv4, a length-prefixed display
   name, and a trailing view-distance byte.
-- `PlayerId::new` accepts only non-zero UUIDv4 values. Display names must
-  remain valid after trimming (`1..=32` runes, `<=128` bytes, no control
-  characters). View distance is the closed interval `2..=64`. Failures are
-  `InvalidIdentity`, `InvalidString`, or `InvalidRange` before publication
+- The identity is the checked domain `PlayerId`. The display name is
+  length-bounded on the raw payload, trimmed by the domain's pinned
+  whitespace set, and then admitted by the domain's canonical display-name
+  rule (`1..=32` runes, `<=128` bytes, no control characters), so the login
+  path shares one lexical rule with the other name carriers. View distance is
+  the closed interval `2..=64`. Failures are `InvalidIdentity`,
+  `InvalidString`, or `InvalidRange` before publication
   (`login_start_round_trip_preserves_golden_bytes`,
   `login_start_rejects_invalid_identity_name_range_and_malformed_payload`).
 
@@ -310,13 +313,29 @@ rather than checking that it omits a few names.
 
 ## Container reference (`src/container_ref.rs`, `tests/runtime_contract.rs`)
 
-- `ContainerRef` is the shared 18-byte wire value that fleet and chest
+- `ContainerRef` is the shared 18-byte wire value that furnace and chest
   commands carry: a little-endian `i32` dimension, two chunk coordinates,
   a one-byte kind, a slot byte, and a little-endian `u32` generation.
-  Both container kinds live in the overworld's fixed per-chunk arrays, so
-  a foreign dimension, out-of-range slot, or zero generation is
-  `InvalidRange`, and an unknown kind is `InvalidEnum`. `write`/`read`
-  keep furnaces and chests on one encoding.
+  `write`/`read` keep furnaces and chests on one encoding, and `read`
+  stores the raw `i32` dimension without narrowing it: both container arrays
+  live in the overworld's fixed per-chunk storage, so a foreign dimension is
+  an invalid real reference, never a value to reinterpret as a `u8`
+  (`container_view_decode_preserves_a_foreign_raw_dimension`).
+- `NONE` is the exact all-zero record, the one absent sentinel the inventory
+  and crafting views carry. `to_domain_present` rejects it and every invalid
+  real reference; `to_domain_optional` maps only the exact zero record to
+  `None` and requires a checked present record for everything else. The
+  checked value is the domain `ContainerRef`, which owns the per-kind slot
+  bounds and the nonzero-generation rule; a foreign dimension, out-of-range
+  slot, or zero generation is `InvalidRange`, and an unknown kind is
+  `InvalidEnum`
+  (`container_reference_present_conversion_rejects_foreign_dimensions`,
+  `container_reference_absence_is_exactly_the_zero_record`).
+- The packet families keep their own reference gates through the crate-private
+  `validate_furnace` / `validate_chest` / `validate_any` helpers, which run
+  the kind check first and then the checked conversion. A stack-view command
+  that never required a valid real reference keeps that behavior; adding one
+  is the stack-view node's change, not this module's.
 
 ## Move container stack (`src/move_container_stack.rs`, `tests/runtime_contract.rs`)
 
@@ -379,6 +398,12 @@ rather than checking that it omits a few names.
   truncated payloads fail before publication; trailing bytes fail after the
   last field (`chat_command_round_trip_preserves_golden_bytes`,
   `chat_command_rejects_blank_control_and_malformed_payload`).
+- `valid_bounded_text` is this module's local rule: it takes the bound from
+  the caller so the command and speech slots cannot drift apart, and
+  `valid_command_text` binds it to the command bound. Its admitted set is the
+  domain's canonical bounded-text rule; routing it through the domain
+  `CommandText` is the chat node's change, so the local copy stays until then
+  and must not drift from the domain bounds.
 
 ## Player input (`src/player_input.rs`, `tests/runtime_contract.rs`)
 
@@ -421,13 +446,21 @@ rather than checking that it omits a few names.
 
 - `ItemStack` is the fixed 5-byte slot value every inventory-carrying family
   shares: `u16` item, `u8` count, `u16` durability. The empty stack is the
-  zero value. This module is the single owner of the registered item table
-  the Go side consults for `ItemStack.Valid`: stack limits, tool and armor
-  durability maxima, and the smelting input/output whitelists. Families must
-  not fork a second copy of those rules.
+  zero value. The value is the domain's checked `ItemStack`, re-exported
+  here; the registered item table the Go side consults for `ItemStack.Valid`
+  — stack limits, tool and armor durability maxima, and the smelting
+  input/output whitelists — lives once in `mornlea_domain`, and this module
+  composes it instead of forking a second copy
+  (`item_stack_rules_come_from_the_domain_tables`).
 - Unregistered item numbers are `InvalidEnum`; a non-canonical empty stack, a
   zero or over-limit count, and a durability outside the item budget are
-  `InvalidRange`.
+  `InvalidRange`. The item-number constants are frozen wire data and stay in
+  this module; the furnace slot predicates (`valid_furnace_input`,
+  `valid_furnace_output`) read the domain's smelting table rather than
+  listing the products again.
+- The wire codec helpers `read` and `write` are crate-private: decoding runs
+  the domain rule and maps its rejection into the protocol error, and
+  encoding writes an already-checked value.
 
 ## Record arrays and batch headers (`src/batch.rs`, `src/block.rs`)
 
@@ -444,8 +477,9 @@ rather than checking that it omits a few names.
   which is a different failure than the Go side publishes. The item drop and
   remote player state batches use it; the mob and companion batches use
   `require_records`.
-- `src/block.rs` owns registered block numbering, the world vertical span,
-  the chunk-ordered block index that sorted block-change batches compare, and
+- `src/block.rs` re-exports the domain's registered-block predicate and keeps
+  the wire-level geometry: the world vertical span, the section layout, the
+  chunk-ordered block index that sorted block-change batches compare, and
   `MAX_CHUNK_BLOCK_INDEX`, the exclusive upper bound an item drop's block
   index must stay below.
 
@@ -477,17 +511,22 @@ rather than checking that it omits a few names.
 
 ## Companion identity (`src/entity_id.rs`)
 
-- `CompanionId` is the 16-byte UUIDv4 companion identity the companion
-  families share; zero and non-v4 values are `InvalidIdentity`.
-  `valid_companion_name` is the companion name rule: the canonical display
+- `CompanionId` is the checked domain 16-byte UUIDv4 companion identity the
+  companion families share; zero and non-v4 values are `InvalidIdentity`.
+  The domain publishes no zero companion identity, so the absent form a
+  never-addressed chat event carries stays a wire-only raw value; see
+  "Shared value rules"
+  (`companion_absence_is_never_a_domain_identity`).
+- `valid_companion_name` is the companion name rule: the canonical display
   name rule plus a rejection of Unicode whitespace, so a publishable companion
-  name never contains an embedded space.
-- `valid_display_name` is the plain canonical display-name rule, shared by
-  the chat event and the remote player spawn. It is a different rule from the
-  login start's, which trims before validating, because the Go side applies
-  `NormalizeDisplayName` differently in those two places.
-- `CompanionId::NONE` is the absent identity and `from_bytes` the
-  unvalidated reader; see "Shared value rules".
+  name never contains an embedded space. `valid_display_name` is the plain
+  canonical display-name rule, shared by the chat event and the remote player
+  spawn. Both predicates route through the domain's checked text
+  constructors, which own the byte, rune, whitespace and control bounds; a
+  family never restates the rule.
+- `valid_display_name` is a different rule from the login start's, which
+  trims first, because the Go side applies `NormalizeDisplayName` differently
+  in those two places.
 
 ## Companion despawn (`src/companion_despawn.rs`, `tests/runtime_contract.rs`)
 
@@ -632,8 +671,9 @@ rather than checking that it omits a few names.
 
 - `DropId` is the stable identity of one authoritative drop: an `i32`
   dimension, two `i32` chunk coordinates, a `u8` slot, and a `u32`
-  generation, in the 17-byte wire order. The slot must fit
-  `DROPS_PER_CHUNK` (`32`) and the generation must be non-zero.
+  generation, in the 17-byte wire order. The value is the domain's checked
+  `DropId`, re-exported here; the slot must fit the fixed per-chunk drop
+  array (`32`) and the generation must be non-zero.
 - The dimension is deliberately not validated. The Go `DropID.Valid` rule
   checks only the slot range and the generation, so a drop naming an unusual
   dimension is still a publishable identity and must not be rejected by a
@@ -641,7 +681,7 @@ rather than checking that it omits a few names.
 - `DropId` is a validated newtype, so an out-of-range slot or a zero
   generation cannot be constructed at all. The batch families therefore only
   assert the batch bounds and the identity order, and the identity rejections
-  are asserted at `DropId::new`.
+  are asserted at `DropId::try_new`.
 - `MAX_ITEM_DROP_BATCH` (`32`) lives with the identity because both drop
   halves describe the same bounded drop set.
 
@@ -806,34 +846,78 @@ rather than checking that it omits a few names.
   `chunk_snapshot_round_trips_through_committed_fixture`,
   `chunk_snapshot_rejects_malformed_envelope_and_bounds`,
   `chunk_snapshot_rejects_malformed_logical_payload`).
+- `SectionData` and the domain's `PalettedSection` are the same compact
+  storage in two representations. `TryFrom<SectionData> for PalettedSection`
+  moves the palette and packed words through the domain's checked
+  constructors; `TryFrom<(PalettedSection, i32)> for SectionData` moves them
+  back with the section index supplied separately, because the wire states
+  each section's `Y` while the domain holds the column as a fixed array whose
+  position is the index. Neither direction expands the 4096 cells into block
+  IDs, sorts a palette, or recompresses slots, so the round trip preserves the
+  exact palette and word order
+  (`indexed_section_conversion_keeps_palette_and_word_order`,
+  `single_and_direct_section_conversions_round_trip`).
 
 ## Shared value rules
 
-- `src/entity_id.rs` owns both the companion identity and the display-name
-  rule. `valid_display_name` is the plain canonical rule shared by the chat
-  event and the remote player spawn; `valid_companion_name` adds the
-  Unicode-whitespace rejection for companion names.
-- `CompanionId::NONE` is the absent identity a never-addressed chat event
-  carries. It is deliberately unreachable through `CompanionId::new`, which
-  rejects the zero value, and `CompanionId::from_bytes` is the unvalidated
-  reader decoding needs so the kind-specific validation can decide whether
-  the absent form is acceptable.
-- `src/chat_command.rs` owns the bounded text rule. `valid_bounded_text`
-  takes the bound from the caller so the command and speech slots cannot
-  drift apart, and `valid_command_text` binds it to the command bound.
+- `mornlea_protocol` reuses `mornlea_domain::{PlayerId, CompanionId,
+  ItemStack, DropId}` and their checked tables. The shim modules
+  (`src/player_id.rs`, `src/entity_id.rs`, `src/item_stack.rs`,
+  `src/drop_id.rs`) re-export the domain value and hold only the wire edge:
+  the fixed-stride read/write helpers, the frozen item-number constants, and
+  the domain-rejection-to-`ProtocolError` mapping. A packet family never
+  restates an identity, item, or name rule.
+- A wire `ContainerRef` keeps the exact v45 raw representation: the dimension
+  is the wire `i32`, never narrowed, and the exact all-zero record is the one
+  absent sentinel. `to_domain_present` rejects that record and every invalid
+  real reference; `to_domain_optional` maps only the exact zero record to
+  `None`. The domain `ContainerRef` owns the slot and generation bounds, so
+  no container rule lives in this crate beside the per-kind array sizes the
+  wire pins.
+- Wire-only exceptions stay explicit and raw: the absent companion identity
+  in the two permitted chat rejection branches, and armor-owned broken
+  pieces, which are not ordinary `ItemStack` values and stay out of the
+  inventory families. The chat event therefore carries its companion slot as
+  raw 16 bytes and interprets them through `names_companion`, so the zero
+  form never becomes a domain identity.
+- The pinned whitespace set and the canonical text rules live in
+  `mornlea_domain`. `mornlea_domain::trim_pinned_whitespace` borrows the
+  trimmed remainder, and admission paths (the login start today) trim by it
+  before constructing a domain text value, so one lexical rule decides every
+  step and no `str::trim` Unicode-table shortcut enters the crate.
+- Compact section storage is shared through the two checked conversions in
+  `src/chunk_snapshot.rs`; see the chunk snapshot section for the move
+  semantics.
+- The chat command's bounded-text rule (`src/chat_command.rs`) is the one
+  local text rule left: its admitted set matches the domain's canonical
+  bounded-text rule, and the chat node routes it through the domain
+  `CommandText`.
 - A family whose Go `Validate` checks fewer fields than the Rust newtype
   enforces is a parity break. Where the Go rule is narrower, as with
   `DropID.Valid` and the dimension, the Rust rule is narrowed to match rather
   than the Go rule being treated as incomplete.
+- Per-packet validation behavior is owned by the packet nodes: this crate's
+  shared-value layer removes duplicate rules and the dimension narrowing
+  without strengthening or weakening any packet's own gates, and the
+  stack-view commands keep their current reference behavior until their node
+  lands.
 
 ## Focused Verification
 
 ```bash
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_values --locked -- --list
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_values --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_frame --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
+
+`tests/protocol_values.rs` pins the shared-value boundary: the raw container
+dimension survives decoding without narrowing, the exact zero record is the
+only absent reference, the item rules have the domain's single owner, the
+compact section conversions preserve palette and word order, and the pinned
+whitespace set is the only trim rule.
 
 `tests/protocol_corpus.rs` executes the corpus cases this crate owns through
 the real `read_frame`/`write_frame` path and compares the complete result

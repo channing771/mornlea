@@ -77,8 +77,7 @@ mod till_soil;
 mod varint;
 
 pub use block::{
-    BLOCK_ID_MAX, BLOCKS_PER_SECTION, MAX_CHUNK_BLOCK_INDEX, MAX_Y, MIN_Y, SECTION_SIZE,
-    SECTIONS_PER_CHUNK,
+    BLOCKS_PER_SECTION, MAX_CHUNK_BLOCK_INDEX, MAX_Y, MIN_Y, SECTION_SIZE, SECTIONS_PER_CHUNK,
 };
 pub use block_changes::{BlockChange, BlockChanges, MAX_BLOCK_CHANGES};
 pub use bone_meal::BoneMeal;
@@ -126,7 +125,7 @@ pub use disconnect::{
     DISCONNECT_INTERNAL_ERROR, DISCONNECT_PROTOCOL_VIOLATION, DISCONNECT_SERVER_SHUTDOWN,
     DISCONNECT_SLOW_CLIENT, DISCONNECT_TIMEOUT, Disconnect,
 };
-pub use drop_id::{DROP_ID_WIRE_BYTES, DROPS_PER_CHUNK, DropId, MAX_ITEM_DROP_BATCH};
+pub use drop_id::{DROP_ID_WIRE_BYTES, DropId, MAX_ITEM_DROP_BATCH};
 pub use drop_selected_item::DropSelectedItem;
 pub use entity_id::{CompanionId, valid_companion_name, valid_display_name};
 pub use equip_armor::EquipArmor;
@@ -153,8 +152,8 @@ pub use inventory_state::{
 pub use item_drop_removes::ItemDropRemoves;
 pub use item_drop_upserts::{ITEM_DROP_WIRE_BYTES, ItemDrop, ItemDropUpserts};
 pub use item_stack::{
-    ITEM_COAL, ITEM_ID_MAX, ITEM_NONE, ITEM_STONE, ITEM_STONE_PICKAXE, ItemStack, MAX_STACK_COUNT,
-    smelting_output, valid_furnace_output,
+    ITEM_COAL, ITEM_ID_MAX, ITEM_NONE, ITEM_STONE, ITEM_STONE_PICKAXE, ItemStack, smelting_output,
+    valid_furnace_output,
 };
 pub use keep_alive::KeepAlive;
 pub use keep_alive_reply::KeepAliveReply;

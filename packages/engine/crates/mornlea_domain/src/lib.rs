@@ -54,7 +54,7 @@ pub use items::{
 };
 pub use locations::{BlockPos, ChunkPos, ContainerKind, ContainerRef, DropId};
 pub use sections::{PalettedSection, chunk_block_index, registered_block};
-pub use text::{CommandText, CompanionName, DisplayName, SpeechText};
+pub use text::{CommandText, CompanionName, DisplayName, SpeechText, trim_pinned_whitespace};
 pub use values::{Dimension, FiniteVec3, HotbarSlot, LookAngles};
 
 /// Shared semantic work cap for the record batches this crate admits.

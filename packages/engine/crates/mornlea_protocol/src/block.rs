@@ -1,20 +1,20 @@
 //! Registered block numbering and the world geometry the packet families
 //! share.
 //!
-//! Block IDs are protocol-stable values, so this module only publishes the
-//! exclusive upper bound and the geometry rules the protocol layer needs:
-//! which vertical span is inside the world, and how a world position maps to
-//! the chunk-ordered block index that sorted block-change batches compare.
+//! The registered-block predicate is the domain's: the numbering is shared
+//! semantic data, so this module re-exports `mornlea_domain::registered_block`
+//! instead of keeping a second bound. What remains here is the wire-level
+//! geometry the codecs need — the vertical span, the section layout, and the
+//! chunk-ordered block index a sorted block-change batch compares — which the
+//! domain does not publish.
+
+pub use mornlea_domain::registered_block;
 
 /// Air is the zero block, the empty value of a single-storage section.
 pub const BLOCK_AIR: u16 = 0;
 
 /// Stone, the fixture block used by the frozen golden payloads.
 pub const BLOCK_STONE: u16 = 2;
-
-/// Exclusive upper bound of registered block numbers, copied from the Go
-/// `BlockIDMax` sentinel.
-pub const BLOCK_ID_MAX: u16 = 90;
 
 /// Lowest block Y coordinate inside the world, inclusive.
 pub const MIN_Y: i32 = -64;
@@ -30,11 +30,6 @@ pub const SECTIONS_PER_CHUNK: usize = 24;
 
 /// Number of blocks in one section.
 pub const BLOCKS_PER_SECTION: usize = 4096;
-
-/// Reports whether a block ID is registered.
-pub fn registered_block(block: u16) -> bool {
-    block < BLOCK_ID_MAX
-}
 
 /// Reports whether a block Y coordinate is inside the world's vertical span.
 pub fn inside_world(y: i32) -> bool {

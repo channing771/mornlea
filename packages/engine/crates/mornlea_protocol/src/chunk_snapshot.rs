@@ -47,7 +47,7 @@ use crate::block::{BLOCKS_PER_SECTION, SECTIONS_PER_CHUNK, registered_block};
 use crate::bytes::{ByteDecoder, ByteEncoder};
 use crate::error::ProtocolError;
 use crate::varint::canonical_uvarint_length;
-use mornlea_domain::Dimension;
+use mornlea_domain::{Dimension, DomainError, PalettedSection};
 
 /// Compressed ceiling of one snapshot envelope, copied from the Go
 /// `MaxCompressedSnapshot`. A larger declared frame is rejected before the
@@ -238,6 +238,76 @@ impl SectionData {
             }
         }
         Ok(())
+    }
+}
+
+/// Maps a domain section rejection into the protocol error the wire
+/// validator publishes for the same record.
+///
+/// The domain lumps the palette size and duplicate-entry checks into one
+/// error, so the conversion reports that error as `InvalidRange`, the same
+/// carrier the empty and oversized cases use; the block, width, high-bit and
+/// slot violations are `InvalidEnum`, matching the decode path.
+fn section_error_to_wire(error: DomainError) -> ProtocolError {
+    match error {
+        DomainError::InvalidBlock
+        | DomainError::InvalidSectionBits
+        | DomainError::InvalidSectionHighBits
+        | DomainError::InvalidSectionSlot => ProtocolError::InvalidEnum,
+        _ => ProtocolError::InvalidRange,
+    }
+}
+
+/// Moves one wire section container into the checked domain section.
+///
+/// The palette and the packed words move between the two representations
+/// without expanding the 4096 cells into block IDs, without sorting the
+/// palette and without recompressing the slots, so a conversion is lossless
+/// and bounded. The wire `y` field is the section's array position and is not
+/// part of the domain value; `ChunkSnapshot::validate` pins it to the column
+/// order before a conversion runs.
+impl TryFrom<SectionData> for PalettedSection {
+    type Error = ProtocolError;
+
+    fn try_from(section: SectionData) -> Result<Self, ProtocolError> {
+        match section.storage {
+            SectionStorage::Single => PalettedSection::single(section.single),
+            SectionStorage::Indexed => PalettedSection::indexed(
+                section.bits,
+                section.palette.into_boxed_slice(),
+                section.packed.into_boxed_slice(),
+            ),
+            SectionStorage::Direct => PalettedSection::direct(section.packed.into_boxed_slice()),
+        }
+        .map_err(section_error_to_wire)
+    }
+}
+
+/// Moves one checked domain section back into its wire container.
+///
+/// The caller supplies the section index separately, because the domain
+/// carries the column as a fixed array where the position is implicit while
+/// the wire states each section's `y`. The palette order and the packed word
+/// bits are copied exactly, so the round trip neither reorders nor
+/// recompresses the representation.
+impl TryFrom<(PalettedSection, i32)> for SectionData {
+    type Error = ProtocolError;
+
+    fn try_from((section, y): (PalettedSection, i32)) -> Result<Self, ProtocolError> {
+        if !(0..SECTIONS_PER_CHUNK as i32).contains(&y) {
+            return Err(ProtocolError::InvalidRange);
+        }
+        if let Some(block) = section.as_single() {
+            return Ok(Self::single(y, block));
+        }
+        if let Some((bits, palette, words)) = section.as_indexed() {
+            return Ok(Self::indexed(y, bits, palette.to_vec(), words.to_vec()));
+        }
+        // A domain section always carries exactly one of the three
+        // representations, so this arm is unreachable; the error keeps the
+        // conversion total for the compiler without inventing a failure mode.
+        let words = section.as_direct().ok_or(ProtocolError::InvalidEnum)?;
+        Ok(Self::direct(y, words.to_vec()))
     }
 }
 

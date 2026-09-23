@@ -1,6 +1,7 @@
 use crate::bytes::{ByteDecoder, ByteEncoder};
 use crate::error::ProtocolError;
-use crate::player_id::PlayerId;
+use crate::player_id::{self, PlayerId};
+use mornlea_domain::{DisplayName, trim_pinned_whitespace};
 
 const DISPLAY_NAME_MAX_BYTES: usize = 128;
 const DISPLAY_NAME_MAX_RUNES: usize = 32;
@@ -53,7 +54,7 @@ impl LoginStart {
 
     pub fn decode(payload: &[u8]) -> Result<Self, ProtocolError> {
         let mut decoder = ByteDecoder::new(payload);
-        let player_id = PlayerId::new(decoder.bytes()?)?;
+        let player_id = player_id::read(&mut decoder)?;
         let display_name = decoder.string(DISPLAY_NAME_MAX_BYTES, DISPLAY_NAME_MAX_RUNES)?;
         let view_distance = decoder.u8()?;
         decoder.done()?;
@@ -61,14 +62,15 @@ impl LoginStart {
     }
 }
 
+/// Reports whether the login display name is publishable.
+///
+/// The raw payload is length-bounded first, then trimmed by the domain's
+/// pinned whitespace set and admitted by the domain's canonical display-name
+/// rule, so the login path has one lexical rule shared with every other name
+/// carrier instead of a local trim.
 fn valid_display_name(name: &str) -> bool {
     if name.len() > DISPLAY_NAME_MAX_BYTES {
         return false;
     }
-    let trimmed = name.trim();
-    let runes = trimmed.chars().count();
-    runes >= 1
-        && runes <= DISPLAY_NAME_MAX_RUNES
-        && trimmed.len() <= DISPLAY_NAME_MAX_BYTES
-        && !trimmed.chars().any(char::is_control)
+    DisplayName::try_from_canonical(trim_pinned_whitespace(name).to_owned()).is_ok()
 }

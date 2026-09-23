@@ -48,6 +48,15 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   128-byte checks run before any `chars()` iterator is built, so an oversized
   input is rejected without inspecting a single scalar. `CompanionName`
   inherits that byte-first gate before its embedded-whitespace scan.
+- `trim_pinned_whitespace(&str) -> &str` is the one trim rule, exposed as a
+  borrowing helper so an admission path can trim before it constructs a
+  canonical value: it trims the same pinned whitespace set the validation
+  predicates use and returns a subslice of the caller's text. It exists
+  because the Go admission path trims a raw name before validating it, and
+  routing that trim through `str::trim` would read the standard library's
+  Unicode tables. `DisplayName::try_from_canonical` itself stays strict and
+  performs no trim; the caller owns the ordering
+  (`trim_pinned_whitespace_trims_only_the_pinned_set` in `src/text.rs`).
 
 ## Resource bounds (`src/lib.rs`, `src/event/world.rs`, `src/event/people.rs`, `src/event/mobs.rs`, `src/event/objects.rs`, `tests/resource_bounds.rs`)
 
@@ -228,9 +237,9 @@ enforced by `tests/runtime_contract.rs` (`production_manifest_has_no_codec_kerne
   and the world geometry. `registered_block` is the exported numbering
   predicate beside the item predicates, and `chunk_block_index` is the
   chunk-ordered index a sorted block-change batch compares; both are ported
-  from the Go `core` rules the protocol crate's `block.rs` mirrors. This crate
-  sits below `mornlea_protocol` and cannot import it, so the numbering lives
-  here and the tests pin every value against the Go rule; a protocol port
+  from the Go `core` rules. This crate sits below `mornlea_protocol` and
+  cannot import it, so the numbering lives here and the tests pin every value
+  against the Go rule; the protocol crate re-exports `registered_block` and
   consumes this copy rather than growing a second one.
 - `PalettedSection` is a private validated enum-backed value: a private
   `SectionStorage` enum holds `Single`, `Indexed4`, `Indexed8` and `Direct15`,
