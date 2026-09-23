@@ -44,7 +44,7 @@ fn payload_bytes(case: &FrozenCase) -> Vec<u8> {
         .and_then(|value| value.as_str())
         .unwrap_or_else(|| panic!("case {} names no payload", case.id));
     assert!(
-        text.len() % 2 == 0,
+        text.len().is_multiple_of(2),
         "case {} payload is not whole bytes",
         case.id
     );

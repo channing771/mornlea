@@ -490,8 +490,8 @@ fn corpus_structure() {
         try_load_cases_from_root(&root, CorpusConsumer::Frame).expect("load frame cases");
     assert_eq!(
         frame_cases.len(),
-        2,
-        "expected exactly 2 corpus_frame cases"
+        3,
+        "expected exactly 3 corpus_frame cases"
     );
 
     // 2. Verify all domain cases are json format and operation admit
