@@ -579,8 +579,10 @@ rather than checking that it omits a few names.
   (`container_reference_present_conversion_rejects_foreign_dimensions`,
   `container_reference_absence_is_exactly_the_zero_record`).
 - The packet families keep their own reference gates through the crate-private
-  `validate_furnace` / `validate_chest` / `validate_any` helpers, which run
-  the kind check first and then the checked conversion. `MoveContainerStack`
+  `validate_furnace` / `validate_chest` helpers, which run the kind check
+  first and then the checked conversion, and through `validate_any`, which
+  delegates straight to `to_domain_present` and therefore answers the
+  dimension first. `MoveContainerStack`
   validates its reference through `validate_any`, and the three view-addressed
   commands through the private `validate_stack_view` in
   `src/move_stack_partial.rs`, which requires the exact `NONE` in the
@@ -1223,9 +1225,10 @@ rather than checking that it omits a few names.
   than the Go rule being treated as incomplete.
 - Per-packet validation behavior is owned by the packet nodes: this crate's
   shared-value layer removes duplicate rules and the dimension narrowing
-  without strengthening or weakening any packet's own gates, and the
-  stack-view commands keep their current reference behavior until their node
-  lands.
+  without strengthening or weakening any packet's own gates. The four
+  stack-view families validate their reference through `validate_any` and the
+  shared `validate_stack_view` gate, so a malformed real reference is refused
+  at the packet boundary.
 
 ## Focused Verification
 
@@ -1241,11 +1244,13 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_client_control --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_client_rays --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_client_inventory --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_client_stack_views --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
 
 `tests/protocol_values.rs` pins the shared-value boundary: the raw container
-dimension survives decoding without narrowing, the exact zero record is the
+dimension is kept raw through `read` and refused by the checked conversion
+instead of being narrowed, the exact zero record is the
 only absent reference, the item rules have the domain's single owner, the
 compact section conversions preserve palette and word order, and the pinned
 whitespace set is the only trim rule.
@@ -1289,6 +1294,16 @@ destination leaves every caller byte untouched, a mutated slot pair or a mutated
 zero `TakeCraftingOutput` sequence wins over a short destination, the three total
 sequence-only families re-encode a `u64::MAX` sequence byte-exactly, and every
 proper truncation plus one trailing byte reject. It also needs no corpus files.
+
+`tests/protocol_client_stack_views.rs` pins the four container and
+view-addressed stack records through that same surface: the reviewed wire
+literals (28/30/28/28 bytes) round-trip for every family, the exact all-zero
+reference is the only absent form the inventory and crafting views accept, a
+malformed real reference (foreign dimension, unknown kind, zero generation,
+out-of-range physical slot) refuses at the packet boundary, the
+`MoveStackPartial` family keeps the authority-only crafting and
+furnace-output rules off the wire, and every proper truncation plus one
+trailing byte reject. It also needs no corpus files.
 
 `tests/protocol_corpus.rs` executes the corpus cases this crate owns through
 the real codec paths — `read_frame`/`write_frame` for framing and

@@ -4,7 +4,8 @@
 //! The protocol crate keeps the exact wire form wherever the wire is
 //! observable, and consumes the domain's checked newtypes wherever a shared
 //! meaning exists. The cases in this file pin that boundary: a foreign raw
-//! container dimension survives decoding instead of being narrowed into a
+//! container dimension is kept raw through `read` and refused by the checked
+//! conversion instead of being narrowed into a
 //! valid `u8`, the all-zero container reference is the one absent sentinel,
 //! the item rules have a single owner, a compact section moves between the
 //! two representations without expanding cells or reordering a palette, and
