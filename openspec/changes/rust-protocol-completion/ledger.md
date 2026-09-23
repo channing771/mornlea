@@ -282,3 +282,20 @@
 **Rollback:** revert `d9e00fc7` and `90a76cbe` individually; corpus returns to 973.
 
 **Architecture skill: no change.**
+
+
+## Node 3.7 — 2026-09-24
+
+**Status:** complete. Commits `d0c9e2c3` (`feat(protocol): qualify item-drop packets`) + controller integration `eb8a78e1` on top of `6fdc92c4`.
+
+**Deliverable:** the two item-drop families (`ItemDropUpserts` 11, `ItemDropRemoves` 12) on the common fallible surface; raw i32 dimension never narrowed or validated (−1/256 round-trip verbatim, identity ordering compares the raw dimension first); the exact empty triple stays wire-valid while non-canonical empties refuse; count 1..=32 before record scan (minimum-records rule → trailing-byte `trailing` on both sides, implementer-verified); block index < 98304 no-clamp. 19 corpus cases (10/9) through the real Go codec, producer `runtime-oracle/protocol-drops`; 4 routes; group test 15/15.
+
+**Rulings frozen (pre-ruled + implementer findings, reviewer-verified):** drop-ID slot/generation rejections map `invalid-identity` (domain-corpus precedent; `drop_id::read` remapped to `InvalidIdentity` — a baseline behavior change confined to the ID gate); the folded stack message keeps count/stack-limit violations in the corpus while unregistered item 66 stays the latent Rust-only pin (same class 3.4 recorded for inventory slots); the now-dead `drop_id::write`/`item_stack::write` helpers removed; the count case uses count 65 on the limit-64 stone (no registered item has a 16 limit — same boundary class, label/count unchanged).
+
+**Evidence:** group 15/15; `runtime_contract` 134/134; Go producer 8/8; `TestProtocolV4DropGolden|TestItemDropDecodeRejectsOversizedCountBeforeAllocation` ok; full oracle ok; audit ok; fmt/clippy/gofmt/vet clean; the 19 exported cases ran through the real Rust consumer pre-commit (all matched). Corpus integrity: 2 families changed, 992→1011 (+19/−0), `source_revision` preserved. Post-integration whole protocol crate 347/347.
+
+**Review ruling:** Approved, 0 Crit/0 Imp/2 Minor (the mutation matrix asserts validate/encoded_len only transitively through encode; the ten-closure shared round-trip helper is a readability note).
+
+**Rollback:** revert `d0c9e2c3` and `eb8a78e1` individually; corpus returns to 992.
+
+**Architecture skill: no change.**
