@@ -1,0 +1,45 @@
+{
+  "category": "packet",
+  "fields": {
+    "armor_points": 20,
+    "day_phase_offset": 23999,
+    "dimension": 1,
+    "health": 20,
+    "hunger": 20,
+    "last_input_sequence": "0",
+    "mining_active": false,
+    "mining_harvestable": false,
+    "mining_progress_ticks": 0,
+    "mining_required_ticks": 0,
+    "mining_target": {
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "on_ground": false,
+    "oxygen": 300,
+    "pitch": "80000000",
+    "position": [
+      "80000000",
+      "00000000",
+      "00000000"
+    ],
+    "ready": false,
+    "reset": false,
+    "saturation_zero": false,
+    "season": 3,
+    "season_progress": 255,
+    "server_tick": "0",
+    "temperature": -128,
+    "velocity": [
+      "00000000",
+      "00000000",
+      "00000000"
+    ],
+    "weather_kind": 2,
+    "world_time_ticks": "0",
+    "yaw": "00000000"
+  },
+  "kind": "ok"
+}
+

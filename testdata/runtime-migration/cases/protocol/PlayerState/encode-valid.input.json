@@ -1,0 +1,40 @@
+{
+  "server_tick": 0,
+  "last_input_sequence": 0,
+  "dimension": 1,
+  "position": [
+    "80000000",
+    "00000000",
+    "00000000"
+  ],
+  "velocity": [
+    "00000000",
+    "00000000",
+    "00000000"
+  ],
+  "yaw": "00000000",
+  "pitch": "80000000",
+  "on_ground": false,
+  "ready": false,
+  "reset": false,
+  "mining_active": false,
+  "mining_target": {
+    "x": 0,
+    "y": 0,
+    "z": 0
+  },
+  "mining_progress_ticks": 0,
+  "mining_required_ticks": 0,
+  "mining_harvestable": false,
+  "health": 20,
+  "oxygen": 300,
+  "hunger": 20,
+  "saturation_zero": false,
+  "day_phase_offset": 23999,
+  "world_time_ticks": 0,
+  "weather_kind": 2,
+  "season": 3,
+  "season_progress": 255,
+  "temperature": -128,
+  "armor_points": 20
+}

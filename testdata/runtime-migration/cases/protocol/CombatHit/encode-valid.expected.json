@@ -1,0 +1,11 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:7cc15f3ca164271165e1e9172ffa9c348f1c556045511a92896658cb11e20749",
+  "fields": {
+    "damage": 1,
+    "server_tick": "1",
+    "target_kind": 1
+  },
+  "kind": "ok"
+}
+

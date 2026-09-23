@@ -1,0 +1,9 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+  "fields": {
+    "sequence": "0"
+  },
+  "kind": "ok"
+}
+

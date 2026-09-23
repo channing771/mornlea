@@ -1,0 +1,9 @@
+{
+  "category": "packet",
+  "fields": {
+    "reason": 1,
+    "sequence": "0"
+  },
+  "kind": "ok"
+}
+

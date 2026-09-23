@@ -1,0 +1,10 @@
+{
+  "category": "packet",
+  "fields": {
+    "damage": 1,
+    "server_tick": "1",
+    "target_kind": 1
+  },
+  "kind": "ok"
+}
+
