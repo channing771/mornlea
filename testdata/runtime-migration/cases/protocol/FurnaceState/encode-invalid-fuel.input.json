@@ -1,0 +1,27 @@
+{
+  "furnace": {
+    "dimension": 0,
+    "chunk_x": -1,
+    "chunk_z": 2,
+    "kind": 0,
+    "slot": 31,
+    "generation": 1
+  },
+  "input": {
+    "item": 53,
+    "count": 1,
+    "durability": 0
+  },
+  "fuel": {
+    "item": 1,
+    "count": 1,
+    "durability": 0
+  },
+  "output": {
+    "item": 54,
+    "count": 1,
+    "durability": 0
+  },
+  "progress_ticks": 199,
+  "burn_ticks": 1600
+}

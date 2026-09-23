@@ -1,0 +1,60 @@
+{
+  "category": "packet",
+  "fields": {
+    "output": {
+      "count": 1,
+      "durability": 0,
+      "item": 4
+    },
+    "size": 2,
+    "slots": [
+      {
+        "count": 2,
+        "durability": 0,
+        "item": 1
+      },
+      {
+        "count": 2,
+        "durability": 0,
+        "item": 1
+      },
+      {
+        "count": 1,
+        "durability": 0,
+        "item": 37
+      },
+      {
+        "count": 1,
+        "durability": 0,
+        "item": 37
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      }
+    ]
+  },
+  "kind": "ok"
+}
+

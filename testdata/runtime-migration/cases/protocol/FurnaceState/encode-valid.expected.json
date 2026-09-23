@@ -1,0 +1,33 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:66f7cf02ce4f4701e5c4a957da1fda4117741788bb90f95f3d621b5cad769e71",
+  "fields": {
+    "burn_ticks": 1600,
+    "fuel": {
+      "count": 1,
+      "durability": 0,
+      "item": 5
+    },
+    "furnace": {
+      "chunk_x": -1,
+      "chunk_z": 2,
+      "dimension": 0,
+      "generation": 1,
+      "kind": 0,
+      "slot": 31
+    },
+    "input": {
+      "count": 1,
+      "durability": 0,
+      "item": 53
+    },
+    "output": {
+      "count": 1,
+      "durability": 0,
+      "item": 54
+    },
+    "progress_ticks": 199
+  },
+  "kind": "ok"
+}
+

@@ -1,0 +1,61 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:d0154b9554f384e4bb2d58193ab6484be46af48d7149a9e83c2a478b3566e47f",
+  "fields": {
+    "output": {
+      "count": 1,
+      "durability": 0,
+      "item": 4
+    },
+    "size": 2,
+    "slots": [
+      {
+        "count": 2,
+        "durability": 0,
+        "item": 1
+      },
+      {
+        "count": 2,
+        "durability": 0,
+        "item": 1
+      },
+      {
+        "count": 1,
+        "durability": 0,
+        "item": 37
+      },
+      {
+        "count": 1,
+        "durability": 0,
+        "item": 37
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      },
+      {
+        "count": 0,
+        "durability": 0,
+        "item": 0
+      }
+    ]
+  },
+  "kind": "ok"
+}
+

@@ -1,0 +1,147 @@
+{
+  "chest": {
+    "dimension": 0,
+    "chunk_x": -1,
+    "chunk_z": 2,
+    "kind": 1,
+    "slot": 15,
+    "generation": 1
+  },
+  "items": [
+    {
+      "item": 1,
+      "count": 5,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 10,
+      "count": 1,
+      "durability": 60
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 0,
+      "count": 0,
+      "durability": 0
+    },
+    {
+      "item": 2,
+      "count": 1,
+      "durability": 0
+    }
+  ]
+}
