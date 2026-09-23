@@ -33,3 +33,19 @@ func TestGodotProjectValidatorRequiresRipgrepBeforeValidation(t *testing.T) {
 		t.Fatalf("validator reported success after a dependency failure:\n%s", output)
 	}
 }
+
+func TestGodotProjectValidatorRejectsRipgrepExecutionError(t *testing.T) {
+	validator := filepath.Join(repositoryRoot(t), "scripts", "godot", "validate-project.sh")
+	command := exec.Command("bash", "-c", `rg() { return 2; }; export -f rg; exec "$1"`, "bash", validator)
+	outputBytes, err := command.CombinedOutput()
+	output := string(outputBytes)
+	if err == nil {
+		t.Fatalf("validator accepted a ripgrep execution error:\n%s", output)
+	}
+	if !strings.Contains(output, "ripgrep scan failed") {
+		t.Fatalf("missing ripgrep execution diagnostic:\n%s", output)
+	}
+	if strings.Contains(output, "validation passed") {
+		t.Fatalf("validator reported success after a ripgrep execution error:\n%s", output)
+	}
+}
