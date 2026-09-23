@@ -979,7 +979,7 @@ fn place_block_rejects_invalid_slot_non_finite_and_malformed_payload() {
 #[test]
 fn open_container_round_trip_preserves_golden_bytes() {
     let open = mornlea_protocol::OpenContainer::new(3, 1.5, -0.5).expect("open");
-    let payload = open.encode();
+    let payload = open.encode().expect("encode open");
     assert_eq!(
         payload,
         [
@@ -1025,7 +1025,8 @@ fn open_container_rejects_non_finite_and_malformed_payload() {
     let zero = mornlea_protocol::OpenContainer::new(0, 0.0, 0.0).expect("zero");
     assert_eq!(zero.sequence, 0);
     assert_eq!(
-        mornlea_protocol::OpenContainer::decode(&zero.encode()).expect("decode zero"),
+        mornlea_protocol::OpenContainer::decode(&zero.encode().expect("encode zero"))
+            .expect("decode zero"),
         zero
     );
 }
@@ -1094,7 +1095,7 @@ fn request_chunk_resync_rejects_unknown_dimension_and_malformed_payload() {
 #[test]
 fn till_soil_round_trip_preserves_golden_bytes() {
     let till = mornlea_protocol::TillSoil::new(12, 2.0, -1.0).expect("till");
-    let payload = till.encode();
+    let payload = till.encode().expect("encode till");
     assert_eq!(
         payload,
         [
@@ -1131,7 +1132,8 @@ fn till_soil_rejects_non_finite_and_malformed_payload() {
     );
     let zero = mornlea_protocol::TillSoil::new(0, 0.0, 0.0).expect("zero");
     assert_eq!(
-        mornlea_protocol::TillSoil::decode(&zero.encode()).expect("decode zero"),
+        mornlea_protocol::TillSoil::decode(&zero.encode().expect("encode zero"))
+            .expect("decode zero"),
         zero
     );
 }
@@ -1139,7 +1141,7 @@ fn till_soil_rejects_non_finite_and_malformed_payload() {
 #[test]
 fn bone_meal_round_trip_preserves_golden_bytes() {
     let packet = mornlea_protocol::BoneMeal::new(12, 2.0, -1.0).expect("codec");
-    let payload = packet.encode();
+    let payload = packet.encode().expect("encode bone meal");
     assert_eq!(
         payload,
         [
@@ -1184,7 +1186,8 @@ fn bone_meal_rejects_non_finite_and_malformed_payload() {
     );
     let zero = mornlea_protocol::BoneMeal::new(0, 0.0, 0.0).expect("zero");
     assert_eq!(
-        mornlea_protocol::BoneMeal::decode(&zero.encode()).expect("decode zero"),
+        mornlea_protocol::BoneMeal::decode(&zero.encode().expect("encode zero"))
+            .expect("decode zero"),
         zero
     );
 }
@@ -1192,7 +1195,7 @@ fn bone_meal_rejects_non_finite_and_malformed_payload() {
 #[test]
 fn collect_water_round_trip_preserves_golden_bytes() {
     let packet = mornlea_protocol::CollectWater::new(16, 2.0, -1.0).expect("codec");
-    let payload = packet.encode();
+    let payload = packet.encode().expect("encode collect water");
     assert_eq!(
         payload,
         [
@@ -1237,7 +1240,8 @@ fn collect_water_rejects_non_finite_and_malformed_payload() {
     );
     let zero = mornlea_protocol::CollectWater::new(0, 0.0, 0.0).expect("zero");
     assert_eq!(
-        mornlea_protocol::CollectWater::decode(&zero.encode()).expect("decode zero"),
+        mornlea_protocol::CollectWater::decode(&zero.encode().expect("encode zero"))
+            .expect("decode zero"),
         zero
     );
 }
@@ -1245,7 +1249,7 @@ fn collect_water_rejects_non_finite_and_malformed_payload() {
 #[test]
 fn place_water_round_trip_preserves_golden_bytes() {
     let packet = mornlea_protocol::PlaceWater::new(17, 2.0, -1.0).expect("codec");
-    let payload = packet.encode();
+    let payload = packet.encode().expect("encode place water");
     assert_eq!(
         payload,
         [
@@ -1290,7 +1294,8 @@ fn place_water_rejects_non_finite_and_malformed_payload() {
     );
     let zero = mornlea_protocol::PlaceWater::new(0, 0.0, 0.0).expect("zero");
     assert_eq!(
-        mornlea_protocol::PlaceWater::decode(&zero.encode()).expect("decode zero"),
+        mornlea_protocol::PlaceWater::decode(&zero.encode().expect("encode zero"))
+            .expect("decode zero"),
         zero
     );
 }

@@ -18,7 +18,11 @@
 //! client-to-server control families (`PlayerInput`, `PlaceBlock`,
 //! `RequestChunkResync` and `SelectHotbar`), executed here through the same
 //! fallible surface, with the look angles published as their exact IEEE-754
-//! bits.
+//! bits. The fourth group is the five Play client-to-server ray action
+//! families (`OpenContainer`, `TillSoil`, `BoneMeal`, `CollectWater` and
+//! `PlaceWater`), executed through that same surface; their payload carries
+//! only the sequence and the two look angles, because the ray-cast target, the
+//! held item, the container kind and the resulting write stay server-owned.
 //! `CorpusConsumer::Protocol` is registered here as `mornlea_protocol` so a
 //! packet case can name it, while the framing cases stay with the separate
 //! `corpus_frame` consumer the frame regression suite keeps using.
@@ -56,6 +60,12 @@ const PLAYER_INPUT_FAMILY: &str = "protocol.client.PlayerInput";
 const PLACE_BLOCK_FAMILY: &str = "protocol.client.PlaceBlock";
 const REQUEST_CHUNK_RESYNC_FAMILY: &str = "protocol.client.RequestChunkResync";
 const SELECT_HOTBAR_FAMILY: &str = "protocol.client.SelectHotbar";
+/// The five packet families the client ray producer group registers.
+const OPEN_CONTAINER_FAMILY: &str = "protocol.client.OpenContainer";
+const TILL_SOIL_FAMILY: &str = "protocol.client.TillSoil";
+const BONE_MEAL_FAMILY: &str = "protocol.client.BoneMeal";
+const COLLECT_WATER_FAMILY: &str = "protocol.client.CollectWater";
+const PLACE_WATER_FAMILY: &str = "protocol.client.PlaceWater";
 /// The packet families' protocol version, matching the manifest family rows.
 const PACKET_VERSION: &str = "45";
 /// The category label every accepted control packet outcome publishes.
@@ -316,6 +326,26 @@ fn float_bits_field(case: &FrozenCase, name: &str) -> f32 {
     let bits = u32::from_str_radix(text, 16)
         .unwrap_or_else(|_| panic!("case {} field {name} is not hexadecimal bits", case.id));
     f32::from_bits(bits)
+}
+
+/// Reads one ray encode case's canonical request fields: the sequence and the
+/// two look-angle bit strings.
+fn client_ray_request(case: &FrozenCase) -> (u64, f32, f32) {
+    (
+        unsigned_field(case, "sequence"),
+        float_bits_field(case, "yaw"),
+        float_bits_field(case, "pitch"),
+    )
+}
+
+/// Renders the semantic fields one client ray packet publishes, shared by the
+/// decode and encode arms so both publish the same canonical field encoding.
+fn client_ray_fields(sequence: u64, yaw: f32, pitch: f32) -> serde_json::Value {
+    serde_json::json!({
+        "sequence": sequence.to_string(),
+        "yaw": float_bits_text(yaw),
+        "pitch": float_bits_text(pitch)
+    })
 }
 
 /// Reads one signed move-axis field one encode case carries.
@@ -797,6 +827,124 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
             }
             other => panic!("unsupported packet operation for {}: {other}", case.id),
         },
+        OPEN_CONTAINER_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::OpenContainer::decode(&case.input) {
+                Ok(open) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": client_ray_fields(open.sequence, open.yaw, open.pitch),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let (sequence, yaw, pitch) = client_ray_request(case);
+                // The record is built through its public fields, so an invalid
+                // angle is refused by the production validation rather than by
+                // a constructor guard.
+                let open = mornlea_protocol::OpenContainer {
+                    sequence,
+                    yaw,
+                    pitch,
+                };
+                encode_ok_outcome(
+                    open.encode(),
+                    client_ray_fields(open.sequence, open.yaw, open.pitch),
+                )
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        TILL_SOIL_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::TillSoil::decode(&case.input) {
+                Ok(till) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": client_ray_fields(till.sequence, till.yaw, till.pitch),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let (sequence, yaw, pitch) = client_ray_request(case);
+                let till = mornlea_protocol::TillSoil {
+                    sequence,
+                    yaw,
+                    pitch,
+                };
+                encode_ok_outcome(
+                    till.encode(),
+                    client_ray_fields(till.sequence, till.yaw, till.pitch),
+                )
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        BONE_MEAL_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::BoneMeal::decode(&case.input) {
+                Ok(meal) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": client_ray_fields(meal.sequence, meal.yaw, meal.pitch),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let (sequence, yaw, pitch) = client_ray_request(case);
+                let meal = mornlea_protocol::BoneMeal {
+                    sequence,
+                    yaw,
+                    pitch,
+                };
+                encode_ok_outcome(
+                    meal.encode(),
+                    client_ray_fields(meal.sequence, meal.yaw, meal.pitch),
+                )
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        COLLECT_WATER_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::CollectWater::decode(&case.input) {
+                Ok(collect) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": client_ray_fields(collect.sequence, collect.yaw, collect.pitch),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let (sequence, yaw, pitch) = client_ray_request(case);
+                let collect = mornlea_protocol::CollectWater {
+                    sequence,
+                    yaw,
+                    pitch,
+                };
+                encode_ok_outcome(
+                    collect.encode(),
+                    client_ray_fields(collect.sequence, collect.yaw, collect.pitch),
+                )
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        PLACE_WATER_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::PlaceWater::decode(&case.input) {
+                Ok(place) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": client_ray_fields(place.sequence, place.yaw, place.pitch),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let (sequence, yaw, pitch) = client_ray_request(case);
+                let place = mornlea_protocol::PlaceWater {
+                    sequence,
+                    yaw,
+                    pitch,
+                };
+                encode_ok_outcome(
+                    place.encode(),
+                    client_ray_fields(place.sequence, place.yaw, place.pitch),
+                )
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
         other => panic!("unsupported packet family for {}: {other}", case.id),
     }
 }
@@ -821,7 +969,12 @@ fn dispatch_case(case: &FrozenCase) -> serde_json::Value {
         | PLAYER_INPUT_FAMILY
         | PLACE_BLOCK_FAMILY
         | REQUEST_CHUNK_RESYNC_FAMILY
-        | SELECT_HOTBAR_FAMILY => dispatch_packet(case),
+        | SELECT_HOTBAR_FAMILY
+        | OPEN_CONTAINER_FAMILY
+        | TILL_SOIL_FAMILY
+        | BONE_MEAL_FAMILY
+        | COLLECT_WATER_FAMILY
+        | PLACE_WATER_FAMILY => dispatch_packet(case),
         other => panic!("unregistered protocol family for {}: {other}", case.id),
     }
 }
@@ -1052,6 +1205,89 @@ fn protocol_corpus_packet_client_control_cases_are_executed() {
         "the client control selection executed zero cases"
     );
     for case in client_control {
+        assert_eq!(
+            case.consumer,
+            CorpusConsumer::Protocol,
+            "case {} carries the wrong consumer",
+            case.id
+        );
+        assert!(
+            !case.operation.is_empty(),
+            "case {} names no operation",
+            case.id
+        );
+        assert_normalized(case, dispatch_packet(case));
+    }
+}
+
+/// The case identities the client ray group registers. They mirror the Go
+/// producer's registration, so a case that only one side names is a mismatch
+/// rather than a shared name. The merged manifest sorts case IDs, so the
+/// comparison sorts this list too.
+const CLIENT_RAYS_CASE_IDS: [&str; 25] = [
+    "protocol.client.BoneMeal/45/decode-infinite-pitch",
+    "protocol.client.BoneMeal/45/decode-nan-yaw",
+    "protocol.client.BoneMeal/45/decode-valid",
+    "protocol.client.BoneMeal/45/encode-nan-yaw",
+    "protocol.client.BoneMeal/45/encode-valid",
+    "protocol.client.CollectWater/45/decode-infinite-pitch",
+    "protocol.client.CollectWater/45/decode-nan-yaw",
+    "protocol.client.CollectWater/45/decode-valid",
+    "protocol.client.CollectWater/45/encode-nan-yaw",
+    "protocol.client.CollectWater/45/encode-valid",
+    "protocol.client.OpenContainer/45/decode-infinite-pitch",
+    "protocol.client.OpenContainer/45/decode-nan-yaw",
+    "protocol.client.OpenContainer/45/decode-valid",
+    "protocol.client.OpenContainer/45/encode-nan-yaw",
+    "protocol.client.OpenContainer/45/encode-valid",
+    "protocol.client.PlaceWater/45/decode-infinite-pitch",
+    "protocol.client.PlaceWater/45/decode-nan-yaw",
+    "protocol.client.PlaceWater/45/decode-valid",
+    "protocol.client.PlaceWater/45/encode-nan-yaw",
+    "protocol.client.PlaceWater/45/encode-valid",
+    "protocol.client.TillSoil/45/decode-infinite-pitch",
+    "protocol.client.TillSoil/45/decode-nan-yaw",
+    "protocol.client.TillSoil/45/decode-valid",
+    "protocol.client.TillSoil/45/encode-nan-yaw",
+    "protocol.client.TillSoil/45/encode-valid",
+];
+
+/// Reports whether one family belongs to the client ray producer group.
+fn is_client_rays_family(family: &str) -> bool {
+    matches!(
+        family,
+        OPEN_CONTAINER_FAMILY
+            | TILL_SOIL_FAMILY
+            | BONE_MEAL_FAMILY
+            | COLLECT_WATER_FAMILY
+            | PLACE_WATER_FAMILY
+    )
+}
+
+#[test]
+fn protocol_corpus_packet_client_rays_cases_are_executed() {
+    // The case assets are exported by the Go producer and integrated by the
+    // controller, so before that merge this test reports the missing corpus
+    // cases instead of an empty selection that would look like a passing run.
+    let cases = load_cases_for_consumer(CorpusConsumer::Protocol);
+    let client_rays: Vec<&FrozenCase> = cases
+        .iter()
+        .filter(|case| is_client_rays_family(&case.family))
+        .collect();
+    let executed: Vec<&str> = client_rays.iter().map(|case| case.id.as_str()).collect();
+    let mut expected: Vec<&str> = CLIENT_RAYS_CASE_IDS.to_vec();
+    // The merged manifest sorts case IDs; compare as the reviewed set, not in
+    // the authoring order of this suite's constant.
+    expected.sort_unstable();
+    assert_eq!(
+        executed, expected,
+        "the client ray selection does not carry the reviewed case set"
+    );
+    assert!(
+        !client_rays.is_empty(),
+        "the client ray selection executed zero cases"
+    );
+    for case in client_rays {
         assert_eq!(
             case.consumer,
             CorpusConsumer::Protocol,

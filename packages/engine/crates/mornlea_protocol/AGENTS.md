@@ -368,7 +368,38 @@ rather than checking that it omits a few names.
 - `ByteEncoder` / `ByteDecoder` `f32` helpers copy the Go primitive: NaN
   and Inf fail before a payload is published.
 
-## Open container (`src/open_container.rs`, `tests/runtime_contract.rs`)
+## Client ray action packets (`src/open_container.rs`, `src/till_soil.rs`, `src/bone_meal.rs`, `src/collect_water.rs`, `src/place_water.rs`, `tests/protocol_client_rays.rs`)
+
+- The five Play client-to-server ray action families share the client control
+  group's common fallible surface in design §4: `validate(&self)` rechecks the
+  finite rotation on each call, checked `encoded_len(&self)` sizes the
+  validated record, `encode_into(&self, dst)` publishes into a caller-owned
+  buffer, `encode(&self)` is the allocating wrapper over it, and `decode`
+  stays a bounded read plus `done()` plus validation. The infallible
+  `encode`-returning-`Vec` signatures are gone, so a record mutated into a
+  non-finite angle after construction is refused instead of silently
+  published, and a short destination reports
+  `OutputTooSmall { needed, available }` with every destination byte
+  unchanged. An invalid value always wins over a short destination.
+- Each family keeps its own struct, packet ID and private field-writing
+  closure over the crate-private `publish_packet` in `server_hello.rs`; no
+  combined exported ray payload type exists, so the packet keys
+  (`OpenContainer` C/Play/8, `TillSoil` C/Play/13, `BoneMeal` C/Play/14,
+  `CollectWater` C/Play/16, `PlaceWater` C/Play/17) are never erased. The
+  payload is exactly 16 bytes — the sequence and the two look angles — with
+  no target position, held item, container kind or result, because the
+  ray-cast target and the world write stay server-owned.
+- The look angles are published as their exact IEEE-754 bits, so a `-0.0` yaw
+  survives the round trip where an `f32 ==` comparison cannot tell the two
+  zeros apart (`client_ray_negative_zero_yaw_survives_the_round_trip`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.client.{OpenContainer, TillSoil, BoneMeal,
+  CollectWater, PlaceWater}` each register a decode and an encode route under
+  the `mornlea_protocol` consumer, produced by the real Go codec in
+  `packages/tools/cmd/runtime-oracle/protocol_client_rays_test.go`, with the
+  look angles published and requested as eight-digit hexadecimal bit strings.
+
+## Open container (`src/open_container.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_rays.rs`)
 
 - Play packet ID 8 payload is a little-endian `u64` sequence followed by
   two little-endian `f32` look angles. The server ray-casts the
@@ -378,6 +409,9 @@ rather than checking that it omits a few names.
   trailing bytes fail before publication
   (`open_container_round_trip_preserves_golden_bytes`,
   `open_container_rejects_non_finite_and_malformed_payload`).
+- The family carries the client ray group's fallible surface, so a record
+  mutated into a non-finite angle after construction is refused instead of
+  silently published (`client_ray_invalid_value_wins_over_short_capacity`).
 
 ## Request chunk resync (`src/request_chunk_resync.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_control.rs`)
 
@@ -398,7 +432,7 @@ rather than checking that it omits a few names.
 - `ByteEncoder` / `ByteDecoder` `i32` helpers use two's-complement
   little-endian encoding, matching the Go primitive.
 
-## Till soil (`src/till_soil.rs`, `tests/runtime_contract.rs`)
+## Till soil (`src/till_soil.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_rays.rs`)
 
 - Play packet ID 13 payload is a little-endian `u64` sequence followed by
   two little-endian `f32` look angles, with no slot byte. The server
@@ -407,8 +441,11 @@ rather than checking that it omits a few names.
   are `InvalidFloat`; truncated payloads and trailing bytes fail before
   publication (`till_soil_round_trip_preserves_golden_bytes`,
   `till_soil_rejects_non_finite_and_malformed_payload`).
+- The family carries the client ray group's fallible surface, so a record
+  mutated into a non-finite angle after construction is refused instead of
+  silently published (`client_ray_invalid_value_wins_over_short_capacity`).
 
-## Bone meal (`src/bone_meal.rs`, `tests/runtime_contract.rs`)
+## Bone meal (`src/bone_meal.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_rays.rs`)
 
 - Play packet ID 14 payload is a little-endian `u64` sequence followed by
   two little-endian `f32` look angles, with no slot byte. The server
@@ -417,8 +454,11 @@ rather than checking that it omits a few names.
   yaw/pitch are `InvalidFloat`; truncated payloads and trailing bytes
   fail before publication (`bone_meal_round_trip_preserves_golden_bytes`,
   `bone_meal_rejects_non_finite_and_malformed_payload`).
+- The family carries the client ray group's fallible surface, so a record
+  mutated into a non-finite angle after construction is refused instead of
+  silently published (`client_ray_invalid_value_wins_over_short_capacity`).
 
-## Collect water (`src/collect_water.rs`, `tests/runtime_contract.rs`)
+## Collect water (`src/collect_water.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_rays.rs`)
 
 - Play packet ID 16 payload is a little-endian `u64` sequence followed by
   two little-endian `f32` look angles, with no slot byte. The server
@@ -428,8 +468,11 @@ rather than checking that it omits a few names.
   trailing bytes fail before publication
   (`collect_water_round_trip_preserves_golden_bytes`,
   `collect_water_rejects_non_finite_and_malformed_payload`).
+- The family carries the client ray group's fallible surface, so a record
+  mutated into a non-finite angle after construction is refused instead of
+  silently published (`client_ray_invalid_value_wins_over_short_capacity`).
 
-## Place water (`src/place_water.rs`, `tests/runtime_contract.rs`)
+## Place water (`src/place_water.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_rays.rs`)
 
 - Play packet ID 17 payload is a little-endian `u64` sequence followed by
   two little-endian `f32` look angles, with no slot byte. The server
@@ -438,6 +481,9 @@ rather than checking that it omits a few names.
   `InvalidFloat`; truncated payloads and trailing bytes fail before
   publication (`place_water_round_trip_preserves_golden_bytes`,
   `place_water_rejects_non_finite_and_malformed_payload`).
+- The family carries the client ray group's fallible surface, so a record
+  mutated into a non-finite angle after construction is refused instead of
+  silently published (`client_ray_invalid_value_wins_over_short_capacity`).
 
 ## Container reference (`src/container_ref.rs`, `tests/runtime_contract.rs`)
 
@@ -1048,6 +1094,7 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_frame --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_control --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_client_control --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_client_rays --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
 
@@ -1081,6 +1128,13 @@ records through the same surface: the reviewed wire bytes round-trip through
 clamped, the resync family's total gate survives extreme legal field values,
 and the resync dimension is refused by ID match rather than by a `u8` narrowing
 cast. It also needs no corpus files.
+
+`tests/protocol_client_rays.rs` pins the five Play client-to-server ray action
+records through that same surface: the 16-byte reviewed wire literal round-trips
+for every family, the `-0.0` yaw keeps its `0x80000000` bit pattern, a short or
+invalid destination leaves every caller byte untouched, a mutated non-finite
+angle wins over a short destination for each family, and every proper truncation
+plus one trailing byte reject. It also needs no corpus files.
 
 `tests/protocol_corpus.rs` executes the corpus cases this crate owns through
 the real codec paths — `read_frame`/`write_frame` for framing and

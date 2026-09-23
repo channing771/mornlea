@@ -199,6 +199,24 @@ and the isolated export helpers (`exportGeneratedAssets`,
   angle, an out-of-range hotbar slot and an unknown resync dimension classify
   at their own boundaries, so the Rust consumer publishes the same category
   from its `ProtocolError` variants.
+- The fourth packet producer group is `protocol_client_rays_test.go`
+  (`protocol.client.OpenContainer`, `protocol.client.TillSoil`,
+  `protocol.client.BoneMeal`, `protocol.client.CollectWater` and
+  `protocol.client.PlaceWater`, decode and encode). It executes
+  `codec.DecodeClient`/`EncodeClient` in the play state with the case's own
+  `PacketKey`, normalizes the DTO fields (`sequence` as a decimal string and
+  the two look angles as eight-digit lowercase-hexadecimal bit strings), and
+  reads every encoded payload back through the decoder before publishing it.
+  Every family's canonical vector is the same 16-byte payload — sequence 0,
+  a `-0.0` yaw and a 1.5 pitch — so the packet key is the only thing that
+  tells the five families apart. Its category table stays minimal: the f32
+  primitive's `invalid float32` and each validator's `non-finite rotation`
+  resolve to `invalid-value` on both directions, while `short input` and
+  `trailing bytes` keep their own categories, so the Rust consumer publishes
+  the same category from its `ProtocolError` variants. Provenance is
+  `codec_client.go` plus the family's own message file, because
+  `OpenContainer` lives in `message_container.go` and the other four in
+  `message_command.go`.
 - `validProducerIDs` is the closed exporter allowlist. It carries the 18
   protocol group producer IDs the v45 packet plan names
   (`runtime-oracle/protocol-negotiation`, `-control`, `-client-control`,
