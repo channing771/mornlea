@@ -123,3 +123,19 @@
 **Rollback:** revert `ed944b5f` and `df40d0d3` individually; the five families return to `cases: null` and the corpus index returns to 754 (the zero-case fixture swap returns with them).
 
 **Architecture skill: no change.**
+
+## Node 2.3 — 2026-09-23
+
+**Status:** complete. Commits `136811d7` (`feat(protocol): qualify inventory command bytes`) + controller integration `13ea634e` (`chore(corpus): integrate inventory command evidence`) on top of `1311882e`.
+
+**Deliverable:** the six simple inventory/crafting families (`MoveInventoryStack` 6, `MoveCraftingStack` 7, `CloseContainer` 10, `DropSelectedItem` 11, `EquipArmor` 18, `TakeCraftingOutput` 15, all Play C→S) on the common fallible surface; the two move payloads are 10 bytes (seq + from + to) with the Go rule set (inventory 0..35 distinct; crafting view 0..44 distinct with the both-in-inventory exclusion), the four sequence-only payloads are 8 bytes with `TakeCraftingOutput` alone rejecting sequence 0; no personal-grid 4..8 authority rule entered the protocol. 28 corpus cases (6+6+4+4+4+4: valid pairs, the named slot/same-slot/two-inventory/zero-sequence negatives as decode mutations plus encode twins, truncation/trailing for the sequence-only families) through the real Go codec, producer `runtime-oracle/protocol-client-inventory`; 12 routes registered and pinned; corpus consumer arms + exact 28-ID list; group test `tests/protocol_client_inventory.rs` (mutation matrix for the three rule-bearing families, total-validate u64::MAX round-trip for the three sequence-only families, `encoded_len` 10/8 pins, purity pins); mechanical `runtime_contract.rs` updates; AGENTS.md sync for both guides.
+
+**Evidence:** group test 9/9; `runtime_contract` 134/134; Go `TestProtocolClientInventoryOracle*` 8/8; `TestSmallPacket` ok; full oracle package `ok`; audit `ok`. Corpus integrity: exactly 6 families changed, 779→807 strict superset (+28/−0), `source_revision` preserved; controller spot-checked the three valid literals (`00×8|00|23`, `00×8|08|2c`, `01 00×7`) and the inventory-to-inventory mutation bytes before integration. Post-integration whole protocol crate green with the 28 cases executed.
+
+**Controller arithmetic slip (recorded):** the brief's prose said "26 cases / 779 → 805" while its binding label table enumerates 28; the implementer followed the binding table (literal-over-prose precedent from node 2.1).
+
+**Review ruling:** Approved, 0 Crit/0 Imp/3 Minor. Deferred Minors: a no-op `resize` in the sequence-only round-trip test; a `want_stride` assertion implied by the payload-length check (pin per family if a real stride pin is wanted); the total-family doc-comment phrase "shared by encode_into and decode" inherited from `request_chunk_resync.rs` (decode routes through `new` for those families) — normalize only if the crate decides the phrase must be exact everywhere.
+
+**Rollback:** revert `136811d7` and `13ea634e` individually; the six families return to `cases: null` and the corpus index returns to 779.
+
+**Architecture skill: no change.**
