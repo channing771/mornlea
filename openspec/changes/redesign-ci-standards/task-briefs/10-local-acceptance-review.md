@@ -23,6 +23,8 @@
 
 The first 6.2.3 re-review found that invoking `godot.sh` itself inside `run_isolated` fails because isolation removes Bash from `PATH`. Extend 6.2.3 ownership to `scripts/godot/godot.sh` and its focused resolver tests. First make a non-exported qualification fixture fail with an isolated `PATH`; then add a resolver-only `--print-path` mode to `godot.sh` and obtain the actual editor executable before entering isolation. Keep the cached-editor and explicit-binary selection policy unchanged. Re-run both exported and isolated fixtures before restoring the node to complete.
 
+Stage-boundary `make test-race-short` exposed a scheduler-sensitive persistence test in `packages/server/server/persistence/world_metadata_test.go`, so 6.2.4 additionally owns that test file only. The test currently fills a channel without proving its worker is already blocked; the worker can consume a slot before the last autosave tick and legitimately set metadata `inFlight` instead of `pending`. Preserve production persistence behavior. First record the full-suite failure and isolate the test; then enqueue one sentinel, wait for a bounded worker-entry signal, fill the queue, and prove the non-blocking Step and pending snapshot under repeated focused race runs. Rerun the affected package and both race stages; do not classify the full-suite failure as inherited or silently ignore it.
+
 ## Focused acceptance
 
 Run from a clean worktree:
