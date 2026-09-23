@@ -42,12 +42,27 @@ the next section.
 | `save.chunk` | `src/chunk.rs` | v9 | `CHNK` envelope over a zstd frame carrying an `MCGC` logical payload; 24 section snapshots plus fixed drop/furnace/chest arrays; v1..v9 migrate to one normalized result |
 | `save.passive` | `src/passive.rs` | v1 | 32-byte header + fixed 72-byte records, 30-byte zero reserved tail, canonical ascending-ID order |
 | `save.hostile` | `src/hostile.rs` | v2 | v1 records lack the trailing `kind` byte and migrate to nightcrawler; re-encode keeps each v1 record as the v2 prefix |
-| `save.region` | `src/region.rs` | v1 | fixed 4096-byte superblock plus two 28672-byte banks; newest valid generation wins, ties break to bank A |
+| `save.region` | `src/region.rs` | v1 | fixed 4096-byte superblock plus two 28672-byte banks; newest valid committed generation wins, identical ties select bank A and divergent ties fail |
 | `save.world-metadata` | `src/world_metadata.rs` | v6 | v1..v6 are pure tail appends; a legacy file keeps its bytes and reads missing tails as documented defaults |
 | `save.companion` | `src/companion.rs` | v5 | v1..v4 stay read-only migration input; v5 adds a 16-byte agent namespace plus per-record lifecycle mirrors and tombstones |
 | `save.player` | `src/player.rs` | v9 | every schema is a tail append; decoding peels fixed tails off the end so older files keep their layout |
 | player identity | `src/identity.rs` | — | `PlayerId` UUIDv4 wrapper shared by the entity families |
 | item rules | `src/items.rs` | — | Stable item numbering plus the stack-limit and durability tables the entity bodies validate against |
+
+## `save.region` output boundary (`src/region.rs`)
+
+- `RegionBank.entries` is a boxed array of exactly 1024 slots. Use
+  `RegionBank::try_from_entries` when taking ownership of caller entries; it
+  rejects wrong cardinality and noncanonical entries before encoding. Direct
+  entry mutation remains possible, so every encoder validates again.
+- `encode_superblock_into` and `encode_region_bank_into` write the exact v1
+  length into a caller buffer and preserve any tail. A short buffer returns
+  `StorageError::OutputTooSmall` without writing; an invalid bank reports
+  corruption before capacity and likewise leaves the entire buffer unchanged.
+  Owned-array encoders retain their existing v1 bytes through these APIs.
+- The Go region codec remains the read-only format authority during migration.
+  Rust decoding rejects invalid extents, reserved bytes and padding without
+  repair; a zero-generation bank is standby and cannot be selected as committed.
 
 ## `save.chunk` compression boundary (`src/chunk.rs`)
 
@@ -94,6 +109,7 @@ the next section.
 
 ```bash
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_storage --test runtime_contract --locked -- --list
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_storage --test runtime_contract region_ --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_storage --test runtime_contract --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_storage --lib --locked
 rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml -p mornlea_storage -- --check
