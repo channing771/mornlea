@@ -3,6 +3,8 @@
 //! 输入布局与偏移以 `docs/superpowers/specs/2026-08-15-rust-engine-physics-step-design.md`
 //! 第 4 节为准：header（magic MGP1 + layout 版本）+ 每 cell 196 字节；header 现为 v4、160 字节。
 
+use std::io::Write;
+
 /// StepInput header 长度。v1 128，v2 160（浸没标志+水中 tunable），v3
 /// 复用保留区追加疾跑位与倍率（129 位 + 148..152 multiplier），v4 在 130 置
 /// 潜行位、152..156 置潜行倍率，总长保持 160（32 整数倍），仍是同一
@@ -359,7 +361,8 @@ pub(crate) fn physics_step(bytes: &[u8]) -> Result<[u8; STEP_OUTPUT_BYTES], Step
         .enumerate()
     {
         if !(minimum.next_down() <= offset && offset <= maximum.next_up()) {
-            eprintln!(
+            let _ = writeln!(
+                std::io::stderr(),
                 "physics-step reject=displacement axis={axis} min={:08x} offset={:08x} max={:08x}",
                 minimum.to_bits(),
                 offset.to_bits(),
