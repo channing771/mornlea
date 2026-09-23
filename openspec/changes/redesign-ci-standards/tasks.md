@@ -60,7 +60,7 @@
 ## 6. Documentation and acceptance
 
 - [x] 6.1 Reconcile current CI documentation and the active Godot tooling plan with the implemented topology (`task-briefs/09-documentation-reconciliation.md`).
-- [ ] 6.2.1 Remove the cold-Linux native link from artifact-free preflight while retaining Linux quality compilation (`task-briefs/10-local-acceptance-review.md`).
+- [x] 6.2.1 Remove the cold-Linux native link from artifact-free preflight while retaining Linux quality compilation (`task-briefs/10-local-acceptance-review.md`).
 - [ ] 6.2.2 Fail closed on ripgrep execution errors in the Godot project validator (`task-briefs/10-local-acceptance-review.md`).
 - [ ] 6.2.3 Complete optional Godot path routing, client-core build, and exported-runtime qualification (`task-briefs/10-local-acceptance-review.md`).
 - [ ] 6.2.4 Re-review the repaired branch and run the complete local acceptance suite (`task-briefs/10-local-acceptance-review.md`).
