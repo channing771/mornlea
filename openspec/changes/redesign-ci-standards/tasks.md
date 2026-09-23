@@ -65,5 +65,9 @@
 - [x] 6.2.3 Complete optional Godot path routing, client-core build, and exported-runtime qualification (`task-briefs/10-local-acceptance-review.md`).
 - [x] 6.2.4 Re-review the repaired branch and run the complete local acceptance suite (`task-briefs/10-local-acceptance-review.md`).
 - [ ] 6.3.1 Defer the native-backed asset-sync audit from cold preflight while preserving full post-artifact coverage (`task-briefs/13-hosted-preflight-repair.md`).
+- [ ] 6.3.2 Select the exact Linux-compilable package set without dropping Darwin race coverage (`task-briefs/14-hosted-linux-source-set.md`).
+- [ ] 6.3.3 Provision and fail closed on `rg` for both Linux audit consumers (`task-briefs/15-hosted-audit-tools.md`).
+- [ ] 6.3.4 Discover the Godot extension on a cold project and provide its editor-selected debug library (`task-briefs/16-hosted-godot-extension.md`).
+- [ ] 6.3.5 Distinguish Linux native physics-step rejection causes on a candidate-bound runner before selecting a repair (`task-briefs/17-hosted-native-step-diagnostic.md`).
 - [ ] 6.3 Push the PR and qualify one exact candidate head in required and optional workflows (`task-briefs/11-pr-hosted-acceptance.md`).
 - [ ] 6.4 Synchronize delta specs, archive the change, and qualify the final PR head (`task-briefs/12-archive-final-head.md`).

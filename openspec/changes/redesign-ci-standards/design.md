@@ -87,13 +87,15 @@ The `Makefile` exposes named CI entry points for the workflow layers, including 
 
 `scripts/ci/doctor.sh` checks the commands required by a selected profile before validation begins. Missing prerequisites fail immediately with a single actionable diagnostic. Validators may still check their own mandatory dependencies, but they must exit before doing partial work and must never print a success message after a prerequisite failure.
 
+The full repository audit consumes `rg` through Godot project checks. Linux quality and the `rest` race slice each run that audit in a separate clean job, so both must install ripgrep and invoke an `audit` doctor profile before inventory or test execution; installing it only in preflight does not populate those runners.
+
 `scripts/ci/package-inventory.sh` derives the six-module package universe and compares it with the race partitions. The check fails if a package is missing, duplicated, or assigned to more than one partition. The package inventory, not hand-maintained counts, defines completeness.
 
 Because this change makes `.github/workflows` and `scripts/ci` explicit policy and lifecycle boundaries, concise directory-scoped `AGENTS.md` guidance is added or updated beside them.
 
 ### 5. Route validation by supported platform instead of runner convenience
 
-Platform-neutral and server-owned work uses a pinned supported Linux runner. Linux quality compiles and vets the complete supported Linux package set; graphical app, capture, developer-capture, and gfxspike packages remain in the complete macOS client source set and are excluded through one audit-checked exact list. macOS is reserved for artifacts and tests that consume Darwin libraries or exercise the graphical client. Runner labels are explicit supported versions rather than floating `*-latest` aliases.
+Platform-neutral and server-owned work uses a pinned supported Linux runner. Linux quality compiles and vets the complete supported Linux package set. The six-module race inventory remains the Linux/Darwin union, but Linux quality excludes exactly nine Darwin-owned client packages through one audit-checked list: graphical command, app, capture, developer-capture, benchmark, Godot client-core command, render, render/hud, and gfxspike. Linux `go list -e` loadability alone is insufficient because some render files refer to symbols defined only in Darwin-tagged files; the hosted Linux compiler decides support. All excluded packages remain in the complete Darwin client race slice. macOS is reserved for artifacts and tests that consume Darwin libraries or exercise the graphical client. Runner labels are explicit supported versions rather than floating `*-latest` aliases.
 
 Third-party actions are pinned to immutable commit SHAs and selected from revisions compatible with the runner's supported Node runtime. Every job has an explicit timeout and least-privilege permissions. Caches may accelerate a job but are never treated as validation evidence or a substitute for candidate-bound artifacts.
 
@@ -105,6 +107,8 @@ The optional Godot workflow has two layers:
 - deterministic-asset generation after six-module Go dependency prefetch and native-engine materialization, followed by pinned Godot/Python runtime materialization, embedded-Python tooling checks, extension build, runtime smoke, and the existing repeated lifecycle qualification on the macOS 26 arm64/Xcode 26.5 environment required by the checked-in runtime inputs.
 
 The deterministic asset command is runtime-owned even though its emitted bytes are platform neutral: its current Go dependency closure reaches the cgo-only native engine ABI. Dependency caches may accelerate this layer, but a cold runner explicitly activates the repository-pinned Rust toolchain and downloads every committed Go module's external requirements before the gate switches back to its locked offline mode. The pinned Godot fetch command materializes the verified editor application at the cache path consumed by headless checks; a downloaded archive alone is not runtime evidence.
+
+The cold GDExtension qualification must build the editor-selected debug library as well as the release distribution library. Verification performs a headless editor import after the debug library is present and before script/scene probes; this discovers the extension in a fresh project's ignored `.godot` cache. A direct release verification without the debug prerequisite fails explicitly. The release build and exported-app probe still qualify the shipped release artifact rather than substituting the debug library for it.
 
 Its path filters include the Godot project, Godot bridge crate, extension build and validation scripts, asset generator and relevant inputs, workflow and Makefile entry points, and executable audit tests. Manual dispatch is always available to diagnose filter mistakes or validate a candidate before cutover.
 
