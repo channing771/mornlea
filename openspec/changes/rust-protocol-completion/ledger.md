@@ -45,3 +45,17 @@
 **Rollback:** revert `d2f715e5`; wrappers' byte output is provably identical to the pre-node encoder, so `runtime_contract` and the corpus stay valid on either side.
 
 **Architecture skill: no change.**
+
+## Node 1.3 — 2026-09-23
+
+**Status:** complete. Commit `38cf5eb4` (`refactor(protocol): use checked domain values`) on top of `e5059ed0`.
+
+**Deliverable:** protocol reexports domain `PlayerId`/`CompanionId`/`ItemStack`/`DropId` (duplicate protocol item tables deleted; domain is single owner); wire `ContainerRef` keeps raw i32 dimension with exact `NONE` sentinel, `to_domain_present`/`to_domain_optional`; `CompanionId::NONE` unreachable as domain identity (chat absent-branch stays raw bytes); checked `TryFrom` section conversions moving palette/words exactly with separate Y; domain gains only `trim_pinned_whitespace` (same pinned predicate; `try_from_canonical` still does not trim). Packet modules mechanically updated; `runtime_contract` golden bytes and error expectations unchanged.
+
+**Evidence:** protocol_values 8/8 (reds first: runtime dimension-256-narrowing + missing conversion APIs); domain items_locations 14, identity_values 13, runtime_contract 7, event_world 17; whole protocol crate 158 green; fmt + clippy `-D warnings` clean both crates. Reviewer verified duplicate-table removal by grep, exact sentinel semantics, lossless section moves, pinned-whitespace predicate equality with the Go set (U+200B kept, U+00A0/U+3000 trimmed).
+
+**Review ruling:** Approved, 0 Crit/0 Imp/4 Minor. Controller ruling from Minor 1: the neutral container gate now checks dimension before kind (`to_domain_present` delegation), changing observable error variants for doubly-invalid references while the admitted set is unchanged — node 2.4 MUST verify this order against the real Go validator's observable rejection when freezing corpus categories; a genuine Go/Rust category divergence returns to the controller for a design ruling, not a silent Rust-side fix. Deferred Minors: validation-path `String` allocation in name gates, one process-language doc phrase, one weak OR assertion.
+
+**Rollback:** revert `38cf5eb4`; domain's `trim_pinned_whitespace` is additive, and packet modules return to the deleted local tables within the same commit.
+
+**Architecture skill: no change.**
