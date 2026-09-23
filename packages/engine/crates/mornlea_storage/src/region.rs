@@ -102,11 +102,12 @@ pub struct Entry {
     pub payload_crc32c: u32,
 }
 
-/// One of the two backing bank indexes inside a region file.
+/// One of the two backing bank indexes inside a region file. Its boxed array
+/// keeps slot cardinality fixed without placing the full bank on the stack.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Bank {
     pub generation: u64,
-    pub entries: Vec<Entry>,
+    pub entries: Box<[Entry; REGION_SLOTS]>,
 }
 
 /// A chunk coordinate used to derive the owning region and slot.
@@ -122,8 +123,32 @@ impl Bank {
     pub fn empty() -> Self {
         Self {
             generation: 0,
-            entries: vec![Entry::default(); REGION_SLOTS],
+            entries: vec![Entry::default(); REGION_SLOTS]
+                .into_boxed_slice()
+                .try_into()
+                .expect("fixed number of region slots"),
         }
+    }
+
+    /// Takes ownership of exactly one bank of entries and rejects any
+    /// noncanonical structure before it can be published by an encoder.
+    pub fn try_from_entries(generation: u64, entries: Vec<Entry>) -> StorageResult<Self> {
+        if entries.len() != REGION_SLOTS {
+            return Err(corrupt(
+                "region bank entries",
+                format!("{} entries, want {REGION_SLOTS}", entries.len()),
+            ));
+        }
+        let entries: Box<[Entry; REGION_SLOTS]> = entries
+            .into_boxed_slice()
+            .try_into()
+            .map_err(|_| corrupt("region bank entries", "invalid fixed length"))?;
+        let bank = Self {
+            generation,
+            entries,
+        };
+        validate_region_bank(&bank, 0, false)?;
+        Ok(bank)
     }
 }
 
@@ -280,9 +305,9 @@ pub fn decode_region_bank(key: RegionKey, encoded: &[u8], file_size: i64) -> Sto
     if !is_zero(&encoded[BANK_PADDING..]) {
         return Err(corrupt("region bank padding", "nonzero"));
     }
-    let generation = u64_at(encoded, BANK_GENERATION);
-    let mut entries = vec![Entry::default(); REGION_SLOTS];
-    for (slot, entry) in entries.iter_mut().enumerate() {
+    let mut bank = Bank::empty();
+    bank.generation = u64_at(encoded, BANK_GENERATION);
+    for (slot, entry) in bank.entries.iter_mut().enumerate() {
         let offset = BANK_ENTRIES + slot * REGION_ENTRY_SIZE;
         *entry = Entry {
             offset_sector: u32_at(encoded, offset + ENTRY_OFFSET_SECTOR),
@@ -292,10 +317,6 @@ pub fn decode_region_bank(key: RegionKey, encoded: &[u8], file_size: i64) -> Sto
             payload_crc32c: u32_at(encoded, offset + ENTRY_PAYLOAD_CRC32C),
         };
     }
-    let bank = Bank {
-        generation,
-        entries,
-    };
     validate_region_bank(&bank, file_size, true)?;
     Ok(bank)
 }

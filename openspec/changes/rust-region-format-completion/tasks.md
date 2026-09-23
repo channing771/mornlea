@@ -28,7 +28,7 @@
 
 ## 1. Region representation and codec
 
-- [ ] 1.1 [Make the region bank fixed-shape](plans/01-region.md#node-1-1) in `packages/engine/crates/mornlea_storage/src/region.rs` and the region section of `tests/runtime_contract.rs`; verify wrong cardinality, valid standby, canonical occupied entry and existing layout. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_storage --test runtime_contract region_ --locked` and `go test ./packages/server/storage/region -run '^Test(Superblock|RegionBank|EncodeRegionBank|SelectRegionBank)' -count=1`.
+- [x] 1.1 [Make the region bank fixed-shape](plans/01-region.md#node-1-1) in `packages/engine/crates/mornlea_storage/src/region.rs` and the region section of `tests/runtime_contract.rs`; verify wrong cardinality, valid standby, canonical occupied entry and existing layout. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_storage --test runtime_contract region_ --locked` and `go test ./packages/server/storage/region -run '^Test(Superblock|RegionBank|EncodeRegionBank|SelectRegionBank)' -count=1`.
 - [ ] 1.2 [Add atomic caller-buffer region encoders](plans/01-region.md#node-1-2) in `src/{region,error,lib}.rs` and the region section of `tests/runtime_contract.rs`; verify invalid-before-short precedence, exact lengths, unchanged failure buffers, Go CRC constants and selection/corruption regression. Run `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_storage --test runtime_contract region_ --locked`, `rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_storage --lib --locked`, and `go test ./packages/server/storage/region -count=1`.
 
 ## 2. Acceptance

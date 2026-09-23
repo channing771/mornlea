@@ -697,6 +697,36 @@ fn hostile_bone_thrower(id: u64) -> HostileMob {
 }
 
 #[test]
+fn region_bank_rejects_wrong_slot_count() {
+    for count in [REGION_SLOTS - 1, REGION_SLOTS + 1] {
+        let entries = vec![RegionEntry::default(); count];
+        assert!(matches!(
+            RegionBank::try_from_entries(1, entries),
+            Err(StorageError::Corrupt(_))
+        ));
+    }
+}
+
+#[test]
+fn region_bank_constructor_preserves_valid_shape() {
+    let mut entries = vec![RegionEntry::default(); REGION_SLOTS];
+    entries[0] = RegionEntry {
+        offset_sector: DATA_START_SECTOR,
+        sector_count: 1,
+        payload_length: 0,
+        revision: 1,
+        payload_crc32c: 0,
+    };
+    let bank = RegionBank::try_from_entries(1, entries).expect("construct region bank");
+    assert_eq!(bank.entries.len(), REGION_SLOTS);
+    let key = region_bank_key();
+    let encoded = encode_region_bank(key, &bank).expect("encode region bank");
+    let decoded =
+        decode_region_bank(key, &encoded, 16 * SECTOR_SIZE as i64).expect("decode region bank");
+    assert_eq!(decoded, bank);
+}
+
+#[test]
 fn region_superblock_exact_layout_and_round_trip() {
     let key = RegionKey {
         dimension: -7,
