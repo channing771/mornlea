@@ -24,7 +24,7 @@ git diff --check
 git status --short
 ```
 
-Commit only synchronized main specs, archived change artifacts, and the final task/ledger state with `docs(ci): archive layered validation standard`. Push normally.
+If spec synchronization decreases the OpenSpec language-debt inventory, use its guarded decrease-only generator, inspect the exact baseline diff, and pass the normal audit without the update variable. Commit only synchronized main specs, the resulting language-debt baseline, archived change artifacts, and the final task/ledger state with `docs(ci): archive layered validation standard`. Push normally.
 
 Watch the new exact PR head until these are green again:
 

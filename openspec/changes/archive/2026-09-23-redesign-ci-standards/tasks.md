@@ -72,4 +72,4 @@
 - [x] 6.3.6 Match Go sweep-bound vector length to the Rust fixed-step FMA order without changing the native displacement policy (`task-briefs/18-hosted-physics-sweep-parity.md`).
 - [x] 6.3.7 Remove the temporary native rejection probe and refreeze the exact source-provenance digest (`task-briefs/19-remove-physics-probe.md`).
 - [x] 6.3 Push the PR and qualify one exact candidate head in required and optional workflows (`task-briefs/11-pr-hosted-acceptance.md`).
-- [ ] 6.4 Synchronize delta specs, archive the change, and qualify the final PR head (`task-briefs/12-archive-final-head.md`).
+- [x] 6.4 Synchronize delta specs, archive the change, and qualify the final PR head (`task-briefs/12-archive-final-head.md`).
