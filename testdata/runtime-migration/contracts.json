@@ -1955,8 +1955,9 @@
         }
       ],
       "cases": [
-        "protocol.frame/45/valid",
-        "protocol.frame/45/noncanonical-length"
+        "protocol.frame/45/encode-id-128",
+        "protocol.frame/45/noncanonical-length",
+        "protocol.frame/45/valid"
       ]
     },
     {
@@ -16115,6 +16116,25 @@
         "0"
       ],
       "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "protocol.frame/45/encode-id-128",
+      "family": "protocol.frame",
+      "version": "45",
+      "operation": "encode",
+      "input": {
+        "path": "testdata/runtime-migration/cases/frame/encode-id-128.input.json",
+        "sha256": "sha256:5f010a836d18e581235b4cf93f49d86000e9519540ceb5f50d0e913ba97cb4bd"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/frame/encode-id-128.expected.json",
+        "sha256": "sha256:6cbe390ce719a1f5033603ee3dfdf03dd34185a7c0f8b600327ab4da773ad62f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "corpus_frame"
     },
     {
       "id": "protocol.frame/45/noncanonical-length",

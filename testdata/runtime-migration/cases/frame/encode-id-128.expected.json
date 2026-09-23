@@ -1,0 +1,11 @@
+{
+  "category": "frame",
+  "encoded_payload_digest": "sha256:06e2771e70dc8caa600bcaacfbd3ea5d183b70f889c3055b62dba43815927765",
+  "fields": {
+    "packet_id": 128,
+    "payload": "010203",
+    "payload_len": 3
+  },
+  "kind": "ok"
+}
+
