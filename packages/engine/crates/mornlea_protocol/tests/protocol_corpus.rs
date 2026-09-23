@@ -71,7 +71,13 @@
 //! half-turn limit, the batch applies the exact-remaining-length rule the Go
 //! decoder compares against, and the absent zero companion identity stays
 //! unconstructible on this surface because the identity is the checked domain
-//! `CompanionId`.
+//! `CompanionId`. The eleventh group is the two item-drop publication
+//! families (`ItemDropUpserts` and `ItemDropRemoves`), executed through the
+//! same fallible surface; both order their records by the domain `DropId`
+//! total order, where the raw wire dimension comes first and is never
+//! narrowed, both apply the minimum-records batch rule so a padded payload
+//! answers at the trailing-byte boundary, and the exact empty stack triple
+//! stays wire-valid.
 //!
 //! A packet case whose assets the controller has not integrated yet fails
 //! here as a missing corpus case rather than as a silently empty selection,
@@ -153,6 +159,9 @@ const REMOTE_PLAYER_STATES_FAMILY: &str = "protocol.server.RemotePlayerStates";
 const COMPANION_SPAWN_FAMILY: &str = "protocol.server.CompanionSpawn";
 const COMPANION_DESPAWN_FAMILY: &str = "protocol.server.CompanionDespawn";
 const COMPANION_STATES_FAMILY: &str = "protocol.server.CompanionStates";
+/// The two packet families the item drop producer group registers.
+const ITEM_DROP_UPSERTS_FAMILY: &str = "protocol.server.ItemDropUpserts";
+const ITEM_DROP_REMOVES_FAMILY: &str = "protocol.server.ItemDropRemoves";
 /// The packet families' protocol version, matching the manifest family rows.
 const PACKET_VERSION: &str = "45";
 /// The category label every accepted control packet outcome publishes.
@@ -1767,6 +1776,154 @@ fn companion_states_request(
     Ok(mornlea_protocol::CompanionStates { tick, states })
 }
 
+/// Renders one drop identity as its ordered five-field object.
+///
+/// The dimension publishes as the plain wire integer, verbatim and never
+/// narrowed: the Go validity rule checks only the slot range and the
+/// generation, so a −1 or 256 dimension is a publishable identity both
+/// directions carry unchanged.
+fn drop_id_fields(id: mornlea_protocol::DropId) -> serde_json::Value {
+    serde_json::json!({
+        "dimension": id.dimension(),
+        "chunk_x": id.chunk().x(),
+        "chunk_z": id.chunk().z(),
+        "slot": id.slot(),
+        "generation": id.generation()
+    })
+}
+
+/// Renders one drop record's stack as its ordered triple, where the exact
+/// empty triple `(0,0,0)` is wire-valid.
+fn item_drop_stack_fields(item: u16, count: u8, durability: u16) -> serde_json::Value {
+    serde_json::json!({
+        "item": item,
+        "count": count,
+        "durability": durability
+    })
+}
+
+/// Renders one drop record's semantic fields.
+fn item_drop_fields(drop: &mornlea_protocol::ItemDrop) -> serde_json::Value {
+    serde_json::json!({
+        "id": drop_id_fields(drop.id),
+        "block_index": drop.block_index,
+        "stack": item_drop_stack_fields(drop.item, drop.count, drop.durability)
+    })
+}
+
+/// Renders one item drop upsert batch's semantic fields.
+///
+/// The records publish in wire order, never sorted, so a batch the authority
+/// ordered is observed in the order it carried.
+fn item_drop_upserts_fields(upserts: &mornlea_protocol::ItemDropUpserts) -> serde_json::Value {
+    let drops: Vec<serde_json::Value> = upserts.drops.iter().map(item_drop_fields).collect();
+    serde_json::json!({
+        "server_tick": upserts.server_tick.to_string(),
+        "drops": drops
+    })
+}
+
+/// Renders one item drop remove batch's semantic fields.
+fn item_drop_removes_fields(removes: &mornlea_protocol::ItemDropRemoves) -> serde_json::Value {
+    let ids: Vec<serde_json::Value> = removes.ids.iter().map(|id| drop_id_fields(*id)).collect();
+    serde_json::json!({
+        "server_tick": removes.server_tick.to_string(),
+        "ids": ids
+    })
+}
+
+/// Reads one drop identity object an encode case carries.
+fn drop_id_request(entry: &serde_json::Value, case: &FrozenCase) -> mornlea_protocol::DropId {
+    let field = |name: &str| -> i64 {
+        entry
+            .get(name)
+            .and_then(|value| value.as_i64())
+            .unwrap_or_else(|| panic!("case {} drop identity names no {name}", case.id))
+    };
+    let i32_field = |name: &str| -> i32 {
+        i32::try_from(field(name))
+            .unwrap_or_else(|_| panic!("case {} drop identity field {name} exceeds i32", case.id))
+    };
+    let u32_field = |name: &str| -> u32 {
+        u32::try_from(field(name))
+            .unwrap_or_else(|_| panic!("case {} drop identity field {name} exceeds u32", case.id))
+    };
+    mornlea_protocol::DropId::try_new(
+        i32_field("dimension"),
+        mornlea_domain::ChunkPos::new(i32_field("chunk_x"), i32_field("chunk_z")),
+        u8::try_from(field("slot"))
+            .unwrap_or_else(|_| panic!("case {} drop identity slot exceeds u8", case.id)),
+        u32_field("generation"),
+    )
+    .expect("the reviewed drop identity satisfies the domain rule")
+}
+
+/// Reads one nested object field an encode case carries.
+fn nested_object_field<'a>(
+    entry: &'a serde_json::Value,
+    name: &str,
+    case: &FrozenCase,
+) -> &'a serde_json::Value {
+    entry
+        .get(name)
+        .unwrap_or_else(|| panic!("case {} drop record names no {name}", case.id))
+}
+
+/// Reads one numeric field of one nested object.
+fn nested_int_field(entry: &serde_json::Value, name: &str, case: &FrozenCase) -> i64 {
+    entry
+        .get(name)
+        .and_then(|value| value.as_i64())
+        .unwrap_or_else(|| panic!("case {} nested object names no {name}", case.id))
+}
+
+/// Builds one drop record its JSON object names.
+fn item_drop_record_request(
+    entry: &serde_json::Value,
+    case: &FrozenCase,
+) -> mornlea_protocol::ItemDrop {
+    let id = drop_id_request(nested_object_field(entry, "id", case), case);
+    let block_index = u32::try_from(nested_int_field(entry, "block_index", case))
+        .unwrap_or_else(|_| panic!("case {} drop record block_index exceeds u32", case.id));
+    let stack = nested_object_field(entry, "stack", case);
+    mornlea_protocol::ItemDrop {
+        id,
+        block_index,
+        item: u16::try_from(nested_int_field(stack, "item", case))
+            .unwrap_or_else(|_| panic!("case {} drop stack item exceeds u16", case.id)),
+        count: u8::try_from(nested_int_field(stack, "count", case))
+            .unwrap_or_else(|_| panic!("case {} drop stack count exceeds u8", case.id)),
+        durability: u16::try_from(nested_int_field(stack, "durability", case))
+            .unwrap_or_else(|_| panic!("case {} drop stack durability exceeds u16", case.id)),
+    }
+}
+
+/// Builds the item drop upsert batch one encode case names from its typed
+/// fields.
+///
+/// The record is built through its public fields, so a mutated or invalid
+/// case is refused by the production validation rather than by a constructor
+/// guard.
+fn item_drop_upserts_request(case: &FrozenCase) -> mornlea_protocol::ItemDropUpserts {
+    let server_tick = unsigned_field(case, "server_tick");
+    let drops: Vec<mornlea_protocol::ItemDrop> = record_array(case, "drops")
+        .into_iter()
+        .map(|entry| item_drop_record_request(entry, case))
+        .collect();
+    mornlea_protocol::ItemDropUpserts { server_tick, drops }
+}
+
+/// Builds the item drop remove batch one encode case names from its typed
+/// fields.
+fn item_drop_removes_request(case: &FrozenCase) -> mornlea_protocol::ItemDropRemoves {
+    let server_tick = unsigned_field(case, "server_tick");
+    let ids: Vec<mornlea_protocol::DropId> = record_array(case, "ids")
+        .into_iter()
+        .map(|entry| drop_id_request(entry, case))
+        .collect();
+    mornlea_protocol::ItemDropRemoves { server_tick, ids }
+}
+
 /// Builds the inventory state one encode case names from its typed fields.
 ///
 /// The record is built through its public fields, so a mutated or invalid
@@ -3007,6 +3164,36 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
             }
             other => panic!("unsupported packet operation for {}: {other}", case.id),
         },
+        ITEM_DROP_UPSERTS_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::ItemDropUpserts::decode(&case.input) {
+                Ok(upserts) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": item_drop_upserts_fields(&upserts),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let upserts = item_drop_upserts_request(case);
+                encode_ok_outcome(upserts.encode(), item_drop_upserts_fields(&upserts))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        ITEM_DROP_REMOVES_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::ItemDropRemoves::decode(&case.input) {
+                Ok(removes) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": item_drop_removes_fields(&removes),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let removes = item_drop_removes_request(case);
+                encode_ok_outcome(removes.encode(), item_drop_removes_fields(&removes))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
         other => panic!("unsupported packet family for {}: {other}", case.id),
     }
 }
@@ -3065,7 +3252,9 @@ fn dispatch_case(case: &FrozenCase) -> serde_json::Value {
         | REMOTE_PLAYER_STATES_FAMILY
         | COMPANION_SPAWN_FAMILY
         | COMPANION_DESPAWN_FAMILY
-        | COMPANION_STATES_FAMILY => dispatch_packet(case),
+        | COMPANION_STATES_FAMILY
+        | ITEM_DROP_UPSERTS_FAMILY
+        | ITEM_DROP_REMOVES_FAMILY => dispatch_packet(case),
         other => panic!("unregistered protocol family for {}: {other}", case.id),
     }
 }
@@ -4179,6 +4368,85 @@ fn protocol_corpus_packet_companions_cases_are_executed() {
         "the companion selection executed zero cases"
     );
     for case in companions {
+        assert_eq!(
+            case.consumer,
+            CorpusConsumer::Protocol,
+            "case {} carries the wrong consumer",
+            case.id
+        );
+        assert!(
+            !case.operation.is_empty(),
+            "case {} names no operation",
+            case.id
+        );
+        assert_normalized(case, dispatch_packet(case));
+    }
+}
+
+/// The case identities the item drop producer group registers. They mirror
+/// the Go producer's registration, so a case that only one side names is a
+/// mismatch rather than a shared name. The merged manifest sorts case IDs, so
+/// the comparison sorts this list too.
+///
+/// The count is the reviewed table's enumerated labels: each family's
+/// canonical vector pair, the upsert's block-index, identity and stack
+/// boundaries with its encode twin, the upsert's two order refusals, the
+/// remove batch's count boundaries and its two order refusals. The
+/// unregistered item number is deliberately absent from the upsert table:
+/// the Go validator folds it into the same stack message as the count
+/// boundary, so a corpus case could not distinguish them and the Rust group
+/// test pins it at its own variant instead.
+const ITEM_DROPS_CASE_IDS: [&str; 19] = [
+    "protocol.server.ItemDropUpserts/45/decode-valid",
+    "protocol.server.ItemDropUpserts/45/encode-valid",
+    "protocol.server.ItemDropUpserts/45/decode-block-index-above",
+    "protocol.server.ItemDropUpserts/45/decode-generation-zero",
+    "protocol.server.ItemDropUpserts/45/decode-slot-above",
+    "protocol.server.ItemDropUpserts/45/decode-count-above-stack-limit",
+    "protocol.server.ItemDropUpserts/45/decode-duplicate-ids",
+    "protocol.server.ItemDropUpserts/45/decode-reversed-ids",
+    "protocol.server.ItemDropUpserts/45/encode-block-index-above",
+    "protocol.server.ItemDropUpserts/45/decode-trailing-byte",
+    "protocol.server.ItemDropRemoves/45/decode-valid",
+    "protocol.server.ItemDropRemoves/45/encode-valid",
+    "protocol.server.ItemDropRemoves/45/decode-count-one",
+    "protocol.server.ItemDropRemoves/45/decode-count-thirty-two",
+    "protocol.server.ItemDropRemoves/45/decode-count-zero",
+    "protocol.server.ItemDropRemoves/45/decode-count-thirty-three",
+    "protocol.server.ItemDropRemoves/45/decode-duplicate-ids",
+    "protocol.server.ItemDropRemoves/45/decode-reversed-ids",
+    "protocol.server.ItemDropRemoves/45/decode-bad-generation",
+];
+
+/// Reports whether one family belongs to the item drop producer group.
+fn is_item_drops_family(family: &str) -> bool {
+    matches!(family, ITEM_DROP_UPSERTS_FAMILY | ITEM_DROP_REMOVES_FAMILY)
+}
+
+#[test]
+fn protocol_corpus_packet_item_drops_cases_are_executed() {
+    // The case assets are exported by the Go producer and integrated by the
+    // controller, so before this merge the test reports the missing corpus
+    // cases instead of an empty selection that would look like a passing run.
+    let cases = load_cases_for_consumer(CorpusConsumer::Protocol);
+    let drops: Vec<&FrozenCase> = cases
+        .iter()
+        .filter(|case| is_item_drops_family(&case.family))
+        .collect();
+    let executed: Vec<&str> = drops.iter().map(|case| case.id.as_str()).collect();
+    let mut expected: Vec<&str> = ITEM_DROPS_CASE_IDS.to_vec();
+    // The merged manifest sorts case IDs; compare as the reviewed set, not in
+    // the authoring order of this suite's constant.
+    expected.sort_unstable();
+    assert_eq!(
+        executed, expected,
+        "the item drop selection does not carry the reviewed case set"
+    );
+    assert!(
+        !drops.is_empty(),
+        "the item drop selection executed zero cases"
+    );
+    for case in drops {
         assert_eq!(
             case.consumer,
             CorpusConsumer::Protocol,

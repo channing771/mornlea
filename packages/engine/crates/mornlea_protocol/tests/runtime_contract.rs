@@ -3545,7 +3545,7 @@ fn item_drop_upserts_round_trip_preserves_batch_bytes() {
         ],
     )
     .expect("upserts");
-    let payload = upserts.encode();
+    let payload = upserts.encode().expect("encode upserts");
     assert_eq!(mornlea_protocol::ItemDropUpserts::PACKET_ID, 11);
     assert_eq!(payload.len(), 8 + 1 + 2 * 26);
     assert_eq!(&payload[..8], &0x0102_0304_0506_0708u64.to_le_bytes());
@@ -3636,7 +3636,7 @@ fn item_drop_upserts_rejects_invalid_records_and_malformed_payload() {
     );
 
     let valid = mornlea_protocol::ItemDropUpserts::new(1, vec![drop]).expect("upserts");
-    let payload = valid.encode();
+    let payload = valid.encode().expect("encode upserts");
     for length in 0..payload.len() {
         assert!(
             mornlea_protocol::ItemDropUpserts::decode(&payload[..length]).is_err(),
@@ -3677,7 +3677,7 @@ fn item_drop_removes_round_trip_preserves_batch_bytes() {
         ],
     )
     .expect("removes");
-    let payload = removes.encode();
+    let payload = removes.encode().expect("encode removes");
     assert_eq!(mornlea_protocol::ItemDropRemoves::PACKET_ID, 12);
     assert_eq!(payload.len(), 8 + 1 + 2 * 17);
     assert_eq!(&payload[..8], &0x0102_0304_0506_0708u64.to_le_bytes());
@@ -3718,7 +3718,7 @@ fn item_drop_removes_rejects_invalid_ids_and_malformed_payload() {
     );
 
     let valid = mornlea_protocol::ItemDropRemoves::new(1, vec![first]).expect("removes");
-    let payload = valid.encode();
+    let payload = valid.encode().expect("encode removes");
     for length in 0..payload.len() {
         assert!(
             mornlea_protocol::ItemDropRemoves::decode(&payload[..length]).is_err(),

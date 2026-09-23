@@ -447,6 +447,32 @@ and the isolated export helpers (`exportGeneratedAssets`,
   nonfinite-pose boundaries, which both sides publish as value violations).
   Provenance is `codec_server.go` plus `message_companion.go` and
   `companion_wire.go` for all three families.
+- The fourteenth packet producer group is `protocol_drops_test.go`
+  (`protocol.server.ItemDropUpserts` and `protocol.server.ItemDropRemoves`,
+  decode and encode), the item-drop publications. It executes
+  `codec.DecodeServer`/`EncodeServer` in the play state with the case's own
+  `PacketKey`, normalizes the `server_tick` as a decimal string, each drop
+  identity as the ordered five-field object
+  `{dimension, chunk_x, chunk_z, slot, generation}` of plain integers where
+  the dimension is the raw wire value kept verbatim, and each record's stack
+  as the `{item, count, durability}` object beside its `block_index`; the
+  records publish in wire order. Its category table resolves the boundaries
+  the Go decoder and validators actually name: the per-record identity
+  messages (`invalid item drop ID`, `item drop remove %d: invalid ID`) to
+  `invalid-identity`, the block-index message, the batch count message, the
+  two order messages and the folded stack message (`invalid item drop stack`)
+  to `invalid-value`, `short input` to `truncated`, and the end-of-payload
+  check to `trailing` because both drop decoders apply the minimum-records
+  rule and leave the remainder to it (the companion batch, with its exact
+  remaining-length rule, answers the same extra byte at the truncation
+  boundary instead).
+  The unregistered item number is registered nowhere: the Go folds it into
+  the same stack message as the count boundary, so a corpus case could not
+  distinguish them, and it stays a Rust group-test pin
+  (`protocol.server.ItemDropUpserts` carries the count-above-stack-limit
+  boundary, which both sides publish as a value violation). Provenance is
+  `codec_server.go` plus `message_drop.go` and `codec_values.go` for both
+  families.
 - `validProducerIDs` is the closed exporter allowlist. It carries the 18
   protocol group producer IDs the v45 packet plan names
   (`runtime-oracle/protocol-negotiation`, `-control`, `-client-control`,
@@ -719,6 +745,7 @@ go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolOracleFrame' -cou
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolInventoryPublicationOracle' -count=1
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolRemotePlayersOracle' -count=1
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolCompanionsOracle' -count=1
+go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolDropsOracle' -count=1
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolCorpus' -count=1
 go test ./packages/tools/cmd/runtime-oracle -race -count=1
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked corpus_frame

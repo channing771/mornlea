@@ -1333,10 +1333,17 @@ rather than checking that it omits a few names.
   generation cannot be constructed at all. The batch families therefore only
   assert the batch bounds and the identity order, and the identity rejections
   are asserted at `DropId::try_new`.
+- The wire read maps the two identity rejections to `InvalidIdentity` rather
+  than `InvalidRange`: the Go decoder answers a slot past the fixed array and
+  a zero generation with `network: invalid item drop ID` (and `network: item
+  drop remove %d: invalid ID`), which is the identity boundary the domain
+  publication corpus already freezes for drop-ID slot and generation errors,
+  so the protocol error vocabulary keeps one boundary for the same condition
+  (`item_drops_the_identity_rejection_is_the_identity_boundary`).
 - `MAX_ITEM_DROP_BATCH` (`32`) lives with the identity because both drop
   halves describe the same bounded drop set.
 
-## Item drop upserts (`src/item_drop_upserts.rs`, `tests/runtime_contract.rs`)
+## Item drop upserts (`src/item_drop_upserts.rs`, `tests/runtime_contract.rs`, `tests/protocol_drops.rs`)
 
 - Play packet ID 11 payload is a `u64` server tick, a canonical uvarint
   count, and the fixed 26-byte records of identity, `u32` block index, and
@@ -1345,8 +1352,60 @@ rather than checking that it omits a few names.
   rule, so a drop cannot publish a slot value the inventory families reject
   (`item_drop_upserts_round_trip_preserves_batch_bytes`,
   `item_drop_upserts_rejects_invalid_records_and_malformed_payload`).
+- The family carries the item drop group's common fallible surface:
+  `validate(&self)` rechecks every public field on each call, checked
+  `encoded_len(&self)` sizes the validated batch, `encode_into(&self, dst)`
+  publishes into a caller-owned buffer through the crate-private
+  `publish_packet`, `encode(&self)` is the allocating wrapper over it, and
+  `decode(payload)` stays a bounded read plus `done()` plus validation. The
+  gate order is the Go `ItemDropUpserts.Validate` order: the batch count
+  bound, then per record the block-index bound and the shared stack rule,
+  with the strict identity order checked against the previous record. A
+  record mutated into an out-of-range block index, an invalid stack or an
+  unordered identity after construction is refused instead of silently
+  published, and a short destination reports
+  `OutputTooSmall { needed, available }` with every destination byte
+  unchanged (`item_drops_upserts_round_trips_through_the_fallible_surface`,
+  `item_drops_invalid_value_wins_over_short_capacity`,
+  `item_drops_mutated_public_fields_are_never_published`).
+- The identity order compares the full `(dimension, chunk x, chunk z, slot,
+  generation)` key with the RAW dimension first, exactly as the Go
+  `core.DropID.Compare` does, so a −1-dimension record sorts before a
+  0-dimension one and neither an unusual dimension nor the exact empty stack
+  triple `(0,0,0)` is refused
+  (`item_drops_identity_order_compares_the_raw_dimension_first`,
+  `item_drops_the_stack_rule_preserves_the_valid_empty_triple`).
+- The batch applies the minimum-records rule rather than the
+  exact-remaining-length rule: the Go decoder rejects a payload shorter than
+  the declared records before it allocates and applies its end-of-payload
+  check afterwards, so a short payload reports `Truncated` and a padded one
+  reports `TrailingBytes` on both sides
+  (`item_drops_decode_rejects_one_trailing_byte`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.ItemDropUpserts` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real Go
+  codec in
+  `packages/tools/cmd/runtime-oracle/protocol_drops_test.go`. The frozen
+  cases are the canonical vector pair (the raw dimensions −1 and 256, block
+  indexes 0 and 98303, one ordinary stack and one exact empty triple), the
+  block-index boundary and its encode twin, the identity boundary (zero
+  generation and slot 32, which the Go decoder answers with its invalid-drop-ID
+  message), the count above the stack limit, the two order refusals, and the
+  trailing-byte refusal the minimum-records rule answers.
+- **Latent cross-implementation boundary class:** the Go validator folds an
+  unregistered item number, a count above the item's stack limit and a
+  durability violation into the single message `network: invalid item drop
+  stack`, while the Rust rule answers an unregistered number with
+  `InvalidEnum` and the count and durability boundaries with `InvalidRange`.
+  The corpus freezes the count boundary, where both sides publish the value
+  boundary, and the unregistered item number is pinned as a Rust group-test
+  assertion instead of a corpus case
+  (`item_drops_unregistered_item_number_is_pinned_here_not_in_the_corpus`);
+  this is the same latent class the furnace and companion families record,
+  and it is recorded here rather than resolved by weakening the Rust gates to
+  match the Go message coarseness.
 
-## Item drop removes (`src/item_drop_removes.rs`, `tests/runtime_contract.rs`)
+## Item drop removes (`src/item_drop_removes.rs`, `tests/runtime_contract.rs`, `tests/protocol_drops.rs`)
 
 - Play packet ID 12 payload is a `u64` server tick, a canonical uvarint
   count, and the fixed 17-byte drop identities. The two drop halves are
@@ -1354,6 +1413,29 @@ rather than checking that it omits a few names.
   and they share the identity space, the batch ceiling, and the count header
   (`item_drop_removes_round_trip_preserves_batch_bytes`,
   `item_drop_removes_rejects_invalid_ids_and_malformed_payload`).
+- The family carries the item drop group's common fallible surface, and its
+  gate is count-first: the batch count bound, then the strictly increasing
+  identity order over the same full key the upsert half compares. Identity
+  validity is enforced where the identity is read, so the gate restates no
+  rule the domain `DropId` owns, and a batch mutated into an empty or
+  over-full record set or an unordered identity after construction is refused
+  instead of silently published
+  (`item_drops_removes_round_trips_through_the_fallible_surface`,
+  `item_drops_invalid_value_wins_over_short_capacity`).
+- The batch applies the same minimum-records rule and end-of-payload check as
+  the upsert half, because the Go decoder validates the record budget before
+  it allocates and reports the remainder as trailing bytes afterwards
+  (`item_drops_decode_rejects_one_trailing_byte`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.ItemDropRemoves` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real Go
+  codec in
+  `packages/tools/cmd/runtime-oracle/protocol_drops_test.go`. The frozen
+  cases are the canonical vector pair, the one-record and full 32-record
+  boundaries, the two count-bound refusals (the count bound fires before the
+  remaining-bytes rule), the two order refusals including the
+  cross-dimension descending twin, and the zero-generation identity
+  refusal.
 
 ## Remote player spawn (`src/remote_player_spawn.rs`, `tests/runtime_contract.rs`)
 
@@ -1670,6 +1752,8 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_remote_players --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_companions --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_companions --locked -- --list
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_drops --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_drops --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
 
@@ -1793,6 +1877,24 @@ because the Go validator's single message cannot separate them, and its
 absent-identity test pins that the zero UUID is unconstructible on this
 surface and refused on every decode path. It also needs no corpus files, so
 it runs before the controller integrates the exported candidates.
+
+`tests/protocol_drops.rs` pins the two item drop publication records through
+that same surface: the reviewed 61-byte upsert and 26-byte remove literals
+round-trip byte for byte with the raw dimensions −1 and 256 preserved
+verbatim, the inclusive block-index boundary (98303 admits, 98304 refuses
+without clamping), the exact empty stack triple and the non-canonical empty
+refusals, the 32-record ceiling on both halves, the count bound before the
+record rule, the identity order with the raw dimension first (including a
+cross-dimension ordered pair admitted and its reverse refused), the
+minimum-records batch rule (every proper truncation plus one trailing byte
+reject), the identity boundary for a slot past the fixed array and a zero
+generation, and the packet IDs 11/12. Its latent-boundary test pins the
+unregistered item number at the Rust `InvalidEnum` variant because the Go
+validator's single stack message cannot separate it from the count boundary,
+and its mutation test quotes the silent publishes the previous surface
+allowed: an out-of-range block index, an empty batch and a duplicate or
+descending identity pair. It also needs no corpus files, so it runs before
+the controller integrates the exported candidates.
 
 `tests/protocol_corpus.rs` executes the corpus cases this crate owns through
 the real codec paths — `read_frame`/`write_frame` for framing,

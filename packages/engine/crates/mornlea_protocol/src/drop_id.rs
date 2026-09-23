@@ -7,10 +7,19 @@
 //! `core.DropID.Valid` rule checks only the slot range and the generation, so
 //! a drop that names an unusual dimension is still a publishable identity and
 //! must not be rejected by a stricter Rust rule.
+//!
+//! A slot past the fixed per-chunk array and a zero generation are the one
+//! identity rejection this wire edge publishes, and they answer at the
+//! identity boundary rather than the range boundary: the Go decoder reports
+//! both with `network: invalid item drop ID` (and `network: item drop remove
+//! %d: invalid ID`), which is the same boundary the domain publication corpus
+//! freezes for drop-ID slot and generation errors, so the protocol error
+//! vocabulary keeps `InvalidIdentity` for them.
 
-use crate::bytes::{ByteDecoder, ByteEncoder};
+use crate::bytes::{ByteDecoder, SliceWriter};
 use crate::error::ProtocolError;
-pub use mornlea_domain::{ChunkPos, DropId};
+pub use mornlea_domain::DropId;
+use mornlea_domain::{ChunkPos, DomainError};
 
 /// Maximum drop records one payload may carry, copied from the Go
 /// `MaxItemDropBatch` pin. Both the upsert and the remove batch share this
@@ -22,23 +31,33 @@ pub const MAX_ITEM_DROP_BATCH: u32 = 32;
 pub const DROP_ID_WIRE_BYTES: usize = 4 + 4 + 4 + 1 + 4;
 
 /// Reads one 17-byte identity and runs the domain rule. A slot past the fixed
-/// per-chunk array and a zero generation are `InvalidRange`, which is the
-/// mapping the Go decoder publishes.
+/// per-chunk array and a zero generation are the identity boundary the Go
+/// decoder names with its invalid-drop-ID message, which is the mapping the
+/// packet families publish.
 pub(crate) fn read(decoder: &mut ByteDecoder<'_>) -> Result<DropId, ProtocolError> {
     let dimension = decoder.i32()?;
     let chunk_x = decoder.i32()?;
     let chunk_z = decoder.i32()?;
     let slot = decoder.u8()?;
     let generation = decoder.u32()?;
-    DropId::try_new(dimension, ChunkPos::new(chunk_x, chunk_z), slot, generation)
-        .map_err(|_| ProtocolError::InvalidRange)
+    DropId::try_new(dimension, ChunkPos::new(chunk_x, chunk_z), slot, generation).map_err(|error| {
+        match error {
+            DomainError::InvalidDropSlot | DomainError::InvalidDropGeneration => {
+                ProtocolError::InvalidIdentity
+            }
+            _ => ProtocolError::InvalidRange,
+        }
+    })
 }
 
-/// Writes one identity in the wire field order.
-pub(crate) fn write(id: DropId, encoder: &mut ByteEncoder) {
-    encoder.i32(id.dimension());
-    encoder.i32(id.chunk().x());
-    encoder.i32(id.chunk().z());
-    encoder.u8(id.slot());
-    encoder.u32(id.generation());
+/// Publishes one identity into a caller-owned publication window.
+///
+/// The bytes are the fixed wire field order with the raw dimension verbatim,
+/// so the caller-owned window cannot drift from the decoded form.
+pub(crate) fn write_into(id: DropId, writer: &mut SliceWriter<'_>) {
+    writer.i32(id.dimension());
+    writer.i32(id.chunk().x());
+    writer.i32(id.chunk().z());
+    writer.u8(id.slot());
+    writer.u32(id.generation());
 }

@@ -11,7 +11,7 @@
 //! numbering and the furnace slot predicates, which compose the domain table
 //! instead of copying it.
 
-use crate::bytes::{ByteDecoder, ByteEncoder, SliceWriter};
+use crate::bytes::{ByteDecoder, SliceWriter};
 use crate::error::ProtocolError;
 pub use mornlea_domain::ItemStack;
 
@@ -66,18 +66,10 @@ pub(crate) fn read(decoder: &mut ByteDecoder<'_>) -> Result<ItemStack, ProtocolE
     checked(item, count, durability)
 }
 
-/// Writes one fixed-stride stack. The value is already checked, so the write
-/// cannot fail.
-pub(crate) fn write(stack: ItemStack, encoder: &mut ByteEncoder) {
-    encoder.u16(stack.item());
-    encoder.u8(stack.count());
-    encoder.u16(stack.durability());
-}
-
 /// Publishes one fixed-stride stack into a caller-owned publication window.
 ///
-/// The bytes come from the same field order as [`write`], so the allocating
-/// encoder and the caller-owned window cannot drift apart.
+/// The bytes are the fixed wire field order, so the caller-owned window cannot
+/// drift from the decoded form.
 pub(crate) fn write_into(stack: ItemStack, writer: &mut SliceWriter<'_>) {
     writer.u16(stack.item());
     writer.u8(stack.count());
