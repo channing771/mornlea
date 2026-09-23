@@ -3,10 +3,10 @@ set -euo pipefail
 
 fail() { printf 'Linux quality failed: %s\n' "$*" >&2; exit 1; }
 [[ $# -eq 0 ]] || fail 'usage: run-linux-quality.sh'
-command -v go >/dev/null 2>&1 || fail 'missing required executable: go'
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 cd "$root"
 export GOOS=linux GOARCH=amd64 CGO_ENABLED=1
+scripts/ci/doctor.sh audit
 package_output=$(scripts/ci/package-inventory.sh --all) || fail 'package inventory failed'
 [[ -n "$package_output" ]] || fail 'package inventory is empty'
 if type mapfile >/dev/null 2>&1; then
@@ -19,7 +19,7 @@ fi
 
 packages=()
 for package in "${all_packages[@]}"; do
-	# Audit recomputes this exact unsupported set, including transitive Darwin imports.
+	# Audit pins this explicit exclusion set against the Linux/Darwin package union.
 	case "$package" in
 	github.com/channing771/mornlea/packages/client/cmd/mornlea|\
 	github.com/channing771/mornlea/packages/client/cmd/mornlea/app|\

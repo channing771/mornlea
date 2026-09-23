@@ -15,6 +15,7 @@ func TestCIDoctorProfilesAndFailures(t *testing.T) {
 	script := filepath.Join(root, "scripts", "ci", "doctor.sh")
 	profiles := map[string][]string{
 		"preflight":     {"bash", "git", "go", "gofmt", "node", "npx", "rg"},
+		"audit":         {"bash", "go", "gofmt", "rg"},
 		"frontend":      {"bash", "corepack", "git", "node"},
 		"rust":          {"bash", "cargo", "rustc", "rustup"},
 		"go":            {"bash", "go", "gofmt"},
@@ -34,7 +35,7 @@ func TestCIDoctorProfilesAndFailures(t *testing.T) {
 			if got, want := output, "CI dependency profile passed: "+profile+"\n"; got != want {
 				t.Fatalf("doctor output = %q, want %q", got, want)
 			}
-			if strings.HasPrefix(profile, "godot-") {
+			if strings.HasPrefix(profile, "godot-") || profile == "audit" {
 				for _, missing := range commands {
 					if missing == "bash" {
 						continue

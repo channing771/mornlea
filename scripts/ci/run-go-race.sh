@@ -14,6 +14,9 @@ client|server|rest) ;;
 esac
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+if [[ $slice == rest ]]; then
+	"$root/scripts/ci/doctor.sh" audit
+fi
 inventory="$root/scripts/ci/package-inventory.sh"
 package_output=$("$inventory" --slice "$slice") || exit 1
 [[ -n "$package_output" ]] || {

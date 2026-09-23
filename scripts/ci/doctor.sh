@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-	printf 'usage: doctor.sh <preflight|frontend|rust|go|native-linux|native-macos|agent|godot-static|godot-runtime>\n' >&2
+	printf 'usage: doctor.sh <preflight|audit|frontend|rust|go|native-linux|native-macos|agent|godot-static|godot-runtime>\n' >&2
 	exit 2
 }
 
@@ -11,6 +11,7 @@ profile=${1:-}
 
 case "$profile" in
 preflight) required=(bash git go gofmt node npx rg) ;;
+audit) required=(bash go gofmt rg) ;;
 frontend) required=(bash corepack git node) ;;
 rust) required=(bash cargo rustc rustup) ;;
 go) required=(bash go gofmt) ;;

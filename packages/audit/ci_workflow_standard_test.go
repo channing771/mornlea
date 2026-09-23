@@ -194,7 +194,7 @@ func requiredWorkflowViolations(source []byte) []string {
 		}
 		require(slices.Equal(setups, want.setups), name+": setup actions must match command dependencies")
 		wantRuns := []string{ciStart}
-		if name == "preflight" {
+		if name == "preflight" || name == "linux-quality" || name == "race-rest" {
 			wantRuns = append(wantRuns, "sudo apt-get update\nsudo apt-get install --yes ripgrep")
 		}
 		if name == "frontend" {
@@ -313,6 +313,29 @@ func TestRequiredCIWorkflowMutations(t *testing.T) {
 			mutated := strings.Replace(source, mutation.old, mutation.new, 1)
 			if violations := requiredWorkflowViolations([]byte(mutated)); len(violations) == 0 {
 				t.Fatal("policy regression accepted")
+			}
+		})
+	}
+	for _, test := range []struct{ job, next string }{{"linux-quality", "race-server"}, {"race-rest", "race-client"}} {
+		t.Run("missing ripgrep setup in "+test.job, func(t *testing.T) {
+			block := "  " + test.job + ":\n"
+			start := strings.Index(source, block)
+			if start < 0 {
+				t.Fatal("job sentinel missing")
+			}
+			end := strings.Index(source[start+len(block):], "\n  "+test.next+":\n")
+			if end < 0 {
+				t.Fatal("next job sentinel missing")
+			}
+			end += start + len(block)
+			jobSource := source[start:end]
+			setup := "      - name: Install policy dependencies\n        run: |\n          sudo apt-get update\n          sudo apt-get install --yes ripgrep\n"
+			if !strings.Contains(jobSource, setup) {
+				t.Fatal("setup sentinel missing")
+			}
+			mutated := source[:start] + strings.Replace(jobSource, setup, "", 1) + source[end:]
+			if violations := requiredWorkflowViolations([]byte(mutated)); len(violations) == 0 {
+				t.Fatal("missing ripgrep setup accepted")
 			}
 		})
 	}

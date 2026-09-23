@@ -214,6 +214,10 @@ jobs:
             packages/audit/go.sum
             packages/engine/include/mornlea_engine.h
             packages/engine/include/mornlea_client.h
+      - name: Install policy dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: native-linux-${{ github.sha }}
@@ -282,6 +286,10 @@ jobs:
             packages/audit/go.sum
             packages/engine/include/mornlea_engine.h
             packages/engine/include/mornlea_client.h
+      - name: Install policy dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: native-linux-${{ github.sha }}

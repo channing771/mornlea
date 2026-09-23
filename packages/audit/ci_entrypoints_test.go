@@ -252,10 +252,11 @@ func TestCIIntegrationOrderedCommandsAndFailures(t *testing.T) {
 
 func TestCILinuxQualityOrderedCommandsAndFailures(t *testing.T) {
 	const prefix = "github.com/channing771/mornlea/packages/"
-	for _, mode := range []string{"pass", "inventory-error", "empty", "compile-error", "vet-error", "focused-error"} {
+	for _, mode := range []string{"pass", "doctor-error", "inventory-error", "empty", "compile-error", "vet-error", "focused-error"} {
 		t.Run(mode, func(t *testing.T) {
 			root, script := ciEntrypointFixture(t, "run-linux-quality.sh")
 			bin, log := ciCommandRecorder(t)
+			writeExecutable(t, filepath.Join(root, "scripts/ci/doctor.sh"), ciRecorderSource("doctor"))
 			inventory := "#!/usr/bin/env bash\n[[ $# == 1 && $1 == --all ]] || exit 92\n"
 			switch mode {
 			case "inventory-error":
@@ -266,28 +267,84 @@ func TestCILinuxQualityOrderedCommandsAndFailures(t *testing.T) {
 				inventory += "printf '%s\\n' '" + prefix + "audit' '" + prefix + "client/cmd/mornlea/app' '" + prefix + "client/cmd/mornlea/capture' '" + prefix + "client/cmd/mornlea/devcapture' '" + prefix + "tools/gfxspike' '" + prefix + "tools/perfcheck'\n"
 			}
 			writeExecutable(t, filepath.Join(root, "scripts/ci/package-inventory.sh"), inventory)
-			failAt := map[string]int{"compile-error": 1, "vet-error": 2, "focused-error": 3}[mode]
+			failAt := map[string]int{"doctor-error": 1, "compile-error": 2, "vet-error": 3, "focused-error": 4}[mode]
 			output, err := ciRunWithEnv(t.TempDir(), bin+":"+os.Getenv("PATH"), []string{"CI_TEST_LOG=" + log, fmt.Sprintf("CI_TEST_FAIL_AT=%d", failAt), "CI_TEST_ROOT=" + root, "CI_TEST_LINUX=1"}, script)
 			if (err != nil) != (mode != "pass") {
 				t.Fatalf("unexpected result: %v\n%s", err, output)
 			}
-			if mode == "inventory-error" || mode == "empty" {
-				if _, err := os.Stat(log); !os.IsNotExist(err) {
-					t.Fatalf("invalid inventory invoked go: %v", err)
-				}
-				return
-			}
 			want := []string{
+				"doctor\taudit",
 				"go\ttest\t" + prefix + "audit\t" + prefix + "tools/perfcheck\t-run\t^$\t-count=1",
 				"go\tvet\t" + prefix + "audit\t" + prefix + "tools/perfcheck",
 				"go\ttest\t./packages/audit\t./packages/server/storage/...\t./packages/shared/network/...\t./packages/shared/physics\t-v",
 			}
-			if failAt > 0 {
+			if mode == "inventory-error" || mode == "empty" {
+				want = want[:1]
+			} else if failAt > 0 {
 				want = want[:failAt]
 			}
 			got := strings.Split(strings.TrimSpace(string(readFile(t, log))), "\n")
 			if !slices.Equal(got, want) {
 				t.Fatalf("commands = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestCIAuditEntrypointsRejectMissingRipgrepBeforeWork(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		script string
+		args   []string
+	}{
+		{"linux quality", "run-linux-quality.sh", nil},
+		{"rest race", "run-go-race.sh", []string{"rest"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root, script := ciEntrypointFixture(t, test.script)
+			writeExecutable(t, filepath.Join(root, "scripts/ci/doctor.sh"), string(readFile(t, filepath.Join(repositoryRoot(t), "scripts/ci/doctor.sh"))))
+			called := filepath.Join(t.TempDir(), "inventory-called")
+			writeExecutable(t, filepath.Join(root, "scripts/ci/package-inventory.sh"), "#!/usr/bin/env bash\nprintf called > \"$CI_TEST_CALLED\"\n")
+			bin := ciFixtureBin(t, []string{"bash", "go", "gofmt"})
+			dirname, err := exec.LookPath("dirname")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(dirname, filepath.Join(bin, "dirname")); err != nil {
+				t.Fatal(err)
+			}
+			output, err := ciRunWithEnv(root, bin, []string{"CI_TEST_CALLED=" + called}, script, test.args...)
+			if err == nil || !strings.Contains(output, "missing required executable for audit: rg") || strings.Contains(output, "passed") {
+				t.Fatalf("missing rg result: %v\n%s", err, output)
+			}
+			if _, err := os.Stat(called); !os.IsNotExist(err) {
+				t.Fatalf("inventory ran without rg: %v", err)
+			}
+		})
+	}
+}
+
+func TestCIRaceServerAndClientDoNotRequireRipgrep(t *testing.T) {
+	for _, slice := range []string{"server", "client"} {
+		t.Run(slice, func(t *testing.T) {
+			root, script := ciEntrypointFixture(t, "run-go-race.sh")
+			writeExecutable(t, filepath.Join(root, "scripts/ci/package-inventory.sh"), "#!/usr/bin/env bash\nprintf 'example/package\\n'\n")
+			bin := ciFixtureBin(t, []string{"bash", "go", "gofmt"})
+			dirname, err := exec.LookPath("dirname")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(dirname, filepath.Join(bin, "dirname")); err != nil {
+				t.Fatal(err)
+			}
+			called := filepath.Join(t.TempDir(), "go-test-called")
+			writeExecutable(t, filepath.Join(bin, "go"), "#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > \"$CI_TEST_CALLED\"\n")
+			output, err := ciRunWithEnv(root, bin, []string{"CI_TEST_CALLED=" + called}, script, slice)
+			if err != nil {
+				t.Fatalf("race %s requires an unrelated tool: %v\n%s", slice, err, output)
+			}
+			if got := strings.Fields(string(readFile(t, called))); len(got) < 3 || got[0] != "test" || got[1] != "example/package" {
+				t.Fatalf("race %s Go test args = %v", slice, got)
 			}
 		})
 	}
