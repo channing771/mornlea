@@ -3352,11 +3352,24 @@
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
         },
         {
+          "path": "packages/shared/network/codec/codec_server.go",
+          "sha256": "sha256:733ce941581e6ab2893e81c894d68a2815e14ff67b2c4f2caf6987a9ce6ad67c"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_player.go",
+          "sha256": "sha256:097f4a8e062eaaeed57b42f3ae9d86c5e94c7b9ccf62ed78cd9a958bddb7f485"
+        },
+        {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.server.RemotePlayerDespawn/45/decode-trailing-byte",
+        "protocol.server.RemotePlayerDespawn/45/decode-valid",
+        "protocol.server.RemotePlayerDespawn/45/decode-zero-uuid",
+        "protocol.server.RemotePlayerDespawn/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.server.RemotePlayerSpawn",
@@ -3375,11 +3388,25 @@
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
         },
         {
+          "path": "packages/shared/network/codec/codec_server.go",
+          "sha256": "sha256:733ce941581e6ab2893e81c894d68a2815e14ff67b2c4f2caf6987a9ce6ad67c"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_player.go",
+          "sha256": "sha256:097f4a8e062eaaeed57b42f3ae9d86c5e94c7b9ccf62ed78cd9a958bddb7f485"
+        },
+        {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.server.RemotePlayerSpawn/45/decode-nan-pitch",
+        "protocol.server.RemotePlayerSpawn/45/decode-padded-name",
+        "protocol.server.RemotePlayerSpawn/45/decode-valid",
+        "protocol.server.RemotePlayerSpawn/45/encode-padded-name",
+        "protocol.server.RemotePlayerSpawn/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.server.RemotePlayerStates",
@@ -3398,11 +3425,31 @@
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
         },
         {
+          "path": "packages/shared/network/codec/codec_server.go",
+          "sha256": "sha256:733ce941581e6ab2893e81c894d68a2815e14ff67b2c4f2caf6987a9ce6ad67c"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_player.go",
+          "sha256": "sha256:097f4a8e062eaaeed57b42f3ae9d86c5e94c7b9ccf62ed78cd9a958bddb7f485"
+        },
+        {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.server.RemotePlayerStates/45/decode-count-eight",
+        "protocol.server.RemotePlayerStates/45/decode-count-one",
+        "protocol.server.RemotePlayerStates/45/decode-count-seven",
+        "protocol.server.RemotePlayerStates/45/decode-count-zero",
+        "protocol.server.RemotePlayerStates/45/decode-dimension-two",
+        "protocol.server.RemotePlayerStates/45/decode-duplicate-uuids",
+        "protocol.server.RemotePlayerStates/45/decode-infinite-coordinate",
+        "protocol.server.RemotePlayerStates/45/decode-reversed-uuids",
+        "protocol.server.RemotePlayerStates/45/decode-trailing-byte",
+        "protocol.server.RemotePlayerStates/45/decode-valid",
+        "protocol.server.RemotePlayerStates/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.server.ServerHello",
@@ -23031,6 +23078,486 @@
       "expected": {
         "path": "testdata/runtime-migration/cases/protocol/PlayerState/encode-valid.expected.json",
         "sha256": "sha256:2d18ea2ba23de1e5b11d7b023d4d749ea72ee4c6b3b8ac7b8e493c7f03836d5b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerDespawn/45/decode-trailing-byte",
+      "family": "protocol.server.RemotePlayerDespawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 8
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerDespawn/decode-trailing-byte.input.bin",
+        "sha256": "sha256:55a8e22cffe9327d7a584cbfe62a0f2aa2b4347912f969b54a6a6e455dfef3f2"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerDespawn/decode-trailing-byte.expected.json",
+        "sha256": "sha256:e86ced1efbf7a5d21ad5044581d2db90ba5286a5cd992edbe27e12b051dd3f85"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerDespawn/45/decode-valid",
+      "family": "protocol.server.RemotePlayerDespawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 8
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerDespawn/decode-valid.input.bin",
+        "sha256": "sha256:af73551bcba2e2182b861a0776f8a4f82d2987df0dc2e9c4f377ea1681041453"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerDespawn/decode-valid.expected.json",
+        "sha256": "sha256:0026f50a2cda1592c1af734175daeef45f508e471173cf52b9eb6ee09065c5de"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerDespawn/45/decode-zero-uuid",
+      "family": "protocol.server.RemotePlayerDespawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 8
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerDespawn/decode-zero-uuid.input.bin",
+        "sha256": "sha256:374708fff7719dd5979ec875d56cd2286f6d3cf7ec317a3b25632aab28ec37bb"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerDespawn/decode-zero-uuid.expected.json",
+        "sha256": "sha256:e18b772c91375783f134c2837eb4944e794f26958ccdc48661b4f68a1ec3e5f4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerDespawn/45/encode-valid",
+      "family": "protocol.server.RemotePlayerDespawn",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 8
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerDespawn/encode-valid.input.json",
+        "sha256": "sha256:753a913f21805dab0682a9911427130a03f802fa3fe772a8d9f0e9c659194598"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerDespawn/encode-valid.expected.json",
+        "sha256": "sha256:68878ccdf5abddc247efcaa8857fb795b7cdde35cb194ccd11300a50a2ad6a0a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerSpawn/45/decode-nan-pitch",
+      "family": "protocol.server.RemotePlayerSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 7
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerSpawn/decode-nan-pitch.input.bin",
+        "sha256": "sha256:e21997a5b62c161fe399affe481dbc90b6788a6a6c6593db9e738936bfb9fee1"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerSpawn/decode-nan-pitch.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerSpawn/45/decode-padded-name",
+      "family": "protocol.server.RemotePlayerSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 7
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerSpawn/decode-padded-name.input.bin",
+        "sha256": "sha256:2bcf66cf655eea3edb1bdcc67b4b6e8cad48e9de8ae0eefb0c7ce0d4190052de"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerSpawn/decode-padded-name.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerSpawn/45/decode-valid",
+      "family": "protocol.server.RemotePlayerSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 7
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerSpawn/decode-valid.input.bin",
+        "sha256": "sha256:e208e3b5319ef7744a7d41bb64762f66ec2baa81f798f35d65f57e6b58a0c8bc"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerSpawn/decode-valid.expected.json",
+        "sha256": "sha256:cc0eab10bf41500deb2f4df750723d5553722392ac05de6bbf441cef49c50fc3"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerSpawn/45/encode-padded-name",
+      "family": "protocol.server.RemotePlayerSpawn",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 7
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerSpawn/encode-padded-name.input.json",
+        "sha256": "sha256:6870a09d49807e602740a6d4d2414156947e3916ba4c2bca0da7efa6d08a8079"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerSpawn/encode-padded-name.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerSpawn/45/encode-valid",
+      "family": "protocol.server.RemotePlayerSpawn",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 7
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerSpawn/encode-valid.input.json",
+        "sha256": "sha256:61ff3c83fe8bef87ea2fdd9ad9ae2191e52b211c5b2d999801e4c27a20d22156"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerSpawn/encode-valid.expected.json",
+        "sha256": "sha256:d7f6ce4b6022736ecc88c54a395b62687300583dc2f02b1ce9aae2db13f1c642"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerStates/45/decode-count-eight",
+      "family": "protocol.server.RemotePlayerStates",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 9
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-count-eight.input.bin",
+        "sha256": "sha256:088e532cb8022c0c90fdad943757fd52a0f37cd3097909cbe4ab13572e8f65d0"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-count-eight.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerStates/45/decode-count-one",
+      "family": "protocol.server.RemotePlayerStates",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 9
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-count-one.input.bin",
+        "sha256": "sha256:c46ef24deaaa94797342f80334ffe6165a27a295ae8f89877b8e8ce0178fdd68"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-count-one.expected.json",
+        "sha256": "sha256:389cecf4c149f42b5b468d44c3c34007177cf3f4fceac69ab3165cc37a5cb692"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerStates/45/decode-count-seven",
+      "family": "protocol.server.RemotePlayerStates",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 9
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-count-seven.input.bin",
+        "sha256": "sha256:4904e7d59a02d53ef7ba7aaff6c91b5491ae730fc4c3c1719dac0c5c21441c11"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-count-seven.expected.json",
+        "sha256": "sha256:3091a1f2bb5c8e5e75fc693e89c9f5f5e909d766ab1f6a590431fa0c32a2804d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerStates/45/decode-count-zero",
+      "family": "protocol.server.RemotePlayerStates",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 9
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-count-zero.input.bin",
+        "sha256": "sha256:3e7077fd2f66d689e0cee6a7cf5b37bf2dca7c979af356d0a31cbc5c85605c7d"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-count-zero.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerStates/45/decode-dimension-two",
+      "family": "protocol.server.RemotePlayerStates",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 9
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-dimension-two.input.bin",
+        "sha256": "sha256:42ef7fdac5b9325ba3c22f7af9758667aef75720e37dcc5a5477722e6ac5f75b"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-dimension-two.expected.json",
+        "sha256": "sha256:986d015321a2eb07422b25a336ae52c8c5cb2dc5199a6fc758e8b0e0bcd32b8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerStates/45/decode-duplicate-uuids",
+      "family": "protocol.server.RemotePlayerStates",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 9
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-duplicate-uuids.input.bin",
+        "sha256": "sha256:9eda3a9f959d8ee89ea212b746525d0fefa789c365d389defbaaae79fb6f3fc4"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-duplicate-uuids.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerStates/45/decode-infinite-coordinate",
+      "family": "protocol.server.RemotePlayerStates",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 9
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-infinite-coordinate.input.bin",
+        "sha256": "sha256:6af2299d1da40b40091d54e188617cdbbbb0c16f6fe820903f204539475393d2"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-infinite-coordinate.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerStates/45/decode-reversed-uuids",
+      "family": "protocol.server.RemotePlayerStates",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 9
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-reversed-uuids.input.bin",
+        "sha256": "sha256:3f940a961e80024a15055bb9eec6bb36bbd0db021568c6a5f4ceef0115e00273"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-reversed-uuids.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerStates/45/decode-trailing-byte",
+      "family": "protocol.server.RemotePlayerStates",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 9
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-trailing-byte.input.bin",
+        "sha256": "sha256:3c74b7db5bc4cdb10bed0dc054cef67286cbe4e6429b7901899a3b66c804e958"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-trailing-byte.expected.json",
+        "sha256": "sha256:e86ced1efbf7a5d21ad5044581d2db90ba5286a5cd992edbe27e12b051dd3f85"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerStates/45/decode-valid",
+      "family": "protocol.server.RemotePlayerStates",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 9
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-valid.input.bin",
+        "sha256": "sha256:3a722e81183720d06dafd8e6c2f4095b471d5585373481e7ca5ab7bbd5fab149"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/decode-valid.expected.json",
+        "sha256": "sha256:e4301a2d3b8138ec242e5a32ce733d6da1800919c5884eadcec1de309b615252"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.RemotePlayerStates/45/encode-valid",
+      "family": "protocol.server.RemotePlayerStates",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 9
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/encode-valid.input.json",
+        "sha256": "sha256:8c678c6715a555dd9a911c2255c74b5fdce07f0a5302c9a8148d844dd2b0694e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RemotePlayerStates/encode-valid.expected.json",
+        "sha256": "sha256:54f28b7e26551370724b9f195890770ef6aee8d5bdaf2b992e5a7954838c46a3"
       },
       "checkpoints": [
         "0"

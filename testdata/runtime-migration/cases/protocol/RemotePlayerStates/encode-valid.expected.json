@@ -1,0 +1,35 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:3a722e81183720d06dafd8e6c2f4095b471d5585373481e7ca5ab7bbd5fab149",
+  "fields": {
+    "players": [
+      {
+        "dimension": 0,
+        "pitch": "40000000",
+        "player_id": "000102030405460788090a0b0c0d0e0f",
+        "position": [
+          "80000000",
+          "3f800000",
+          "40000000"
+        ],
+        "reset": false,
+        "yaw": "00000000"
+      },
+      {
+        "dimension": 1,
+        "pitch": "40000000",
+        "player_id": "000102030405460788090a0b0c0d0e10",
+        "position": [
+          "80000000",
+          "bfc00000",
+          "00000000"
+        ],
+        "reset": true,
+        "yaw": "00000000"
+      }
+    ],
+    "server_tick": "0"
+  },
+  "kind": "ok"
+}
+

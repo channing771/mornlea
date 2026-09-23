@@ -1,0 +1,22 @@
+{
+  "category": "packet",
+  "fields": {
+    "players": [
+      {
+        "dimension": 0,
+        "pitch": "40000000",
+        "player_id": "000102030405460788090a0b0c0d0e0f",
+        "position": [
+          "80000000",
+          "3f800000",
+          "40000000"
+        ],
+        "reset": false,
+        "yaw": "00000000"
+      }
+    ],
+    "server_tick": "0"
+  },
+  "kind": "ok"
+}
+
