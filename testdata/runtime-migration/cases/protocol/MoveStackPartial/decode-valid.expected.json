@@ -1,0 +1,20 @@
+{
+  "category": "packet",
+  "fields": {
+    "container": {
+      "chunk_x": -1,
+      "chunk_z": 2,
+      "dimension": 0,
+      "generation": 1,
+      "kind": 1,
+      "slot": 15
+    },
+    "from": 36,
+    "sequence": "0",
+    "single": true,
+    "to": 62,
+    "view": 2
+  },
+  "kind": "ok"
+}
+

@@ -1,0 +1,19 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:d20ba28037a69946f07f8d17b60cee57bb0aaa13e7192877f80898795ce960b6",
+  "fields": {
+    "container": {
+      "chunk_x": -1,
+      "chunk_z": 2,
+      "dimension": 0,
+      "generation": 1,
+      "kind": 0,
+      "slot": 31
+    },
+    "from": 0,
+    "sequence": "0",
+    "to": 37
+  },
+  "kind": "ok"
+}
+

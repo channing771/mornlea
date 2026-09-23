@@ -1,0 +1,15 @@
+{
+  "sequence": 0,
+  "container": {
+    "dimension": 0,
+    "chunk_x": -1,
+    "chunk_z": 2,
+    "kind": 1,
+    "slot": 15,
+    "generation": 1
+  },
+  "view": 2,
+  "from": 36,
+  "to": 62,
+  "single": true
+}
