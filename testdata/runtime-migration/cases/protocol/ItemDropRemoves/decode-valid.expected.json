@@ -1,0 +1,17 @@
+{
+  "category": "packet",
+  "fields": {
+    "ids": [
+      {
+        "chunk_x": 1,
+        "chunk_z": -2,
+        "dimension": 0,
+        "generation": 7,
+        "slot": 3
+      }
+    ],
+    "server_tick": "0"
+  },
+  "kind": "ok"
+}
+

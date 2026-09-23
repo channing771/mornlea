@@ -1,0 +1,18 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:74b0e69382d4e1e27a3dea00a1f04c0ce168090fdbf05c60756c8c8e0a11b4e8",
+  "fields": {
+    "ids": [
+      {
+        "chunk_x": 1,
+        "chunk_z": -2,
+        "dimension": 0,
+        "generation": 7,
+        "slot": 3
+      }
+    ],
+    "server_tick": "0"
+  },
+  "kind": "ok"
+}
+

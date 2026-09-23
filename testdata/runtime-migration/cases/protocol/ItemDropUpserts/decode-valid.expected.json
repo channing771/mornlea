@@ -1,0 +1,40 @@
+{
+  "category": "packet",
+  "fields": {
+    "drops": [
+      {
+        "block_index": 0,
+        "id": {
+          "chunk_x": 7,
+          "chunk_z": -3,
+          "dimension": -1,
+          "generation": 4294967295,
+          "slot": 31
+        },
+        "stack": {
+          "count": 4,
+          "durability": 0,
+          "item": 1
+        }
+      },
+      {
+        "block_index": 98303,
+        "id": {
+          "chunk_x": -4,
+          "chunk_z": 9,
+          "dimension": 256,
+          "generation": 1,
+          "slot": 0
+        },
+        "stack": {
+          "count": 0,
+          "durability": 0,
+          "item": 0
+        }
+      }
+    ],
+    "server_tick": "0"
+  },
+  "kind": "ok"
+}
+

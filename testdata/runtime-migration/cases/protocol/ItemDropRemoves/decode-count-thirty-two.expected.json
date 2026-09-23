@@ -1,0 +1,234 @@
+{
+  "category": "packet",
+  "fields": {
+    "ids": [
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 0,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 1,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 2,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 3,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 4,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 5,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 6,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 7,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 8,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 9,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 10,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 11,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 12,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 13,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 14,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 15,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 16,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 17,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 18,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 19,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 20,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 21,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 22,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 23,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 24,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 25,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 26,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 27,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 28,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 29,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 30,
+        "generation": 1,
+        "slot": 0
+      },
+      {
+        "chunk_x": 0,
+        "chunk_z": 0,
+        "dimension": 31,
+        "generation": 1,
+        "slot": 0
+      }
+    ],
+    "server_tick": "0"
+  },
+  "kind": "ok"
+}
+

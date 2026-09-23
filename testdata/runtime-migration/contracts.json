@@ -3034,11 +3034,33 @@
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
         },
         {
+          "path": "packages/shared/network/codec/codec_server.go",
+          "sha256": "sha256:733ce941581e6ab2893e81c894d68a2815e14ff67b2c4f2caf6987a9ce6ad67c"
+        },
+        {
+          "path": "packages/shared/network/codec/codec_values.go",
+          "sha256": "sha256:2096935175d9d470d750ed8eae6935414e32586c26f2b5271dc9628e7ea16049"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_drop.go",
+          "sha256": "sha256:f19242d3394aa3ba04dc90af3dcf3c567bf63a9881169968d4e74e54e0208d7f"
+        },
+        {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.server.ItemDropRemoves/45/decode-bad-generation",
+        "protocol.server.ItemDropRemoves/45/decode-count-one",
+        "protocol.server.ItemDropRemoves/45/decode-count-thirty-three",
+        "protocol.server.ItemDropRemoves/45/decode-count-thirty-two",
+        "protocol.server.ItemDropRemoves/45/decode-count-zero",
+        "protocol.server.ItemDropRemoves/45/decode-duplicate-ids",
+        "protocol.server.ItemDropRemoves/45/decode-reversed-ids",
+        "protocol.server.ItemDropRemoves/45/decode-valid",
+        "protocol.server.ItemDropRemoves/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.server.ItemDropUpserts",
@@ -3057,11 +3079,34 @@
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
         },
         {
+          "path": "packages/shared/network/codec/codec_server.go",
+          "sha256": "sha256:733ce941581e6ab2893e81c894d68a2815e14ff67b2c4f2caf6987a9ce6ad67c"
+        },
+        {
+          "path": "packages/shared/network/codec/codec_values.go",
+          "sha256": "sha256:2096935175d9d470d750ed8eae6935414e32586c26f2b5271dc9628e7ea16049"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_drop.go",
+          "sha256": "sha256:f19242d3394aa3ba04dc90af3dcf3c567bf63a9881169968d4e74e54e0208d7f"
+        },
+        {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.server.ItemDropUpserts/45/decode-block-index-above",
+        "protocol.server.ItemDropUpserts/45/decode-count-above-stack-limit",
+        "protocol.server.ItemDropUpserts/45/decode-duplicate-ids",
+        "protocol.server.ItemDropUpserts/45/decode-generation-zero",
+        "protocol.server.ItemDropUpserts/45/decode-reversed-ids",
+        "protocol.server.ItemDropUpserts/45/decode-slot-above",
+        "protocol.server.ItemDropUpserts/45/decode-trailing-byte",
+        "protocol.server.ItemDropUpserts/45/decode-valid",
+        "protocol.server.ItemDropUpserts/45/encode-block-index-above",
+        "protocol.server.ItemDropUpserts/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.server.KeepAlive",
@@ -22824,6 +22869,462 @@
       "expected": {
         "path": "testdata/runtime-migration/cases/protocol/InventoryState/encode-valid.expected.json",
         "sha256": "sha256:772038c7b1535b44e4c4caa0aecef277250c72382e58b5d27318747cafdfbfbd"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropRemoves/45/decode-bad-generation",
+      "family": "protocol.server.ItemDropRemoves",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropRemoves/decode-bad-generation.input.bin",
+        "sha256": "sha256:8362dcf9491fecde0f6535a730b038f2156f3fbe6f15905ead9a29c6817c9ac4"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropRemoves/decode-bad-generation.expected.json",
+        "sha256": "sha256:e18b772c91375783f134c2837eb4944e794f26958ccdc48661b4f68a1ec3e5f4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropRemoves/45/decode-count-one",
+      "family": "protocol.server.ItemDropRemoves",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropRemoves/decode-count-one.input.bin",
+        "sha256": "sha256:23be8a43b230636d2062507c6a25fe91aa77a95534bd0e582de34ffb15ee031a"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropRemoves/decode-count-one.expected.json",
+        "sha256": "sha256:5d6c0210428835eef407d1a141dc62aa132ad50cce44de356281619424ce431f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropRemoves/45/decode-count-thirty-three",
+      "family": "protocol.server.ItemDropRemoves",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropRemoves/decode-count-thirty-three.input.bin",
+        "sha256": "sha256:63f9a1b31237c7b5df43c069c7b46959eb2c2f74988e0716bdc342654405dacf"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropRemoves/decode-count-thirty-three.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropRemoves/45/decode-count-thirty-two",
+      "family": "protocol.server.ItemDropRemoves",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropRemoves/decode-count-thirty-two.input.bin",
+        "sha256": "sha256:f5ad0e03be4f0325badb60314cc601fd96f50c72ce7d8fbfa51b3e38fe3e9d69"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropRemoves/decode-count-thirty-two.expected.json",
+        "sha256": "sha256:0e2f3e8a117887f2f042a21a9ed0dcea534cf960925403a2146711440b95ce00"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropRemoves/45/decode-count-zero",
+      "family": "protocol.server.ItemDropRemoves",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropRemoves/decode-count-zero.input.bin",
+        "sha256": "sha256:3e7077fd2f66d689e0cee6a7cf5b37bf2dca7c979af356d0a31cbc5c85605c7d"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropRemoves/decode-count-zero.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropRemoves/45/decode-duplicate-ids",
+      "family": "protocol.server.ItemDropRemoves",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropRemoves/decode-duplicate-ids.input.bin",
+        "sha256": "sha256:b45d5a181e8d0910828c97cf241b7e954ce620eda1908ecf97081a08afa50162"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropRemoves/decode-duplicate-ids.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropRemoves/45/decode-reversed-ids",
+      "family": "protocol.server.ItemDropRemoves",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropRemoves/decode-reversed-ids.input.bin",
+        "sha256": "sha256:b4d1f714aa6e92a862762ef0dc0dc06824b2aa7b64e529bd4de37c2f8d5dc32a"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropRemoves/decode-reversed-ids.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropRemoves/45/decode-valid",
+      "family": "protocol.server.ItemDropRemoves",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropRemoves/decode-valid.input.bin",
+        "sha256": "sha256:74b0e69382d4e1e27a3dea00a1f04c0ce168090fdbf05c60756c8c8e0a11b4e8"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropRemoves/decode-valid.expected.json",
+        "sha256": "sha256:06d2d01ae2d783f7f2a323b33ac39c530844451703cc34c449f22974a712b27e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropRemoves/45/encode-valid",
+      "family": "protocol.server.ItemDropRemoves",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 12
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropRemoves/encode-valid.input.json",
+        "sha256": "sha256:332be3a23d6e1a267c4447c254d60549d643b926e009bb6362a4c5d8af7eb1bc"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropRemoves/encode-valid.expected.json",
+        "sha256": "sha256:6ce3299b2762aa5d565989787714e225d5b9e9d6087bc517b564575a9b5f7abb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropUpserts/45/decode-block-index-above",
+      "family": "protocol.server.ItemDropUpserts",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 11
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/decode-block-index-above.input.bin",
+        "sha256": "sha256:5206a6e3ac2d36f3f0cb17f9af8c071c00bd1f8b7565285d747858de04d35d1d"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/decode-block-index-above.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropUpserts/45/decode-count-above-stack-limit",
+      "family": "protocol.server.ItemDropUpserts",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 11
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/decode-count-above-stack-limit.input.bin",
+        "sha256": "sha256:07ac1a5ed21d933d4848b9d43ea6b37cc4759629c6b6ced995f55399001efe10"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/decode-count-above-stack-limit.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropUpserts/45/decode-duplicate-ids",
+      "family": "protocol.server.ItemDropUpserts",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 11
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/decode-duplicate-ids.input.bin",
+        "sha256": "sha256:f2240256f72c5f0845f1c2b998cd7b781f88603ba078a31944a0d7dc827e1075"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/decode-duplicate-ids.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropUpserts/45/decode-generation-zero",
+      "family": "protocol.server.ItemDropUpserts",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 11
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/decode-generation-zero.input.bin",
+        "sha256": "sha256:06355799a850d918b4f51896606d955362742a295383a32fdd0e06ee0e3ed11f"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/decode-generation-zero.expected.json",
+        "sha256": "sha256:e18b772c91375783f134c2837eb4944e794f26958ccdc48661b4f68a1ec3e5f4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropUpserts/45/decode-reversed-ids",
+      "family": "protocol.server.ItemDropUpserts",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 11
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/decode-reversed-ids.input.bin",
+        "sha256": "sha256:f965b2a19a64def5076bd1d9d6b1460334908477a193322bb01557a798c575e1"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/decode-reversed-ids.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropUpserts/45/decode-slot-above",
+      "family": "protocol.server.ItemDropUpserts",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 11
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/decode-slot-above.input.bin",
+        "sha256": "sha256:e6e8eb80d30412ef343d15b227fd0cab0b76f96b1df60e5ea82a9c21dcffede8"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/decode-slot-above.expected.json",
+        "sha256": "sha256:e18b772c91375783f134c2837eb4944e794f26958ccdc48661b4f68a1ec3e5f4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropUpserts/45/decode-trailing-byte",
+      "family": "protocol.server.ItemDropUpserts",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 11
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/decode-trailing-byte.input.bin",
+        "sha256": "sha256:89d3e915e89d97325e634f30ce0f77d48f89faf992010c7c8c9526dbf3890132"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/decode-trailing-byte.expected.json",
+        "sha256": "sha256:e86ced1efbf7a5d21ad5044581d2db90ba5286a5cd992edbe27e12b051dd3f85"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropUpserts/45/decode-valid",
+      "family": "protocol.server.ItemDropUpserts",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 11
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/decode-valid.input.bin",
+        "sha256": "sha256:4d78cc9324341bd5e8ebf8e9cd5bc41ef9944e8e0ec0deccbcd69378dad5cd33"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/decode-valid.expected.json",
+        "sha256": "sha256:c83c1fcf75c55086874d13f7d25384a0c9efba9e72cafc92bf7768e08680aa50"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropUpserts/45/encode-block-index-above",
+      "family": "protocol.server.ItemDropUpserts",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 11
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/encode-block-index-above.input.json",
+        "sha256": "sha256:8c60dae3eb7ce3e4ff3a55ccfa91d38c908c84087a9bdfa2c8256d6fe5725f6e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/encode-block-index-above.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ItemDropUpserts/45/encode-valid",
+      "family": "protocol.server.ItemDropUpserts",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 11
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/encode-valid.input.json",
+        "sha256": "sha256:a538a34ff2cdec56297fc060186620353450d3ad658ca8158bc92fa07ddaca5a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ItemDropUpserts/encode-valid.expected.json",
+        "sha256": "sha256:22b53dec38342af9ce5afb3f8d748c7d0b8e15a5d8e83d9b2f09b5f2e71165c9"
       },
       "checkpoints": [
         "0"

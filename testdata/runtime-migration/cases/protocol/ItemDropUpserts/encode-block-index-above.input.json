@@ -1,0 +1,35 @@
+{
+  "server_tick": 0,
+  "drops": [
+    {
+      "id": {
+        "dimension": -1,
+        "chunk_x": 7,
+        "chunk_z": -3,
+        "slot": 31,
+        "generation": 4294967295
+      },
+      "block_index": 0,
+      "stack": {
+        "item": 1,
+        "count": 4,
+        "durability": 0
+      }
+    },
+    {
+      "id": {
+        "dimension": 256,
+        "chunk_x": -4,
+        "chunk_z": 9,
+        "slot": 0,
+        "generation": 1
+      },
+      "block_index": 98304,
+      "stack": {
+        "item": 0,
+        "count": 0,
+        "durability": 0
+      }
+    }
+  ]
+}
