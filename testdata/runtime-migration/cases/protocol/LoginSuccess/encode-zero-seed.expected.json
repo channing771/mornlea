@@ -1,0 +1,10 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:214faa2c2c0174421d6c43ba49414a327e0b91b57fd54bef111c14b27cac1f8b",
+  "fields": {
+    "player_id": "000102030405460788090a0b0c0d0e0f",
+    "world_seed": "0"
+  },
+  "kind": "ok"
+}
+

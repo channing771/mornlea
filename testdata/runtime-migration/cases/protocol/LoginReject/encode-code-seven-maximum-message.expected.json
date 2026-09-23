@@ -1,0 +1,10 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:7f108ff6dd13f183c4f97c041e98a024ed0726ac101631dc5736fa77b66f2817",
+  "fields": {
+    "code": 7,
+    "message": "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"
+  },
+  "kind": "ok"
+}
+

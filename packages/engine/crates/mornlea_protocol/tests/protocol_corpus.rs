@@ -579,7 +579,15 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
 fn dispatch_case(case: &FrozenCase) -> serde_json::Value {
     match case.family.as_str() {
         "protocol.frame" => dispatch_frame(case),
-        CLIENT_HELLO_FAMILY | LOGIN_START_FAMILY => dispatch_packet(case),
+        CLIENT_HELLO_FAMILY
+        | LOGIN_START_FAMILY
+        | SERVER_HELLO_FAMILY
+        | HANDSHAKE_REJECT_FAMILY
+        | LOGIN_SUCCESS_FAMILY
+        | LOGIN_REJECT_FAMILY
+        | KEEP_ALIVE_FAMILY
+        | KEEP_ALIVE_REPLY_FAMILY
+        | DISCONNECT_FAMILY => dispatch_packet(case),
         other => panic!("unregistered protocol family for {}: {other}", case.id),
     }
 }

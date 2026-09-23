@@ -1,0 +1,9 @@
+{
+  "category": "packet",
+  "fields": {
+    "code": 1,
+    "message": ""
+  },
+  "kind": "ok"
+}
+

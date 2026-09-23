@@ -1614,15 +1614,28 @@
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
       "sources": [
         {
+          "path": "packages/shared/network/codec/codec_client.go",
+          "sha256": "sha256:572788394d3bc8b13b42d097beaa3fade87cdc4e9d5d022f7e5c92568c9c70de"
+        },
+        {
           "path": "packages/shared/network/codec/codec_golden_test.go",
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet.go",
+          "sha256": "sha256:7f17bfa1ec21e58417c876aec881f7215ab61c04a3fcc0124e91ac9f928f5525"
         },
         {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.client.KeepAliveReply/45/decode-valid",
+        "protocol.client.KeepAliveReply/45/decode-zero-token",
+        "protocol.client.KeepAliveReply/45/encode-valid",
+        "protocol.client.KeepAliveReply/45/encode-zero-token"
+      ]
     },
     {
       "id": "protocol.client.LoginStart",
@@ -2262,11 +2275,28 @@
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
         },
         {
+          "path": "packages/shared/network/codec/codec_server.go",
+          "sha256": "sha256:733ce941581e6ab2893e81c894d68a2815e14ff67b2c4f2caf6987a9ce6ad67c"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet.go",
+          "sha256": "sha256:7f17bfa1ec21e58417c876aec881f7215ab61c04a3fcc0124e91ac9f928f5525"
+        },
+        {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.server.Disconnect/45/decode-code-one-empty-message",
+        "protocol.server.Disconnect/45/decode-code-six",
+        "protocol.server.Disconnect/45/decode-code-zero",
+        "protocol.server.Disconnect/45/decode-declared-length-above-bound",
+        "protocol.server.Disconnect/45/decode-message-length-exceeds-payload",
+        "protocol.server.Disconnect/45/decode-trailing-byte",
+        "protocol.server.Disconnect/45/encode-code-five-maximum-message",
+        "protocol.server.Disconnect/45/encode-message-above-bound"
+      ]
     },
     {
       "id": "protocol.server.ForgetChunks",
@@ -2331,11 +2361,25 @@
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
         },
         {
+          "path": "packages/shared/network/codec/codec_server.go",
+          "sha256": "sha256:733ce941581e6ab2893e81c894d68a2815e14ff67b2c4f2caf6987a9ce6ad67c"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet.go",
+          "sha256": "sha256:7f17bfa1ec21e58417c876aec881f7215ab61c04a3fcc0124e91ac9f928f5525"
+        },
+        {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.server.HandshakeReject/45/decode-message-length-exceeds-payload",
+        "protocol.server.HandshakeReject/45/decode-unknown-code",
+        "protocol.server.HandshakeReject/45/decode-valid",
+        "protocol.server.HandshakeReject/45/encode-unknown-code",
+        "protocol.server.HandshakeReject/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.server.HostileDespawn",
@@ -2492,11 +2536,23 @@
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
         },
         {
+          "path": "packages/shared/network/codec/codec_server.go",
+          "sha256": "sha256:733ce941581e6ab2893e81c894d68a2815e14ff67b2c4f2caf6987a9ce6ad67c"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet.go",
+          "sha256": "sha256:7f17bfa1ec21e58417c876aec881f7215ab61c04a3fcc0124e91ac9f928f5525"
+        },
+        {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.server.KeepAlive/45/decode-valid",
+        "protocol.server.KeepAlive/45/decode-zero-token",
+        "protocol.server.KeepAlive/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.server.LoginReject",
@@ -2515,11 +2571,27 @@
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
         },
         {
+          "path": "packages/shared/network/codec/codec_server.go",
+          "sha256": "sha256:733ce941581e6ab2893e81c894d68a2815e14ff67b2c4f2caf6987a9ce6ad67c"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet.go",
+          "sha256": "sha256:7f17bfa1ec21e58417c876aec881f7215ab61c04a3fcc0124e91ac9f928f5525"
+        },
+        {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.server.LoginReject/45/decode-code-eight",
+        "protocol.server.LoginReject/45/decode-code-one-empty-message",
+        "protocol.server.LoginReject/45/decode-code-zero",
+        "protocol.server.LoginReject/45/decode-declared-length-above-bound",
+        "protocol.server.LoginReject/45/decode-message-length-exceeds-payload",
+        "protocol.server.LoginReject/45/encode-code-seven-maximum-message",
+        "protocol.server.LoginReject/45/encode-message-above-bound"
+      ]
     },
     {
       "id": "protocol.server.LoginSuccess",
@@ -2538,11 +2610,24 @@
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
         },
         {
+          "path": "packages/shared/network/codec/codec_server.go",
+          "sha256": "sha256:733ce941581e6ab2893e81c894d68a2815e14ff67b2c4f2caf6987a9ce6ad67c"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet.go",
+          "sha256": "sha256:7f17bfa1ec21e58417c876aec881f7215ab61c04a3fcc0124e91ac9f928f5525"
+        },
+        {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.server.LoginSuccess/45/decode-invalid-uuid",
+        "protocol.server.LoginSuccess/45/decode-trailing-byte",
+        "protocol.server.LoginSuccess/45/decode-zero-seed",
+        "protocol.server.LoginSuccess/45/encode-zero-seed"
+      ]
     },
     {
       "id": "protocol.server.PassiveDespawn",
@@ -2814,11 +2899,23 @@
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
         },
         {
+          "path": "packages/shared/network/codec/codec_server.go",
+          "sha256": "sha256:733ce941581e6ab2893e81c894d68a2815e14ff67b2c4f2caf6987a9ce6ad67c"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet.go",
+          "sha256": "sha256:7f17bfa1ec21e58417c876aec881f7215ab61c04a3fcc0124e91ac9f928f5525"
+        },
+        {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.server.ServerHello/45/decode-current-version",
+        "protocol.server.ServerHello/45/decode-previous-version",
+        "protocol.server.ServerHello/45/encode-current-version"
+      ]
     },
     {
       "id": "save.chunk",
@@ -16242,6 +16339,102 @@
       "rust_consumer": "mornlea_protocol"
     },
     {
+      "id": "protocol.client.KeepAliveReply/45/decode-valid",
+      "family": "protocol.client.KeepAliveReply",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 4
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/KeepAliveReply/decode-valid.input.bin",
+        "sha256": "sha256:7c9fa136d4413fa6173637e883b6998d32e1d675f88cddff9dcbcf331820f4b8"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/KeepAliveReply/decode-valid.expected.json",
+        "sha256": "sha256:6a78f2319e223631d057ce8dc972945822f45daeb9b1ec57725bfb5ecca08310"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.KeepAliveReply/45/decode-zero-token",
+      "family": "protocol.client.KeepAliveReply",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 4
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/KeepAliveReply/decode-zero-token.input.bin",
+        "sha256": "sha256:af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/KeepAliveReply/decode-zero-token.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.KeepAliveReply/45/encode-valid",
+      "family": "protocol.client.KeepAliveReply",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 4
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/KeepAliveReply/encode-valid.input.json",
+        "sha256": "sha256:404832710ec8f7c45b49e8085c68d7ca2c204c0e8713289d712ca2d2f877253e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/KeepAliveReply/encode-valid.expected.json",
+        "sha256": "sha256:1ca4b7b77df3bf3c404eb8bfab035c9de084c72dc9c61b6265d106165a07729e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.KeepAliveReply/45/encode-zero-token",
+      "family": "protocol.client.KeepAliveReply",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 4
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/KeepAliveReply/encode-zero-token.input.json",
+        "sha256": "sha256:230f929d615ba5fc123401ebadddd0014c3ef6dc1020d9ab6e0bbb0b333aac9d"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/KeepAliveReply/encode-zero-token.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
       "id": "protocol.client.LoginStart/45/decode-invalid-utf8-name",
       "family": "protocol.client.LoginStart",
       "version": "45",
@@ -16441,6 +16634,726 @@
         "0"
       ],
       "rust_consumer": "corpus_frame"
+    },
+    {
+      "id": "protocol.server.Disconnect/45/decode-code-one-empty-message",
+      "family": "protocol.server.Disconnect",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 6
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/Disconnect/decode-code-one-empty-message.input.bin",
+        "sha256": "sha256:47dc540c94ceb704a23875c11273e16bb0b8a87aed84de911f2133568115f254"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/Disconnect/decode-code-one-empty-message.expected.json",
+        "sha256": "sha256:f3dcc081a51592618b31fc2a8ce6dee16d68129885b5783feb8338f14ad0226d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.Disconnect/45/decode-code-six",
+      "family": "protocol.server.Disconnect",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 6
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/Disconnect/decode-code-six.input.bin",
+        "sha256": "sha256:ceb827ad3d3884fd4d50ae6099d6d50c09a21e72ebd309708e8b69d93df19e55"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/Disconnect/decode-code-six.expected.json",
+        "sha256": "sha256:986d015321a2eb07422b25a336ae52c8c5cb2dc5199a6fc758e8b0e0bcd32b8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.Disconnect/45/decode-code-zero",
+      "family": "protocol.server.Disconnect",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 6
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/Disconnect/decode-code-zero.input.bin",
+        "sha256": "sha256:96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/Disconnect/decode-code-zero.expected.json",
+        "sha256": "sha256:986d015321a2eb07422b25a336ae52c8c5cb2dc5199a6fc758e8b0e0bcd32b8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.Disconnect/45/decode-declared-length-above-bound",
+      "family": "protocol.server.Disconnect",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 6
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/Disconnect/decode-declared-length-above-bound.input.bin",
+        "sha256": "sha256:77105102a1b72cecbe44b150570ce17af1cfac2e2991a9c6092bb26ab567524d"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/Disconnect/decode-declared-length-above-bound.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.Disconnect/45/decode-message-length-exceeds-payload",
+      "family": "protocol.server.Disconnect",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 6
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/Disconnect/decode-message-length-exceeds-payload.input.bin",
+        "sha256": "sha256:178772b944102eea943b5a1f4ab9c1dd14957f3146ae4989efbf38fe28e5cc65"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/Disconnect/decode-message-length-exceeds-payload.expected.json",
+        "sha256": "sha256:6a6aba5322f6bb08d116cc9b314494e850b3adbad2801f6f0078ec3215fd5f44"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.Disconnect/45/decode-trailing-byte",
+      "family": "protocol.server.Disconnect",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 6
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/Disconnect/decode-trailing-byte.input.bin",
+        "sha256": "sha256:fb50dc0717ff266cf9baf82b1ce7a1c2ef6d9247859680b11a19fb7077f5f222"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/Disconnect/decode-trailing-byte.expected.json",
+        "sha256": "sha256:e86ced1efbf7a5d21ad5044581d2db90ba5286a5cd992edbe27e12b051dd3f85"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.Disconnect/45/encode-code-five-maximum-message",
+      "family": "protocol.server.Disconnect",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 6
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/Disconnect/encode-code-five-maximum-message.input.json",
+        "sha256": "sha256:536d060ebcfe6740e9466b3c6f9719ceb9a21947056ccf62d210eafcefe0c451"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/Disconnect/encode-code-five-maximum-message.expected.json",
+        "sha256": "sha256:79a4914c9511f0688ca5eca8a5b6112ca0e147209bc4a59c28c3e0c657094987"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.Disconnect/45/encode-message-above-bound",
+      "family": "protocol.server.Disconnect",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 6
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/Disconnect/encode-message-above-bound.input.json",
+        "sha256": "sha256:3e80a9c1df44daa398c085e3216abb6973579c6a543ac9be3cd8667b178130ba"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/Disconnect/encode-message-above-bound.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.HandshakeReject/45/decode-message-length-exceeds-payload",
+      "family": "protocol.server.HandshakeReject",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "handshake",
+        "id": 1
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/HandshakeReject/decode-message-length-exceeds-payload.input.bin",
+        "sha256": "sha256:e45d6c86338d7bd7e454aaab2959feee1418303b1c61d319571ed051406fea63"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/HandshakeReject/decode-message-length-exceeds-payload.expected.json",
+        "sha256": "sha256:6a6aba5322f6bb08d116cc9b314494e850b3adbad2801f6f0078ec3215fd5f44"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.HandshakeReject/45/decode-unknown-code",
+      "family": "protocol.server.HandshakeReject",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "handshake",
+        "id": 1
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/HandshakeReject/decode-unknown-code.input.bin",
+        "sha256": "sha256:b0036c1f132656ca1e69702ba8d618e9cfb1264f6c9445c54a10be357d88a146"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/HandshakeReject/decode-unknown-code.expected.json",
+        "sha256": "sha256:986d015321a2eb07422b25a336ae52c8c5cb2dc5199a6fc758e8b0e0bcd32b8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.HandshakeReject/45/decode-valid",
+      "family": "protocol.server.HandshakeReject",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "handshake",
+        "id": 1
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/HandshakeReject/decode-valid.input.bin",
+        "sha256": "sha256:0ffc62a4b8f252fdcfa40bf11b11efe7358e93c4354814daad4e6e03cf589eff"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/HandshakeReject/decode-valid.expected.json",
+        "sha256": "sha256:6077bfa0b0fd064480093ea165758417ad5174ea08fd33c4bfc4e2bd92f71c45"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.HandshakeReject/45/encode-unknown-code",
+      "family": "protocol.server.HandshakeReject",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "handshake",
+        "id": 1
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/HandshakeReject/encode-unknown-code.input.json",
+        "sha256": "sha256:06dd6a49de9fc1cf42420aac714a5f61dc8ac694c0746e31905bb5f6c0beb1fb"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/HandshakeReject/encode-unknown-code.expected.json",
+        "sha256": "sha256:986d015321a2eb07422b25a336ae52c8c5cb2dc5199a6fc758e8b0e0bcd32b8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.HandshakeReject/45/encode-valid",
+      "family": "protocol.server.HandshakeReject",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "handshake",
+        "id": 1
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/HandshakeReject/encode-valid.input.json",
+        "sha256": "sha256:9559c222c9546ea9c7e115b6bed553f7f9bc5d793d20a5e5b8adf0068345e1b2"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/HandshakeReject/encode-valid.expected.json",
+        "sha256": "sha256:8105df6e8de92b68aa0c4e689e680a1a68c50494e0517cd34dab42d4f720a617"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.KeepAlive/45/decode-valid",
+      "family": "protocol.server.KeepAlive",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 5
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/KeepAlive/decode-valid.input.bin",
+        "sha256": "sha256:7c9fa136d4413fa6173637e883b6998d32e1d675f88cddff9dcbcf331820f4b8"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/KeepAlive/decode-valid.expected.json",
+        "sha256": "sha256:6a78f2319e223631d057ce8dc972945822f45daeb9b1ec57725bfb5ecca08310"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.KeepAlive/45/decode-zero-token",
+      "family": "protocol.server.KeepAlive",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 5
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/KeepAlive/decode-zero-token.input.bin",
+        "sha256": "sha256:af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/KeepAlive/decode-zero-token.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.KeepAlive/45/encode-valid",
+      "family": "protocol.server.KeepAlive",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 5
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/KeepAlive/encode-valid.input.json",
+        "sha256": "sha256:404832710ec8f7c45b49e8085c68d7ca2c204c0e8713289d712ca2d2f877253e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/KeepAlive/encode-valid.expected.json",
+        "sha256": "sha256:1ca4b7b77df3bf3c404eb8bfab035c9de084c72dc9c61b6265d106165a07729e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.LoginReject/45/decode-code-eight",
+      "family": "protocol.server.LoginReject",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "login",
+        "id": 1
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginReject/decode-code-eight.input.bin",
+        "sha256": "sha256:e545d395bb3fd971f91bf9a2b6722831df704efae6c1aa9da0989ed0970b77bb"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginReject/decode-code-eight.expected.json",
+        "sha256": "sha256:986d015321a2eb07422b25a336ae52c8c5cb2dc5199a6fc758e8b0e0bcd32b8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.LoginReject/45/decode-code-one-empty-message",
+      "family": "protocol.server.LoginReject",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "login",
+        "id": 1
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginReject/decode-code-one-empty-message.input.bin",
+        "sha256": "sha256:47dc540c94ceb704a23875c11273e16bb0b8a87aed84de911f2133568115f254"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginReject/decode-code-one-empty-message.expected.json",
+        "sha256": "sha256:f3dcc081a51592618b31fc2a8ce6dee16d68129885b5783feb8338f14ad0226d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.LoginReject/45/decode-code-zero",
+      "family": "protocol.server.LoginReject",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "login",
+        "id": 1
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginReject/decode-code-zero.input.bin",
+        "sha256": "sha256:96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginReject/decode-code-zero.expected.json",
+        "sha256": "sha256:986d015321a2eb07422b25a336ae52c8c5cb2dc5199a6fc758e8b0e0bcd32b8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.LoginReject/45/decode-declared-length-above-bound",
+      "family": "protocol.server.LoginReject",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "login",
+        "id": 1
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginReject/decode-declared-length-above-bound.input.bin",
+        "sha256": "sha256:d6c0d4c639c2c5f9c1648b222984a7478753402c1d734a892d7e19bdb3010e87"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginReject/decode-declared-length-above-bound.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.LoginReject/45/decode-message-length-exceeds-payload",
+      "family": "protocol.server.LoginReject",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "login",
+        "id": 1
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginReject/decode-message-length-exceeds-payload.input.bin",
+        "sha256": "sha256:d45c9fb46ffae65624f1368a6e227afeef18baa07ae7e13120a1eabb5719a2f4"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginReject/decode-message-length-exceeds-payload.expected.json",
+        "sha256": "sha256:6a6aba5322f6bb08d116cc9b314494e850b3adbad2801f6f0078ec3215fd5f44"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.LoginReject/45/encode-code-seven-maximum-message",
+      "family": "protocol.server.LoginReject",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "login",
+        "id": 1
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginReject/encode-code-seven-maximum-message.input.json",
+        "sha256": "sha256:9bb02fc947fe5d1b994b4a49f0e09e0bfcbaff85b349716b067efabc0a7bddad"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginReject/encode-code-seven-maximum-message.expected.json",
+        "sha256": "sha256:16186c19eab9cdfb3de48a6f99f1fafa9f71eb69424d8271fc4fe66b48b806a8"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.LoginReject/45/encode-message-above-bound",
+      "family": "protocol.server.LoginReject",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "login",
+        "id": 1
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginReject/encode-message-above-bound.input.json",
+        "sha256": "sha256:3e80a9c1df44daa398c085e3216abb6973579c6a543ac9be3cd8667b178130ba"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginReject/encode-message-above-bound.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.LoginSuccess/45/decode-invalid-uuid",
+      "family": "protocol.server.LoginSuccess",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "login",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginSuccess/decode-invalid-uuid.input.bin",
+        "sha256": "sha256:9d908ecfb6b256def8b49a7c504e6c889c4b0e41fe6ce3e01863dd7b61a20aa0"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginSuccess/decode-invalid-uuid.expected.json",
+        "sha256": "sha256:e18b772c91375783f134c2837eb4944e794f26958ccdc48661b4f68a1ec3e5f4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.LoginSuccess/45/decode-trailing-byte",
+      "family": "protocol.server.LoginSuccess",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "login",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginSuccess/decode-trailing-byte.input.bin",
+        "sha256": "sha256:5a04017601c6d9718074e01d7be8d484d5ff37ec82d3b41674747a40371527f2"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginSuccess/decode-trailing-byte.expected.json",
+        "sha256": "sha256:e86ced1efbf7a5d21ad5044581d2db90ba5286a5cd992edbe27e12b051dd3f85"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.LoginSuccess/45/decode-zero-seed",
+      "family": "protocol.server.LoginSuccess",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "login",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginSuccess/decode-zero-seed.input.bin",
+        "sha256": "sha256:214faa2c2c0174421d6c43ba49414a327e0b91b57fd54bef111c14b27cac1f8b"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginSuccess/decode-zero-seed.expected.json",
+        "sha256": "sha256:42746182be3e3010092b796471f6a7c74d0e5cf0eecf7d3bc866f54ebfaf8288"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.LoginSuccess/45/encode-zero-seed",
+      "family": "protocol.server.LoginSuccess",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "login",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginSuccess/encode-zero-seed.input.json",
+        "sha256": "sha256:d5eb20c765c64c87b9ab2831464f4f25aff0b79eefc32db970ea9bdf3a92a0d6"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginSuccess/encode-zero-seed.expected.json",
+        "sha256": "sha256:49321b4442ac6cd1c2818796adc6a9ac375f9db78d784cc5b9820681e45fe3fb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ServerHello/45/decode-current-version",
+      "family": "protocol.server.ServerHello",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "handshake",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ServerHello/decode-current-version.input.bin",
+        "sha256": "sha256:3973e022e93220f9212c18d0d0c543ae7c309e46640da93a4a0314de999f5112"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ServerHello/decode-current-version.expected.json",
+        "sha256": "sha256:6be3ac509e894eddacb511e1e52a0808f96fe9a0e3d824ac961df9757744e2e1"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ServerHello/45/decode-previous-version",
+      "family": "protocol.server.ServerHello",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "handshake",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ServerHello/decode-previous-version.input.bin",
+        "sha256": "sha256:d03502c43d74a30b936740a9517dc4ea2b2ad7168caa0a774cefe793ce0b33e7"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ServerHello/decode-previous-version.expected.json",
+        "sha256": "sha256:1d244765e8472f215ba80c99a769bfa09c85adf31f112401dafa5af95cc6e14c"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ServerHello/45/encode-current-version",
+      "family": "protocol.server.ServerHello",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "handshake",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ServerHello/encode-current-version.input.json",
+        "sha256": "sha256:49482515859dd42f40269c6c04ef5b270c436e31cdf39ab5057a862797f9422e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ServerHello/encode-current-version.expected.json",
+        "sha256": "sha256:4847b32ffcfbcca42c32d6ef15b5f656fb6847d7b02780c0dbba65b6b85becd7"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
     }
   ]
 }

@@ -1,0 +1,9 @@
+{
+  "category": "packet",
+  "fields": {
+    "player_id": "000102030405460788090a0b0c0d0e0f",
+    "world_seed": "0"
+  },
+  "kind": "ok"
+}
+

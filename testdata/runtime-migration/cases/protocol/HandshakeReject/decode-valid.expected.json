@@ -1,0 +1,10 @@
+{
+  "category": "packet",
+  "fields": {
+    "code": 1,
+    "message": "",
+    "server_protocol_version": 42
+  },
+  "kind": "ok"
+}
+

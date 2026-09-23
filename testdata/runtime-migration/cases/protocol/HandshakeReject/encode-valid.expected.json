@@ -1,0 +1,11 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:0ffc62a4b8f252fdcfa40bf11b11efe7358e93c4354814daad4e6e03cf589eff",
+  "fields": {
+    "code": 1,
+    "message": "",
+    "server_protocol_version": 42
+  },
+  "kind": "ok"
+}
+

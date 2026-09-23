@@ -1,0 +1,10 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:2f60c649b1199a5184ff4eddaf6bf3e10506f1a75e0ac258e6e54ad356fc6893",
+  "fields": {
+    "code": 5,
+    "message": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "kind": "ok"
+}
+
