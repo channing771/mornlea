@@ -29,7 +29,14 @@
 //! through that same surface; the two move payloads carry the sequence and
 //! two slot bytes, and the four sequence-only payloads carry the sequence
 //! alone, because inventory contents, the moved count, the output recipe,
-//! the drop position and the equipped slot stay server-owned.
+//! the drop position and the equipped slot stay server-owned. The sixth group
+//! is the four container and view-addressed stack command families
+//! (`MoveContainerStack`, `MoveStackPartial`, `QuickMoveStack` and
+//! `DropStack`), executed through that same surface; every one of them carries
+//! the 18-byte container reference, which the container view validates as a
+//! real reference and the inventory and crafting views require to be the exact
+//! all-zero sentinel. The moved amount, the transfer destination and the world
+//! drop position stay server-owned, so no payload carries any of them.
 //! `CorpusConsumer::Protocol` is registered here as `mornlea_protocol` so a
 //! packet case can name it, while the framing cases stay with the separate
 //! `corpus_frame` consumer the frame regression suite keeps using.
@@ -81,6 +88,12 @@ const CLOSE_CONTAINER_FAMILY: &str = "protocol.client.CloseContainer";
 const DROP_SELECTED_ITEM_FAMILY: &str = "protocol.client.DropSelectedItem";
 const EQUIP_ARMOR_FAMILY: &str = "protocol.client.EquipArmor";
 const TAKE_CRAFTING_OUTPUT_FAMILY: &str = "protocol.client.TakeCraftingOutput";
+/// The four packet families the container and view-addressed stack command
+/// producer group registers.
+const MOVE_CONTAINER_STACK_FAMILY: &str = "protocol.client.MoveContainerStack";
+const MOVE_STACK_PARTIAL_FAMILY: &str = "protocol.client.MoveStackPartial";
+const QUICK_MOVE_STACK_FAMILY: &str = "protocol.client.QuickMoveStack";
+const DROP_STACK_FAMILY: &str = "protocol.client.DropStack";
 /// The packet families' protocol version, matching the manifest family rows.
 const PACKET_VERSION: &str = "45";
 /// The category label every accepted control packet outcome publishes.
@@ -390,6 +403,102 @@ fn client_move_fields(sequence: u64, from: u8, to: u8) -> serde_json::Value {
 fn client_sequence_fields(sequence: u64) -> serde_json::Value {
     serde_json::json!({
         "sequence": sequence.to_string()
+    })
+}
+
+/// Renders one 18-byte container reference as the nested JSON object both
+/// directions publish.
+///
+/// The reference stays the raw wire value: the dimension and the two chunk
+/// coordinates are plain JSON integers, so a negative chunk coordinate and a
+/// dimension the authority would refuse both survive the round trip, and the
+/// physical slot and generation publish as the byte and number they are.
+fn client_container_fields(container: &mornlea_protocol::ContainerRef) -> serde_json::Value {
+    serde_json::json!({
+        "dimension": container.dimension,
+        "chunk_x": container.chunk_x,
+        "chunk_z": container.chunk_z,
+        "kind": container.kind,
+        "slot": container.slot,
+        "generation": container.generation
+    })
+}
+
+/// Reads one stack-view command encode case's container reference object.
+fn client_container_request(case: &FrozenCase) -> mornlea_protocol::ContainerRef {
+    let raw = case
+        .input_json
+        .as_ref()
+        .expect("encode case carries JSON fields")
+        .get("container")
+        .and_then(|value| value.as_object())
+        .unwrap_or_else(|| panic!("case {} names no container reference", case.id));
+    let field = |name: &str| -> i64 {
+        raw.get(name)
+            .and_then(|value| value.as_i64())
+            .unwrap_or_else(|| panic!("case {} reference names no {name}", case.id))
+    };
+    let byte = |name: &str| -> u8 {
+        u8::try_from(field(name))
+            .unwrap_or_else(|_| panic!("case {} reference field {name} exceeds u8", case.id))
+    };
+    let generation = u32::try_from(field("generation"))
+        .unwrap_or_else(|_| panic!("case {} reference generation exceeds u32", case.id));
+    mornlea_protocol::ContainerRef {
+        dimension: i32::try_from(field("dimension"))
+            .unwrap_or_else(|_| panic!("case {} reference dimension exceeds i32", case.id)),
+        chunk_x: i32::try_from(field("chunk_x"))
+            .unwrap_or_else(|_| panic!("case {} reference chunk_x exceeds i32", case.id)),
+        chunk_z: i32::try_from(field("chunk_z"))
+            .unwrap_or_else(|_| panic!("case {} reference chunk_z exceeds i32", case.id)),
+        kind: byte("kind"),
+        slot: byte("slot"),
+        generation,
+    }
+}
+
+/// Renders the semantic fields the four stack-view command families publish,
+/// shared by the decode and encode arms so both publish the same canonical
+/// field encoding.
+fn client_stack_view_fields(record: &mornlea_protocol::MoveContainerStack) -> serde_json::Value {
+    serde_json::json!({
+        "sequence": record.sequence.to_string(),
+        "container": client_container_fields(&record.container),
+        "from": record.from,
+        "to": record.to
+    })
+}
+
+/// Renders the partial move's semantic fields, which add the view byte and the
+/// single-item flag to the shared sequence, reference and index fields.
+fn client_stack_partial_fields(record: &mornlea_protocol::MoveStackPartial) -> serde_json::Value {
+    serde_json::json!({
+        "sequence": record.sequence.to_string(),
+        "container": client_container_fields(&record.container),
+        "view": record.view,
+        "from": record.from,
+        "to": record.to,
+        "single": record.single
+    })
+}
+
+/// Renders the quick move's semantic fields, which carry one index.
+fn client_quick_move_fields(record: &mornlea_protocol::QuickMoveStack) -> serde_json::Value {
+    serde_json::json!({
+        "sequence": record.sequence.to_string(),
+        "container": client_container_fields(&record.container),
+        "view": record.view,
+        "from": record.from
+    })
+}
+
+/// Renders the stack drop's semantic fields, which carry one slot.
+fn client_drop_stack_fields(record: &mornlea_protocol::DropStack) -> serde_json::Value {
+    serde_json::json!({
+        "sequence": record.sequence.to_string(),
+        "container": client_container_fields(&record.container),
+        "view": record.view,
+        "slot": record.slot
     })
 }
 
@@ -1109,6 +1218,96 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
             }
             other => panic!("unsupported packet operation for {}: {other}", case.id),
         },
+        MOVE_CONTAINER_STACK_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::MoveContainerStack::decode(&case.input) {
+                Ok(command) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": client_stack_view_fields(&command),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                // The record is built through its public fields, so a malformed
+                // reference, a same-slot pair or the furnace output target is
+                // refused by the production validation rather than by a
+                // constructor guard.
+                let command = mornlea_protocol::MoveContainerStack {
+                    sequence: unsigned_field(case, "sequence"),
+                    container: client_container_request(case),
+                    from: byte_field(case, "from"),
+                    to: byte_field(case, "to"),
+                };
+                encode_ok_outcome(command.encode(), client_stack_view_fields(&command))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        MOVE_STACK_PARTIAL_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::MoveStackPartial::decode(&case.input) {
+                Ok(command) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": client_stack_partial_fields(&command),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                // The record is built through its public fields, so an unknown
+                // view, a reference that does not match its view, an
+                // out-of-range index or a same-slot pair is refused by the
+                // production validation rather than by a constructor guard.
+                let command = mornlea_protocol::MoveStackPartial {
+                    sequence: unsigned_field(case, "sequence"),
+                    container: client_container_request(case),
+                    view: byte_field(case, "view"),
+                    from: byte_field(case, "from"),
+                    to: byte_field(case, "to"),
+                    single: bool_field(case, "single"),
+                };
+                encode_ok_outcome(command.encode(), client_stack_partial_fields(&command))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        QUICK_MOVE_STACK_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::QuickMoveStack::decode(&case.input) {
+                Ok(command) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": client_quick_move_fields(&command),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let command = mornlea_protocol::QuickMoveStack {
+                    sequence: unsigned_field(case, "sequence"),
+                    container: client_container_request(case),
+                    view: byte_field(case, "view"),
+                    from: byte_field(case, "from"),
+                };
+                encode_ok_outcome(command.encode(), client_quick_move_fields(&command))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        DROP_STACK_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::DropStack::decode(&case.input) {
+                Ok(command) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": client_drop_stack_fields(&command),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let command = mornlea_protocol::DropStack {
+                    sequence: unsigned_field(case, "sequence"),
+                    container: client_container_request(case),
+                    view: byte_field(case, "view"),
+                    slot: byte_field(case, "slot"),
+                };
+                encode_ok_outcome(command.encode(), client_drop_stack_fields(&command))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
         other => panic!("unsupported packet family for {}: {other}", case.id),
     }
 }
@@ -1144,7 +1343,11 @@ fn dispatch_case(case: &FrozenCase) -> serde_json::Value {
         | CLOSE_CONTAINER_FAMILY
         | DROP_SELECTED_ITEM_FAMILY
         | EQUIP_ARMOR_FAMILY
-        | TAKE_CRAFTING_OUTPUT_FAMILY => dispatch_packet(case),
+        | TAKE_CRAFTING_OUTPUT_FAMILY
+        | MOVE_CONTAINER_STACK_FAMILY
+        | MOVE_STACK_PARTIAL_FAMILY
+        | QUICK_MOVE_STACK_FAMILY
+        | DROP_STACK_FAMILY => dispatch_packet(case),
         other => panic!("unregistered protocol family for {}: {other}", case.id),
     }
 }
@@ -1549,6 +1752,96 @@ fn protocol_corpus_packet_client_inventory_cases_are_executed() {
         "the client inventory selection executed zero cases"
     );
     for case in client_inventory {
+        assert_eq!(
+            case.consumer,
+            CorpusConsumer::Protocol,
+            "case {} carries the wrong consumer",
+            case.id
+        );
+        assert!(
+            !case.operation.is_empty(),
+            "case {} names no operation",
+            case.id
+        );
+        assert_normalized(case, dispatch_packet(case));
+    }
+}
+
+/// The case identities the container and view-addressed stack command group
+/// registers. They mirror the Go producer's registration, so a case that only
+/// one side names is a mismatch rather than a shared name. The merged manifest
+/// sorts case IDs, so the comparison sorts this list too.
+const CLIENT_STACK_VIEWS_CASE_IDS: [&str; 29] = [
+    "protocol.client.DropStack/45/decode-inventory-index-above",
+    "protocol.client.DropStack/45/decode-nonzero-ref-inventory-view",
+    "protocol.client.DropStack/45/decode-unknown-view",
+    "protocol.client.DropStack/45/decode-valid",
+    "protocol.client.DropStack/45/encode-valid",
+    "protocol.client.MoveContainerStack/45/decode-chest-index-above",
+    "protocol.client.MoveContainerStack/45/decode-foreign-dimension",
+    "protocol.client.MoveContainerStack/45/decode-output-target",
+    "protocol.client.MoveContainerStack/45/decode-ref-slot-above-range",
+    "protocol.client.MoveContainerStack/45/decode-same-slot",
+    "protocol.client.MoveContainerStack/45/decode-unknown-kind",
+    "protocol.client.MoveContainerStack/45/decode-valid",
+    "protocol.client.MoveContainerStack/45/decode-zero-generation",
+    "protocol.client.MoveContainerStack/45/encode-output-target",
+    "protocol.client.MoveContainerStack/45/encode-valid",
+    "protocol.client.MoveStackPartial/45/decode-furnace-index-above",
+    "protocol.client.MoveStackPartial/45/decode-nonzero-ref-inventory-view",
+    "protocol.client.MoveStackPartial/45/decode-same-slot",
+    "protocol.client.MoveStackPartial/45/decode-single-tag-two",
+    "protocol.client.MoveStackPartial/45/decode-unknown-view",
+    "protocol.client.MoveStackPartial/45/decode-valid",
+    "protocol.client.MoveStackPartial/45/decode-zero-generation-container-view",
+    "protocol.client.MoveStackPartial/45/encode-nonzero-ref-inventory-view",
+    "protocol.client.MoveStackPartial/45/encode-valid",
+    "protocol.client.QuickMoveStack/45/decode-crafting-index-above",
+    "protocol.client.QuickMoveStack/45/decode-nonzero-ref-crafting-view",
+    "protocol.client.QuickMoveStack/45/decode-unknown-view",
+    "protocol.client.QuickMoveStack/45/decode-valid",
+    "protocol.client.QuickMoveStack/45/encode-valid",
+];
+
+/// Reports whether one family belongs to the container and view-addressed
+/// stack command producer group.
+fn is_client_stack_views_family(family: &str) -> bool {
+    matches!(
+        family,
+        MOVE_CONTAINER_STACK_FAMILY
+            | MOVE_STACK_PARTIAL_FAMILY
+            | QUICK_MOVE_STACK_FAMILY
+            | DROP_STACK_FAMILY
+    )
+}
+
+#[test]
+fn protocol_corpus_packet_client_stack_views_cases_are_executed() {
+    // The case assets are exported by the Go producer and integrated by the
+    // controller, so before that merge this test reports the missing corpus
+    // cases instead of an empty selection that would look like a passing run.
+    let cases = load_cases_for_consumer(CorpusConsumer::Protocol);
+    let client_stack_views: Vec<&FrozenCase> = cases
+        .iter()
+        .filter(|case| is_client_stack_views_family(&case.family))
+        .collect();
+    let executed: Vec<&str> = client_stack_views
+        .iter()
+        .map(|case| case.id.as_str())
+        .collect();
+    let mut expected: Vec<&str> = CLIENT_STACK_VIEWS_CASE_IDS.to_vec();
+    // The merged manifest sorts case IDs; compare as the reviewed set, not in
+    // the authoring order of this suite's constant.
+    expected.sort_unstable();
+    assert_eq!(
+        executed, expected,
+        "the client stack view selection does not carry the reviewed case set"
+    );
+    assert!(
+        !client_stack_views.is_empty(),
+        "the client stack view selection executed zero cases"
+    );
+    for case in client_stack_views {
         assert_eq!(
             case.consumer,
             CorpusConsumer::Protocol,

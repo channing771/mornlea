@@ -34,16 +34,33 @@ fn container_view_payload(dimension: i32) -> Vec<u8> {
     payload
 }
 
-/// A raw dimension outside the `u8` range must survive decoding exactly: the
-/// wire value is `i32` and narrowing it would alias a foreign dimension into
-/// a valid one, which is the raw-format loss this node removes.
+/// A raw dimension outside the `u8` range never survives decoding as a valid
+/// record: the wire value is `i32`, and narrowing it would alias a foreign
+/// dimension into a valid one and publish a container-view reference the
+/// authority would reject. The container view runs the real-reference gate, so
+/// both foreign dimensions are refused as `InvalidRange` instead of being
+/// reinterpreted as a `u8` dimension or accepted as publishable wire data.
 #[test]
-fn container_view_decode_preserves_a_foreign_raw_dimension() {
+fn container_view_decode_refuses_a_foreign_raw_dimension() {
     for dimension in [256i32, -1] {
-        let decoded = MoveStackPartial::decode(&container_view_payload(dimension))
-            .expect("a raw foreign dimension is publishable wire data");
-        let raw: i64 = i64::from(decoded.container.dimension);
-        assert_eq!(raw, i64::from(dimension));
+        assert_eq!(
+            MoveStackPartial::decode(&container_view_payload(dimension)),
+            Err(ProtocolError::InvalidRange),
+            "a container view naming dimension {dimension} must be refused"
+        );
+        let foreign = ContainerRef {
+            dimension,
+            chunk_x: 1,
+            chunk_z: 2,
+            kind: mornlea_protocol::CONTAINER_KIND_CHEST,
+            slot: 5,
+            generation: 9,
+        };
+        assert_eq!(
+            foreign.to_domain_present(),
+            Err(ProtocolError::InvalidRange),
+            "the raw dimension is kept rather than narrowed, so the conversion refuses it"
+        );
     }
 }
 

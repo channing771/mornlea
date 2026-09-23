@@ -1316,7 +1316,9 @@ fn move_container_stack_round_trip_preserves_golden_bytes() {
         generation: 9,
     };
     let move_stack = mornlea_protocol::MoveContainerStack::new(4, container, 0, 36).expect("move");
-    let payload = move_stack.encode();
+    let payload = move_stack
+        .encode()
+        .expect("validated container move is encodable");
     assert_eq!(
         payload,
         [
@@ -1342,7 +1344,12 @@ fn move_container_stack_round_trip_preserves_golden_bytes() {
     let chest_move =
         mornlea_protocol::MoveContainerStack::new(5, chest, 62, 3).expect("chest move");
     assert_eq!(
-        mornlea_protocol::MoveContainerStack::decode(&chest_move.encode()).expect("decode chest"),
+        mornlea_protocol::MoveContainerStack::decode(
+            &chest_move
+                .encode()
+                .expect("validated chest move is encodable"),
+        )
+        .expect("decode chest"),
         chest_move
     );
 }
@@ -1465,7 +1472,9 @@ fn move_stack_partial_round_trip_preserves_golden_bytes() {
     };
     let partial =
         mornlea_protocol::MoveStackPartial::new(19, container, 2, 10, 34, true).expect("partial");
-    let payload = partial.encode();
+    let payload = partial
+        .encode()
+        .expect("validated stack split move is encodable");
     assert_eq!(
         payload,
         [
@@ -1490,7 +1499,12 @@ fn move_stack_partial_round_trip_preserves_golden_bytes() {
     )
     .expect("inventory split");
     assert_eq!(
-        mornlea_protocol::MoveStackPartial::decode(&inventory.encode()).expect("decode inventory"),
+        mornlea_protocol::MoveStackPartial::decode(
+            &inventory
+                .encode()
+                .expect("validated inventory split is encodable"),
+        )
+        .expect("decode inventory"),
         inventory
     );
 }
@@ -1583,7 +1597,7 @@ fn quick_move_stack_round_trip_preserves_golden_bytes() {
         generation: 5,
     };
     let quick = mornlea_protocol::QuickMoveStack::new(20, container, 2, 38).expect("quick");
-    let payload = quick.encode();
+    let payload = quick.encode().expect("validated quick move is encodable");
     assert_eq!(
         payload,
         [
@@ -1604,7 +1618,12 @@ fn quick_move_stack_round_trip_preserves_golden_bytes() {
     )
     .expect("crafting quick");
     assert_eq!(
-        mornlea_protocol::QuickMoveStack::decode(&crafting.encode()).expect("decode crafting"),
+        mornlea_protocol::QuickMoveStack::decode(
+            &crafting
+                .encode()
+                .expect("validated crafting quick move is encodable"),
+        )
+        .expect("decode crafting"),
         crafting
     );
 }
@@ -1662,7 +1681,7 @@ fn drop_stack_round_trip_preserves_golden_bytes() {
         generation: 9,
     };
     let drop = mornlea_protocol::DropStack::new(21, container, 2, 62).expect("drop");
-    let payload = drop.encode();
+    let payload = drop.encode().expect("validated stack drop is encodable");
     assert_eq!(
         payload,
         [
@@ -1680,7 +1699,12 @@ fn drop_stack_round_trip_preserves_golden_bytes() {
         mornlea_protocol::DropStack::new(1, mornlea_protocol::ContainerRef::NONE, 0, 35)
             .expect("drop");
     assert_eq!(
-        mornlea_protocol::DropStack::decode(&inventory.encode()).expect("decode inventory"),
+        mornlea_protocol::DropStack::decode(
+            &inventory
+                .encode()
+                .expect("validated inventory drop is encodable"),
+        )
+        .expect("decode inventory"),
         inventory
     );
 }

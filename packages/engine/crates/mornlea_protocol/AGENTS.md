@@ -564,8 +564,10 @@ rather than checking that it omits a few names.
   `write`/`read` keep furnaces and chests on one encoding, and `read`
   stores the raw `i32` dimension without narrowing it: both container arrays
   live in the overworld's fixed per-chunk storage, so a foreign dimension is
-  an invalid real reference, never a value to reinterpret as a `u8`
-  (`container_view_decode_preserves_a_foreign_raw_dimension`).
+  an invalid real reference, never a value to reinterpret as a `u8`. The
+  dimension-first conversion therefore refuses `256` and `-1` as
+  `InvalidRange` instead of publishing a reference the authority rejects
+  (`container_view_decode_refuses_a_foreign_raw_dimension`).
 - `NONE` is the exact all-zero record, the one absent sentinel the inventory
   and crafting views carry. `to_domain_present` rejects it and every invalid
   real reference; `to_domain_optional` maps only the exact zero record to
@@ -578,23 +580,43 @@ rather than checking that it omits a few names.
   `container_reference_absence_is_exactly_the_zero_record`).
 - The packet families keep their own reference gates through the crate-private
   `validate_furnace` / `validate_chest` / `validate_any` helpers, which run
-  the kind check first and then the checked conversion. A stack-view command
-  that never required a valid real reference keeps that behavior; adding one
-  is the stack-view node's change, not this module's.
+  the kind check first and then the checked conversion. `MoveContainerStack`
+  validates its reference through `validate_any`, and the three view-addressed
+  commands through the private `validate_stack_view` in
+  `src/move_stack_partial.rs`, which requires the exact `NONE` in the
+  inventory and crafting views and runs `to_domain_present` in the container
+  view. A case record therefore never combines an unknown kind with a nonzero
+  dimension: Go's `validAnyContainerRef` answers the kind first
+  (`invalid-enum`) while the neutral conversion answers the dimension first
+  (`invalid-value`), so a doubly invalid reference would publish different
+  categories on the two sides. Every corpus case and group-test negative
+  carries exactly one violation.
 
-## Move container stack (`src/move_container_stack.rs`, `tests/runtime_contract.rs`)
+## Move container stack (`src/move_container_stack.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_stack_views.rs`)
 
 - Play packet ID 9 payload is a `u64` sequence, an 18-byte container
   reference, and unified source and target slot bytes. Furnace unified
   slots are `0..FURNACE_VIEW_SLOTS-1` with `FURNACE_OUTPUT_SLOT` legal
   only as a source; chest unified slots are `0..CHEST_VIEW_SLOTS-1`.
-  Same-slot and out-of-range pairs are `InvalidRange`; unknown kinds and
-  malformed references are `InvalidEnum`; truncated payloads and trailing
-  bytes fail before publication
+  The family carries the stack-view group's common fallible surface
+  (`validate` → checked `encoded_len` → capacity check → private
+  `publish_packet`), so a record mutated into a malformed reference, a
+  same-slot pair or the furnace output target after construction is refused
+  instead of silently published, and a short destination reports
+  `OutputTooSmall { needed, available }` with every destination byte
+  unchanged.
+- The value gate keeps the Go `MoveContainerStack.Validate` order: the
+  reference through `validate_any` first, then the same-slot relation, then
+  the per-kind range, then the furnace output-target exclusion. A foreign
+  dimension, an unknown kind, a zero generation and a physical slot outside
+  the per-chunk array are all refused before any slot rule, which is what
+  keeps the frozen corpus categories aligned on both sides.
+  Truncated payloads and trailing bytes fail before publication
   (`move_container_stack_round_trip_preserves_golden_bytes`,
-  `move_container_stack_rejects_invalid_container_and_malformed_payload`).
+  `move_container_stack_rejects_invalid_container_and_malformed_payload`,
+  `client_stack_view_refuses_a_malformed_real_reference`).
 
-## Move stack partial (`src/move_stack_partial.rs`, `tests/runtime_contract.rs`)
+## Move stack partial (`src/move_stack_partial.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_stack_views.rs`)
 
 - Play packet ID 19 payload is a `u64` sequence, an 18-byte container
   reference, a view byte, source and target bytes, and a single-item
@@ -603,26 +625,42 @@ rather than checking that it omits a few names.
   `STACK_VIEW_INVENTORY` (`0`), `STACK_VIEW_CRAFTING` (`1`), and
   `STACK_VIEW_CONTAINER` (`2`); the container view bounds the index by the
   referenced container kind, while the inventory and crafting views must
-  carry the zero container reference. Same-slot and out-of-range pairs are
-  `InvalidRange`; unknown views and kinds are `InvalidEnum`; a `single`
-  flag outside 0/1 is `InvalidEnum`; truncated payloads and trailing bytes
-  fail before publication
+  carry the zero container reference.
+- The family carries the stack-view group's common fallible surface and
+  routes its gate through the private `validate_stack_view`, which runs the
+  container view's checked reference conversion even though the packet layer
+  publishes the raw bytes, so a malformed real reference is refused here
+  instead of being handed to the authority. The returned
+  `Option<mornlea_domain::ContainerRef>` is the checked identity the
+  container view addresses; the two absent views return `None`.
+- The static rule set deliberately stops where the Go validator stops: two
+  crafting inventory-region indices and the furnace output slot as a target
+  stay wire-valid here, because target-cell capacity, furnace slot item
+  rules and the moved count are authority rules the protocol layer does not
+  publish (`move_stack_partial_keeps_the_authority_only_rules_off_the_wire`).
+  Same-slot and out-of-range pairs are `InvalidRange`; unknown views and
+  kinds are `InvalidEnum`; a `single` flag outside 0/1 is `InvalidEnum`;
+  truncated payloads and trailing bytes fail before publication
   (`move_stack_partial_round_trip_preserves_golden_bytes`,
   `move_stack_partial_rejects_invalid_view_and_malformed_payload`).
 
-## Quick move stack (`src/move_stack_partial.rs`, `tests/runtime_contract.rs`)
+## Quick move stack (`src/move_stack_partial.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_stack_views.rs`)
 
 - Play packet ID 20 payload is the `MoveStackPartial` prefix without the
   target and single-item flag: a `u64` sequence, an 18-byte container
   reference, a view byte, and one source byte. The destination is a fixed
   deterministic contract the server derives, so the wire carries no target
-  slot and there is no same-slot rejection. The same static view,
-  container-reference, and index bounds apply; unknown views and kinds are
-  `InvalidEnum`; truncated payloads and trailing bytes fail before
-  publication (`quick_move_stack_round_trip_preserves_golden_bytes`,
+  slot and there is no same-slot rejection.
+- The family carries the same fallible surface and hands its single index to
+  `validate_stack_view` as both ends, so the exact all-zero reference in the
+  inventory and crafting views and a checked real reference in the container
+  view are gates this family publishes rather than assumptions. Unknown views
+  and kinds are `InvalidEnum`; truncated payloads and trailing bytes fail
+  before publication
+  (`quick_move_stack_round_trip_preserves_golden_bytes`,
   `quick_move_stack_rejects_invalid_view_and_malformed_payload`).
 
-## Drop stack (`src/move_stack_partial.rs`, `tests/runtime_contract.rs`)
+## Drop stack (`src/move_stack_partial.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_stack_views.rs`)
 
 - Play packet ID 21 payload is a `u64` sequence, an 18-byte container
   reference, a view byte, and a unified slot byte. The drop position is
@@ -632,6 +670,42 @@ rather than checking that it omits a few names.
   are `InvalidEnum`; truncated payloads and trailing bytes fail before
   publication (`drop_stack_round_trip_preserves_golden_bytes`,
   `drop_stack_rejects_invalid_view_and_malformed_payload`).
+- The canonical vector carries the exact all-zero reference, so the absent
+  sentinel is round-tripped byte for byte rather than reconstructed, and any
+  nonzero reference in that position is refused
+  (`view_addressed_records_carry_the_exact_absent_sentinel`).
+
+## Container and view-addressed stack command packets (`tests/protocol_client_stack_views.rs`)
+
+- The four Play client-to-server stack command families share one common
+  fallible surface in design §4: `validate(&self)` rechecks every public
+  field on each call, checked `encoded_len(&self)` sizes the validated
+  record, `encode_into(&self, dst)` publishes into a caller-owned buffer,
+  `encode(&self)` is the allocating wrapper over it, and `decode` stays a
+  bounded read plus `done()` plus validation. The infallible
+  `encode`-returning-`Vec` signatures are gone, so a record mutated into an
+  invalid reference view pair after construction is refused instead of
+  silently published, and a short destination reports
+  `OutputTooSmall { needed, available }` with every destination byte
+  unchanged. An invalid value always wins over a short destination.
+- Payload strides are fixed and pinned per shape: `MoveContainerStack`,
+  `QuickMoveStack` and `DropStack` are 28 bytes, `MoveStackPartial` is 30.
+  Each family keeps its own struct, packet ID and private field-writing
+  closure over the crate-private `publish_packet` in `server_hello.rs`, and
+  the three view-addressed records share the private `validate_stack_view`,
+  which owns the view dispatch, the reference regime and the per-view index
+  bounds once (`client_stack_view_records_round_trip_through_the_fallible_surface`,
+  `client_stack_view_invalid_value_wins_over_short_capacity`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.client.{MoveContainerStack, MoveStackPartial,
+  QuickMoveStack, DropStack}` each register a decode and an encode route
+  under the `mornlea_protocol` consumer, produced by the real Go codec in
+  `packages/tools/cmd/runtime-oracle/protocol_client_stack_views_test.go`.
+  The container reference publishes and requests as a nested JSON object of
+  plain integers (`dimension`, `chunk_x`, `chunk_z`, `kind`, `slot`,
+  `generation`), the `sequence` as a decimal string in normalized fields and
+  a decimal number in requests, and `view`/`from`/`to`/`slot` as JSON
+  numbers with `single` as a JSON boolean.
 
 ## Chat command (`src/chat_command.rs`, `tests/runtime_contract.rs`)
 

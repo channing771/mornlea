@@ -1,4 +1,4 @@
-use crate::bytes::{ByteDecoder, ByteEncoder};
+use crate::bytes::{ByteDecoder, ByteEncoder, SliceWriter};
 use crate::error::ProtocolError;
 use mornlea_domain::{ChunkPos, ContainerKind, ContainerRef as DomainContainerRef};
 
@@ -108,13 +108,28 @@ impl ContainerRef {
         self.to_domain_present().map(|_| ())
     }
 
+    /// The exact 18 wire bytes in the published field order.
+    fn wire_bytes(&self) -> [u8; 18] {
+        let mut bytes = [0u8; 18];
+        bytes[0..4].copy_from_slice(&self.dimension.to_le_bytes());
+        bytes[4..8].copy_from_slice(&self.chunk_x.to_le_bytes());
+        bytes[8..12].copy_from_slice(&self.chunk_z.to_le_bytes());
+        bytes[12] = self.kind;
+        bytes[13] = self.slot;
+        bytes[14..18].copy_from_slice(&self.generation.to_le_bytes());
+        bytes
+    }
+
     pub(crate) fn write(&self, encoder: &mut ByteEncoder) {
-        encoder.i32(self.dimension);
-        encoder.i32(self.chunk_x);
-        encoder.i32(self.chunk_z);
-        encoder.u8(self.kind);
-        encoder.u8(self.slot);
-        encoder.u32(self.generation);
+        encoder.bytes(&self.wire_bytes());
+    }
+
+    /// Publishes the same 18 bytes into a caller-owned publication window.
+    ///
+    /// The bytes come from one `wire_bytes` source, so the allocating encoder
+    /// and the caller-owned window cannot drift apart on field order.
+    pub(crate) fn write_into(&self, writer: &mut SliceWriter<'_>) {
+        writer.bytes(&self.wire_bytes());
     }
 
     /// Reads the 18 raw wire bytes without validating them.

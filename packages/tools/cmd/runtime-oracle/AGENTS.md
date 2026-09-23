@@ -241,6 +241,29 @@ and the isolated export helpers (`exportGeneratedAssets`,
   for the two move families and `TakeCraftingOutput`, `message_container.go`
   for `CloseContainer`, and `message_command.go` for `DropSelectedItem` and
   `EquipArmor`.
+- The sixth packet producer group is `protocol_client_stack_views_test.go`
+  (`protocol.client.MoveContainerStack`, `protocol.client.MoveStackPartial`,
+  `protocol.client.QuickMoveStack` and `protocol.client.DropStack`, decode and
+  encode). It executes `codec.DecodeClient`/`EncodeClient` in the play state
+  with the case's own `PacketKey`, normalizes the DTO fields (the `sequence` as
+  a decimal string, the 18-byte container reference as a nested JSON object of
+  plain integers, and `view`/`from`/`to`/`slot` as JSON numbers with `single`
+  as a JSON boolean), and reads every encoded payload back through the decoder
+  before publishing it. Every negative carries exactly one violation, because
+  Go's `validAnyContainerRef` checks the kind first (`invalid-enum`) while the
+  Rust neutral conversion checks the dimension first (`invalid-value`), so a
+  doubly invalid reference would publish different categories on the two
+  sides. Its category table resolves the reference gates (`dimension is not
+  overworld`, `generation is zero`, `slot is outside`, `carries a container
+  ref`, `source equals target`, `cannot be a move target`) to `invalid-value`,
+  the two enum boundaries (`unknown container kind`, `unknown stack split
+  view`, the decoder's `invalid boolean`) to `invalid-enum`, and keeps `short
+  input` and `trailing bytes` at their own categories, so the Rust consumer
+  publishes the same category from its `ProtocolError` variants. Provenance is
+  `codec_client.go` plus `message_container.go` for `MoveContainerStack`,
+  `message_stack_splitting.go` added for `MoveStackPartial` and
+  `QuickMoveStack`, and `message_drop_stack.go` added for `DropStack`, because
+  the shared reference validators live in `message_container.go`.
 - `validProducerIDs` is the closed exporter allowlist. It carries the 18
   protocol group producer IDs the v45 packet plan names
   (`runtime-oracle/protocol-negotiation`, `-control`, `-client-control`,
