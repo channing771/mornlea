@@ -87,3 +87,21 @@
 **Rollback:** revert `27ff5a60..ce197b28`; the seven families return to null case lists and the corpus index returns to 701.
 
 **Architecture skill: no change.**
+
+## Node 2.1 — 2026-09-23
+
+**Status:** complete. Commits `9e707cf5` (`feat(protocol): qualify client control packets`) + controller integration `8ce2d132` (`chore(corpus): integrate client control packet evidence`) on top of `5abf9eb6`; an unrelated parallel-session planning commit `cdf8676a` interleaved between them (path-disjoint).
+
+**Deliverable:** the four client control families (`PlayerInput`, `PlaceBlock`, `RequestChunkResync`, `SelectHotbar`) on the common fallible surface (validate → checked encoded_len → encode_into → fallible encode → decode) over the node-1.2 writer; `RequestChunkResync::decode` replaces the `u8::try_from(..).unwrap_or(u8::MAX)` dimension narrowing with an explicit raw-i32 {0,1} match rejecting everything else as `InvalidEnum`; 19 corpus cases (PlayerInput 6 / PlaceBlock 5 / RequestChunkResync 4 / SelectHotbar 4) through the real Go codec under the `mornlea_protocol` consumer, producer `runtime-oracle/protocol-client-control`; the eight decode/encode routes registered in `ORACLE/inventory.go` and pinned in `inventory_test.go`; corpus consumer arms + exact case-ID list in `tests/protocol_corpus.rs`; new group test `tests/protocol_client_control.rs`; mechanical `.encode().expect` updates for the four families in `runtime_contract.rs` (pinned bytes/errors unchanged); AGENTS.md sync for both crates' guides.
+
+**Controller rulings frozen by this node:** f32 values travel as eight-digit lowercase-hexadecimal bit strings in encode-case JSON requests and normalized fields (both sides), so `-0.0` survives JSON deterministically — later packet groups with float fields reuse this encoding; the four encode-negative twins exercise the Go outbound validator on values the inbound path also rejects; the group's Go category resolver matches the shared substring `slot is outside 0..8` for both hotbar validators.
+
+**Evidence:** group test 9/9 with `--list` nonzero; `runtime_contract` 134/134; Go `TestProtocolClientControlOracle*` 8/8; full oracle package `ok` (19s); `packages/audit` `ok`; fmt/clippy/gofmt/vet clean (implementer-run). Corpus integrity: exactly 4 families changed (`cases: null` markers removed only), 735→754 strict superset (+19/−0), `source_revision` preserved, provenance = the two named live sources with identical hashes across all four families; controller spot-checked wire bytes (PlayerInput 23-byte valid literal, mutation offsets), normalized field encodings and SHA256 digests against the merged manifest before integration. Post-integration whole protocol crate green: `protocol_corpus` 6/6 with the 19 client-control cases executed, tracked corpus byte-identical after the runs. Corpus tree: `git rev-parse 8ce2d132:testdata/runtime-migration`.
+
+**Review ruling:** Approved, 0 Crit/0 Imp/4 Minor. Deferred Minors for final review triage: comment typo "headecimal" (`protocol_client_control_test.go` float-encoding comment); PlayerInput decode arm in `protocol_corpus.rs` inlines the field map the shared renderer already produces; the no-narrowing pin covers dimensions 2 and 256 but not −1; an unreachable `exceeds 64 KiB` → capacity branch in the group's category resolver (latent misclassification risk if a future producer reuses the table).
+
+**Incidents:** during task review an external actor switched the shared checkout to `main` (observed by the reviewer; node commits were safe on the branch); the user authorized switching back, and the parallel session's own planning commit `cdf8676a` landed on this branch during the gate runs — all node-2.1 commits are path-scoped and disjoint from both events.
+
+**Rollback:** revert `9e707cf5` and `8ce2d132` individually (the interleaved `cdf8676a` is path-disjoint and must not be reverted with them); the four families return to `cases: null` and the corpus index returns to 735.
+
+**Architecture skill: no change.**
