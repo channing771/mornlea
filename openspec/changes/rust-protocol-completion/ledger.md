@@ -193,3 +193,22 @@
 **Rollback:** revert `9afe565a` and the integration commit individually; the two families return to `cases: null` and the corpus index returns to 849.
 
 **Architecture skill: no change.**
+
+
+## Node 3.2 — 2026-09-24
+
+**Status:** complete. Commits `dde28196` (`feat(protocol): qualify bounded chunk snapshots`) + controller integration `1962f4c2` (`chore(corpus): integrate chunk snapshot evidence`) on top of `9c68e61a`.
+
+**Deliverable:** the compressed ChunkSnapshot family (S/Play/0) qualified: new `src/codec.rs` owns one `ProtocolCodec` with a reused zstd encoder+decoder context (`new()` typed failure, no per-call construction); `decode_snapshot`/`encode_snapshot_into` are the snapshot-only methods (node 4.1 adds dispatch); `encode_logical_checked` replaces the infallible paths (the sections-pop panic red is now a typed refusal); scratch via `try_reserve` (`Allocation`), 1 MiB/2 MiB ceilings, destination checked before the single copy. 13 corpus cases (fixture decode verbatim, mixed/all-single valid pairs with LOGICAL digests, five encode-side logical negatives, four decode-side compressed-layer negatives) through the real Go codec, producer `runtime-oracle/protocol-snapshot`.
+
+**Controller rulings frozen:** (1) corpus digests are of the canonical LOGICAL payload, derived by each side decompressing its own output — no compressed-byte comparison anywhere (the klauspost read-back in the producer is this ruling's prescribed mechanism; it adds no go.mod edge); (2) logical negatives encode-side, compressed negatives decode-side byte edits — the producer never hand-compresses case inputs; (3) the truncated/integrity split — a cut inside the body is caught by the envelope declared-length check first (`truncated`); a byte flip in a length-complete frame fails zstd checksum verification and maps to the NEW single `ProtocolError::Integrity` → `integrity` (editable set extended to `src/error.rs` for exactly this variant, per a NEEDS_CONTEXT escalation the worker correctly raised); (4) `SectionData` palette-slot and direct-high-bits gates aligned `InvalidEnum` → `InvalidRange` (node 3.1 split precedent; producer classifies from the real Go messages).
+
+**Orchestration note:** the implementer's first dispatch correctly stopped NEEDS_CONTEXT on the two genuine contract conflicts; both were ruled and the same agent resumed and completed.
+
+**Evidence:** group test 9/9; `runtime_contract` 134/134; Go producer 9/9; codec read-only confirmations ok; full oracle ok; audit ok; fmt/clippy/gofmt/vet clean; the exported 13 cases were run through the real Rust consumer against the merged manifest BEFORE commit (all matched). Corpus integrity: exactly 1 family changed, 871→884 (+13/−0), `source_revision` preserved, the committed Go fixture byte-identical as the decode-fixture input (sha d1397d23…). Post-integration whole protocol crate 268/268.
+
+**Review ruling:** Approved, 0 Crit/0 Imp/5 Minor. Deferred Minors: the 1 MiB compressed bound rests on the structural logical-size argument rather than an explicit reservation clamp; no deterministic seam to pin the `try_reserve` failure mapping; the stale `// indirect` klauspost marker in tools go.mod; the corpus decode arm uses the one-shot `decode` path (pinned identical to the owned-context path); a render-asymmetry nit in the section renderer.
+
+**Rollback:** revert `dde28196` and `1962f4c2` individually; the family returns to `cases: null` and the corpus index returns to 871.
+
+**Architecture skill: no change.**
