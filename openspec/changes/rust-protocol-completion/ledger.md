@@ -73,3 +73,17 @@
 **Rollback:** revert `59f545b9..e7bfbdf5`; the two families return to zero cases and the corpus index returns to 691.
 
 **Architecture skill: no change.**
+
+## Node 1.5 — 2026-09-23
+
+**Status:** complete. Commits `27ff5a60` (`feat(protocol): qualify control packet codecs`) + controller integration `ce197b28` (`chore(corpus): integrate control packet evidence`) on top of `a6affab3`.
+
+**Deliverable:** the seven control families (ServerHello, HandshakeReject, LoginSuccess, LoginReject, KeepAlive, KeepAliveReply, Disconnect) share the common fallible surface (validate → checked encoded_len → encode_into → fallible encode → decode) over the node-1.2 writer; shared `pub(crate)` control-message helpers (single publication half, no public leak); 34 corpus cases (4+8+5+3+7+4+3) through the real Go codec under the `mornlea_protocol` consumer, producer `runtime-oracle/protocol-control`; exhaustive proper-truncation loops over the nine canonical vectors; invalid-before-capacity mutation matrix with sentinel-unchanged checks across five call shapes.
+
+**Evidence:** protocol_control 10/10 (red: infallible encode surface); runtime_contract 134/134 (mechanical `encode().expect` updates only, bytes/errors pinned); Go control oracle 9/9; full oracle package ok; audit ok; fmt/clippy/vet/gofmt clean; post-integration whole protocol crate green (corpus 5/5 incl. 34 control + generic consumer selection). Corpus integrity: exactly 7 families changed, `cases: null` markers removed only, 701→735 strict superset, `source_revision` preserved, provenance hashes re-verified by reviewer.
+
+**Controller integration incident + fix:** the generic `dispatch_case` in `protocol_corpus.rs` lacked the seven control family constants (the control group test used its own dispatch path); fixed by adding the constants to the dispatch arm (reviewer verified correct and minimal). **Review ruling:** Approved, 0 Crit/1 Imp/6 Min. The Important item is procedural and now ruled: payloads cut inside a length-prefix varint publish `invalid-varint` from Go's sentinel mapping but `truncated` from Rust's `Truncated` — **no corpus case may sit on that boundary until the two sides agree**; the target category per the frozen vocabulary's semantics is `truncated` (incomplete bytes), to be achieved by routing the Go producer's `errInvalidUvarint` on proper-prefix payloads through the rejected-prefix resolver while Rust keeps `Truncated`. A node needing such a case first returns to the controller. Deferred Minors: truncation enumeration over the 9 canonical vectors only (max-message payloads excluded), case-ID-keyed resolver heuristic, unreachable `Allocation` path in `control_message_len`, `.expect` in `message_length_prefix` guarded by caller order, four-fold control-family list duplication in the corpus test, order-dependent export guard.
+
+**Rollback:** revert `27ff5a60..ce197b28`; the seven families return to null case lists and the corpus index returns to 701.
+
+**Architecture skill: no change.**
