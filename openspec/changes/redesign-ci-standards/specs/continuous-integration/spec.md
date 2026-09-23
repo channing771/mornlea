@@ -108,6 +108,8 @@ Until an independently approved cutover change promotes the Godot client, Godot 
 
 The optional runtime layer MUST select the architecture and Xcode toolchain required by its checked-in build inputs, explicitly populate dependency inputs on a cold runner, build the native engine before any cgo asset consumer, and materialize the checksum-verified Godot editor at the cache path used by headless validation. A workflow cache or preinstalled editor MUST NOT be required for success.
 
+The runtime layer MUST discover the native GDExtension in a fresh project before headless identity and host probes. It MUST provide the editor-selected debug library for discovery while separately building and qualifying the release distribution; a warm `.godot` import cache MUST NOT be required for success.
+
 #### Scenario: Unrelated server-only change avoids Godot setup
 
 - **GIVEN** a pull request changes only authoritative server code and no Godot input, bridge contract, generated-asset input, or gate definition
@@ -120,6 +122,13 @@ The optional runtime layer MUST select the architecture and Xcode toolchain requ
 - **WHEN** the optional Godot workflow runs
 - **THEN** the Godot check MUST report failure with the original command result
 - **AND** the required merge gate MUST continue to reflect only approved required contracts
+
+#### Scenario: Cold Godot project discovers its native bridge
+
+- **GIVEN** a fresh checkout has no generated `.godot` import cache
+- **WHEN** optional runtime qualification builds and verifies the native bridge
+- **THEN** headless editor import MUST discover the debug-selected extension before identity and host probes
+- **AND** the release library and exported application MUST remain separately qualified
 
 ### Requirement: CI commands are locally reproducible and caches are non-authoritative
 
