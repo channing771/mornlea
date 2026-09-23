@@ -125,7 +125,14 @@ if "${bundled_python}" -I -s -E -m pip --version >/dev/null 2>&1; then
   fail "runtime package installer must be unavailable"
 fi
 
-godot_binary="${MORNLEA_GODOT_BIN:-/Applications/Godot.app/Contents/MacOS/Godot}"
+# Resolve the actual editor before entering the sandbox, whose PATH cannot run
+# the Bash resolver wrapper. Explicit binary overrides retain their behavior.
+if [[ -n "${MORNLEA_GODOT_BIN:-}" ]]; then
+  godot_binary="${MORNLEA_GODOT_BIN}"
+else
+  godot_binary="$("${script_dir}/godot.sh" --print-path)" || \
+    fail "Godot executable is unavailable through the repository resolver"
+fi
 [[ -x "${godot_binary}" ]] || fail "Godot executable is unavailable: ${godot_binary}"
 actual_godot_version="$("${godot_binary}" --version)"
 [[ "${actual_godot_version}" == 4.7.2.stable* ]] || \

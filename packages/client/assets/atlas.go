@@ -1,12 +1,9 @@
-//go:build darwin
-
 package assets
 
-// atlasMips 是材质 atlas 的 mip 层数;与 Rust 渲染器的 ATLAS_MIPS 必须一致。
+// atlasMips is the number of material atlas mip levels and must match the Rust renderer's ATLAS_MIPS.
 const atlasMips = 5
 
-// layerMipChain 生成一个 layer 的完整 mip 链(含 mip 0),
-// UploadTo 与 AtlasPixels 共用,保证两个后端消费同一份字节。
+// layerMipChain generates one complete layer-major mip chain, including mip zero.
 func (r *Registry) layerMipChain(layer int) [][]byte {
 	chain := make([][]byte, 0, atlasMips)
 	px := r.LayerRGBA(layer)
@@ -26,8 +23,7 @@ func (r *Registry) layerMipChain(layer int) [][]byte {
 	return chain
 }
 
-// AtlasPixels 导出与 UploadTo 写入 GPU 完全一致的逐 layer、逐 mip RGBA
-// 字节流,供 Rust 渲染器上传同一份材质(材质所有权保持在 Go)。
+// AtlasPixels returns layer-major, mip-major RGBA bytes shared by native renderer upload and deterministic asset generation.
 func (r *Registry) AtlasPixels() (int, []byte) {
 	var out []byte
 	for layer := 0; layer < r.LayerCount(); layer++ {

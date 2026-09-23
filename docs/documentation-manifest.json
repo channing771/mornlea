@@ -51,7 +51,7 @@
       ],
       "english_path": "docs/README.md",
       "chinese_path": "docs/README.zh.md",
-      "revision": "2026-09-15.2"
+      "revision": "2026-09-23.1"
     },
     {
       "id": "agent-guidance-style",
@@ -122,6 +122,17 @@
       "revision": "2026-09-20.1"
     },
     {
+      "id": "continuous-integration",
+      "classification": "bilingual",
+      "paths": [
+        "docs/continuous-integration.md",
+        "docs/continuous-integration.zh.md"
+      ],
+      "english_path": "docs/continuous-integration.md",
+      "chinese_path": "docs/continuous-integration.zh.md",
+      "revision": "2026-09-23.5"
+    },
+    {
       "id": "development-process",
       "classification": "bilingual",
       "paths": [
@@ -130,7 +141,7 @@
       ],
       "english_path": "docs/development-process.md",
       "chinese_path": "docs/development-process.zh.md",
-      "revision": "2026-09-20.1"
+      "revision": "2026-09-23.1"
     },
     {
       "id": "feature-backlog",

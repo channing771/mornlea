@@ -14,6 +14,8 @@
 - Create: `scripts/ci/platform-id.sh`.
 - Create: `scripts/ci/AGENTS.md` covering the complete planned `scripts/ci` boundary so later nodes do not rewrite it.
 - Create: `packages/audit/native_artifact_test.go`.
+- Modify: `packages/audit/companion_agent_service_test.go` only to remove the obsolete `TestVerifyNativeArtifactScript` source-fragment test; the new behavioral round-trip and mutation suite becomes the verifier trust contract. Node 5.1 retains ownership of the workflow and companion-job assertions in this file.
+- Modify if required by that comment removal: `testdata/audit/english-comment-migration.json` through the repository update mode, inspecting that only the owned audit-file debt decreases.
 - Remove no artifact producer from `.github/workflows/ci.yml` in this node; workflow conversion belongs to Node 5.1.
 - Read-only authority: `scripts/AGENTS.md`; `packages/engine/AGENTS.md`; `scripts/engine/deploy-dylib.sh`; `packages/shared/nativeabi/native.go`; `packages/client/client/window.go`; current native producer and consumers in `.github/workflows/ci.yml`.
 - Excluded: building Rust or Go products, changing loader/rpath behavior, caches, workflow topology, or accepting legacy manifests after the new consumers land.
@@ -82,6 +84,8 @@ Both scripts use `wc -c` for portable byte size and `shasum -a 256` for digest. 
    bash -n scripts/ci/platform-id.sh scripts/ci/package-native-artifact.sh scripts/ci/verify-native-artifact.sh
    go test ./packages/audit -run '^TestNativeArtifact' -count=1
    ```
+
+8. Remove the superseded `TestVerifyNativeArtifactScript` source-fragment ratchet. Run the English-comment migration test, use its documented update mode if the removed legacy comment changes debt, inspect the baseline diff, then run `go test ./packages/audit -count=1`. Do not change the companion workflow assertions that Node 5.1 owns.
 
 ## Closure
 

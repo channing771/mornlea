@@ -2,10 +2,10 @@
   "schema_version": 1,
   "generator": "packages/client/cmd/mornlea-godot-assets",
   "input_revision": {
-    "assets_git_tree": "ced29dd2ab2cf77796cdfc43d8dc3a4876d514be",
+    "assets_git_tree": "b5d04df4d75032dae1ced35a49c5cdf25904d538",
     "fonts_git_tree": "8d3ac392aaf29419a01a18775e6f5425fda6367f"
   },
-  "input_checksum": "a287a03efbd4ada644b28c7d712e78d4e5ceddede3fd34ea24b77222c63bb181",
+  "input_checksum": "d263b958507e6a7e8068a8a8dac025861250b7f57bb84c70edfb9b9b71585fc9",
   "inputs": [
     {
       "path": "packages/client/assets/ITEM_ICONS.md",
@@ -14,13 +14,13 @@
     },
     {
       "path": "packages/client/assets/atlas.go",
-      "sha256": "552b33d12b43f5c9ca28a28b981572a4106c70b0d251b7abc17221f7c159d162",
-      "bytes": 2005
+      "sha256": "e475525ad4deea6846c208307b5275f5072b55cb63eb569d95df4eb78f1fe88d",
+      "bytes": 1891
     },
     {
       "path": "packages/client/assets/atlas_test.go",
-      "sha256": "165bfeda8a4f225fc493160dd854f9e26b16c069623694e594feaf14db8c00c5",
-      "bytes": 5904
+      "sha256": "76065151f176cee0862191d4fa377b84f5e41012f1ce1a448daf5af0385e6238",
+      "bytes": 5885
     },
     {
       "path": "packages/client/assets/avatar.go",
@@ -74,8 +74,8 @@
     },
     {
       "path": "packages/client/assets/default_pack_test.go",
-      "sha256": "57fe3df71931d2d99387e197f72d14a40caaba35f512b06508a8fe614c500711",
-      "bytes": 25120
+      "sha256": "4cfe0ac1a90d087c09404660036143c62322cd0d59bc19f1f08aaedc93e863e9",
+      "bytes": 24973
     },
     {
       "path": "packages/client/assets/farmland_layers_test.go",
