@@ -11,7 +11,7 @@
 //! numbering and the furnace slot predicates, which compose the domain table
 //! instead of copying it.
 
-use crate::bytes::{ByteDecoder, ByteEncoder};
+use crate::bytes::{ByteDecoder, ByteEncoder, SliceWriter};
 use crate::error::ProtocolError;
 pub use mornlea_domain::ItemStack;
 
@@ -72,6 +72,16 @@ pub(crate) fn write(stack: ItemStack, encoder: &mut ByteEncoder) {
     encoder.u16(stack.item());
     encoder.u8(stack.count());
     encoder.u16(stack.durability());
+}
+
+/// Publishes one fixed-stride stack into a caller-owned publication window.
+///
+/// The bytes come from the same field order as [`write`], so the allocating
+/// encoder and the caller-owned window cannot drift apart.
+pub(crate) fn write_into(stack: ItemStack, writer: &mut SliceWriter<'_>) {
+    writer.u16(stack.item());
+    writer.u8(stack.count());
+    writer.u16(stack.durability());
 }
 
 /// Reports the fixed smelting product of a registered furnace input, read from

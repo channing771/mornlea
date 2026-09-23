@@ -2497,7 +2497,7 @@ fn chest_state_round_trip_preserves_slot_bytes() {
     items[0] = mornlea_protocol::ItemStack::try_new(1, 5, 0).expect("stone");
     items[26] = mornlea_protocol::ItemStack::try_new(2, 1, 0).expect("dirt");
     let state = mornlea_protocol::ChestState::new(chest, items).expect("state");
-    let payload = state.encode();
+    let payload = state.encode().expect("encode");
     assert_eq!(mornlea_protocol::ChestState::PACKET_ID, 15);
     assert_eq!(payload.len(), 18 + mornlea_protocol::CHEST_SLOTS * 5);
     assert_eq!(&payload[18..23], &[0x01, 0x00, 0x05, 0x00, 0x00]);
@@ -2534,7 +2534,7 @@ fn chest_state_rejects_wrong_reference_and_malformed_payload() {
         generation: 11,
     };
     let state = mornlea_protocol::ChestState::new(chest, items).expect("state");
-    let payload = state.encode();
+    let payload = state.encode().expect("encode");
     // A registered chest reference is accepted and round-trips.
     assert_eq!(
         mornlea_protocol::ChestState::decode(&payload).expect("decode"),
@@ -2569,7 +2569,7 @@ fn furnace_state_round_trip_preserves_golden_bytes() {
         1600,
     )
     .expect("state");
-    let payload = state.encode();
+    let payload = state.encode().expect("encode");
     assert_eq!(mornlea_protocol::FurnaceState::PACKET_ID, 13);
     assert_eq!(payload.len(), 18 + 3 * 5 + 3);
     // The furnace reference stays the shared 18-byte layout.
@@ -2704,7 +2704,7 @@ fn furnace_state_rejects_invalid_slots_timers_and_malformed_payload() {
         )
         .is_ok()
     );
-    let payload = base.encode();
+    let payload = base.encode().expect("encode");
     assert!(mornlea_protocol::FurnaceState::decode(&payload[..payload.len() - 1]).is_err());
     let mut trailing = payload.clone();
     trailing.push(0x00);
@@ -2725,7 +2725,7 @@ fn crafting_state_round_trip_preserves_golden_bytes() {
         mornlea_protocol::ItemStack::try_new(4, 4, 0).expect("stone brick"),
     )
     .expect("state");
-    let payload = state.encode();
+    let payload = state.encode().expect("encode");
     assert_eq!(mornlea_protocol::CraftingState::PACKET_ID, 21);
     assert_eq!(payload.len(), 1 + 9 * 5 + 5);
     assert_eq!(payload[0], 3);
@@ -2781,7 +2781,7 @@ fn crafting_state_rejects_unknown_size_residue_and_malformed_payload() {
         mornlea_protocol::ItemStack::EMPTY,
     )
     .expect("state");
-    let payload = state.encode();
+    let payload = state.encode().expect("encode");
     assert!(mornlea_protocol::CraftingState::decode(&payload[..payload.len() - 1]).is_err());
     let mut trailing = payload.clone();
     trailing.push(0x00);
@@ -2801,7 +2801,7 @@ fn inventory_state_round_trip_preserves_golden_bytes() {
     backpack[mornlea_protocol::BACKPACK_SLOTS - 1] =
         mornlea_protocol::ItemStack::try_new(1, 9, 0).expect("stone");
     let state = mornlea_protocol::InventoryState::new(2, hotbar, backpack).expect("state");
-    let payload = state.encode();
+    let payload = state.encode().expect("encode");
     assert_eq!(mornlea_protocol::InventoryState::PACKET_ID, 10);
     assert_eq!(payload.len(), mornlea_protocol::INVENTORY_STATE_WIRE_BYTES);
     assert_eq!(payload[0], 2);
@@ -2831,7 +2831,7 @@ fn inventory_state_rejects_unknown_selected_and_malformed_payload() {
     assert!(mornlea_protocol::InventoryState::new(8, empty_hotbar, empty_backpack).is_ok());
     let state =
         mornlea_protocol::InventoryState::new(0, empty_hotbar, empty_backpack).expect("state");
-    let payload = state.encode();
+    let payload = state.encode().expect("encode");
     assert!(mornlea_protocol::InventoryState::decode(&payload[..payload.len() - 1]).is_err());
     let mut trailing = payload.clone();
     trailing.push(0x00);
@@ -2846,7 +2846,8 @@ fn inventory_state_rejects_unknown_selected_and_malformed_payload() {
     hotbar[3] = mornlea_protocol::ItemStack::try_new(65, 1, 0).expect("item");
     let encoded = mornlea_protocol::InventoryState::new(0, hotbar, empty_backpack)
         .expect("state")
-        .encode();
+        .encode()
+        .expect("encode");
     let slot = 1 + 3 * 5;
     let mut corrupt = encoded.clone();
     corrupt[slot] = 0xff;

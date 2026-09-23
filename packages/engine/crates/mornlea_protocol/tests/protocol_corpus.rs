@@ -54,7 +54,13 @@
 //! the only relation the wire publishes. The block-change gate's variant
 //! split is a pinned ruling: an unregistered block is `InvalidEnum` and an
 //! out-of-world Y is `InvalidRange`, which are the two categories the Go
-//! producer records for the same bytes.
+//! producer records for the same bytes. The ninth group is the five inventory
+//! and container publication families (`InventoryState`, `CraftingState`,
+//! `FurnaceState`, `ChestState` and `ContainerClosed`), executed through the
+//! same fallible surface; every slot value goes through the domain
+//! `ItemStack` rule, the furnace and chest references keep their kind-first
+//! gates, and the container-neutral closure family refuses the exact all-zero
+//! record through its zero generation rather than treating it as absence.
 //! `CorpusConsumer::Protocol` is registered here as `mornlea_protocol` so a
 //! packet case can name it, while the framing cases stay with the separate
 //! `corpus_frame` consumer the frame regression suite keeps using.
@@ -124,6 +130,13 @@ const PLAYER_STATE_FAMILY: &str = "protocol.server.PlayerState";
 const COMMAND_REJECTED_FAMILY: &str = "protocol.server.CommandRejected";
 const PLACE_BLOCK_SUCCEEDED_FAMILY: &str = "protocol.server.PlaceBlockSucceeded";
 const COMBAT_HIT_FAMILY: &str = "protocol.server.CombatHit";
+/// The five packet families the inventory and container publication producer
+/// group registers.
+const INVENTORY_STATE_FAMILY: &str = "protocol.server.InventoryState";
+const CRAFTING_STATE_FAMILY: &str = "protocol.server.CraftingState";
+const FURNACE_STATE_FAMILY: &str = "protocol.server.FurnaceState";
+const CHEST_STATE_FAMILY: &str = "protocol.server.ChestState";
+const CONTAINER_CLOSED_FAMILY: &str = "protocol.server.ContainerClosed";
 /// The packet families' protocol version, matching the manifest family rows.
 const PACKET_VERSION: &str = "45";
 /// The category label every accepted control packet outcome publishes.
@@ -1086,6 +1099,254 @@ fn combat_hit_fields(hit: &mornlea_protocol::CombatHit) -> serde_json::Value {
     })
 }
 
+/// Renders one item stack as the nested JSON object both directions publish.
+///
+/// All three fields are published, because the empty slot is the zero triple
+/// and a missing field would not prove the record carried exactly that.
+fn inventory_stack_fields(stack: mornlea_protocol::ItemStack) -> serde_json::Value {
+    serde_json::json!({
+        "item": stack.item(),
+        "count": stack.count(),
+        "durability": stack.durability()
+    })
+}
+
+/// Renders one ordered stack array, preserving wire order.
+fn inventory_stack_array(stacks: &[mornlea_protocol::ItemStack]) -> Vec<serde_json::Value> {
+    stacks
+        .iter()
+        .map(|stack| inventory_stack_fields(*stack))
+        .collect()
+}
+
+/// Reads one stack object an encode case carries through the domain rule.
+///
+/// The corpus never names an invalid stack in an encode request, so a value
+/// the domain rule refuses is a case-authoring failure rather than an outcome
+/// this consumer publishes.
+fn inventory_stack_request(
+    entry: &serde_json::Value,
+    case: &FrozenCase,
+) -> mornlea_protocol::ItemStack {
+    let field = |name: &str| -> i64 {
+        entry
+            .get(name)
+            .and_then(|value| value.as_i64())
+            .unwrap_or_else(|| panic!("case {} stack names no {name}", case.id))
+    };
+    mornlea_protocol::ItemStack::try_new(
+        u16::try_from(field("item"))
+            .unwrap_or_else(|_| panic!("case {} stack item exceeds u16", case.id)),
+        u8::try_from(field("count"))
+            .unwrap_or_else(|_| panic!("case {} stack count exceeds u8", case.id)),
+        u16::try_from(field("durability"))
+            .unwrap_or_else(|_| panic!("case {} stack durability exceeds u16", case.id)),
+    )
+    .unwrap_or_else(|_| panic!("case {} names an invalid item stack", case.id))
+}
+
+/// Reads one ordered stack array an encode case carries.
+fn inventory_stack_array_request(
+    case: &FrozenCase,
+    name: &str,
+    want: usize,
+) -> Vec<mornlea_protocol::ItemStack> {
+    let stacks: Vec<mornlea_protocol::ItemStack> = record_array(case, name)
+        .into_iter()
+        .map(|entry| inventory_stack_request(entry, case))
+        .collect();
+    assert_eq!(
+        stacks.len(),
+        want,
+        "case {} field {name} carries {} stacks, want {want}",
+        case.id,
+        stacks.len()
+    );
+    stacks
+}
+
+/// Reads one container reference object an encode case carries, naming the
+/// field the family publishes it under.
+fn inventory_container_request(case: &FrozenCase, name: &str) -> mornlea_protocol::ContainerRef {
+    let raw = case
+        .input_json
+        .as_ref()
+        .expect("encode case carries JSON fields")
+        .get(name)
+        .and_then(|value| value.as_object())
+        .unwrap_or_else(|| panic!("case {} names no {name} reference", case.id));
+    let field = |key: &str| -> i64 {
+        raw.get(key)
+            .and_then(|value| value.as_i64())
+            .unwrap_or_else(|| panic!("case {} reference names no {key}", case.id))
+    };
+    let byte = |key: &str| -> u8 {
+        u8::try_from(field(key))
+            .unwrap_or_else(|_| panic!("case {} reference field {key} exceeds u8", case.id))
+    };
+    let generation = u32::try_from(field("generation"))
+        .unwrap_or_else(|_| panic!("case {} reference generation exceeds u32", case.id));
+    mornlea_protocol::ContainerRef {
+        dimension: i32::try_from(field("dimension"))
+            .unwrap_or_else(|_| panic!("case {} reference dimension exceeds i32", case.id)),
+        chunk_x: i32::try_from(field("chunk_x"))
+            .unwrap_or_else(|_| panic!("case {} reference chunk_x exceeds i32", case.id)),
+        chunk_z: i32::try_from(field("chunk_z"))
+            .unwrap_or_else(|_| panic!("case {} reference chunk_z exceeds i32", case.id)),
+        kind: byte("kind"),
+        slot: byte("slot"),
+        generation,
+    }
+}
+
+/// Renders the semantic fields one inventory state publishes: the selected
+/// index and the two ordered slot arrays.
+fn inventory_state_fields(state: &mornlea_protocol::InventoryState) -> serde_json::Value {
+    serde_json::json!({
+        "selected": state.selected,
+        "hotbar": inventory_stack_array(&state.hotbar),
+        "backpack": inventory_stack_array(&state.backpack)
+    })
+}
+
+/// Renders the semantic fields one crafting state publishes.
+fn crafting_state_fields(state: &mornlea_protocol::CraftingState) -> serde_json::Value {
+    serde_json::json!({
+        "size": state.size,
+        "slots": inventory_stack_array(&state.slots),
+        "output": inventory_stack_fields(state.output)
+    })
+}
+
+/// Renders the semantic fields one furnace state publishes.
+fn furnace_state_fields(state: &mornlea_protocol::FurnaceState) -> serde_json::Value {
+    serde_json::json!({
+        "furnace": client_container_fields(&state.furnace),
+        "input": inventory_stack_fields(state.input),
+        "fuel": inventory_stack_fields(state.fuel),
+        "output": inventory_stack_fields(state.output),
+        "progress_ticks": state.progress_ticks,
+        "burn_ticks": state.burn_ticks
+    })
+}
+
+/// Renders the semantic fields one chest state publishes.
+fn chest_state_fields(state: &mornlea_protocol::ChestState) -> serde_json::Value {
+    serde_json::json!({
+        "chest": client_container_fields(&state.chest),
+        "items": inventory_stack_array(&state.items)
+    })
+}
+
+/// Renders the semantic fields one container closure publishes.
+fn container_closed_fields(closed: &mornlea_protocol::ContainerClosed) -> serde_json::Value {
+    serde_json::json!({
+        "container": client_container_fields(&closed.container)
+    })
+}
+
+/// Builds the inventory state one encode case names from its typed fields.
+///
+/// The record is built through its public fields, so a mutated or invalid
+/// case is refused by the production validation rather than by a constructor
+/// guard.
+fn inventory_state_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::InventoryState, mornlea_protocol::ProtocolError> {
+    let selected = byte_field(case, "selected");
+    let mut hotbar = [mornlea_protocol::ItemStack::EMPTY; 9];
+    let mut requested = inventory_stack_array_request(case, "hotbar", 9).into_iter();
+    for slot in &mut hotbar {
+        *slot = requested
+            .next()
+            .expect("the request carries nine hotbar slots");
+    }
+    let mut backpack = [mornlea_protocol::ItemStack::EMPTY; 27];
+    let mut requested = inventory_stack_array_request(case, "backpack", 27).into_iter();
+    for slot in &mut backpack {
+        *slot = requested
+            .next()
+            .expect("the request carries twenty-seven backpack slots");
+    }
+    Ok(mornlea_protocol::InventoryState {
+        selected,
+        hotbar,
+        backpack,
+    })
+}
+
+/// Reads one stack object field an encode case carries.
+fn inventory_stack_object_field<'a>(case: &'a FrozenCase, name: &str) -> &'a serde_json::Value {
+    case.input_json
+        .as_ref()
+        .expect("encode case carries JSON fields")
+        .get(name)
+        .unwrap_or_else(|| panic!("case {} names no {name} stack", case.id))
+}
+
+/// Builds the crafting state one encode case names from its typed fields.
+fn crafting_state_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::CraftingState, mornlea_protocol::ProtocolError> {
+    let size = byte_field(case, "size");
+    let mut slots = [mornlea_protocol::ItemStack::EMPTY; 9];
+    let mut requested = inventory_stack_array_request(case, "slots", 9).into_iter();
+    for slot in &mut slots {
+        *slot = requested
+            .next()
+            .expect("the request carries nine grid slots");
+    }
+    let output = inventory_stack_request(inventory_stack_object_field(case, "output"), case);
+    Ok(mornlea_protocol::CraftingState {
+        size,
+        slots,
+        output,
+    })
+}
+
+/// Builds the furnace state one encode case names from its typed fields.
+fn furnace_state_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::FurnaceState, mornlea_protocol::ProtocolError> {
+    let stack = |name: &str| -> mornlea_protocol::ItemStack {
+        inventory_stack_request(inventory_stack_object_field(case, name), case)
+    };
+    Ok(mornlea_protocol::FurnaceState {
+        furnace: inventory_container_request(case, "furnace"),
+        input: stack("input"),
+        fuel: stack("fuel"),
+        output: stack("output"),
+        progress_ticks: byte_field(case, "progress_ticks"),
+        burn_ticks: u16_field(case, "burn_ticks"),
+    })
+}
+
+/// Builds the chest state one encode case names from its typed fields.
+fn chest_state_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::ChestState, mornlea_protocol::ProtocolError> {
+    let mut items = [mornlea_protocol::ItemStack::EMPTY; 27];
+    let mut requested = inventory_stack_array_request(case, "items", 27).into_iter();
+    for slot in &mut items {
+        *slot = requested
+            .next()
+            .expect("the request carries twenty-seven chest slots");
+    }
+    Ok(mornlea_protocol::ChestState {
+        chest: inventory_container_request(case, "chest"),
+        items,
+    })
+}
+
+/// Builds the container closure one encode case names from its typed fields.
+fn container_closed_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::ContainerClosed, mornlea_protocol::ProtocolError> {
+    Ok(mornlea_protocol::ContainerClosed {
+        container: inventory_container_request(case, "container"),
+    })
+}
+
 /// Builds the player state one encode case names from its typed fields, so a
 /// mutated or invalid case is refused by the production validation rather
 /// than by a constructor guard.
@@ -2026,6 +2287,96 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
             }
             other => panic!("unsupported packet operation for {}: {other}", case.id),
         },
+        INVENTORY_STATE_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::InventoryState::decode(&case.input) {
+                Ok(state) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": inventory_state_fields(&state),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let state = match inventory_state_request(case) {
+                    Ok(state) => state,
+                    Err(err) => return packet_error(err),
+                };
+                encode_ok_outcome(state.encode(), inventory_state_fields(&state))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        CRAFTING_STATE_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::CraftingState::decode(&case.input) {
+                Ok(state) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": crafting_state_fields(&state),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let state = match crafting_state_request(case) {
+                    Ok(state) => state,
+                    Err(err) => return packet_error(err),
+                };
+                encode_ok_outcome(state.encode(), crafting_state_fields(&state))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        FURNACE_STATE_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::FurnaceState::decode(&case.input) {
+                Ok(state) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": furnace_state_fields(&state),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let state = match furnace_state_request(case) {
+                    Ok(state) => state,
+                    Err(err) => return packet_error(err),
+                };
+                encode_ok_outcome(state.encode(), furnace_state_fields(&state))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        CHEST_STATE_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::ChestState::decode(&case.input) {
+                Ok(state) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": chest_state_fields(&state),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let state = match chest_state_request(case) {
+                    Ok(state) => state,
+                    Err(err) => return packet_error(err),
+                };
+                encode_ok_outcome(state.encode(), chest_state_fields(&state))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        CONTAINER_CLOSED_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::ContainerClosed::decode(&case.input) {
+                Ok(closed) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": container_closed_fields(&closed),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let closed = match container_closed_request(case) {
+                    Ok(closed) => closed,
+                    Err(err) => return packet_error(err),
+                };
+                encode_ok_outcome(closed.encode(), container_closed_fields(&closed))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
         other => panic!("unsupported packet family for {}: {other}", case.id),
     }
 }
@@ -2073,7 +2424,12 @@ fn dispatch_case(case: &FrozenCase) -> serde_json::Value {
         | PLAYER_STATE_FAMILY
         | COMMAND_REJECTED_FAMILY
         | PLACE_BLOCK_SUCCEEDED_FAMILY
-        | COMBAT_HIT_FAMILY => dispatch_packet(case),
+        | COMBAT_HIT_FAMILY
+        | INVENTORY_STATE_FAMILY
+        | CRAFTING_STATE_FAMILY
+        | FURNACE_STATE_FAMILY
+        | CHEST_STATE_FAMILY
+        | CONTAINER_CLOSED_FAMILY => dispatch_packet(case),
         other => panic!("unregistered protocol family for {}: {other}", case.id),
     }
 }
@@ -2924,6 +3280,102 @@ fn protocol_corpus_packet_player_outcomes_cases_are_executed() {
         "the player and private outcome selection executed zero cases"
     );
     for case in outcomes {
+        assert_eq!(
+            case.consumer,
+            CorpusConsumer::Protocol,
+            "case {} carries the wrong consumer",
+            case.id
+        );
+        assert!(
+            !case.operation.is_empty(),
+            "case {} names no operation",
+            case.id
+        );
+        assert_normalized(case, dispatch_packet(case));
+    }
+}
+
+/// The case identities the inventory and container publication group
+/// registers. They mirror the Go producer's registration, so a case that only
+/// one side names is a mismatch rather than a shared name. The merged manifest
+/// sorts case IDs, so the comparison sorts this list too.
+const INVENTORY_PUBLICATION_CASE_IDS: [&str; 37] = [
+    "protocol.server.InventoryState/45/decode-valid",
+    "protocol.server.InventoryState/45/encode-valid",
+    "protocol.server.InventoryState/45/decode-selected-nine",
+    "protocol.server.InventoryState/45/encode-selected-nine",
+    "protocol.server.InventoryState/45/decode-tool-at-durability-zero",
+    "protocol.server.InventoryState/45/decode-trailing-byte",
+    "protocol.server.InventoryState/45/decode-truncated",
+    "protocol.server.CraftingState/45/decode-valid",
+    "protocol.server.CraftingState/45/encode-valid",
+    "protocol.server.CraftingState/45/decode-size-three",
+    "protocol.server.CraftingState/45/decode-size-zero",
+    "protocol.server.CraftingState/45/decode-size-four",
+    "protocol.server.CraftingState/45/decode-personal-residue-slot-four",
+    "protocol.server.CraftingState/45/encode-personal-residue-slot-four",
+    "protocol.server.CraftingState/45/decode-trailing-byte",
+    "protocol.server.FurnaceState/45/decode-valid",
+    "protocol.server.FurnaceState/45/encode-valid",
+    "protocol.server.FurnaceState/45/decode-progress-at-limit",
+    "protocol.server.FurnaceState/45/decode-burn-above",
+    "protocol.server.FurnaceState/45/decode-wrong-kind",
+    "protocol.server.FurnaceState/45/decode-zero-generation",
+    "protocol.server.FurnaceState/45/decode-invalid-fuel",
+    "protocol.server.FurnaceState/45/decode-invalid-output",
+    "protocol.server.FurnaceState/45/encode-invalid-fuel",
+    "protocol.server.FurnaceState/45/decode-trailing-byte",
+    "protocol.server.ChestState/45/decode-valid",
+    "protocol.server.ChestState/45/encode-valid",
+    "protocol.server.ChestState/45/decode-wrong-kind",
+    "protocol.server.ChestState/45/decode-ref-slot-above",
+    "protocol.server.ChestState/45/decode-invalid-stack",
+    "protocol.server.ChestState/45/decode-truncated",
+    "protocol.server.ChestState/45/decode-trailing-byte",
+    "protocol.server.ContainerClosed/45/decode-valid",
+    "protocol.server.ContainerClosed/45/encode-valid",
+    "protocol.server.ContainerClosed/45/decode-exact-none",
+    "protocol.server.ContainerClosed/45/decode-foreign-dimension",
+    "protocol.server.ContainerClosed/45/decode-kind-two",
+];
+
+/// Reports whether one family belongs to the inventory and container
+/// publication producer group.
+fn is_inventory_publication_family(family: &str) -> bool {
+    matches!(
+        family,
+        INVENTORY_STATE_FAMILY
+            | CRAFTING_STATE_FAMILY
+            | FURNACE_STATE_FAMILY
+            | CHEST_STATE_FAMILY
+            | CONTAINER_CLOSED_FAMILY
+    )
+}
+
+#[test]
+fn protocol_corpus_packet_inventory_publication_cases_are_executed() {
+    // The case assets are exported by the Go producer and integrated by the
+    // controller, so before this merge the test reports the missing corpus
+    // cases instead of an empty selection that would look like a passing run.
+    let cases = load_cases_for_consumer(CorpusConsumer::Protocol);
+    let publications: Vec<&FrozenCase> = cases
+        .iter()
+        .filter(|case| is_inventory_publication_family(&case.family))
+        .collect();
+    let executed: Vec<&str> = publications.iter().map(|case| case.id.as_str()).collect();
+    let mut expected: Vec<&str> = INVENTORY_PUBLICATION_CASE_IDS.to_vec();
+    // The merged manifest sorts case IDs; compare as the reviewed set, not in
+    // the authoring order of this suite's constant.
+    expected.sort_unstable();
+    assert_eq!(
+        executed, expected,
+        "the inventory and container publication selection does not carry the reviewed case set"
+    );
+    assert!(
+        !publications.is_empty(),
+        "the inventory and container publication selection executed zero cases"
+    );
+    for case in publications {
         assert_eq!(
             case.consumer,
             CorpusConsumer::Protocol,

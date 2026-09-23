@@ -32,6 +32,7 @@ mod command_rejected;
 mod companion_despawn;
 mod companion_spawn;
 mod companion_states;
+mod container_closed;
 mod container_ref;
 mod crafting_state;
 mod disconnect;
@@ -126,6 +127,7 @@ pub use companion_states::{
     COMPANION_STATE_WIRE_BYTES, COMPANION_STATES_MAX_WIRE_BYTES, CompanionState, CompanionStates,
     MAX_COMPANION_STATES,
 };
+pub use container_closed::ContainerClosed;
 pub use container_ref::{
     CHESTS_PER_CHUNK, CONTAINER_KIND_CHEST, CONTAINER_KIND_FURNACE, ContainerRef,
     FURNACES_PER_CHUNK,

@@ -1026,7 +1026,7 @@ rather than checking that it omits a few names.
   (`passive_despawn_round_trip_preserves_batch_bytes`,
   `passive_despawn_rejects_unsorted_zero_reason_and_malformed_payload`).
 
-## Chest state (`src/chest_state.rs`, `src/batch.rs`, `tests/runtime_contract.rs`)
+## Chest state (`src/chest_state.rs`, `tests/runtime_contract.rs`)
 
 - Play packet ID 15 payload is the 18-byte chest container reference plus the
   fixed `CHEST_SLOTS` (`27`) item stacks. `read_fixed` decodes the fixed-count
@@ -1034,6 +1034,26 @@ rather than checking that it omits a few names.
   reference must name a chest with a legal slot and generation
   (`chest_state_round_trip_preserves_slot_bytes`,
   `chest_state_rejects_wrong_reference_and_malformed_payload`).
+- The family carries the inventory and container publication group's common
+  fallible surface: `validate(&self)` rechecks the reference gate on each
+  call, checked `encoded_len(&self)` sizes the fixed stride,
+  `encode_into(&self, dst)` publishes into a caller-owned buffer through the
+  crate-private `publish_packet`, `encode(&self)` is the allocating wrapper
+  over it, and `decode(payload)` stays a bounded read plus `done()` plus
+  validation. The domain `ItemStack` rule is the single slot-value gate — its
+  private fields make an invalid slot value unconstructible on this surface —
+  so the gate restates the Go `validChestRef` order (kind, then dimension,
+  then slot, then generation) alone, and a record mutated into a malformed
+  reference after construction is refused instead of silently published
+  (`inventory_publication_chest_state_round_trips_through_the_fallible_surface`,
+  `inventory_publication_invalid_value_wins_over_short_capacity`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.ChestState` registers a decode and an encode
+  route under the `mornlea_protocol` consumer, produced by the real Go codec
+  in
+  `packages/tools/cmd/runtime-oracle/protocol_inventory_publication_test.go`.
+  The reference publishes as the nested raw-integer object, and every stack
+  renders as the `{item, count, durability}` object both directions share.
 
 ## Furnace state (`src/furnace_state.rs`, `tests/runtime_contract.rs`)
 
@@ -1046,6 +1066,20 @@ rather than checking that it omits a few names.
   the output slot only a fixed smelting product
   (`furnace_state_round_trip_preserves_golden_bytes`,
   `furnace_state_rejects_invalid_slots_timers_and_malformed_payload`).
+- The family carries the inventory and container publication group's common
+  fallible surface, and its gate keeps the Go `FurnaceState.Validate` order:
+  the reference (`validFurnaceRef`: kind, then dimension, then slot, then
+  generation), then the two timer bounds, then the three slot whitelists,
+  which report `InvalidRange`. No timer-versus-stack consistency relation
+  exists in the Go validator and none is invented here, so an idle furnace
+  with zero progress, zero burn and empty whitelisted slots is publishable
+  beside the active canonical vector
+  (`inventory_publication_furnace_state_invents_no_timer_relation`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.FurnaceState` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real
+  Go codec in
+  `packages/tools/cmd/runtime-oracle/protocol_inventory_publication_test.go`.
 
 ## Crafting state (`src/crafting_state.rs`, `tests/runtime_contract.rs`)
 
@@ -1055,6 +1089,18 @@ rather than checking that it omits a few names.
   `CRAFTING_GRID_SIZE_WORKBENCH` (`3`); a personal grid may not carry residue
   beyond its own size (`crafting_state_round_trip_preserves_golden_bytes`,
   `crafting_state_rejects_unknown_size_residue_and_malformed_payload`).
+- The family carries the inventory and container publication group's common
+  fallible surface. Its gate keeps the Go `CraftingState.Validate` order —
+  the size domain, then every grid slot with the personal-grid residue rule,
+  then the output — and reports an unknown size as `InvalidRange`, which is
+  the invalid-value boundary the Go validator's own size message publishes;
+  the slots and the output are the domain's checked `ItemStack`
+  (`inventory_publication_crafting_state_personal_residue_refuses_every_extension_slot`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.CraftingState` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real
+  Go codec in
+  `packages/tools/cmd/runtime-oracle/protocol_inventory_publication_test.go`.
 
 ## Inventory state (`src/inventory_state.rs`, `tests/runtime_contract.rs`)
 
@@ -1064,6 +1110,43 @@ rather than checking that it omits a few names.
   index is a domain `HotbarSlot`; every slot is a validated item stack
   (`inventory_state_round_trip_preserves_golden_bytes`,
   `inventory_state_rejects_unknown_selected_and_malformed_payload`).
+- The family carries the inventory and container publication group's common
+  fallible surface. Its gate keeps the Go `Inventory.Valid` order — the
+  selected index first, every stack second — and the stacks are the domain's
+  checked `ItemStack`, whose private fields make an invalid slot value
+  unconstructible on this surface, so the index is the only rule the gate
+  restates while the item-stack rule stays owned once
+  (`inventory_publication_inventory_state_round_trips_through_the_fallible_surface`,
+  `inventory_publication_the_stack_rule_boundaries_stay_pinned`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.InventoryState` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real
+  Go codec in
+  `packages/tools/cmd/runtime-oracle/protocol_inventory_publication_test.go`.
+
+## Container closed (`src/container_closed.rs`, `tests/runtime_contract.rs`)
+
+- Play packet ID 14 payload is the 18-byte container reference whose view
+  ended, shared by furnaces and chests. The reference gate is
+  `validate_any`, which is the Go `validAnyContainerRef` rule: either known
+  kind with its own slot bounds. The exact all-zero record is refused through
+  its zero generation rather than treated as an absent container, because
+  this family closes a real view and the absent form belongs to the inventory
+  and crafting views alone.
+- The module existed on disk but was absent from `src/lib.rs`, which is the
+  compile red this node closed: `ContainerClosed` now compiles on the public
+  surface beside `CloseContainer`, its client-to-server sibling. The family
+  carries the inventory and container publication group's common fallible
+  surface (`validate` → checked `encoded_len` → capacity check →
+  `publish_packet` → allocating `encode` → bounded `decode`), so a record
+  mutated into a malformed reference after construction is refused instead of
+  silently published
+  (`inventory_publication_container_closed_round_trips_through_the_fallible_surface`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.ContainerClosed` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real
+  Go codec in
+  `packages/tools/cmd/runtime-oracle/protocol_inventory_publication_test.go`.
 
 ## Hostile spawn (`src/hostile_spawn.rs`, `tests/runtime_contract.rs`)
 
@@ -1446,6 +1529,8 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_snapshot --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_player_outcomes --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_player_outcomes --locked -- --list
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_inventory_publication --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_inventory_publication --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
 
@@ -1516,6 +1601,21 @@ and any completed or unstarted swing, a mutated public field wins over a short
 destination for every family, every proper truncation plus one trailing byte
 reject, and the packet IDs 3/4/20/25 stay pinned. It also needs no corpus
 files, so it runs before the controller integrates the exported candidates.
+
+`tests/protocol_inventory_publication.rs` pins the five inventory and
+container publication records through that same surface: the reviewed
+181/51/36/153/18-byte wire literals round-trip byte for byte with the exact
+container-reference bytes preserved, the personal crafting grid refuses
+residue in every extension cell while the workbench admits all nine, the
+furnace gate invents no timer-versus-stack relation (an idle furnace beside
+the active bounds both publish), the item-stack boundaries are pinned through
+the decode path (full stack, durability bounds, the canonical empty triple,
+and the unregistered item number's own enum boundary), the exact all-zero
+container reference is refused through its zero generation, a mutated public
+field wins over a short destination for every family, every proper truncation
+plus one trailing byte reject, and the packet IDs 10/21/13/15/14 stay pinned.
+It also needs no corpus files, so it runs before the controller integrates
+the exported candidates.
 
 `tests/protocol_corpus.rs` executes the corpus cases this crate owns through
 the real codec paths — `read_frame`/`write_frame` for framing,

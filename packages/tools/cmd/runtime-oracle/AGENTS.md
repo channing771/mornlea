@@ -366,6 +366,37 @@ and the isolated export helpers (`exportGeneratedAssets`,
   family's own message file: `message_player.go` for `PlayerState`,
   `CommandRejected` and `PlaceBlockSucceeded`, and `message_combat.go` for
   `CombatHit`.
+- The eleventh packet producer group is `protocol_inventory_publication_test.go`
+  (`protocol.server.InventoryState`, `protocol.server.CraftingState`,
+  `protocol.server.FurnaceState`, `protocol.server.ChestState` and
+  `protocol.server.ContainerClosed`, decode and encode), the item and
+  container publications one player owns. It executes
+  `codec.DecodeServer`/`EncodeServer` in the play state with the case's own
+  `PacketKey`, normalizes the slot values as the `{item, count, durability}`
+  object both directions share, the 18-byte container reference as the nested
+  raw-integer object, and the selected index, size, timers and slot counts as
+  the plain JSON integers the wire carries; the hotbar, backpack, grid and
+  chest arrays publish in wire order. Its category table resolves the
+  reference gates the way their Go order answers: the kind messages
+  (`unknown container kind`, `furnace ref kind is not furnace`, `chest ref
+  kind is not chest`) to `invalid-enum` and the dimension, slot and
+  generation messages to `invalid-value`. The family validators answer every
+  slot-rule violation with one shared message per family, so the table
+  resolves those messages at the item-stack rule's own split, which is what
+  the Rust consumer publishes for the same bytes: the chest slot message to
+  `invalid-enum`, because the one stack-rule case that family registers
+  carries an unregistered item number, and the inventory message to
+  `invalid-value`, because that family's two stack-rule cases are the
+  selected index and a durability violation. No crafting stack case is
+  registered, so that family's slot messages stay outside the reviewed
+  table. The container closure's exact all-zero record is refused through
+  its zero generation (`validFurnaceRef` answers the kind first, and kind 0
+  is a furnace, so the generation is the boundary that fires), which is the
+  `invalid-value` category the Rust neutral conversion publishes for the
+  same bytes. Provenance is `codec_server.go` plus the family's own message
+  file: `message_inventory.go` for `InventoryState` and `CraftingState`,
+  `message_container.go` for `FurnaceState`, `ChestState` and
+  `ContainerClosed`.
 - `validProducerIDs` is the closed exporter allowlist. It carries the 18
   protocol group producer IDs the v45 packet plan names
   (`runtime-oracle/protocol-negotiation`, `-control`, `-client-control`,
@@ -635,6 +666,7 @@ only discriminator the manifest carries.
 go test ./packages/tools/cmd/runtime-oracle -run TestContractInventory -count=1
 go test ./packages/tools/cmd/runtime-oracle -list TestContractInventory
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolOracleFrame' -count=1
+go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolInventoryPublicationOracle' -count=1
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolCorpus' -count=1
 go test ./packages/tools/cmd/runtime-oracle -race -count=1
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked corpus_frame
