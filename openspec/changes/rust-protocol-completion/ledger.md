@@ -157,3 +157,21 @@
 **Rollback:** revert `b348b0e5`, `734564bf` and `1143189e` individually; the four families return to `cases: null` and the corpus index returns to 807.
 
 **Architecture skill: no change.**
+
+## Node 2.5 — 2026-09-23
+
+**Status:** complete. Commits `c3c36945` (`feat(protocol): qualify chat command wire`) + controller integration `9b217547` (`chore(corpus): integrate chat command evidence`, incl. the zero-case fixture move) on top of `4cc5ed2c`. Group 2 (all five client packet nodes) is now closed: every one of the 23 client families carries executed corpus cases.
+
+**Deliverable:** the unsequenced ChatCommand (Play C→S 12) on the common fallible surface as the first variable-length client payload: the gate routes through `mornlea_domain::CommandText::try_from_canonical` (the local `valid_command_text` copy retired for the command slot; `valid_bounded_text` stays for the speech slot until node 3.11), the decode reader mirrors `read_control_message` so a declared length the payload cannot complete reports `Truncated`, and the 1026-byte payload ceiling (`ChatCommandMaxWireBytes` mirrored) refuses with `FrameTooLarge` before any parse. 13 corpus cases through the real Go codec (valid pairs incl. the 1024-byte boundary admit, the encode-side 1025 rejection, the wire-ceiling `capacity` case, empty/untrimmed-NBSP/control/invalid-UTF-8/noncanonical-variant/truncated/trailing negatives), producer `runtime-oracle/protocol-client-chat`; 2 routes registered and pinned; group test `tests/protocol_client_chat.rs`; the single semantic `runtime_contract.rs` pin update (`InvalidString` → `Truncated` for the incomplete payload) matches ruling 2.
+
+**Controller rulings frozen:** (1) domain `CommandText` route for the command slot; (2) incomplete-payload category `truncated` via the Rust reader boundary and the Go prefix resolver, with the empty-payload cut-0 divergence (Rust `Truncated` vs Go invalid-uvarint) documented at the assertion site and excluded from the corpus per the node-1.5 ruling; (3) the 1026-byte wire ceiling maps to `capacity` on both sides.
+
+**Evidence:** group test 11/11; `runtime_contract` 134/134; Go producer 9/9; `TestCompanionMessage` ok; fmt/clippy/gofmt/vet clean; full oracle package `ok`; audit `ok`. Corpus integrity: exactly 1 family changed, 836→849 strict superset (+13/−0), `source_revision` preserved; controller spot-checked the 13-byte valid literal, the 1026-byte max-text payload and the noncanonical variant bytes. Post-integration whole protocol crate 242/242 with the 13 cases executed.
+
+**Integration incident (expected):** filling ChatCommand leaves zero zero-case client families, so the two `zeroCasePoint` fixtures in `inventory_test.go` moved from `protocol.client.ChatCommand` to `protocol.server.ChatEvent` (zero-case until node 3.11) inside the integration commit; the full oracle package re-ran green.
+
+**Review ruling:** Approved, 0 Crit/0 Imp/4 Minor. Deferred Minors: the gate allocates through the owning `CommandText` constructor (a borrowing predicate would be a cross-crate change); the plan-authorized six-line reader duplication with `read_control_message`; the `capacity` category for this family resting on the shared pre-existing mapper until integration (now integrated and executed); an unreachable `"short input"` resolver branch carried defensively.
+
+**Rollback:** revert `c3c36945` and `9b217547` individually; the family returns to `cases: null` and the corpus index returns to 836 (the fixture move returns with them).
+
+**Architecture skill: no change.**
