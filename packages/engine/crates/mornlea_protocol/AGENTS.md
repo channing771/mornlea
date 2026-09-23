@@ -66,6 +66,47 @@ rather than checking that it omits a few names.
   `OutputTooSmall { needed, available }` and `Allocation` beside the framing
   variants; no localized message text is part of the contract.
 
+## Control packets (`src/server_hello.rs`, `src/handshake_reject.rs`, `src/login_success.rs`, `src/login_reject.rs`, `src/keep_alive.rs`, `src/keep_alive_reply.rs`, `src/disconnect.rs`, `tests/protocol_control.rs`)
+
+- The seven non-gameplay control families share the common fallible surface in
+  design §4: `validate(&self)` rechecks every public field on each call,
+  checked `encoded_len(&self)` sizes the validated record, `encode_into(&self,
+  dst)` publishes into a caller-owned buffer, `encode(&self)` is the allocating
+  wrapper over it, and `decode(payload)` stays a bounded read plus `done()` plus
+  validation. The infallible `encode`-returning-`Vec` signatures are gone, so a
+  record mutated into an invalid value after construction is refused instead of
+  silently published, and a short destination reports
+  `OutputTooSmall { needed, available }` with every destination byte unchanged.
+  An invalid value always wins over a short destination.
+- The shared publication half lives in `server_hello.rs` as crate-private
+  `publish_packet(length, dst, write)`: capacity check first, then a
+  `SliceWriter` window exactly `length` bytes wide, then a debug assertion that
+  the published length equals the validated one. The framing module keeps its
+  own private copy because its record is the frame envelope rather than a packet
+  payload. `SliceWriter` (`src/bytes.rs`) performs no semantic validation.
+- The three message-carrying families (`HandshakeReject`, `LoginReject`,
+  `Disconnect`) share one message reader in `handshake_reject.rs`:
+  `read_control_message` checks the declared length against the 256-byte family
+  bound and the bytes that remain before copying anything. A declared length the
+  payload cannot complete reports `Truncated`, not the `InvalidString` the
+  shared string primitive reports for the same bytes: the Go decoder answers
+  that condition with the same sentinel as a malformed UTF-8 message, and the
+  frozen corpus category for an incomplete payload is `truncated`. One owner
+  keeps that boundary from drifting across the three families
+  (`control_an_incomplete_message_payload_is_truncated` in
+  `tests/protocol_control.rs`).
+- Enum and string bounds are checked before size and capacity, in the Go
+  validator's order: the reject code first, then the message bound. `u64`
+  tokens and seeds stay little-endian, and the version a handshake reject
+  answers with stays informational. `LoginSuccess::validate` is total because
+  the identity is checked by `PlayerId` and the seed carries no rule.
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.{ServerHello, HandshakeReject, LoginSuccess,
+  LoginReject, KeepAlive, Disconnect}` and `protocol.client.KeepAliveReply`
+  each register a decode and an encode route under the `mornlea_protocol`
+  consumer, produced by the real Go codec in
+  `packages/tools/cmd/runtime-oracle/protocol_control_test.go`.
+
 ## Client hello (`src/client_hello.rs`, `src/admission.rs`, `tests/runtime_contract.rs`, `tests/protocol_admission.rs`)
 
 - Handshake packet ID 0 payload is a canonical protocol-version uvarint.
@@ -950,6 +991,7 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_frame --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_control --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
 
@@ -966,6 +1008,15 @@ canonical name, and the structural boundaries (truncation, trailing bytes,
 invalid UTF-8, the 64 KiB payload ceiling) reject inside `decode_inbound`. Its
 case identities are shared with
 `packages/shared/network/protocol_admission_oracle_test.go`.
+
+`tests/protocol_control.rs` pins the control group's common surface: the
+reviewed wire bytes of each family's canonical record round-trip through
+`validate`/`encoded_len`/`encode_into`/`encode`, a short destination is refused
+with `OutputTooSmall` and left untouched, an invalid value wins over a short
+destination for every mutable field, every proper truncation of every canonical
+payload rejects, one trailing byte rejects, and an incomplete message payload
+reports `Truncated`. It needs no corpus files, so it runs before the
+controller integrates the exported candidates.
 
 `tests/protocol_corpus.rs` executes the corpus cases this crate owns through
 the real codec paths — `read_frame`/`write_frame` for framing and

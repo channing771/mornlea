@@ -166,6 +166,23 @@ and the isolated export helpers (`exportGeneratedAssets`,
   them both ways. Those values are pinned instead by the package-local
   `packages/shared/network/protocol_admission_oracle_test.go` driver table and
   by the Rust `tests/protocol_admission.rs` suite, whose case identities match.
+- The second packet producer group is `protocol_control_test.go`
+  (`protocol.server.ServerHello`, `protocol.server.HandshakeReject`,
+  `protocol.server.LoginSuccess`, `protocol.server.LoginReject`,
+  `protocol.server.KeepAlive`, `protocol.client.KeepAliveReply` and
+  `protocol.server.Disconnect`, decode and encode). It executes
+  `codec.DecodeServer`/`EncodeServer` (and `DecodeClient`/`EncodeClient` for
+  the client-to-server keep alive reply) with the case's own `PacketKey`,
+  normalizes the DTO fields (`u64` tokens and seeds as decimal strings, small
+  enums as declared integers, identities as lowercase hexadecimal), and reads
+  every encoded payload back before publishing it. Its category table owns one
+  boundary the Go sentinels cannot express: a declared message length the
+  payload cannot complete is answered with the same `invalid string` error as a
+  malformed UTF-8 message, so the boundary resolver classifies a rejected
+  proper prefix of the case's reviewed payload as `truncated` and every other
+  invalid-string rejection as `invalid-value`. The Rust control message reader
+  reports the same boundary as its `Truncated` error, so both implementations
+  publish one category.
 - `validProducerIDs` is the closed exporter allowlist. It carries the 18
   protocol group producer IDs the v45 packet plan names
   (`runtime-oracle/protocol-negotiation`, `-control`, `-client-control`,

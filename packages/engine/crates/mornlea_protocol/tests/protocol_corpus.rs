@@ -11,7 +11,10 @@
 //! first group is the inbound negotiation pair: `protocol.client.ClientHello`
 //! and `protocol.client.LoginStart` each publish a decode and an encode
 //! operation, executed here through `ClientHello::decode_inbound` /
-//! `LoginStart::decode_inbound` and the strict outbound record encoders.
+//! `LoginStart::decode_inbound` and the strict outbound record encoders. The
+//! second group is the seven non-gameplay control families, executed here
+//! through their common fallible surface (`validate` → checked `encoded_len`
+//! → capacity check → `encode_into`).
 //! `CorpusConsumer::Protocol` is registered here as `mornlea_protocol` so a
 //! packet case can name it, while the framing cases stay with the separate
 //! `corpus_frame` consumer the frame regression suite keeps using.
@@ -36,8 +39,18 @@ const FRAME_ENCODE_WIRE: [u8; 6] = [5, 0x80, 0x01, 1, 2, 3];
 /// The two packet families the negotiation producer group registers.
 const CLIENT_HELLO_FAMILY: &str = "protocol.client.ClientHello";
 const LOGIN_START_FAMILY: &str = "protocol.client.LoginStart";
+/// The seven packet families the control producer group registers.
+const SERVER_HELLO_FAMILY: &str = "protocol.server.ServerHello";
+const HANDSHAKE_REJECT_FAMILY: &str = "protocol.server.HandshakeReject";
+const LOGIN_SUCCESS_FAMILY: &str = "protocol.server.LoginSuccess";
+const LOGIN_REJECT_FAMILY: &str = "protocol.server.LoginReject";
+const KEEP_ALIVE_FAMILY: &str = "protocol.server.KeepAlive";
+const KEEP_ALIVE_REPLY_FAMILY: &str = "protocol.client.KeepAliveReply";
+const DISCONNECT_FAMILY: &str = "protocol.server.Disconnect";
 /// The packet families' protocol version, matching the manifest family rows.
 const PACKET_VERSION: &str = "45";
+/// The category label every accepted control packet outcome publishes.
+const PACKET_OUTCOME_CATEGORY: &str = "packet";
 
 /// The case identities the negotiation group registers. They mirror the Go
 /// producer's registration, so a case that only one side names is a mismatch
@@ -247,6 +260,60 @@ fn payload_bytes_from_text(case: &FrozenCase, text: &str) -> Vec<u8> {
     bytes
 }
 
+/// Reads one unsigned numeric field one encode case carries.
+fn unsigned_field(case: &FrozenCase, name: &str) -> u64 {
+    case.input_json
+        .as_ref()
+        .expect("encode case carries JSON fields")
+        .get(name)
+        .and_then(|value| value.as_u64())
+        .unwrap_or_else(|| panic!("case {} names no {name}", case.id))
+}
+
+/// Reads one small unsigned field one encode case carries.
+fn byte_field(case: &FrozenCase, name: &str) -> u8 {
+    u8::try_from(unsigned_field(case, name))
+        .unwrap_or_else(|_| panic!("case {} field {name} exceeds u8", case.id))
+}
+
+/// Reads one text field one encode case carries.
+fn text_field(case: &FrozenCase, name: &str) -> String {
+    case.input_json
+        .as_ref()
+        .expect("encode case carries JSON fields")
+        .get(name)
+        .and_then(|value| value.as_str().map(str::to_owned))
+        .unwrap_or_else(|| panic!("case {} names no {name}", case.id))
+}
+
+/// Digests one produced payload the way the corpus records an encode outcome.
+fn payload_digest(payload: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(payload);
+    format!("sha256:{:x}", hasher.finalize())
+}
+
+/// Publishes one encode case's outcome: the produced bytes' digest beside the
+/// semantic fields on success, or the rejection category on failure.
+///
+/// The record is built through the packet's public fields, so a mutated or
+/// invalid encode case is refused by the same production validation the
+/// positive path applies, and the outcome stays a record of execution.
+fn encode_ok_outcome(
+    encoded: Result<Vec<u8>, mornlea_protocol::ProtocolError>,
+    fields: serde_json::Value,
+) -> serde_json::Value {
+    match encoded {
+        Ok(wire) => serde_json::json!({
+            "category": PACKET_OUTCOME_CATEGORY,
+            "encoded_payload_digest": payload_digest(&wire),
+            "fields": fields,
+            "kind": "ok"
+        }),
+        Err(err) => packet_error(err),
+    }
+}
+
 /// Executes one packet case through the real Rust path its operation names.
 ///
 /// A decode case runs the family's inbound decoder, which applies only the
@@ -327,6 +394,179 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
             }
             other => panic!("unsupported packet operation for {}: {other}", case.id),
         },
+        SERVER_HELLO_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::ServerHello::decode(&case.input) {
+                Ok(hello) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": {"protocol_version": hello.protocol_version},
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let version = u32::try_from(unsigned_field(case, "protocol_version"))
+                    .unwrap_or_else(|_| panic!("case {} protocol_version exceeds u32", case.id));
+                // The record is built through its public field, so an invalid
+                // version is refused by the production validation rather than
+                // by a constructor guard.
+                let hello = mornlea_protocol::ServerHello {
+                    protocol_version: version,
+                };
+                encode_ok_outcome(
+                    hello.encode(),
+                    serde_json::json!({"protocol_version": version}),
+                )
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        HANDSHAKE_REJECT_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::HandshakeReject::decode(&case.input) {
+                Ok(reject) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": {
+                        "server_protocol_version": reject.server_protocol_version,
+                        "code": reject.code,
+                        "message": reject.message
+                    },
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let reject = mornlea_protocol::HandshakeReject {
+                    server_protocol_version: u32::try_from(unsigned_field(
+                        case,
+                        "server_protocol_version",
+                    ))
+                    .unwrap_or_else(|_| {
+                        panic!("case {} server_protocol_version exceeds u32", case.id)
+                    }),
+                    code: byte_field(case, "code"),
+                    message: text_field(case, "message"),
+                };
+                encode_ok_outcome(
+                    reject.encode(),
+                    serde_json::json!({
+                        "server_protocol_version": reject.server_protocol_version,
+                        "code": reject.code,
+                        "message": reject.message
+                    }),
+                )
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        LOGIN_SUCCESS_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::LoginSuccess::decode(&case.input) {
+                Ok(success) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": {
+                        "player_id": hex_lower(&success.player_id.bytes()),
+                        "world_seed": success.world_seed.to_string()
+                    },
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let player_id = mornlea_protocol::PlayerId::try_from_bytes(player_id_bytes(case))
+                    .unwrap_or_else(|_| panic!("case {} names an invalid identity", case.id));
+                let world_seed = unsigned_field(case, "world_seed");
+                let success = mornlea_protocol::LoginSuccess {
+                    player_id,
+                    world_seed,
+                };
+                encode_ok_outcome(
+                    success.encode(),
+                    serde_json::json!({
+                        "player_id": hex_lower(&success.player_id.bytes()),
+                        "world_seed": success.world_seed.to_string()
+                    }),
+                )
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        LOGIN_REJECT_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::LoginReject::decode(&case.input) {
+                Ok(reject) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": {"code": reject.code, "message": reject.message},
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let reject = mornlea_protocol::LoginReject {
+                    code: byte_field(case, "code"),
+                    message: text_field(case, "message"),
+                };
+                encode_ok_outcome(
+                    reject.encode(),
+                    serde_json::json!({"code": reject.code, "message": reject.message}),
+                )
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        KEEP_ALIVE_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::KeepAlive::decode(&case.input) {
+                Ok(keep_alive) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": {"token": keep_alive.token.to_string()},
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let keep_alive = mornlea_protocol::KeepAlive {
+                    token: unsigned_field(case, "token"),
+                };
+                encode_ok_outcome(
+                    keep_alive.encode(),
+                    serde_json::json!({"token": keep_alive.token.to_string()}),
+                )
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        KEEP_ALIVE_REPLY_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::KeepAliveReply::decode(&case.input) {
+                Ok(reply) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": {"token": reply.token.to_string()},
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let reply = mornlea_protocol::KeepAliveReply {
+                    token: unsigned_field(case, "token"),
+                };
+                encode_ok_outcome(
+                    reply.encode(),
+                    serde_json::json!({"token": reply.token.to_string()}),
+                )
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        DISCONNECT_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::Disconnect::decode(&case.input) {
+                Ok(disconnect) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": {"code": disconnect.code, "message": disconnect.message},
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let disconnect = mornlea_protocol::Disconnect {
+                    code: byte_field(case, "code"),
+                    message: text_field(case, "message"),
+                };
+                encode_ok_outcome(
+                    disconnect.encode(),
+                    serde_json::json!({"code": disconnect.code, "message": disconnect.message}),
+                )
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
         other => panic!("unsupported packet family for {}: {other}", case.id),
     }
 }
@@ -404,6 +644,96 @@ fn protocol_corpus_packet_negotiation_cases_are_executed() {
         "the negotiation selection executed zero cases"
     );
     for case in negotiation {
+        assert_eq!(
+            case.consumer,
+            CorpusConsumer::Protocol,
+            "case {} carries the wrong consumer",
+            case.id
+        );
+        assert!(
+            !case.operation.is_empty(),
+            "case {} names no operation",
+            case.id
+        );
+        assert_normalized(case, dispatch_packet(case));
+    }
+}
+
+/// The case identities the control group registers. They mirror the Go
+/// producer's registration, so a case that only one side names is a mismatch
+/// rather than a shared name. The merged manifest sorts case IDs, so the
+/// comparison sorts this list too.
+const CONTROL_CASE_IDS: [&str; 34] = [
+    "protocol.client.KeepAliveReply/45/decode-valid",
+    "protocol.client.KeepAliveReply/45/decode-zero-token",
+    "protocol.client.KeepAliveReply/45/encode-valid",
+    "protocol.client.KeepAliveReply/45/encode-zero-token",
+    "protocol.server.Disconnect/45/decode-code-one-empty-message",
+    "protocol.server.Disconnect/45/decode-code-six",
+    "protocol.server.Disconnect/45/decode-code-zero",
+    "protocol.server.Disconnect/45/decode-declared-length-above-bound",
+    "protocol.server.Disconnect/45/decode-message-length-exceeds-payload",
+    "protocol.server.Disconnect/45/decode-trailing-byte",
+    "protocol.server.Disconnect/45/encode-code-five-maximum-message",
+    "protocol.server.Disconnect/45/encode-message-above-bound",
+    "protocol.server.HandshakeReject/45/decode-message-length-exceeds-payload",
+    "protocol.server.HandshakeReject/45/decode-unknown-code",
+    "protocol.server.HandshakeReject/45/decode-valid",
+    "protocol.server.HandshakeReject/45/encode-unknown-code",
+    "protocol.server.HandshakeReject/45/encode-valid",
+    "protocol.server.KeepAlive/45/decode-valid",
+    "protocol.server.KeepAlive/45/decode-zero-token",
+    "protocol.server.KeepAlive/45/encode-valid",
+    "protocol.server.LoginReject/45/decode-code-eight",
+    "protocol.server.LoginReject/45/decode-code-one-empty-message",
+    "protocol.server.LoginReject/45/decode-code-zero",
+    "protocol.server.LoginReject/45/decode-declared-length-above-bound",
+    "protocol.server.LoginReject/45/decode-message-length-exceeds-payload",
+    "protocol.server.LoginReject/45/encode-code-seven-maximum-message",
+    "protocol.server.LoginReject/45/encode-message-above-bound",
+    "protocol.server.LoginSuccess/45/decode-invalid-uuid",
+    "protocol.server.LoginSuccess/45/decode-trailing-byte",
+    "protocol.server.LoginSuccess/45/decode-zero-seed",
+    "protocol.server.LoginSuccess/45/encode-zero-seed",
+    "protocol.server.ServerHello/45/decode-current-version",
+    "protocol.server.ServerHello/45/decode-previous-version",
+    "protocol.server.ServerHello/45/encode-current-version",
+];
+
+/// Reports whether one family belongs to the control producer group.
+fn is_control_family(family: &str) -> bool {
+    matches!(
+        family,
+        SERVER_HELLO_FAMILY
+            | HANDSHAKE_REJECT_FAMILY
+            | LOGIN_SUCCESS_FAMILY
+            | LOGIN_REJECT_FAMILY
+            | KEEP_ALIVE_FAMILY
+            | KEEP_ALIVE_REPLY_FAMILY
+            | DISCONNECT_FAMILY
+    )
+}
+
+#[test]
+fn protocol_corpus_packet_control_cases_are_executed() {
+    // The case assets are exported by the Go producer and integrated by the
+    // controller, so before that merge this test reports the missing corpus
+    // cases instead of an empty selection that would look like a passing run.
+    let cases = load_cases_for_consumer(CorpusConsumer::Protocol);
+    let control: Vec<&FrozenCase> = cases
+        .iter()
+        .filter(|case| is_control_family(&case.family))
+        .collect();
+    let executed: Vec<&str> = control.iter().map(|case| case.id.as_str()).collect();
+    let mut expected: Vec<&str> = CONTROL_CASE_IDS.to_vec();
+    // The merged manifest sorts case IDs; compare as the reviewed set, not in
+    // the authoring order of this suite's constant.
+    expected.sort_unstable();
+    assert_eq!(
+        executed, expected,
+        "the control selection does not carry the reviewed case set"
+    );
+    for case in control {
         assert_eq!(
             case.consumer,
             CorpusConsumer::Protocol,

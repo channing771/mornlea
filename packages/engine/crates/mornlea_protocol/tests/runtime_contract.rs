@@ -190,7 +190,7 @@ fn client_hello_rejects_unknown_version_and_malformed_payload() {
 #[test]
 fn server_hello_round_trip_preserves_current_version_bytes() {
     let hello = mornlea_protocol::ServerHello::new(45).expect("current hello");
-    let payload = hello.encode();
+    let payload = hello.encode().expect("encode hello");
     assert_eq!(payload, [0x2d]);
     assert_eq!(mornlea_protocol::ServerHello::PACKET_ID, 0);
     let decoded = mornlea_protocol::ServerHello::decode(&payload).expect("decode hello");
@@ -218,7 +218,7 @@ fn server_hello_rejects_unknown_version_and_malformed_payload() {
 #[test]
 fn handshake_reject_round_trip_preserves_golden_bytes() {
     let reject = mornlea_protocol::HandshakeReject::new(42, 1, "no").expect("reject");
-    let payload = reject.encode();
+    let payload = reject.encode().expect("encode reject");
     assert_eq!(payload, [0x2a, 0x01, 0x02, b'n', b'o']);
     assert_eq!(mornlea_protocol::HandshakeReject::PACKET_ID, 1);
     let decoded = mornlea_protocol::HandshakeReject::decode(&payload).expect("decode");
@@ -231,7 +231,7 @@ fn handshake_reject_round_trip_preserves_golden_bytes() {
 #[test]
 fn handshake_reject_round_trip_preserves_empty_message() {
     let reject = mornlea_protocol::HandshakeReject::new(8, 1, "").expect("empty message");
-    let payload = reject.encode();
+    let payload = reject.encode().expect("encode reject");
     assert_eq!(payload, [0x08, 0x01, 0x00]);
     let decoded = mornlea_protocol::HandshakeReject::decode(&payload).expect("decode");
     assert_eq!(decoded, reject);
@@ -333,7 +333,7 @@ fn login_start_rejects_invalid_identity_name_range_and_malformed_payload() {
 fn login_success_round_trip_preserves_golden_bytes() {
     let id = mornlea_protocol::PlayerId::try_from_bytes(GOLDEN_PLAYER_ID).expect("uuid v4");
     let success = mornlea_protocol::LoginSuccess::new(id, 0x1122_3344_5566_7788);
-    let payload = success.encode();
+    let payload = success.encode().expect("encode success");
     assert_eq!(
         payload,
         [
@@ -363,7 +363,8 @@ fn login_success_rejects_invalid_identity_and_malformed_payload() {
     let zero_seed = mornlea_protocol::LoginSuccess::new(id, 0);
     assert_eq!(zero_seed.world_seed, 0);
     assert_eq!(
-        mornlea_protocol::LoginSuccess::decode(&zero_seed.encode()).expect("decode zero seed"),
+        mornlea_protocol::LoginSuccess::decode(&zero_seed.encode().expect("encode zero seed"))
+            .expect("decode zero seed"),
         zero_seed
     );
 }
@@ -371,7 +372,7 @@ fn login_success_rejects_invalid_identity_and_malformed_payload() {
 #[test]
 fn login_reject_round_trip_preserves_golden_bytes() {
     let reject = mornlea_protocol::LoginReject::new(2, "no").expect("reject");
-    let payload = reject.encode();
+    let payload = reject.encode().expect("encode reject");
     assert_eq!(payload, [0x02, 0x02, b'n', b'o']);
     assert_eq!(mornlea_protocol::LoginReject::PACKET_ID, 1);
     let decoded = mornlea_protocol::LoginReject::decode(&payload).expect("decode");
@@ -392,7 +393,7 @@ fn login_reject_round_trip_preserves_empty_message_codes() {
         (7, [0x07, 0x00]),
     ] {
         let reject = mornlea_protocol::LoginReject::new(code, "").expect("empty message");
-        let payload = reject.encode();
+        let payload = reject.encode().expect("encode reject");
         assert_eq!(payload, wire, "code {code}");
         let decoded = mornlea_protocol::LoginReject::decode(&payload).expect("decode");
         assert_eq!(decoded, reject);
@@ -436,7 +437,7 @@ fn login_reject_rejects_unknown_code_and_malformed_payload() {
 #[test]
 fn disconnect_round_trip_preserves_golden_bytes() {
     let disconnect = mornlea_protocol::Disconnect::new(2, "bye").expect("disconnect");
-    let payload = disconnect.encode();
+    let payload = disconnect.encode().expect("encode disconnect");
     assert_eq!(payload, [0x02, 0x03, b'b', b'y', b'e']);
     assert_eq!(mornlea_protocol::Disconnect::PACKET_ID, 6);
     let decoded = mornlea_protocol::Disconnect::decode(&payload).expect("decode");
@@ -455,7 +456,7 @@ fn disconnect_round_trip_preserves_empty_message_codes() {
         (5, [0x05, 0x00]),
     ] {
         let disconnect = mornlea_protocol::Disconnect::new(code, "").expect("empty message");
-        let payload = disconnect.encode();
+        let payload = disconnect.encode().expect("encode disconnect");
         assert_eq!(payload, wire, "code {code}");
         let decoded = mornlea_protocol::Disconnect::decode(&payload).expect("decode");
         assert_eq!(decoded, disconnect);
@@ -499,7 +500,7 @@ fn disconnect_rejects_unknown_code_and_malformed_payload() {
 #[test]
 fn keep_alive_round_trip_preserves_golden_bytes() {
     let keep_alive = mornlea_protocol::KeepAlive::new(8).expect("keep alive");
-    let payload = keep_alive.encode();
+    let payload = keep_alive.encode().expect("encode keep alive");
     assert_eq!(payload, [0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
     assert_eq!(mornlea_protocol::KeepAlive::PACKET_ID, 5);
     let decoded = mornlea_protocol::KeepAlive::decode(&payload).expect("decode");
@@ -529,7 +530,7 @@ fn keep_alive_rejects_zero_token_and_malformed_payload() {
 #[test]
 fn keep_alive_reply_round_trip_preserves_golden_bytes() {
     let reply = mornlea_protocol::KeepAliveReply::new(6).expect("keep alive reply");
-    let payload = reply.encode();
+    let payload = reply.encode().expect("encode reply");
     assert_eq!(payload, [0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
     assert_eq!(mornlea_protocol::KeepAliveReply::PACKET_ID, 4);
     let decoded = mornlea_protocol::KeepAliveReply::decode(&payload).expect("decode");
