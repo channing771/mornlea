@@ -299,3 +299,20 @@
 **Rollback:** revert `d0c9e2c3` and `eb8a78e1` individually; corpus returns to 992.
 
 **Architecture skill: no change.**
+
+
+## Node 3.8 — 2026-09-24
+
+**Status:** complete. Commits `cc852015` (`feat(protocol): qualify hostile packets`) + controller integration `d8368493` on top of `a9b77b53`.
+
+**Deliverable:** the three hostile families (`HostileSpawn` 22, `HostileState` 23, `HostileDespawn` 24) on the common fallible surface; new shim `src/hostile_id.rs` re-exports the domain `HostileId` with the 8-byte wire edge (zero unconstructible outbound; `HOSTILE_ID_WIRE_BYTES` exported for the passive/projectile successors); strides 30/38/8 with state omitting dimension and spawn omitting velocity; count 1..=64 before record scan; strict numeric ID order; the exact remaining-length rule → trailing-byte `truncated` (verified in `hostile_wire.go`). 30 corpus cases (12/10/8), producer `runtime-oracle/protocol-hostiles`; 6 routes; group test 19/19 incl. 64-record admits on all three families.
+
+**Rulings frozen:** distinct-message category mapping (zero ID invalid-identity, dim invalid-enum, health invalid-value, kind invalid-enum, nonfinite/count/sort invalid-value) — no latent classes in this group; the `runtime_contract.rs` zero-ID constructor cases moved to decode-path assertions (the checked newtype makes the mutation inexpressible — reviewer judged the coverage equivalent); the real codec-package hostile filters are `TestHostileMessagesWireLayoutIsFrozen|TestHostileMessagesDecodeRejectsInvalidWire|TestHostileMessagesWireLimitsAreFrozen|TestHostileMessageCodecRoundTripsProperty` + `FuzzHostileMessageCodec`.
+
+**Evidence:** group 19/19; `runtime_contract` 134/134; Go producer 8/8 (+`-race`); codec filters ok; full oracle ok; audit ok; fmt/clippy/gofmt/vet clean. Corpus integrity: 3 families changed, 1011→1041 (+30/−0), `source_revision` preserved. Post-integration whole protocol crate 367/367.
+
+**Review ruling:** Approved, 0 Crit/0 Imp/2 Minor (the 9-byte batch-header stride privately redefined per family — consolidation candidate; a redundant doc sentence).
+
+**Rollback:** revert `cc852015` and `d8368493` individually; corpus returns to 1011.
+
+**Architecture skill: no change.**
