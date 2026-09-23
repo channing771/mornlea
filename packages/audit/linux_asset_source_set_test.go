@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
-	"runtime"
 	"slices"
 	"testing"
 )
@@ -48,20 +47,6 @@ func TestGodotAssetGeneratorUsesPortableLinuxSourceSet(t *testing.T) {
 	if _, ok := packages["github.com/channing771/mornlea/packages/client/cmd/mornlea-godot-assets"]; !ok {
 		t.Fatalf("Linux go list output did not include Godot asset generator package: %v", packages)
 	}
-
-	if runtime.GOOS != "linux" {
-		return
-	}
-	command = exec.Command("go", "test",
-		"./packages/client/assets",
-		"./packages/client/cmd/mornlea-godot-assets",
-		"-run", "^$",
-		"-count=1",
-	)
-	command.Dir = repositoryRoot(t)
-	command.Env = environment
-	output, err = command.CombinedOutput()
-	if err != nil {
-		t.Fatalf("GOOS=linux GOARCH=amd64 CGO_ENABLED=1 go test ./packages/client/assets ./packages/client/cmd/mornlea-godot-assets -run ^$ -count=1 failed: %v\n%s", err, output)
-	}
+	// Linux quality compiles this source set only after verifying its native artifact;
+	// preflight must inspect selection without linking against an unbuilt engine.
 }
