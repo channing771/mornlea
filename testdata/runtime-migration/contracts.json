@@ -2412,19 +2412,45 @@
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
       "sources": [
         {
-          "path": "packages/shared/network/codec/testdata/chunk-snapshot-v1.bin",
-          "sha256": "sha256:d1397d23db8c1180bff91d3144ba5fcaba3b0a07a379b7be516ac50829f39bb2"
+          "path": "packages/shared/network/codec/chunk_codec.go",
+          "sha256": "sha256:8ccddeb4aefe5f79da7ad323d54d039581d1993eb3d634de68db44b21dead357"
         },
         {
           "path": "packages/shared/network/codec/codec_golden_test.go",
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
         },
         {
+          "path": "packages/shared/network/codec/codec_server.go",
+          "sha256": "sha256:733ce941581e6ab2893e81c894d68a2815e14ff67b2c4f2caf6987a9ce6ad67c"
+        },
+        {
+          "path": "packages/shared/network/codec/testdata/chunk-snapshot-v1.bin",
+          "sha256": "sha256:d1397d23db8c1180bff91d3144ba5fcaba3b0a07a379b7be516ac50829f39bb2"
+        },
+        {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
+        },
+        {
+          "path": "packages/shared/network/protocol/snapshot.go",
+          "sha256": "sha256:fd7129728bef6f45d7f1c56d2ac7a908d3fa39a4821833d19e7a962816f6dc6a"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.server.ChunkSnapshot/45/decode-checksum-failure",
+        "protocol.server.ChunkSnapshot/45/decode-compressed-length-above-cap",
+        "protocol.server.ChunkSnapshot/45/decode-decoded-length-above-cap",
+        "protocol.server.ChunkSnapshot/45/decode-fixture",
+        "protocol.server.ChunkSnapshot/45/decode-truncated-zstd-frame",
+        "protocol.server.ChunkSnapshot/45/decode-valid-mixed",
+        "protocol.server.ChunkSnapshot/45/encode-23-sections",
+        "protocol.server.ChunkSnapshot/45/encode-direct-high-bits",
+        "protocol.server.ChunkSnapshot/45/encode-palette-index-out-of-range",
+        "protocol.server.ChunkSnapshot/45/encode-revision-zero",
+        "protocol.server.ChunkSnapshot/45/encode-valid-all-single",
+        "protocol.server.ChunkSnapshot/45/encode-valid-mixed",
+        "protocol.server.ChunkSnapshot/45/encode-y-order-swap"
+      ]
     },
     {
       "id": "protocol.server.CombatHit",
@@ -20047,6 +20073,318 @@
       "expected": {
         "path": "testdata/runtime-migration/cases/protocol/BlockChanges/encode-y-above-world.expected.json",
         "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ChunkSnapshot/45/decode-checksum-failure",
+      "family": "protocol.server.ChunkSnapshot",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/decode-checksum-failure.input.bin",
+        "sha256": "sha256:971461a7a44553f1d2b896c808098365073cb761ab6634e127dfbb3682e0f1cf"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/decode-checksum-failure.expected.json",
+        "sha256": "sha256:59f2c205e82e4ae829c89d03e4d763be50f160372f4dcd771415be08ab2aa2c2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ChunkSnapshot/45/decode-compressed-length-above-cap",
+      "family": "protocol.server.ChunkSnapshot",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/decode-compressed-length-above-cap.input.bin",
+        "sha256": "sha256:bf8c1f6916c68775f9aa5286eb1c11d52027db8720eaa92ee0c68be3d9ab6bfe"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/decode-compressed-length-above-cap.expected.json",
+        "sha256": "sha256:4ea4e66801b2420b206cb2f94c89251dc73199fc1db99ae8a1f7bc08df20ce21"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ChunkSnapshot/45/decode-decoded-length-above-cap",
+      "family": "protocol.server.ChunkSnapshot",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/decode-decoded-length-above-cap.input.bin",
+        "sha256": "sha256:f034f8611e7a79c44c24bb1c94a7809ed7fa3d58e47f9b36575e01812e4dcf8d"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/decode-decoded-length-above-cap.expected.json",
+        "sha256": "sha256:4ea4e66801b2420b206cb2f94c89251dc73199fc1db99ae8a1f7bc08df20ce21"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ChunkSnapshot/45/decode-fixture",
+      "family": "protocol.server.ChunkSnapshot",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/decode-fixture.input.bin",
+        "sha256": "sha256:d1397d23db8c1180bff91d3144ba5fcaba3b0a07a379b7be516ac50829f39bb2"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/decode-fixture.expected.json",
+        "sha256": "sha256:b1b38e0991050c950d2f84953bd0fcb6145003fa3eff77a53670a3ecd9949f1a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ChunkSnapshot/45/decode-truncated-zstd-frame",
+      "family": "protocol.server.ChunkSnapshot",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/decode-truncated-zstd-frame.input.bin",
+        "sha256": "sha256:d299839085f21ee07f04f84693557a7676c14a7b41bcd74df57a33c0e93e8658"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/decode-truncated-zstd-frame.expected.json",
+        "sha256": "sha256:b3e13b655384f4ffb83442888ebe9acd15e37f138167fc744c30ae07f5bd8f1a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ChunkSnapshot/45/decode-valid-mixed",
+      "family": "protocol.server.ChunkSnapshot",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/decode-valid-mixed.input.bin",
+        "sha256": "sha256:f583160b6cd5e7217eb3802b23eee0d947ff040a9a8afa9122bc49b4857c2a39"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/decode-valid-mixed.expected.json",
+        "sha256": "sha256:ab9814a9853165fa8717b57f2cb4801702ed165100042f53401469cb7c44b74f"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ChunkSnapshot/45/encode-23-sections",
+      "family": "protocol.server.ChunkSnapshot",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/encode-23-sections.input.json",
+        "sha256": "sha256:079f2f10e5f786f3268893944f6824a2c1ceeb483a40ba3b840e0b48d459f213"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/encode-23-sections.expected.json",
+        "sha256": "sha256:d855c473e32610aebbe5b6e889a29824549588ba5ec650407e5a3df851b77c76"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ChunkSnapshot/45/encode-direct-high-bits",
+      "family": "protocol.server.ChunkSnapshot",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/encode-direct-high-bits.input.json",
+        "sha256": "sha256:5bb6a9227ed78bb829353a08861354f6ff475260c9fab4ae25429f8356158a1f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/encode-direct-high-bits.expected.json",
+        "sha256": "sha256:d855c473e32610aebbe5b6e889a29824549588ba5ec650407e5a3df851b77c76"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ChunkSnapshot/45/encode-palette-index-out-of-range",
+      "family": "protocol.server.ChunkSnapshot",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/encode-palette-index-out-of-range.input.json",
+        "sha256": "sha256:62a793c10bbc7363738e975a4bf78468200fdb0ab832988f24d4e51750ba8ec7"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/encode-palette-index-out-of-range.expected.json",
+        "sha256": "sha256:d855c473e32610aebbe5b6e889a29824549588ba5ec650407e5a3df851b77c76"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ChunkSnapshot/45/encode-revision-zero",
+      "family": "protocol.server.ChunkSnapshot",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/encode-revision-zero.input.json",
+        "sha256": "sha256:dce321144973a81b8b38bf447e1ece1d256007368239fc525f3b97159e13fe13"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/encode-revision-zero.expected.json",
+        "sha256": "sha256:d855c473e32610aebbe5b6e889a29824549588ba5ec650407e5a3df851b77c76"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ChunkSnapshot/45/encode-valid-all-single",
+      "family": "protocol.server.ChunkSnapshot",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/encode-valid-all-single.input.json",
+        "sha256": "sha256:62eee60c0136496caf6431d152da346541d1c289fa1c22168875a73f78e680c8"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/encode-valid-all-single.expected.json",
+        "sha256": "sha256:756fd5d92e7f802e72dde17be016e53bb3f3d400ce16286abcef6b126d773a4d"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ChunkSnapshot/45/encode-valid-mixed",
+      "family": "protocol.server.ChunkSnapshot",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/encode-valid-mixed.input.json",
+        "sha256": "sha256:a2c1d3752d1f13e1302afcc26019be3fb2b674e29516f98c0b5e85c259ca11a7"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/encode-valid-mixed.expected.json",
+        "sha256": "sha256:51fe6a0599de441487527c9acb35bdcef09617c6c74f8a9e46b7840e2b03171e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ChunkSnapshot/45/encode-y-order-swap",
+      "family": "protocol.server.ChunkSnapshot",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/encode-y-order-swap.input.json",
+        "sha256": "sha256:b8629eab5cc5ab3e8afb8152b14b2723296b9fb69938abca19949df57500785c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ChunkSnapshot/encode-y-order-swap.expected.json",
+        "sha256": "sha256:d855c473e32610aebbe5b6e889a29824549588ba5ec650407e5a3df851b77c76"
       },
       "checkpoints": [
         "0"
