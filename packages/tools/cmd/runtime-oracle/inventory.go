@@ -173,6 +173,8 @@ func BaselineConsumerRegistry() ConsumerRegistry {
 				{FamilyID: "protocol.server.BlockChanges", Version: "45", Operation: "encode"}:       {},
 				{FamilyID: "protocol.server.ForgetChunks", Version: "45", Operation: "decode"}:       {},
 				{FamilyID: "protocol.server.ForgetChunks", Version: "45", Operation: "encode"}:       {},
+				{FamilyID: "protocol.server.ChunkSnapshot", Version: "45", Operation: "decode"}:      {},
+				{FamilyID: "protocol.server.ChunkSnapshot", Version: "45", Operation: "encode"}:      {},
 				{FamilyID: "protocol.client.KeepAliveReply", Version: "45", Operation: "decode"}:     {},
 				{FamilyID: "protocol.client.KeepAliveReply", Version: "45", Operation: "encode"}:     {},
 				{FamilyID: "protocol.server.Disconnect", Version: "45", Operation: "decode"}:         {},

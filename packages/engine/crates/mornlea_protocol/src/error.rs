@@ -25,4 +25,10 @@ pub enum ProtocolError {
     /// A checked length computation or bounded reservation failed, so no
     /// record can be sized or published.
     Allocation,
+    /// A compressed stream failed its own integrity check. The envelope's
+    /// length declarations were already satisfied, so this variant reports
+    /// only the failure the envelope checks could not catch: the zstd frame's
+    /// content-checksum verification (or an equivalent frame-level failure)
+    /// rejected bytes that were present and correctly sized.
+    Integrity,
 }

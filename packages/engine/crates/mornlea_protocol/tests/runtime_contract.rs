@@ -4808,7 +4808,7 @@ fn snapshot_envelope(decoded_length: u32, compressed: &[u8]) -> Vec<u8> {
 #[test]
 fn chunk_snapshot_round_trip_preserves_golden_bytes() {
     let snapshot = golden_chunk_snapshot();
-    let logical = snapshot.encode_logical();
+    let logical = snapshot.encode_logical_checked().expect("golden logical");
     // The Go fixture's logical payload length, derived from its envelope.
     assert_eq!(logical.len(), 86_295);
     assert_eq!(snapshot.logical_size(), 86_295);
@@ -4844,7 +4844,12 @@ fn chunk_snapshot_round_trip_preserves_golden_bytes() {
 fn chunk_snapshot_round_trips_through_committed_fixture() {
     let fixture = read_go_snapshot_fixture();
     let decoded = mornlea_protocol::ChunkSnapshot::decode(&fixture).expect("fixture decode");
-    let reencoded = decoded.encode();
+    let mut reencoded = vec![0u8; fixture.len() + 64];
+    let mut codec = mornlea_protocol::ProtocolCodec::new().expect("snapshot codec");
+    let written = codec
+        .encode_snapshot_into(&decoded, &mut reencoded)
+        .expect("re-encoded payload");
+    reencoded.truncate(written);
     let again = mornlea_protocol::ChunkSnapshot::decode(&reencoded).expect("re-encoded decode");
     assert_eq!(again, decoded);
 
@@ -4876,8 +4881,13 @@ fn chunk_snapshot_round_trips_through_committed_fixture() {
 #[test]
 fn chunk_snapshot_rejects_malformed_envelope_and_bounds() {
     let snapshot = golden_chunk_snapshot();
-    let logical = snapshot.encode_logical();
-    let valid = snapshot.encode();
+    let logical = snapshot.encode_logical_checked().expect("golden logical");
+    let mut valid = vec![0u8; snapshot.logical_size() + 64];
+    let mut codec = mornlea_protocol::ProtocolCodec::new().expect("snapshot codec");
+    let written = codec
+        .encode_snapshot_into(&snapshot, &mut valid)
+        .expect("valid payload");
+    valid.truncate(written);
 
     for length in 0..8 {
         assert!(
@@ -4911,7 +4921,9 @@ fn chunk_snapshot_rejects_malformed_envelope_and_bounds() {
     assert!(mornlea_protocol::ChunkSnapshot::decode(&bad_checksum).is_err());
 
     // Bounds are rejected before decompression: a non-zstd payload of the
-    // declared size still yields the bound failure rather than a frame failure.
+    // declared size satisfies every envelope check and is refused by the zstd
+    // layer itself, which is the integrity boundary — the envelope could not
+    // catch it.
     for size in [
         mornlea_protocol::MAX_COMPRESSED_SNAPSHOT - 1,
         mornlea_protocol::MAX_COMPRESSED_SNAPSHOT,
@@ -4919,7 +4931,7 @@ fn chunk_snapshot_rejects_malformed_envelope_and_bounds() {
         let payload = snapshot_envelope(1, &vec![0u8; size]);
         assert_eq!(
             mornlea_protocol::ChunkSnapshot::decode(&payload),
-            Err(mornlea_protocol::ProtocolError::Truncated),
+            Err(mornlea_protocol::ProtocolError::Integrity),
             "compressed length {size} must reach the zstd decoder"
         );
     }
@@ -4946,7 +4958,7 @@ fn chunk_snapshot_rejects_malformed_envelope_and_bounds() {
 #[test]
 fn chunk_snapshot_rejects_malformed_logical_payload() {
     let snapshot = golden_chunk_snapshot();
-    let logical = snapshot.encode_logical();
+    let logical = snapshot.encode_logical_checked().expect("golden logical");
     let offsets = snapshot_section_offsets(&logical);
 
     let mut cases: Vec<(&str, Box<dyn Fn(&mut Vec<u8>)>)> = Vec::new();

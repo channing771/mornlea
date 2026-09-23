@@ -1247,14 +1247,37 @@ rather than checking that it omits a few names.
   The frame magic, the frame header descriptor, the four-byte content size, and
   the trailing content checksum are pinned separately because those parts are
   identical across the two implementations.
-- Intermediate layers (`encode_logical`, `decode_logical`, `decode_envelope`,
-  `SnapshotEnvelope::decompress`, `compress_logical`) are public so contract
-  tests can prove decode exactness byte for byte and rejection before
-  allocation without reaching into private state
+- Intermediate layers (`encode_logical_checked`, `decode_logical`,
+  `decode_envelope`, `SnapshotEnvelope::decompress`, `compress_logical`) are
+  public so contract tests can prove decode exactness byte for byte and
+  rejection before allocation without reaching into private state
   (`chunk_snapshot_round_trip_preserves_golden_bytes`,
   `chunk_snapshot_round_trips_through_committed_fixture`,
   `chunk_snapshot_rejects_malformed_envelope_and_bounds`,
   `chunk_snapshot_rejects_malformed_logical_payload`).
+- `src/codec.rs` owns the family's one zstd context pair. `ProtocolCodec::new`
+  creates one compressor and one decompressor, `decode_snapshot` reuses the
+  decoder context, and `encode_snapshot_into` reuses the compressor context;
+  no global or static context exists, no background thread is started, and no
+  call constructs a context of its own. `compress_logical` stays the one-shot
+  frame builder the contract tests use to construct malformed payloads from
+  mutated logical bytes; production compression runs through the owned context.
+  One call's scratch is bounded by the 2 MiB logical and 1 MiB compressed
+  ceilings, with `try_reserve` for the compressed scratch and
+  `ProtocolError::Allocation` for an unreservable request; the infallible
+  `encode`/`encode_logical` entry points are removed, so a record mutated after
+  construction is refused instead of panicking inside the encoder
+  (`tests/protocol_snapshot.rs`).
+- The failure boundaries keep the envelope's checks and the frame's checks
+  distinct. A declared compressed length the payload cannot back is
+  `Truncated`, both envelope ceilings are `FrameTooLarge` before the frame is
+  touched, a frame that decompresses to a different length than the envelope
+  declares stays `Truncated`, and a length-complete frame the zstd layer
+  rejects is `Integrity` — the compressed stream's own content-checksum
+  failure, which the envelope checks could not catch. `tests/protocol_snapshot.rs`
+  pins each boundary separately, and the corpus consumer publishes `Integrity`
+  as the `integrity` category
+  (`snapshot_compressed_layer_negatives_are_refused_at_their_boundary`).
 - `SectionData` and the domain's `PalettedSection` are the same compact
   storage in two representations. `TryFrom<SectionData> for PalettedSection`
   moves the palette and packed words through the domain's checked
@@ -1313,6 +1336,17 @@ rather than checking that it omits a few names.
   shared `validate_stack_view` gate, so a malformed real reference is refused
   at the packet boundary.
 
+`tests/protocol_snapshot.rs` is the compressed family's group suite: the
+committed Go fixture's logical payload is reproduced byte for byte and its frame
+pins are checked against a Rust re-encoding, `ProtocolCodec` round-trips the
+canonical mixed vector and every-single vector through one owned context, the
+sections-mutation red is pinned as typed errors instead of panics, a short
+destination is refused with every byte unchanged, an invalid value wins over a
+short destination, and each compressed-layer boundary (both envelope ceilings,
+a truncated frame, a checksum failure) is pinned at its own error variant. It
+needs no corpus files, so it runs before the controller integrates the exported
+candidates.
+
 ## Focused Verification
 
 ```bash
@@ -1331,6 +1365,8 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_client_chat --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_world_delta --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_world_delta --locked -- --list
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_snapshot --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_snapshot --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
 
@@ -1392,12 +1428,18 @@ furnace-output rules off the wire, and every proper truncation plus one
 trailing byte reject. It also needs no corpus files.
 
 `tests/protocol_corpus.rs` executes the corpus cases this crate owns through
-the real codec paths — `read_frame`/`write_frame` for framing and
+the real codec paths — `read_frame`/`write_frame` for framing,
 `decode_inbound` plus the strict outbound encoders for the
-`protocol.client.ClientHello` and `protocol.client.LoginStart` packet families
-— and compares the complete result against the outcome the independent Go
-producer recorded. It loads the `corpus_frame` selection and the
-`mornlea_protocol` selection the packet groups register into; a packet family
-whose cases the controller has not integrated yet fails as a missing corpus
-case rather than as an empty selection. The preexisting `runtime_contract`
-framing test stays a separate regression suite.
+`protocol.client.ClientHello` and `protocol.client.LoginStart` packet families,
+and each later group's real packet surface — and compares the complete result
+against the outcome the independent Go producer recorded. It loads the
+`corpus_frame` selection and the `mornlea_protocol` selection the packet groups
+register into; a packet family whose cases the controller has not integrated
+yet fails as a missing corpus case rather than as an empty selection. The
+preexisting `runtime_contract` framing test stays a separate regression suite.
+The rejection categories the consumer derives from this crate's error variants
+include the `integrity` boundary for a compressed stream the envelope checks
+could not catch; for the one compressed family, the corpus digest is the
+SHA-256 of the canonical logical payload rather than of the compressed bytes,
+because the two implementations' encoders legitimately publish different
+compressed blocks.

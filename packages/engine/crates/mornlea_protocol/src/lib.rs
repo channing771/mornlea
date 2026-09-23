@@ -25,6 +25,7 @@ mod chest_state;
 mod chunk_snapshot;
 mod client_hello;
 mod close_container;
+mod codec;
 mod collect_water;
 mod combat_hit;
 mod command_rejected;
@@ -107,6 +108,7 @@ pub use chunk_snapshot::{
 };
 pub use client_hello::{ClientHello, InboundHello};
 pub use close_container::CloseContainer;
+pub use codec::ProtocolCodec;
 pub use collect_water::CollectWater;
 pub use combat_hit::{
     COMBAT_TARGET_HOSTILE, COMBAT_TARGET_PASSIVE, COMBAT_TARGET_PLAYER, CombatHit, MAX_HEALTH,

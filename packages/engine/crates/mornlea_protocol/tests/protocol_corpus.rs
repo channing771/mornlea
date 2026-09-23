@@ -117,6 +117,7 @@ const CHAT_COMMAND_FAMILY: &str = "protocol.client.ChatCommand";
 /// The two packet families the world delta producer group registers.
 const BLOCK_CHANGES_FAMILY: &str = "protocol.server.BlockChanges";
 const FORGET_CHUNKS_FAMILY: &str = "protocol.server.ForgetChunks";
+const CHUNK_SNAPSHOT_FAMILY: &str = "protocol.server.ChunkSnapshot";
 /// The packet families' protocol version, matching the manifest family rows.
 const PACKET_VERSION: &str = "45";
 /// The category label every accepted control packet outcome publishes.
@@ -242,6 +243,13 @@ fn dispatch_frame(case: &FrozenCase) -> serde_json::Value {
 /// packet payload and never over a message string. A variant with no mapping is
 /// a panic, because an unclassified rejection must never become corpus
 /// evidence.
+///
+/// `Integrity` is the compressed-stream boundary only the chunk-snapshot family
+/// can publish: the envelope's length checks already passed, so the failure the
+/// zstd layer reports is the frame's own content-checksum (or equivalent
+/// frame-level) corruption. It is deliberately distinct from `Truncated`, which
+/// stays the incomplete-bytes boundary the envelope's remaining-length check
+/// and a declared length the frame cannot back both publish.
 fn packet_rejection_category(err: mornlea_protocol::ProtocolError) -> String {
     let category = match err {
         mornlea_protocol::ProtocolError::NonCanonicalUvarint
@@ -251,6 +259,7 @@ fn packet_rejection_category(err: mornlea_protocol::ProtocolError) -> String {
         mornlea_protocol::ProtocolError::TrailingBytes => "trailing",
         mornlea_protocol::ProtocolError::InvalidEnum
         | mornlea_protocol::ProtocolError::UnknownPacket => "invalid-enum",
+        mornlea_protocol::ProtocolError::Integrity => "integrity",
         mornlea_protocol::ProtocolError::InvalidIdentity => "invalid-identity",
         mornlea_protocol::ProtocolError::UnsupportedVersion => "unsupported-version",
         mornlea_protocol::ProtocolError::InvalidString
@@ -741,6 +750,194 @@ fn encode_ok_outcome(
             "fields": fields,
             "kind": "ok"
         }),
+        Err(err) => packet_error(err),
+    }
+}
+
+/// Reads one signed numeric field a section entry carries.
+fn section_i32_field(entry: &serde_json::Value, name: &str) -> i32 {
+    i32::try_from(
+        entry
+            .get(name)
+            .and_then(|value| value.as_i64())
+            .unwrap_or_else(|| panic!("section names no {name}")),
+    )
+    .unwrap_or_else(|_| panic!("section field {name} exceeds i32"))
+}
+
+/// Reads one unsigned numeric field a section entry carries.
+fn section_u16_field(entry: &serde_json::Value, name: &str) -> u16 {
+    u16::try_from(
+        entry
+            .get(name)
+            .and_then(|value| value.as_i64())
+            .unwrap_or_else(|| panic!("section names no {name}")),
+    )
+    .unwrap_or_else(|_| panic!("section field {name} exceeds u16"))
+}
+
+/// Reads one paletted section's ordered palette.
+fn section_palette_field(entry: &serde_json::Value) -> Vec<u16> {
+    entry
+        .get("palette")
+        .and_then(|value| value.as_array())
+        .unwrap_or_else(|| panic!("paletted section names no palette"))
+        .iter()
+        .map(|id| {
+            u16::try_from(
+                id.as_i64()
+                    .unwrap_or_else(|| panic!("palette names a non-integer")),
+            )
+            .unwrap_or_else(|_| panic!("palette entry exceeds u16"))
+        })
+        .collect()
+}
+
+/// Reads one packed section's exact word bits from their fixed-width hex text.
+fn section_words_field(entry: &serde_json::Value, case: &FrozenCase) -> Vec<u64> {
+    entry
+        .get("words")
+        .and_then(|value| value.as_array())
+        .unwrap_or_else(|| panic!("case {} packed section names no words", case.id))
+        .iter()
+        .map(|word| {
+            let text = word
+                .as_str()
+                .unwrap_or_else(|| panic!("case {} packed word is not text", case.id));
+            u64::from_str_radix(text, 16)
+                .unwrap_or_else(|_| panic!("case {} names invalid packed word {text}", case.id))
+        })
+        .collect()
+}
+
+/// Renders one section's semantic fields, the shape the Go producer publishes
+/// for the same record.
+///
+/// The container kind implies the bits-per-slot, so the wire field is not
+/// restated. The palette renders as plain numbers, which preserves its order,
+/// and the packed words render as fixed-width lowercase hexadecimal, which
+/// preserves their exact bits.
+fn snapshot_section_fields(section: &mornlea_protocol::SectionData) -> serde_json::Value {
+    let words: Vec<String> = section
+        .packed
+        .iter()
+        .map(|word| format!("{word:016x}"))
+        .collect();
+    match section.storage {
+        mornlea_protocol::SectionStorage::Single => serde_json::json!({
+            "y": section.y,
+            "kind": "single",
+            "block": section.single
+        }),
+        mornlea_protocol::SectionStorage::Indexed => serde_json::json!({
+            "y": section.y,
+            "kind": if section.bits == 4 { "indexed4" } else { "indexed8" },
+            "palette": section.palette,
+            "words": words
+        }),
+        mornlea_protocol::SectionStorage::Direct => serde_json::json!({
+            "y": section.y,
+            "kind": "direct",
+            "words": words
+        }),
+    }
+}
+
+/// Renders the semantic fields one chunk snapshot publishes.
+///
+/// The revision renders as a decimal string so the full u64 range stays
+/// lossless, and the section list renders in the column order the wire pins.
+fn snapshot_fields(snapshot: &mornlea_protocol::ChunkSnapshot) -> serde_json::Value {
+    let sections: Vec<serde_json::Value> = snapshot
+        .sections
+        .iter()
+        .map(snapshot_section_fields)
+        .collect();
+    serde_json::json!({
+        "dimension": snapshot.dimension.get(),
+        "chunk_x": snapshot.chunk_x,
+        "chunk_z": snapshot.chunk_z,
+        "revision": snapshot.revision.to_string(),
+        "sections": sections
+    })
+}
+
+/// Builds the record one snapshot encode case names from its typed fields, so a
+/// mutated or invalid case is refused by the production validation rather than
+/// by a constructor guard.
+fn snapshot_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::ChunkSnapshot, mornlea_protocol::ProtocolError> {
+    let dimension = dimension_field(case)?;
+    let mut sections = Vec::new();
+    for entry in record_array(case, "sections") {
+        let kind = entry
+            .get("kind")
+            .and_then(|value| value.as_str())
+            .unwrap_or_else(|| panic!("case {} section names no kind", case.id))
+            .to_owned();
+        let y = section_i32_field(entry, "y");
+        let section = match kind.as_str() {
+            "single" => mornlea_protocol::SectionData::single(y, section_u16_field(entry, "block")),
+            "indexed4" => mornlea_protocol::SectionData::indexed(
+                y,
+                4,
+                section_palette_field(entry),
+                section_words_field(entry, case),
+            ),
+            "indexed8" => mornlea_protocol::SectionData::indexed(
+                y,
+                8,
+                section_palette_field(entry),
+                section_words_field(entry, case),
+            ),
+            "direct" => mornlea_protocol::SectionData::direct(y, section_words_field(entry, case)),
+            other => panic!("case {} section names unknown kind {other}", case.id),
+        };
+        sections.push(section);
+    }
+    mornlea_protocol::ChunkSnapshot::new(
+        dimension,
+        i32_field(case, "chunk_x"),
+        i32_field(case, "chunk_z"),
+        unsigned_field(case, "revision"),
+        sections,
+    )
+}
+
+/// Executes one snapshot encode case through the owned context and records the
+/// logical payload's digest.
+///
+/// The digest is taken over the logical bytes of the codec's own frame, never
+/// over the compressed bytes: the Go encoder legitimately publishes a different
+/// compressed block for the same logical payload, while the logical layer is
+/// byte-identical, which is what makes the two implementations' digests agree.
+fn snapshot_encode_outcome(case: &FrozenCase) -> serde_json::Value {
+    let snapshot = match snapshot_request(case) {
+        Ok(snapshot) => snapshot,
+        Err(err) => return packet_error(err),
+    };
+    let mut codec = match mornlea_protocol::ProtocolCodec::new() {
+        Ok(codec) => codec,
+        Err(err) => return packet_error(err),
+    };
+    let mut dst = vec![0u8; mornlea_protocol::MAX_COMPRESSED_SNAPSHOT];
+    match codec.encode_snapshot_into(&snapshot, &mut dst) {
+        Ok(written) => {
+            dst.truncate(written);
+            let logical = match mornlea_protocol::ChunkSnapshot::decode_envelope(&dst)
+                .and_then(|envelope| envelope.decompress())
+            {
+                Ok(logical) => logical,
+                Err(err) => return packet_error(err),
+            };
+            serde_json::json!({
+                "category": PACKET_OUTCOME_CATEGORY,
+                "encoded_payload_digest": payload_digest(&logical),
+                "fields": snapshot_fields(&snapshot),
+                "kind": "ok"
+            })
+        }
         Err(err) => packet_error(err),
     }
 }
@@ -1555,6 +1752,18 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
             }
             other => panic!("unsupported packet operation for {}: {other}", case.id),
         },
+        CHUNK_SNAPSHOT_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::ChunkSnapshot::decode(&case.input) {
+                Ok(snapshot) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": snapshot_fields(&snapshot),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => snapshot_encode_outcome(case),
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
         other => panic!("unsupported packet family for {}: {other}", case.id),
     }
 }
@@ -1597,7 +1806,8 @@ fn dispatch_case(case: &FrozenCase) -> serde_json::Value {
         | DROP_STACK_FAMILY
         | CHAT_COMMAND_FAMILY
         | BLOCK_CHANGES_FAMILY
-        | FORGET_CHUNKS_FAMILY => dispatch_packet(case),
+        | FORGET_CHUNKS_FAMILY
+        | CHUNK_SNAPSHOT_FAMILY => dispatch_packet(case),
         other => panic!("unregistered protocol family for {}: {other}", case.id),
     }
 }
@@ -2207,7 +2417,6 @@ const WORLD_DELTA_CASE_IDS: [&str; 22] = [
 fn is_world_delta_family(family: &str) -> bool {
     family == BLOCK_CHANGES_FAMILY || family == FORGET_CHUNKS_FAMILY
 }
-
 #[test]
 fn protocol_corpus_packet_world_delta_cases_are_executed() {
     // The case assets are exported by the Go producer and integrated by the
@@ -2300,4 +2509,73 @@ fn protocol_corpus_frame_encode_matches_the_reviewed_wire() {
     let mut mutated_digest = normalized;
     mutated_digest["encoded_payload_digest"] = serde_json::json!("sha256:0");
     assert_ne!(case.normalized, mutated_digest);
+}
+
+/// The case identities the chunk-snapshot group registers. They mirror the Go
+/// producer's registration, so a case that only one side names is a mismatch
+/// rather than a shared name. The merged manifest sorts case IDs, so the
+/// comparison sorts this list too.
+///
+/// The count is the reviewed table's enumerated labels: the committed fixture
+/// and the mixed vector as decode cases, the mixed and all-single vectors as
+/// encode cases, the five logical-layer encode negatives, and the four
+/// compressed-layer decode negatives.
+const SNAPSHOT_CASE_IDS: [&str; 13] = [
+    "protocol.server.ChunkSnapshot/45/decode-checksum-failure",
+    "protocol.server.ChunkSnapshot/45/decode-compressed-length-above-cap",
+    "protocol.server.ChunkSnapshot/45/decode-decoded-length-above-cap",
+    "protocol.server.ChunkSnapshot/45/decode-fixture",
+    "protocol.server.ChunkSnapshot/45/decode-truncated-zstd-frame",
+    "protocol.server.ChunkSnapshot/45/decode-valid-mixed",
+    "protocol.server.ChunkSnapshot/45/encode-23-sections",
+    "protocol.server.ChunkSnapshot/45/encode-direct-high-bits",
+    "protocol.server.ChunkSnapshot/45/encode-palette-index-out-of-range",
+    "protocol.server.ChunkSnapshot/45/encode-revision-zero",
+    "protocol.server.ChunkSnapshot/45/encode-valid-all-single",
+    "protocol.server.ChunkSnapshot/45/encode-valid-mixed",
+    "protocol.server.ChunkSnapshot/45/encode-y-order-swap",
+];
+
+/// Reports whether one family belongs to the chunk-snapshot producer group.
+fn is_chunk_snapshot_family(family: &str) -> bool {
+    family == CHUNK_SNAPSHOT_FAMILY
+}
+
+#[test]
+fn protocol_corpus_packet_chunk_snapshot_cases_are_executed() {
+    // The case assets are exported by the Go producer and integrated by the
+    // controller, so before that merge this test reports the missing corpus
+    // cases instead of an empty selection that would look like a passing run.
+    let cases = load_cases_for_consumer(CorpusConsumer::Protocol);
+    let snapshot: Vec<&FrozenCase> = cases
+        .iter()
+        .filter(|case| is_chunk_snapshot_family(&case.family))
+        .collect();
+    let executed: Vec<&str> = snapshot.iter().map(|case| case.id.as_str()).collect();
+    let mut expected: Vec<&str> = SNAPSHOT_CASE_IDS.to_vec();
+    // The merged manifest sorts case IDs; compare as the reviewed set, not in
+    // the authoring order of this suite's constant.
+    expected.sort_unstable();
+    assert_eq!(
+        executed, expected,
+        "the chunk snapshot selection does not carry the reviewed case set"
+    );
+    assert!(
+        !snapshot.is_empty(),
+        "the chunk snapshot selection executed zero cases"
+    );
+    for case in snapshot {
+        assert_eq!(
+            case.consumer,
+            CorpusConsumer::Protocol,
+            "case {} carries the wrong consumer",
+            case.id
+        );
+        assert!(
+            !case.operation.is_empty(),
+            "case {} names no operation",
+            case.id
+        );
+        assert_normalized(case, dispatch_packet(case));
+    }
 }

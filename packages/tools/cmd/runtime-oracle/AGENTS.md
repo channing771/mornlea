@@ -308,6 +308,36 @@ and the isolated export helpers (`exportGeneratedAssets`,
   `tests/protocol_world_delta.rs` rather than corpus assets. Provenance is
   `codec_server.go` plus the family's own message file: `snapshot.go` for
   `BlockChanges` and `message_chunk.go` for `ForgetChunks`.
+- The ninth packet producer group is `protocol_snapshot_test.go`
+  (`protocol.server.ChunkSnapshot`, decode and encode), the one family whose
+  wire payload is compressed. It executes `codec.DecodeServer`/`EncodeServer`
+  in the play state with the case's own `PacketKey`, and normalizes
+  `dimension`, the chunk coordinates, the section indices and the palette as
+  plain JSON integers with `revision` as a decimal string and the packed
+  words as fixed-width lowercase-hexadecimal strings; the section kinds
+  (`single`, `indexed4`, `indexed8`, `direct`) imply the bits-per-slot, so the
+  wire field is not restated. **Corpus digests are logical, never
+  compressed**: the Rust and Go zstd encoders legitimately publish different
+  compressed blocks, so for every encode case the producer encodes through the
+  Go codec, decompresses its own output back to the canonical logical bytes
+  with the zstd package this module already builds through `packages/shared`,
+  and digests those; it returns the logical payload as its encoded output
+  because the shared runner derives a case's recorded digest from the bytes
+  its producer returns, and no corpus case ever records a digest of
+  compressed bytes. The category table resolves the envelope's declared-length
+  ceilings (`exceeds limit`) to `capacity`, the envelope's remaining-length
+  check (`compressed length does not match snapshot envelope`) to `truncated`,
+  and a length-complete frame the zstd layer rejects (`decompress snapshot`)
+  to `integrity` — the first family to publish that category, which the
+  envelope checks could not catch. The five logical-layer validator
+  rejections (zero revision, section count, section Y, palette slot beyond
+  the palette, direct high bits) resolve to `invalid-value`. The committed Go
+  fixture is read verbatim as one decode case and is never rewritten, and this
+  group's assets render compactly rather than with the committed two-space
+  layout because the mixed vector's packed words would otherwise exceed the
+  256 KiB JSON case budget. Provenance is `codec_server.go` plus
+  `chunk_codec.go`, which owns the envelope and the logical layers, and
+  `snapshot.go`, which owns the validators.
 - `validProducerIDs` is the closed exporter allowlist. It carries the 18
   protocol group producer IDs the v45 packet plan names
   (`runtime-oracle/protocol-negotiation`, `-control`, `-client-control`,

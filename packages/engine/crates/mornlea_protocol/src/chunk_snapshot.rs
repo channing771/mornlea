@@ -34,14 +34,17 @@
 //!
 //! # Layers
 //!
-//! The module keeps the Go decomposition: [`ChunkSnapshot::encode`] and
-//! [`ChunkSnapshot::decode`] are the whole Play payload,
+//! The module keeps the Go decomposition: [`crate::codec::ProtocolCodec`]
+//! encodes the whole Play payload through one owned zstd context and
+//! [`ChunkSnapshot::decode`] decodes it,
 //! [`ChunkSnapshot::decode_envelope`] plus [`SnapshotEnvelope::decompress`] are
-//! the envelope and its zstd frame, and [`ChunkSnapshot::encode_logical`] plus
+//! the envelope and its zstd frame, and [`ChunkSnapshot::encode_logical_checked`] plus
 //! [`ChunkSnapshot::decode_logical`] are the uncompressed payload. The
 //! intermediate layers are public so contract tests can prove decode exactness
 //! byte for byte and rejection before allocation without reaching into private
-//! state.
+//! state. [`compress_logical`] remains the one-shot frame builder the contract
+//! tests use to construct malformed payloads; production compression runs
+//! through the owned context instead, never through a per-call context.
 
 use crate::block::{BLOCKS_PER_SECTION, SECTIONS_PER_CHUNK, registered_block};
 use crate::bytes::{ByteDecoder, ByteEncoder};
@@ -58,6 +61,11 @@ pub const MAX_COMPRESSED_SNAPSHOT: usize = 1 << 20;
 /// `MaxDecodedSnapshot`. It bounds both the declared length in the envelope
 /// and the size of an encoded logical payload.
 pub const MAX_DECODED_SNAPSHOT: usize = 2 << 20;
+
+/// Window-log ceiling of the decoder context, derived from the decoded
+/// ceiling: a frame declaring a larger window is refused before its window is
+/// allocated, which is the Rust side of the Go decoder's memory limit.
+const MAX_DECODED_WINDOW_LOG: u32 = MAX_DECODED_SNAPSHOT.trailing_zeros();
 
 /// Fixed envelope header: the declared decoded length, then the declared
 /// compressed length. Both are little-endian `u32` and neither includes the
@@ -176,6 +184,14 @@ impl SectionData {
     /// registered block range, and a direct word must not carry bits above its
     /// 15-bit slot. Rejecting the combination instead of ignoring it keeps a
     /// partially described section from being silently reinterpreted.
+    ///
+    /// A block number that is not registered is the `InvalidEnum` boundary the
+    /// registered-block predicate owns. The two value-range boundaries — a
+    /// packed slot naming an entry beyond the palette and a direct word
+    /// carrying bits above its slot — report `InvalidRange`, matching the Go
+    /// validator's own messages for the same conditions
+    /// (`palette slot ... exceeds palette length`, `unused high bits`), which
+    /// the corpus publishes as the `invalid-value` category.
     pub fn validate(&self) -> Result<(), ProtocolError> {
         if self.y < 0 || self.y >= SECTIONS_PER_CHUNK as i32 {
             return Err(ProtocolError::InvalidRange);
@@ -213,7 +229,7 @@ impl SectionData {
                     if read_section_packed(&self.packed, self.bits, index) as usize
                         >= self.palette.len()
                     {
-                        return Err(ProtocolError::InvalidEnum);
+                        return Err(ProtocolError::InvalidRange);
                     }
                 }
             }
@@ -226,7 +242,7 @@ impl SectionData {
                 }
                 for word in &self.packed {
                     if word >> 60 != 0 {
-                        return Err(ProtocolError::InvalidEnum);
+                        return Err(ProtocolError::InvalidRange);
                     }
                 }
                 for index in 0..BLOCKS_PER_SECTION {
@@ -323,18 +339,54 @@ pub struct SnapshotEnvelope {
 
 impl SnapshotEnvelope {
     /// Decompresses the frame into a destination of exactly `decoded_length`
-    /// bytes, matching the Go `DecodeAll` call. The frame's own content
-    /// checksum is verified, so a truncated or altered frame is rejected here,
-    /// and a frame whose content does not fit the declared length is rejected
-    /// rather than decompressed into a larger buffer.
+    /// bytes through a one-shot context, matching the Go `DecodeAll` call.
+    ///
+    /// A frame the zstd layer rejects reports [`ProtocolError::Integrity`]:
+    /// the envelope's length checks already proved the frame bytes are present
+    /// and correctly sized, so the compressed stream itself — its content
+    /// checksum or an equivalent frame-level failure — is what refused the
+    /// payload. A frame that decompresses to a different length than the
+    /// envelope declares is the length-incomplete condition, which stays
+    /// [`ProtocolError::Truncated`] and is never conflated with the integrity
+    /// boundary.
     pub fn decompress(&self) -> Result<Vec<u8>, ProtocolError> {
-        let decoded = zstd::bulk::decompress(&self.compressed, self.decoded_length)
-            .map_err(|_| ProtocolError::Truncated)?;
-        if decoded.len() != self.decoded_length {
-            return Err(ProtocolError::Truncated);
-        }
-        Ok(decoded)
+        decompress_frame(&self.compressed, self.decoded_length, None)
     }
+
+    /// Decompresses the frame through an owned decoder context, so a session's
+    /// stream never constructs a context per frame. The error mapping is the
+    /// one-shot path's: a rejected frame is the integrity boundary and a
+    /// length mismatch is the truncated boundary.
+    pub(crate) fn decompress_with(
+        &self,
+        decompressor: &mut zstd::bulk::Decompressor<'_>,
+    ) -> Result<Vec<u8>, ProtocolError> {
+        decompress_frame(&self.compressed, self.decoded_length, Some(decompressor))
+    }
+}
+
+/// Decompresses one length-complete frame into a destination bounded by the
+/// envelope's declared decoded length.
+///
+/// The one decision behind both decompression entry points: a frame the zstd
+/// layer rejects is the compressed stream's own failure (`Integrity`), because
+/// the envelope's length checks already passed; a frame that decompresses to a
+/// different length than declared is the length-incomplete condition
+/// (`Truncated`).
+fn decompress_frame(
+    compressed: &[u8],
+    decoded_length: usize,
+    decompressor: Option<&mut zstd::bulk::Decompressor<'_>>,
+) -> Result<Vec<u8>, ProtocolError> {
+    let decoded = match decompressor {
+        Some(context) => context.decompress(compressed, decoded_length),
+        None => zstd::bulk::decompress(compressed, decoded_length),
+    }
+    .map_err(|_| ProtocolError::Integrity)?;
+    if decoded.len() != decoded_length {
+        return Err(ProtocolError::Truncated);
+    }
+    Ok(decoded)
 }
 
 /// Play ChunkSnapshot payload: one chunk column of the authoritative world.
@@ -417,17 +469,6 @@ impl ChunkSnapshot {
         size
     }
 
-    /// Encodes the whole Play payload: envelope header plus zstd frame.
-    pub fn encode(&self) -> Vec<u8> {
-        let logical = self.encode_logical();
-        let compressed = compress_logical(&logical).expect("logical snapshot is compressible");
-        let mut payload = Vec::with_capacity(SNAPSHOT_ENVELOPE_LENGTH + compressed.len());
-        payload.extend_from_slice(&(logical.len() as u32).to_le_bytes());
-        payload.extend_from_slice(&(compressed.len() as u32).to_le_bytes());
-        payload.extend_from_slice(&compressed);
-        payload
-    }
-
     /// Decodes the whole Play payload.
     pub fn decode(payload: &[u8]) -> Result<Self, ProtocolError> {
         let logical = Self::decode_envelope(payload)?.decompress()?;
@@ -464,15 +505,21 @@ impl ChunkSnapshot {
         })
     }
 
-    /// Encodes the uncompressed logical payload.
-    pub fn encode_logical(&self) -> Vec<u8> {
-        self.validate()
-            .expect("validated chunk snapshot is encodable");
-        assert!(
-            self.logical_size() <= MAX_DECODED_SNAPSHOT,
-            "validated chunk snapshot exceeds the decoded ceiling"
-        );
-        let mut encoder = ByteEncoder::with_capacity(self.logical_size());
+    /// Encodes the uncompressed logical payload, re-validating the current
+    /// value first so a record mutated after construction is refused here
+    /// instead of panicking inside the encoder.
+    ///
+    /// The checked logical size is compared with the decoded ceiling before
+    /// any byte is reserved: a validated snapshot is bounded well below that
+    /// ceiling, so the reservation cannot overflow and the only remaining
+    /// failure is the primitive encoder's own.
+    pub fn encode_logical_checked(&self) -> Result<Vec<u8>, ProtocolError> {
+        self.validate()?;
+        let size = self.logical_size();
+        if size > MAX_DECODED_SNAPSHOT {
+            return Err(ProtocolError::FrameTooLarge);
+        }
+        let mut encoder = ByteEncoder::with_capacity(size);
         encoder.i32(i32::from(self.dimension.get()));
         encoder.i32(self.chunk_x);
         encoder.i32(self.chunk_z);
@@ -503,9 +550,7 @@ impl ChunkSnapshot {
                 }
             }
         }
-        encoder
-            .finish()
-            .expect("validated chunk snapshot is encodable")
+        encoder.finish()
     }
 
     /// Decodes the uncompressed logical payload.
@@ -533,26 +578,74 @@ impl ChunkSnapshot {
     }
 }
 
-/// Compresses one logical payload into a single-frame zstd stream.
+/// Creates the one zstd compressor context the codec and the one-shot helper
+/// share. The settings mirror the Go encoder: compression level 3 (its default)
+/// with the content checksum enabled, and the exact logical length pledged per
+/// call, so the frame carries its content size and the trailing xxhash-64 the
+/// Go decoder also verifies.
+pub(crate) fn new_compressor() -> Result<zstd::bulk::Compressor<'static>, ProtocolError> {
+    let mut compressor =
+        zstd::bulk::Compressor::new(COMPRESSION_LEVEL).map_err(|_| ProtocolError::Allocation)?;
+    compressor
+        .set_parameter(zstd::zstd_safe::CParameter::ChecksumFlag(true))
+        .map_err(|_| ProtocolError::Allocation)?;
+    Ok(compressor)
+}
+
+/// Creates the one zstd decompressor context the codec and the one-shot helper
+/// share. The window limit is the decoded ceiling itself, mirroring the Go
+/// decoder's 2 MiB memory limit, so a frame declaring an oversized window is
+/// refused instead of allocating it.
+pub(crate) fn new_decompressor() -> Result<zstd::bulk::Decompressor<'static>, ProtocolError> {
+    let mut decompressor =
+        zstd::bulk::Decompressor::new().map_err(|_| ProtocolError::Allocation)?;
+    decompressor
+        .set_parameter(zstd::zstd_safe::DParameter::WindowLogMax(
+            MAX_DECODED_WINDOW_LOG,
+        ))
+        .map_err(|_| ProtocolError::Allocation)?;
+    Ok(decompressor)
+}
+
+/// Compresses one logical payload into a single-frame zstd stream through the
+/// given context.
 ///
-/// The settings mirror the Go encoder: one worker and the content checksum
-/// enabled, with the exact logical length pledged so the frame carries its
-/// content size. The compressed block payload legitimately differs from the Go
-/// encoder's; see the module documentation.
-pub fn compress_logical(logical: &[u8]) -> Result<Vec<u8>, ProtocolError> {
-    let mut encoder = zstd::stream::write::Encoder::new(Vec::new(), COMPRESSION_LEVEL)
-        .map_err(|_| ProtocolError::InvalidRange)?;
-    encoder
+/// The pledged source size is set per call because it is the payload's own
+/// length, and the compressed scratch is reserved with `try_reserve`, so an
+/// unreservable request reports the allocation boundary instead of aborting.
+/// A context or compression failure never publishes partial output.
+pub(crate) fn compress_frame(
+    logical: &[u8],
+    compressor: &mut zstd::bulk::Compressor<'_>,
+) -> Result<Vec<u8>, ProtocolError> {
+    compressor
+        .context_mut()
         .set_pledged_src_size(Some(logical.len() as u64))
-        .map_err(|_| ProtocolError::InvalidRange)?;
-    encoder
-        .include_checksum(true)
-        .map_err(|_| ProtocolError::InvalidRange)?;
-    encoder
-        .include_contentsize(true)
-        .map_err(|_| ProtocolError::InvalidRange)?;
-    std::io::Write::write_all(&mut encoder, logical).map_err(|_| ProtocolError::Truncated)?;
-    encoder.finish().map_err(|_| ProtocolError::Truncated)
+        .map_err(|_| ProtocolError::Allocation)?;
+    let bound = zstd::zstd_safe::compress_bound(logical.len());
+    let mut compressed = Vec::new();
+    compressed
+        .try_reserve(bound)
+        .map_err(|_| ProtocolError::Allocation)?;
+    let written = compressor
+        .compress_to_buffer(logical, &mut compressed)
+        .map_err(|_| ProtocolError::Allocation)?;
+    compressed.truncate(written);
+    Ok(compressed)
+}
+
+/// Compresses one logical payload into a single-frame zstd stream with a fresh
+/// context.
+///
+/// This is the one-shot frame builder the contract tests use to construct
+/// malformed payloads from mutated logical bytes; production compression runs
+/// through [`crate::codec::ProtocolCodec`]'s owned context instead. The settings
+/// mirror the Go encoder, so the frame's magic, header descriptor, content size
+/// and trailing checksum are the parts the two implementations share, while the
+/// compressed block payload legitimately differs from the Go encoder's; see the
+/// module documentation.
+pub fn compress_logical(logical: &[u8]) -> Result<Vec<u8>, ProtocolError> {
+    compress_frame(logical, &mut new_compressor()?)
 }
 
 /// Rejects a declared field count the remaining logical payload cannot back,
