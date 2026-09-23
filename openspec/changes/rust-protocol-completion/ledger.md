@@ -265,3 +265,20 @@
 **Rollback:** revert `975b44c5` and `d7e7b4b7` individually; corpus returns to 953.
 
 **Architecture skill: no change.**
+
+
+## Node 3.6 — 2026-09-24
+
+**Status:** complete. Commits `d9e00fc7` (`feat(protocol): qualify companion packets`) + controller integration `90a76cbe` on top of `8f109aff`.
+
+**Deliverable:** the three companion families (`CompanionSpawn` 17, `CompanionStates` 18, `CompanionDespawn` 19) on the common fallible surface; overworld-only; pitch ∈ [−π/2,+π/2] inclusive pinned at exact bits (next float rejects); companion name rule (no embedded whitespace); count 1..=4 before record scan; strict UUID byte order. 19 corpus cases (6/9/4) through the real Go codec, producer `runtime-oracle/protocol-companions`; 6 routes; group test 16/16 incl. the latent-boundary section.
+
+**Rulings frozen:** the node-3.5 folded-validator precedent applied proactively (no NEEDS_CONTEXT round trip) — the producer maps the folded spawn/state messages to invalid-value; zero/wrong-version-ID and dimension-1 are latent Rust-only pins. Two implementer-found category corrections (reviewer-verified against Go source): `CompanionStates` decode-trailing-byte is `truncated` (the Go batch's exact remaining-length rule, mirrored by `require_records`), and `CompanionDespawn` decode-trailing-byte is `capacity` (Go's pre-parse 16-byte fixed maximum; the Rust despawn decoder gained the same pre-read ceiling — the one Rust behavior change not red-driven, justified to keep both sides on one boundary). The plan's literal NONE red did not exist on the baseline (`CompanionId` was already the checked newtype); unconstructibility pinned instead.
+
+**Evidence:** group 16/16; `runtime_contract` 134/134; Go producer 8/8; codec golden filters ok; full oracle ok; audit ok; fmt/clippy/gofmt/vet clean; the 19 exported cases ran through the real Rust consumer pre-commit (all matched). Corpus integrity: 3 families changed, 973→992 (+19/−0), `source_revision` preserved. Post-integration whole protocol crate 331/331.
+
+**Review ruling:** Approved, 0 Crit/0 Imp/3 Minor (group-numbering drift in the corpus doc-comment — one renumbering pass pending; the despawn `runtime_contract` trailing pin updated to `FrameTooLarge` per the ceiling ruling; the spawn name-prefix cut pins note).
+
+**Rollback:** revert `d9e00fc7` and `90a76cbe` individually; corpus returns to 973.
+
+**Architecture skill: no change.**
