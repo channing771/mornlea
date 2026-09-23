@@ -1,0 +1,19 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:143fe94ec81b7dc82ba106eab7ed5b271aba58822a304cc88f0ed1c54bdd1fb6",
+  "fields": {
+    "companion_id": "000102030405460788090a0b0c0d0e0f",
+    "dimension": 0,
+    "name": "Mira",
+    "pitch": "3fc90fdb",
+    "position": [
+      "80000000",
+      "3f800000",
+      "40000000"
+    ],
+    "tick": "0",
+    "yaw": "00000000"
+  },
+  "kind": "ok"
+}
+

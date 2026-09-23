@@ -1,0 +1,58 @@
+{
+  "category": "packet",
+  "fields": {
+    "states": [
+      {
+        "companion_id": "00000000000040008000000000000000",
+        "dimension": 0,
+        "pitch": "3fc90fdb",
+        "position": [
+          "3f800000",
+          "40000000",
+          "40400000"
+        ],
+        "reset": true,
+        "yaw": "00000000"
+      },
+      {
+        "companion_id": "00000000000041008100000000000000",
+        "dimension": 0,
+        "pitch": "3fc90fdb",
+        "position": [
+          "3f800000",
+          "40000000",
+          "40400000"
+        ],
+        "reset": false,
+        "yaw": "00000000"
+      },
+      {
+        "companion_id": "00000000000042008200000000000000",
+        "dimension": 0,
+        "pitch": "3fc90fdb",
+        "position": [
+          "3f800000",
+          "40000000",
+          "40400000"
+        ],
+        "reset": true,
+        "yaw": "00000000"
+      },
+      {
+        "companion_id": "00000000000043008300000000000000",
+        "dimension": 0,
+        "pitch": "3fc90fdb",
+        "position": [
+          "3f800000",
+          "40000000",
+          "40400000"
+        ],
+        "reset": false,
+        "yaw": "00000000"
+      }
+    ],
+    "tick": "0"
+  },
+  "kind": "ok"
+}
+

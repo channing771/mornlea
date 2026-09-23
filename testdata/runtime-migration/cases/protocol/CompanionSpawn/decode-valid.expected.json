@@ -1,0 +1,18 @@
+{
+  "category": "packet",
+  "fields": {
+    "companion_id": "000102030405460788090a0b0c0d0e0f",
+    "dimension": 0,
+    "name": "Mira",
+    "pitch": "3fc90fdb",
+    "position": [
+      "80000000",
+      "3f800000",
+      "40000000"
+    ],
+    "tick": "0",
+    "yaw": "00000000"
+  },
+  "kind": "ok"
+}
+

@@ -1,0 +1,22 @@
+{
+  "category": "packet",
+  "fields": {
+    "states": [
+      {
+        "companion_id": "000102030405460788090a0b0c0d0e0f",
+        "dimension": 0,
+        "pitch": "3fc90fdb",
+        "position": [
+          "80000000",
+          "3f800000",
+          "40000000"
+        ],
+        "reset": false,
+        "yaw": "00000000"
+      }
+    ],
+    "tick": "0"
+  },
+  "kind": "ok"
+}
+
