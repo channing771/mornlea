@@ -63,7 +63,15 @@
 //! record through its zero generation rather than treating it as absence.
 //! `CorpusConsumer::Protocol` is registered here as `mornlea_protocol` so a
 //! packet case can name it, while the framing cases stay with the separate
-//! `corpus_frame` consumer the frame regression suite keeps using.
+//! `corpus_frame` consumer the frame regression suite keeps using. The tenth
+//! group is the three companion publication families (`CompanionSpawn`,
+//! `CompanionStates` and `CompanionDespawn`), executed through the same
+//! fallible surface; a companion is a member of the player's own party, so it
+//! appears in the overworld alone and its pitch is bounded by the inclusive
+//! half-turn limit, the batch applies the exact-remaining-length rule the Go
+//! decoder compares against, and the absent zero companion identity stays
+//! unconstructible on this surface because the identity is the checked domain
+//! `CompanionId`.
 //!
 //! A packet case whose assets the controller has not integrated yet fails
 //! here as a missing corpus case rather than as a silently empty selection,
@@ -141,6 +149,10 @@ const CONTAINER_CLOSED_FAMILY: &str = "protocol.server.ContainerClosed";
 const REMOTE_PLAYER_SPAWN_FAMILY: &str = "protocol.server.RemotePlayerSpawn";
 const REMOTE_PLAYER_DESPAWN_FAMILY: &str = "protocol.server.RemotePlayerDespawn";
 const REMOTE_PLAYER_STATES_FAMILY: &str = "protocol.server.RemotePlayerStates";
+/// The three packet families the companion producer group registers.
+const COMPANION_SPAWN_FAMILY: &str = "protocol.server.CompanionSpawn";
+const COMPANION_DESPAWN_FAMILY: &str = "protocol.server.CompanionDespawn";
+const COMPANION_STATES_FAMILY: &str = "protocol.server.CompanionStates";
 /// The packet families' protocol version, matching the manifest family rows.
 const PACKET_VERSION: &str = "45";
 /// The category label every accepted control packet outcome publishes.
@@ -1259,6 +1271,15 @@ fn remote_player_id_text(player_id: &mornlea_protocol::PlayerId) -> String {
     hex_lower(&player_id.bytes())
 }
 
+/// Renders one companion identity as its 32-lowercase-hexadecimal text.
+///
+/// The wire form is published as text rather than as a nested object, so a
+/// zero or non-UUIDv4 byte sequence stays observable instead of being
+/// pre-validated into a number the wire never carries.
+fn companion_id_text(companion_id: &mornlea_protocol::CompanionId) -> String {
+    hex_lower(&companion_id.bytes())
+}
+
 /// Renders one remote player spawn's semantic fields.
 ///
 /// The tick is a decimal string so the full `u64` range stays lossless, the
@@ -1508,6 +1529,242 @@ fn remote_player_states_request(
         server_tick,
         players,
     })
+}
+
+/// Renders one companion spawn's semantic fields.
+///
+/// The tick is a decimal string so the full `u64` range stays lossless, the
+/// dimension is the plain wire integer, the pose publishes as the eight-digit
+/// hexadecimal bit strings that keep a negative zero distinct, and the name is
+/// verbatim because the codec performs no trimming.
+fn companion_spawn_fields(spawn: &mornlea_protocol::CompanionSpawn) -> serde_json::Value {
+    serde_json::json!({
+        "companion_id": companion_id_text(&spawn.companion_id),
+        "name": spawn.name,
+        "tick": spawn.tick.to_string(),
+        "dimension": spawn.dimension.get(),
+        "position": [
+            float_bits_text(spawn.position[0]),
+            float_bits_text(spawn.position[1]),
+            float_bits_text(spawn.position[2])
+        ],
+        "yaw": float_bits_text(spawn.yaw),
+        "pitch": float_bits_text(spawn.pitch)
+    })
+}
+
+/// Renders one companion state record's semantic fields.
+fn companion_state_fields(record: &mornlea_protocol::CompanionState) -> serde_json::Value {
+    serde_json::json!({
+        "companion_id": companion_id_text(&record.companion_id),
+        "dimension": record.dimension.get(),
+        "position": [
+            float_bits_text(record.position[0]),
+            float_bits_text(record.position[1]),
+            float_bits_text(record.position[2])
+        ],
+        "yaw": float_bits_text(record.yaw),
+        "pitch": float_bits_text(record.pitch),
+        "reset": record.reset
+    })
+}
+
+/// Renders one companion despawn's semantic fields.
+fn companion_despawn_fields(despawn: &mornlea_protocol::CompanionDespawn) -> serde_json::Value {
+    serde_json::json!({
+        "companion_id": companion_id_text(&despawn.companion)
+    })
+}
+
+/// Renders one companion state batch's semantic fields.
+///
+/// The records publish in wire order, never sorted, so a batch the authority
+/// ordered is observed in the order it carried.
+fn companion_states_fields(states: &mornlea_protocol::CompanionStates) -> serde_json::Value {
+    let records: Vec<serde_json::Value> =
+        states.states.iter().map(companion_state_fields).collect();
+    serde_json::json!({
+        "tick": states.tick.to_string(),
+        "states": records
+    })
+}
+
+/// Reads one identity field an encode case carries as its 32-hex text.
+fn companion_id_request(case: &FrozenCase, name: &str) -> mornlea_protocol::CompanionId {
+    let text = case
+        .input_json
+        .as_ref()
+        .expect("encode case carries JSON fields")
+        .get(name)
+        .and_then(|value| value.as_str())
+        .unwrap_or_else(|| panic!("case {} names no {name}", case.id));
+    let bytes: [u8; 16] = payload_bytes_from_text(case, text)
+        .try_into()
+        .unwrap_or_else(|_| panic!("case {} field {name} is not 16 bytes", case.id));
+    mornlea_protocol::CompanionId::try_from_bytes(bytes)
+        .unwrap_or_else(|_| panic!("case {} field {name} is not a companion identity", case.id))
+}
+
+/// Reads one dimension field an encode case carries, mapping an unknown value
+/// to the enum boundary the decoder publishes for the same bytes.
+fn companion_dimension_request(
+    case: &FrozenCase,
+    name: &str,
+) -> Result<mornlea_domain::Dimension, mornlea_protocol::ProtocolError> {
+    let dimension = i32_field(case, name);
+    let narrowed = u8::try_from(dimension).unwrap_or(u8::MAX);
+    mornlea_domain::Dimension::new(narrowed)
+        .map_err(|_| mornlea_protocol::ProtocolError::InvalidEnum)
+}
+
+/// Reads one companion name field an encode case carries.
+fn companion_name_field(case: &FrozenCase) -> String {
+    case.input_json
+        .as_ref()
+        .expect("encode case carries JSON fields")
+        .get("name")
+        .and_then(|value| value.as_str().map(str::to_owned))
+        .unwrap_or_else(|| panic!("case {} names no name", case.id))
+}
+
+/// Builds the companion spawn one encode case names from its typed fields.
+///
+/// The record is built through its public fields, so a mutated or invalid
+/// case is refused by the production validation rather than by a constructor
+/// guard.
+fn companion_spawn_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::CompanionSpawn, mornlea_protocol::ProtocolError> {
+    let companion_id = companion_id_request(case, "companion_id");
+    let name = companion_name_field(case);
+    let tick = unsigned_field(case, "tick");
+    let dimension = companion_dimension_request(case, "dimension")?;
+    let position = float_bits_array_request(case, "position");
+    let yaw = float_bits_field(case, "yaw");
+    let pitch = float_bits_field(case, "pitch");
+    Ok(mornlea_protocol::CompanionSpawn {
+        companion_id,
+        name,
+        tick,
+        dimension,
+        position,
+        yaw,
+        pitch,
+    })
+}
+
+/// Builds the companion despawn one encode case names from its typed fields.
+fn companion_despawn_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::CompanionDespawn, mornlea_protocol::ProtocolError> {
+    Ok(mornlea_protocol::CompanionDespawn::new(
+        companion_id_request(case, "companion_id"),
+    ))
+}
+
+/// Builds one companion state record its JSON object names.
+///
+/// The identity is read as the checked domain value, so a zero or non-UUIDv4
+/// identity an encode case names is refused at the identity boundary rather
+/// than reaching the record gate.
+fn companion_state_request(
+    case: &FrozenCase,
+    name: &str,
+    index: usize,
+) -> Result<mornlea_protocol::CompanionState, mornlea_protocol::ProtocolError> {
+    let entry = record_array(case, name)
+        .get(index)
+        .copied()
+        .unwrap_or_else(|| panic!("case {} {name}[{index}] is missing", case.id));
+    let companion_id = {
+        let text = entry
+            .get("companion_id")
+            .and_then(|value| value.as_str())
+            .unwrap_or_else(|| panic!("case {} {name}[{index}] names no companion_id", case.id));
+        let bytes: [u8; 16] = payload_bytes_from_text(case, text)
+            .try_into()
+            .unwrap_or_else(|_| {
+                panic!(
+                    "case {} {name}[{index}] companion_id is not 16 bytes",
+                    case.id
+                )
+            });
+        mornlea_protocol::CompanionId::try_from_bytes(bytes)
+            .map_err(|_| mornlea_protocol::ProtocolError::InvalidIdentity)?
+    };
+    let dimension = match entry.get("dimension").and_then(|value| value.as_i64()) {
+        Some(dimension) => {
+            let narrowed = u8::try_from(dimension).unwrap_or(u8::MAX);
+            mornlea_domain::Dimension::new(narrowed)
+                .map_err(|_| mornlea_protocol::ProtocolError::InvalidEnum)?
+        }
+        None => panic!("case {} {name}[{index}] names no dimension", case.id),
+    };
+    let position = {
+        let values = entry
+            .get("position")
+            .and_then(|value| value.as_array())
+            .unwrap_or_else(|| panic!("case {} {name}[{index}] names no position", case.id));
+        let mut parsed = [0f32; 3];
+        for (slot_index, slot) in parsed.iter_mut().enumerate() {
+            let text = values
+                .get(slot_index)
+                .and_then(|value| value.as_str())
+                .unwrap_or_else(|| {
+                    panic!(
+                        "case {} {name}[{index}] position[{slot_index}] is not text",
+                        case.id
+                    )
+                });
+            let bits = u32::from_str_radix(text, 16).unwrap_or_else(|_| {
+                panic!(
+                    "case {} {name}[{index}] position[{slot_index}] is not hexadecimal bits",
+                    case.id
+                )
+            });
+            *slot = f32::from_bits(bits);
+        }
+        parsed
+    };
+    let angle = |field: &str| -> f32 {
+        let text = entry
+            .get(field)
+            .and_then(|value| value.as_str())
+            .unwrap_or_else(|| panic!("case {} {name}[{index}] names no {field}", case.id));
+        let bits = u32::from_str_radix(text, 16).unwrap_or_else(|_| {
+            panic!(
+                "case {} {name}[{index}] {field} is not hexadecimal bits",
+                case.id
+            )
+        });
+        f32::from_bits(bits)
+    };
+    let reset = entry
+        .get("reset")
+        .and_then(|value| value.as_bool())
+        .unwrap_or_else(|| panic!("case {} {name}[{index}] names no reset", case.id));
+    Ok(mornlea_protocol::CompanionState {
+        companion_id,
+        dimension,
+        position,
+        yaw: angle("yaw"),
+        pitch: angle("pitch"),
+        reset,
+    })
+}
+
+/// Builds the companion state batch one encode case names from its typed
+/// fields.
+fn companion_states_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::CompanionStates, mornlea_protocol::ProtocolError> {
+    let tick = unsigned_field(case, "tick");
+    let records = record_array(case, "states");
+    let mut states = Vec::with_capacity(records.len());
+    for index in 0..records.len() {
+        states.push(companion_state_request(case, "states", index)?);
+    }
+    Ok(mornlea_protocol::CompanionStates { tick, states })
 }
 
 /// Builds the inventory state one encode case names from its typed fields.
@@ -2696,6 +2953,60 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
             }
             other => panic!("unsupported packet operation for {}: {other}", case.id),
         },
+        COMPANION_SPAWN_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::CompanionSpawn::decode(&case.input) {
+                Ok(spawn) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": companion_spawn_fields(&spawn),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let spawn = match companion_spawn_request(case) {
+                    Ok(spawn) => spawn,
+                    Err(err) => return packet_error(err),
+                };
+                encode_ok_outcome(spawn.encode(), companion_spawn_fields(&spawn))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        COMPANION_DESPAWN_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::CompanionDespawn::decode(&case.input) {
+                Ok(despawn) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": companion_despawn_fields(&despawn),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let despawn = match companion_despawn_request(case) {
+                    Ok(despawn) => despawn,
+                    Err(err) => return packet_error(err),
+                };
+                encode_ok_outcome(despawn.encode(), companion_despawn_fields(&despawn))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        COMPANION_STATES_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::CompanionStates::decode(&case.input) {
+                Ok(states) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": companion_states_fields(&states),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let states = match companion_states_request(case) {
+                    Ok(states) => states,
+                    Err(err) => return packet_error(err),
+                };
+                encode_ok_outcome(states.encode(), companion_states_fields(&states))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
         other => panic!("unsupported packet family for {}: {other}", case.id),
     }
 }
@@ -2751,7 +3062,10 @@ fn dispatch_case(case: &FrozenCase) -> serde_json::Value {
         | CONTAINER_CLOSED_FAMILY
         | REMOTE_PLAYER_SPAWN_FAMILY
         | REMOTE_PLAYER_DESPAWN_FAMILY
-        | REMOTE_PLAYER_STATES_FAMILY => dispatch_packet(case),
+        | REMOTE_PLAYER_STATES_FAMILY
+        | COMPANION_SPAWN_FAMILY
+        | COMPANION_DESPAWN_FAMILY
+        | COMPANION_STATES_FAMILY => dispatch_packet(case),
         other => panic!("unregistered protocol family for {}: {other}", case.id),
     }
 }
@@ -3782,6 +4096,89 @@ fn protocol_corpus_packet_remote_players_cases_are_executed() {
         "the remote player selection executed zero cases"
     );
     for case in remote_players {
+        assert_eq!(
+            case.consumer,
+            CorpusConsumer::Protocol,
+            "case {} carries the wrong consumer",
+            case.id
+        );
+        assert!(
+            !case.operation.is_empty(),
+            "case {} names no operation",
+            case.id
+        );
+        assert_normalized(case, dispatch_packet(case));
+    }
+}
+
+/// The case identities the companion producer group registers. They mirror
+/// the Go producer's registration, so a case that only one side names is a
+/// mismatch rather than a shared name. The merged manifest sorts case IDs, so
+/// the comparison sorts this list too.
+///
+/// The count is the reviewed table's enumerated labels: the spawn's canonical
+/// vector pair with its embedded-space name pair and its pitch and yaw
+/// boundaries, the despawn's pair with its identity refusal and its fixed
+/// ceiling, and the batch's canonical pair with the full four-record boundary,
+/// the two count-bound refusals, the two order refusals, the pitch boundary
+/// and the length refusal. The spawn's zero and wrong-version identity and its
+/// depths dimension are deliberately absent: the Go validator folds them into
+/// one message, so they are pinned as Rust group-test boundaries instead of
+/// corpus cases.
+const COMPANIONS_CASE_IDS: [&str; 19] = [
+    "protocol.server.CompanionSpawn/45/decode-valid",
+    "protocol.server.CompanionSpawn/45/encode-valid",
+    "protocol.server.CompanionSpawn/45/decode-embedded-space-name",
+    "protocol.server.CompanionSpawn/45/encode-embedded-space-name",
+    "protocol.server.CompanionSpawn/45/decode-pitch-above-limit",
+    "protocol.server.CompanionSpawn/45/decode-nan-yaw",
+    "protocol.server.CompanionDespawn/45/decode-valid",
+    "protocol.server.CompanionDespawn/45/encode-valid",
+    "protocol.server.CompanionDespawn/45/decode-zero-id",
+    "protocol.server.CompanionDespawn/45/decode-trailing-byte",
+    "protocol.server.CompanionStates/45/decode-valid",
+    "protocol.server.CompanionStates/45/encode-valid",
+    "protocol.server.CompanionStates/45/decode-count-four",
+    "protocol.server.CompanionStates/45/decode-count-zero",
+    "protocol.server.CompanionStates/45/decode-count-five",
+    "protocol.server.CompanionStates/45/decode-duplicate-ids",
+    "protocol.server.CompanionStates/45/decode-reversed-ids",
+    "protocol.server.CompanionStates/45/decode-pitch-above-limit",
+    "protocol.server.CompanionStates/45/decode-trailing-byte",
+];
+
+/// Reports whether one family belongs to the companion producer group.
+fn is_companions_family(family: &str) -> bool {
+    matches!(
+        family,
+        COMPANION_SPAWN_FAMILY | COMPANION_DESPAWN_FAMILY | COMPANION_STATES_FAMILY
+    )
+}
+
+#[test]
+fn protocol_corpus_packet_companions_cases_are_executed() {
+    // The case assets are exported by the Go producer and integrated by the
+    // controller, so before this merge the test reports the missing corpus
+    // cases instead of an empty selection that would look like a passing run.
+    let cases = load_cases_for_consumer(CorpusConsumer::Protocol);
+    let companions: Vec<&FrozenCase> = cases
+        .iter()
+        .filter(|case| is_companions_family(&case.family))
+        .collect();
+    let executed: Vec<&str> = companions.iter().map(|case| case.id.as_str()).collect();
+    let mut expected: Vec<&str> = COMPANIONS_CASE_IDS.to_vec();
+    // The merged manifest sorts case IDs; compare as the reviewed set, not in
+    // the authoring order of this suite's constant.
+    expected.sort_unstable();
+    assert_eq!(
+        executed, expected,
+        "the companion selection does not carry the reviewed case set"
+    );
+    assert!(
+        !companions.is_empty(),
+        "the companion selection executed zero cases"
+    );
+    for case in companions {
         assert_eq!(
             case.consumer,
             CorpusConsumer::Protocol,

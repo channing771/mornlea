@@ -1008,6 +1008,24 @@ rather than checking that it omits a few names.
   values; truncated payloads and trailing bytes fail before publication
   (`companion_despawn_round_trip_preserves_identity_bytes`,
   `companion_despawn_rejects_invalid_identity_and_malformed_payload`).
+- The family carries the companion group's common fallible surface, and its
+  gate is total because the identity is the checked domain `CompanionId`:
+  no field mutation can make this record unpublishable and the gate restates
+  no rule the domain type owns. `decode` applies the 16-byte fixed wire bound
+  as a pre-allocation guard, matching the Go decoder's fixed-maximum check for
+  this packet ID, so a payload above the stride reports `FrameTooLarge` before
+  a single byte is read rather than the trailing-byte boundary
+  (`companions_despawn_round_trips_through_the_fallible_surface`,
+  `companions_the_fixed_ceilings_refuse_before_any_field_is_read`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.CompanionDespawn` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real Go
+  codec in
+  `packages/tools/cmd/runtime-oracle/protocol_companions_test.go`. The
+  zero-identity case classifies at the identity boundary, which is the one
+  category the Go despawn message and `InvalidIdentity` share, and the
+  trailing-byte case classifies at the capacity boundary because both
+  implementations refuse the oversized payload before any field is read.
 
 ## Hostile despawn (`src/hostile_despawn.rs`, `tests/runtime_contract.rs`)
 
@@ -1238,6 +1256,37 @@ rather than checking that it omits a few names.
   fixed payload ceiling
   (`companion_spawn_round_trip_preserves_golden_bytes`,
   `companion_spawn_rejects_invalid_identity_name_and_pose`).
+- The family carries the companion group's common fallible surface, and its
+  gate keeps the Go `CompanionSpawn.Validate` order: the companion name
+  first, then the overworld-only dimension, then the finite pose with its
+  inclusive half-turn pitch bound. Exactly ±pi/2 admits bit-exact and the next
+  float above or below rejects, while the yaw stays unrestricted in range
+  (`companions_spawn_round_trips_through_the_fallible_surface`,
+  `companions_pitch_limit_is_inclusive_on_both_ends`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.CompanionSpawn` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real Go
+  codec in
+  `packages/tools/cmd/runtime-oracle/protocol_companions_test.go`. The frozen
+  cases are the boundaries where both implementations agree: the canonical
+  vector pair, the embedded-space name (Go's folded validator message
+  resolves as a value boundary, matching `InvalidString`), the pitch above the
+  limit (`InvalidFloat`), and the NaN yaw the Go float primitive answers
+  before the validator.
+- **Latent cross-implementation boundary class:** the Go validator folds the
+  identity, the name, the dimension and the pose into one predicate with the
+  single message `network: invalid companion spawn`, so a zero or
+  wrong-version identity and the depths dimension cannot publish distinct
+  categories on the Go side. Those boundaries are pinned as Rust group-test
+  assertions instead of corpus cases — `InvalidIdentity` for the identity and
+  `InvalidEnum` for dimension 1, both on the decode path
+  (`companions_absent_identity_is_unconstructible_and_decode_refuses_it`,
+  `companions_spawn_latent_boundaries_are_pinned_here_not_in_the_corpus`).
+  Unlike the identity, the dimension is a constructible domain value, so the
+  outbound surface can name the depths and the packet gate refuses it there
+  too; this is the same latent class the remote-player and furnace families
+  record, and it is recorded here rather than resolved by weakening the Rust
+  gates to match the Go message coarseness.
 
 ## Companion states (`src/companion_states.rs`, `tests/runtime_contract.rs`)
 
@@ -1249,6 +1298,25 @@ rather than checking that it omits a few names.
   this family carries no name
   (`companion_states_round_trip_preserves_batch_bytes`,
   `companion_states_rejects_unsorted_invalid_and_malformed_payload`).
+- The family carries the companion group's common fallible surface, and its
+  gate keeps the Go `CompanionStates.Validate` order: the count bound, then
+  each record's overworld dimension and finite pose with its inclusive pitch
+  bound, then the strictly increasing identity order. The batch applies the
+  exact-remaining-length rule rather than the minimum-records rule the
+  remote-player batch uses, because the Go decoder compares the remaining
+  bytes against the declared count, so a payload with one extra byte reports
+  the truncation boundary on both sides
+  (`companions_states_round_trips_through_the_fallible_surface`,
+  `companions_count_bound_fires_before_the_record_scan`,
+  `companions_decode_rejects_one_trailing_byte`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.CompanionStates` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real Go
+  codec in
+  `packages/tools/cmd/runtime-oracle/protocol_companions_test.go`. The frozen
+  cases are the canonical vector pair, the full four-record boundary, the
+  count-bound refusals, the two order refusals, the pitch above the limit,
+  and the length refusal the exact-record rule answers.
 
 ## Drop identity (`src/drop_id.rs`, `src/item_drop_upserts.rs`, `src/item_drop_removes.rs`, `tests/runtime_contract.rs`)
 
@@ -1600,6 +1668,8 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_inventory_publication --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_remote_players --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_remote_players --locked -- --list
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_companions --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_companions --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
 
@@ -1702,6 +1772,27 @@ stay pinned. Its latent-boundary test pins the spawn's zero and wrong-version
 identity and its unknown dimension at their Rust variants because the Go
 validator's single message cannot separate them. It also needs no corpus
 files, so it runs before the controller integrates the exported candidates.
+
+`tests/protocol_companions.rs` pins the three companion publication records
+through that same surface: the reviewed 53/16/50/173-byte wire literals
+round-trip byte for byte with the negative-zero position components and the
+boundary pitch preserved, the half-turn pitch limit is inclusive in both
+directions (exactly ±pi/2 publishes its exact bits and the next float above
+or below refuses) while the yaw keeps its full finite range, the full
+four-record batch admits at exactly the fixed wire ceiling, the count bound
+fires before the record scan and the exact-remaining-length rule answers a
+payload whose declared count disagrees with the record bytes present, the
+identity order is the raw unsigned byte order, the despawn's 16-byte fixed
+bound refuses before any byte is read, a mutated public field — embedded-space
+or padded name, foreign dimension, out-of-range or non-finite pose, duplicate
+or descending identity, empty batch — wins over a short destination for every
+family, every proper truncation plus one trailing byte reject, and the packet
+IDs 17/18/19 stay pinned. Its latent-boundary test pins the spawn's zero and
+wrong-version identity and the depths dimension at their Rust variants
+because the Go validator's single message cannot separate them, and its
+absent-identity test pins that the zero UUID is unconstructible on this
+surface and refused on every decode path. It also needs no corpus files, so
+it runs before the controller integrates the exported candidates.
 
 `tests/protocol_corpus.rs` executes the corpus cases this crate owns through
 the real codec paths — `read_frame`/`write_frame` for framing,

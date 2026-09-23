@@ -2297,7 +2297,7 @@ fn companion_despawn_round_trip_preserves_identity_bytes() {
     ])
     .expect("companion");
     let despawn = mornlea_protocol::CompanionDespawn::new(companion);
-    let payload = despawn.encode();
+    let payload = despawn.encode().expect("encode despawn");
     assert_eq!(
         payload,
         [
@@ -2333,7 +2333,7 @@ fn companion_despawn_rejects_invalid_identity_and_malformed_payload() {
     trailing.push(0x00);
     assert_eq!(
         mornlea_protocol::CompanionDespawn::decode(&trailing),
-        Err(mornlea_protocol::ProtocolError::TrailingBytes)
+        Err(mornlea_protocol::ProtocolError::FrameTooLarge)
     );
 }
 
@@ -3266,7 +3266,7 @@ fn companion_spawn_round_trip_preserves_golden_bytes() {
         -0.5,
     )
     .expect("spawn");
-    let payload = spawn.encode();
+    let payload = spawn.encode().expect("encode spawn");
     assert_eq!(mornlea_protocol::CompanionSpawn::PACKET_ID, 17);
     // 16 ID + (1 length prefix + 4 name) + 8 tick + 4 dimension + 12 position
     // + 4 yaw + 4 pitch.
@@ -3334,7 +3334,7 @@ fn companion_spawn_rejects_invalid_identity_name_and_pose() {
         "accepted non-UUIDv4 companion identity"
     );
 
-    let payload = spawn.encode();
+    let payload = spawn.encode().expect("encode spawn");
     for length in 0..payload.len() {
         assert!(
             mornlea_protocol::CompanionSpawn::decode(&payload[..length]).is_err(),
@@ -3388,7 +3388,7 @@ fn companion_states_round_trip_preserves_batch_bytes() {
         ],
     )
     .expect("states");
-    let payload = states.encode();
+    let payload = states.encode().expect("encode states");
     assert_eq!(mornlea_protocol::CompanionStates::PACKET_ID, 18);
     assert_eq!(payload.len(), 8 + 1 + 2 * 41);
     assert_eq!(&payload[..8], &0x0102_0304_0506_0708u64.to_le_bytes());
@@ -3492,7 +3492,7 @@ fn companion_states_rejects_unsorted_invalid_and_malformed_payload() {
     );
 
     let valid = mornlea_protocol::CompanionStates::new(1, vec![record]).expect("states");
-    let payload = valid.encode();
+    let payload = valid.encode().expect("encode states");
     for length in 0..payload.len() {
         assert!(
             mornlea_protocol::CompanionStates::decode(&payload[..length]).is_err(),
