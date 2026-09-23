@@ -1,6 +1,6 @@
 ---
 doc_id: continuous-integration
-doc_revision: 2026-09-23.3
+doc_revision: 2026-09-23.4
 language: en
 counterpart: continuous-integration.zh.md
 ---
@@ -27,4 +27,4 @@ The initial feedback targets are five minutes for actionable preflight results a
 
 ## Optional Godot qualification
 
-[`Godot CI`](../.github/workflows/godot.yml) runs for relevant paths and supports manual dispatch. It is outside `merge-gate`, but its own failures remain visible and fail the optional workflow. `godot-static` checks project closure on Linux. After it succeeds, `godot-runtime` runs on macOS 26 arm64 with Xcode 26.5: it prefetches the external Go dependencies of all six workspace modules on a cold runner, builds the native engine before cgo-backed deterministic asset generation, and fetches the checksum-verified Godot editor. It then verifies the embedded Python runtime, builds and verifies the Go client-core/GDExtension distribution, checks Python tooling, runs the unchanged 100-cycle headless lifecycle smoke, and exports and probes a macOS application offline. The export probe uses the fetched editor through the repository resolver. This workflow remains optional until a separate approved cutover changes merge authority.
+[`Godot CI`](../.github/workflows/godot.yml) runs for relevant paths and supports manual dispatch. It is outside `merge-gate`, but its own failures remain visible and fail the optional workflow. `godot-static` checks project closure on Linux. After it succeeds, `godot-runtime` runs on macOS 26 arm64 with Xcode 26.5: it prefetches the external Go dependencies of all six workspace modules on a cold runner, builds the native engine before cgo-backed deterministic asset generation, and fetches the checksum-verified Godot editor. It then verifies the embedded Python runtime and builds the editor-selected debug GDExtension before the release GDExtension. Release verification opens the project in the headless editor to discover the extension in a cold `.godot` cache before running identity and bridge-host probes; direct release verification requires the debug library. The Go client core and offline exported-app probe continue to qualify the release distribution. Python tooling checks and the unchanged 100-cycle headless lifecycle smoke also run. The export probe uses the fetched editor through the repository resolver. This workflow remains optional until a separate approved cutover changes merge authority.

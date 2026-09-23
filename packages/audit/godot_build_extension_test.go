@@ -89,6 +89,80 @@ func TestGodotBuildExtensionUsesEffectiveCargoTargetDirectory(t *testing.T) {
 	})
 }
 
+func TestGodotBuildExtensionColdEditorImport(t *testing.T) {
+	script := filepath.Join(repositoryRoot(t), "scripts", "godot", "build-extension.sh")
+	for _, testCase := range []struct {
+		name     string
+		profiles []string
+		want     string
+	}{
+		{name: "debug verification", profiles: []string{"debug:verify"}, want: "import\nidentity\nhost\n"},
+		{name: "release verification after debug build", profiles: []string{"debug", "release:verify"}, want: "import\nidentity\nhost\n"},
+		{name: "cold release verification fails", profiles: []string{"release:verify"}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			repository := t.TempDir()
+			projectRoot := createGodotExtensionFixture(t, repository)
+			binDir := t.TempDir()
+			calls := filepath.Join(repository, "godot-calls")
+			writeGodotExtensionFakeCommand(t, filepath.Join(binDir, "uname"), "#!/usr/bin/env bash\nprintf '%s\\n' arm64\n")
+			writeGodotExtensionFakeCommand(t, filepath.Join(binDir, "rustup"), `#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$3" == rustc ]]; then printf '%s\n' 'host: aarch64-apple-darwin'; exit 0; fi
+profile=debug
+for arg in "$@"; do if [[ "$arg" == --release ]]; then profile=release; fi; done
+mkdir -p "${CARGO_TARGET_DIR}/aarch64-apple-darwin/${profile}"
+printf '%s' "${profile}" > "${CARGO_TARGET_DIR}/aarch64-apple-darwin/${profile}/libmornlea_godot.dylib"
+`)
+			writeGodotExtensionFakeCommand(t, filepath.Join(binDir, "nm"), "#!/usr/bin/env bash\nprintf '%s\\n' gdext_rust_init\n")
+			godot := filepath.Join(binDir, "godot")
+			writeGodotExtensionFakeCommand(t, godot, `#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == --version ]]; then printf '%s\n' '4.7.2.stable'; exit 0; fi
+project="${MORNLEA_GODOT_PROJECT_ROOT}"
+debug="${project}/addons/mornlea_bridge/bin/macos-universal/debug/libmornlea_godot.dylib"
+if [[ " $* " == *" --editor "* ]]; then
+  [[ -f "${debug}" ]] || { printf '%s\n' 'ERROR: missing editor-selected debug library'; exit 1; }
+  printf '%s\n' import >> "${MORNLEA_GODOT_CALLS}"
+  mkdir -p "${project}/.godot"
+  touch "${project}/.godot/extension_list.cfg"
+elif [[ " $* " == *"bridge_identity_check.gd"* ]]; then
+  [[ -f "${project}/.godot/extension_list.cfg" ]] || { printf '%s\n' 'ERROR: extension not discovered'; exit 1; }
+  printf '%s\n' identity >> "${MORNLEA_GODOT_CALLS}"
+  printf '%s\n' 'Godot bridge identity check passed.'
+else
+  [[ -f "${project}/.godot/extension_list.cfg" ]] || { printf '%s\n' 'ERROR: extension not discovered'; exit 1; }
+  printf '%s\n' host >> "${MORNLEA_GODOT_CALLS}"
+  printf '%s\n' 'Python bridge host check passed.'
+fi
+`)
+			for _, profile := range testCase.profiles {
+				args := []string{"--profile", strings.TrimSuffix(profile, ":verify")}
+				if strings.HasSuffix(profile, ":verify") {
+					args = append(args, "--verify")
+				}
+				command := exec.Command(script, args...)
+				command.Env = append(os.Environ(), "PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"), "MORNLEA_REPOSITORY_ROOT="+repository, "MORNLEA_GODOT_PROJECT_ROOT="+projectRoot, "MORNLEA_GODOT_BIN="+godot, "MORNLEA_GODOT_CALLS="+calls, "CARGO_TARGET_DIR="+filepath.Join(repository, "target"))
+				output, err := command.CombinedOutput()
+				if testCase.want == "" {
+					if err == nil || !strings.Contains(string(output), "debug GDExtension") {
+						t.Fatalf("cold release verify = %v, output %q; want debug prerequisite failure", err, output)
+					}
+				} else if err != nil {
+					t.Fatalf("build-extension %s failed: %v\n%s", profile, err, output)
+				}
+			}
+			got, err := os.ReadFile(calls)
+			if testCase.want == "" && os.IsNotExist(err) {
+				return
+			}
+			if err != nil || string(got) != testCase.want {
+				t.Fatalf("Godot calls = %q (%v), want %q", got, err, testCase.want)
+			}
+		})
+	}
+}
+
 func createGodotExtensionFixture(t *testing.T, repository string) string {
 	t.Helper()
 	engineRoot := filepath.Join(repository, "packages", "engine")

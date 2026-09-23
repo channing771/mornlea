@@ -114,10 +114,30 @@ mkdir -p -- "${destination_dir}"
 cp -- "${source_library}" "${destination_library}"
 
 if [[ "${verify}" == "true" ]]; then
+  # The editor always loads the debug variant while discovering extensions,
+  # including when this invocation qualifies the release distribution.
+  debug_library="${project_root}/addons/mornlea_bridge/bin/${platform_dir}/debug/${library_name}"
+  [[ -f "${debug_library}" ]] || {
+    printf 'debug GDExtension is required before verification: %s\n' "${debug_library}" >&2
+    exit 1
+  }
   nm -gU "${destination_library}" | grep -q 'gdext_rust_init' || {
     printf 'GDExtension entry symbol is missing from %s\n' "${destination_library}" >&2
     exit 1
   }
+  if ! output="$("${script_dir}/godot.sh" \
+    --headless \
+    --path "${project_root}" \
+    --editor \
+    --quit 2>&1)"; then
+    printf '%s\n' "${output}" >&2
+    exit 1
+  fi
+  printf '%s\n' "${output}"
+  if [[ "${output}" == *"SCRIPT ERROR:"* || "${output}" == *"ERROR:"* ]]; then
+    printf 'Godot editor extension import failed.\n' >&2
+    exit 1
+  fi
   if ! output="$("${script_dir}/godot.sh" \
     --headless \
     --path "${project_root}" \

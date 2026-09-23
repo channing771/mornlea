@@ -48,6 +48,7 @@ var godotEntrypointTargets = []string{
 var godotEntrypointRecipes = map[string][]string{
 	"godot-build": {
 		"scripts/godot/build-python-runtime.sh --verify --offline",
+		"scripts/godot/build-extension.sh --profile debug",
 		"scripts/godot/build-extension.sh --profile release --verify",
 		"scripts/godot/build-core.sh --profile release --verify",
 	},
@@ -121,6 +122,15 @@ func godotMakefileEntrypointViolations(t *testing.T, makefile string) []string {
 			violations = append(violations, fmt.Sprintf("make help does not list %s", target))
 		}
 		recipe := makeTargetRecipe(t, makefile, target)
+		if target == "godot-build" {
+			lines := strings.Split(strings.TrimSpace(recipe), "\n")
+			for index := range lines {
+				lines[index] = strings.TrimSpace(lines[index])
+			}
+			if !reflect.DeepEqual(lines, godotEntrypointRecipes[target]) {
+				violations = append(violations, fmt.Sprintf("godot-build recipe order = %q, want %q", lines, godotEntrypointRecipes[target]))
+			}
+		}
 		for _, required := range godotEntrypointRecipes[target] {
 			if !strings.Contains(recipe, required) {
 				violations = append(violations, fmt.Sprintf("godot gate %s must invoke %q", target, required))

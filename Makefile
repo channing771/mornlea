@@ -323,6 +323,7 @@ agent-ui-dev:
 # test, run and friends) must not depend on them or probe scripts/godot.
 godot-build:
 	scripts/godot/build-python-runtime.sh --verify --offline
+	scripts/godot/build-extension.sh --profile debug
 	scripts/godot/build-extension.sh --profile release --verify
 	scripts/godot/build-core.sh --profile release --verify
 
