@@ -840,7 +840,55 @@ rather than checking that it omits a few names.
   `MAX_CHUNK_BLOCK_INDEX`, the exclusive upper bound an item drop's block
   index must stay below.
 
-## Block changes (`src/block_changes.rs`, `tests/runtime_contract.rs`)
+## World delta packets (`src/block_changes.rs`, `src/forget_chunks.rs`, `tests/protocol_world_delta.rs`, `tests/protocol_corpus.rs`)
+
+- The two server-to-client world delta families are the first variable-count
+  batch families in this crate: both payloads are a fixed header, a canonical
+  uvarint record count, and fixed-stride records (14 bytes per block change,
+  8 bytes per chunk coordinate). Both carry the crate's common fallible
+  surface in design §4 — `validate(&self)` rechecks every public field on
+  each call, checked `encoded_len(&self)` sizes the validated record
+  (header + varint length + stride × count, all checked arithmetic),
+  `encode_into(&self, dst)` publishes into a caller-owned buffer through the
+  crate-private `publish_packet`, `encode(&self)` is the allocating wrapper
+  over it, and `decode(payload)` is a bounded read plus `done()` plus
+  validation — so a record mutated into an invalid value after construction
+  is refused instead of silently published and a short destination reports
+  `OutputTooSmall { needed, available }` with every destination byte
+  unchanged.
+- The empty rules differ and the difference is the wire's own: a zero-change
+  block batch stays legal as the revision barrier an item-only tick carries,
+  while a zero-count forget batch is `InvalidRange` because it has no
+  observable meaning. The decode side applies the count bound before the
+  record-length rule on both families, mirroring the Go decode arms, so a
+  count above the ceiling is a range violation even when the remaining
+  payload is also short.
+- The order rules differ too. A block-change batch must stay strictly
+  increasing by the chunk-ordered block index `src/block.rs` publishes; a
+  forget batch keeps its submitted wire order and is only checked for
+  uniqueness, because the authority groups and sorts when it publishes and a
+  replay has to observe the recorded sequence. The uniqueness check sorts a
+  fallible reserved scratch copy (`reserve_unique_scratch`, a failed reserve
+  is `Allocation`) rather than the batch itself, following the domain's
+  forget-batch pattern.
+- The block-change gate's variant split is the pinned ruling: an
+  unregistered block is `InvalidEnum` and an out-of-span Y is
+  `InvalidRange`, which are the two categories the Go validator publishes for
+  the same bytes; the two checks were one collapsed branch before this
+  surface landed. The revisions render as decimal strings and the coordinates
+  and blocks as plain JSON numbers in the corpus, and the record arrays are
+  published in wire order, never sorted.
+- The 4096/4097 boundaries are group-test pins rather than corpus assets, so
+  the frozen corpus stays small; `tests/protocol_world_delta.rs` constructs
+  the maximum columns directly and pins the count bound firing before the
+  record-length rule.
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.BlockChanges` and
+  `protocol.server.ForgetChunks` each register a decode and an encode route
+  under the `mornlea_protocol` consumer, produced by the real Go codec in
+  `packages/tools/cmd/runtime-oracle/protocol_world_delta_test.go`.
+
+## Block changes (`src/block_changes.rs`, `tests/runtime_contract.rs`, `tests/protocol_world_delta.rs`)
 
 - Play packet ID 1 payload is the dimension, two chunk coordinates, the
   base and new revision, a canonical uvarint change count, and the
@@ -853,9 +901,11 @@ rather than checking that it omits a few names.
   `InvalidRange`, or `Truncated` before publication; trailing bytes fail
   after the last change
   (`block_changes_round_trip_preserves_golden_bytes`,
-  `block_changes_rejects_invalid_revision_position_and_malformed_payload`).
+  `block_changes_rejects_invalid_revision_position_and_malformed_payload`,
+  `world_delta_block_changes_round_trips_through_the_fallible_surface`,
+  `world_delta_the_variant_split_is_pinned`).
 
-## Forget chunks (`src/forget_chunks.rs`, `tests/runtime_contract.rs`)
+## Forget chunks (`src/forget_chunks.rs`, `tests/runtime_contract.rs`, `tests/protocol_world_delta.rs`)
 
 - Play packet ID 2 payload is the dimension, a canonical uvarint chunk
   count, and the fixed-stride chunk coordinates. The count is bounded by
@@ -864,7 +914,9 @@ rather than checking that it omits a few names.
   declared records is `Truncated` before publication; trailing bytes fail
   after the last coordinate
   (`forget_chunks_round_trip_preserves_golden_bytes`,
-  `forget_chunks_rejects_empty_duplicate_and_malformed_payload`).
+  `forget_chunks_rejects_empty_duplicate_and_malformed_payload`,
+  `world_delta_forget_chunks_round_trips_through_the_fallible_surface`,
+  `world_delta_forget_chunks_preserves_the_unsorted_wire_order`).
 
 ## Companion identity (`src/entity_id.rs`)
 
@@ -1277,6 +1329,8 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_client_inventory --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_client_stack_views --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_client_chat --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_world_delta --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_world_delta --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
 

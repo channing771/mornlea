@@ -1,7 +1,9 @@
 use crate::batch::strictly_increasing;
 use crate::block::{chunk_block_index, chunk_of, inside_world, registered_block};
-use crate::bytes::{ByteDecoder, ByteEncoder};
+use crate::bytes::{ByteDecoder, SliceWriter};
 use crate::error::ProtocolError;
+use crate::server_hello::publish_packet;
+use crate::varint::canonical_uvarint_length;
 use mornlea_domain::Dimension;
 
 /// Maximum block changes one payload may carry. Zero changes stay legal
@@ -11,6 +13,10 @@ pub const MAX_BLOCK_CHANGES: u32 = 4096;
 /// Fixed stride of one encoded block change: three little-endian `i32`
 /// coordinates and a little-endian `u16` block.
 const BLOCK_CHANGE_WIRE_BYTES: usize = 4 + 4 + 4 + 2;
+
+/// Fixed header stride before the count: the dimension, the two chunk
+/// coordinates and the two revisions.
+const BLOCK_CHANGES_HEADER_BYTES: usize = 4 + 4 + 4 + 8 + 8;
 
 /// One authoritative block write inside a chunk column.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -51,19 +57,52 @@ impl BlockChanges {
         new_revision: u64,
         changes: Vec<BlockChange>,
     ) -> Result<Self, ProtocolError> {
-        if base_revision == 0
-            || base_revision == u64::MAX
-            || new_revision != base_revision + 1
-            || changes.len() > MAX_BLOCK_CHANGES as usize
+        let changes = Self {
+            dimension,
+            chunk_x,
+            chunk_z,
+            base_revision,
+            new_revision,
+            changes,
+        };
+        changes.valid()?;
+        Ok(changes)
+    }
+
+    /// The single value gate shared by `new`, `encode_into` and `decode`.
+    ///
+    /// The fields are public, so the gate runs on every encode instead of only
+    /// at construction: a record mutated into an invalid revision, an
+    /// unregistered block or an out-of-span position after construction is
+    /// refused rather than silently published. The order is the Go
+    /// `BlockChanges.Validate` order — the revision transition, then the count
+    /// bound, then each change in submitted order — and the block-registration
+    /// and world-span checks are split so each field reports the boundary that
+    /// owns it: an unregistered block is the registered-numbering boundary
+    /// (`InvalidEnum`) and an out-of-span Y is the geometry boundary
+    /// (`InvalidRange`), which are the two categories the Go validator
+    /// publishes for the same bytes.
+    pub fn validate(&self) -> Result<(), ProtocolError> {
+        self.valid()
+    }
+
+    fn valid(&self) -> Result<(), ProtocolError> {
+        if self.base_revision == 0
+            || self.base_revision == u64::MAX
+            || self.new_revision != self.base_revision + 1
+            || self.changes.len() > MAX_BLOCK_CHANGES as usize
         {
             return Err(ProtocolError::InvalidRange);
         }
-        let mut indices = Vec::with_capacity(changes.len());
-        for change in &changes {
-            if !registered_block(change.block) || !inside_world(change.y) {
+        let mut indices = Vec::with_capacity(self.changes.len());
+        for change in &self.changes {
+            if !registered_block(change.block) {
                 return Err(ProtocolError::InvalidEnum);
             }
-            if chunk_of(change.x, change.z) != (chunk_x, chunk_z) {
+            if !inside_world(change.y) {
+                return Err(ProtocolError::InvalidRange);
+            }
+            if chunk_of(change.x, change.z) != (self.chunk_x, self.chunk_z) {
                 return Err(ProtocolError::InvalidRange);
             }
             indices.push(chunk_block_index(change.x, change.y, change.z));
@@ -71,33 +110,65 @@ impl BlockChanges {
         if !strictly_increasing(&indices) {
             return Err(ProtocolError::InvalidRange);
         }
-        Ok(Self {
-            dimension,
-            chunk_x,
-            chunk_z,
-            base_revision,
-            new_revision,
-            changes,
+        Ok(())
+    }
+
+    /// The exact encoded length: the fixed header, the canonical uvarint count
+    /// and one stride per change.
+    ///
+    /// The value gate runs first, so an invalid record reports its own error
+    /// here instead of reaching a size decision. The count is bounded by the
+    /// gate, so the length arithmetic cannot overflow the platform's usize.
+    pub fn encoded_len(&self) -> Result<usize, ProtocolError> {
+        self.valid()?;
+        let count = self.changes.len();
+        let records = count
+            .checked_mul(BLOCK_CHANGE_WIRE_BYTES)
+            .ok_or(ProtocolError::Allocation)?;
+        let length = BLOCK_CHANGES_HEADER_BYTES
+            .checked_add(canonical_uvarint_length(count as u32))
+            .and_then(|length| length.checked_add(records))
+            .ok_or(ProtocolError::Allocation)?;
+        Ok(length)
+    }
+
+    /// Publishes the batch into a caller-owned buffer and returns the bytes
+    /// written.
+    ///
+    /// The field order is the Go encoder's — the dimension, the chunk
+    /// coordinates, the two revisions, the canonical uvarint count and the
+    /// per-change records — and the destination is tested before the first
+    /// byte is written, so a short call leaves every destination byte
+    /// unchanged.
+    pub fn encode_into(&self, dst: &mut [u8]) -> Result<usize, ProtocolError> {
+        let length = self.encoded_len()?;
+        publish_packet(length, dst, |writer: &mut SliceWriter<'_>| {
+            writer.i32(i32::from(self.dimension.get()));
+            writer.i32(self.chunk_x);
+            writer.i32(self.chunk_z);
+            writer.u64(self.base_revision);
+            writer.u64(self.new_revision);
+            writer.uvarint(self.changes.len() as u32);
+            for change in &self.changes {
+                writer.i32(change.x);
+                writer.i32(change.y);
+                writer.i32(change.z);
+                writer.u16(change.block);
+            }
         })
     }
 
-    pub fn encode(&self) -> Vec<u8> {
-        let mut encoder = ByteEncoder::new();
-        encoder.i32(i32::from(self.dimension.get()));
-        encoder.i32(self.chunk_x);
-        encoder.i32(self.chunk_z);
-        encoder.u64(self.base_revision);
-        encoder.u64(self.new_revision);
-        encoder.uvarint(self.changes.len() as u32);
-        for change in &self.changes {
-            encoder.i32(change.x);
-            encoder.i32(change.y);
-            encoder.i32(change.z);
-            encoder.u16(change.block);
-        }
-        encoder
-            .finish()
-            .expect("validated block changes are encodable")
+    /// The allocating compatibility wrapper.
+    ///
+    /// It reserves exactly the validated length and publishes through
+    /// `encode_into`, so the two entry points always agree byte for byte and
+    /// an invalid record fails instead of panicking.
+    pub fn encode(&self) -> Result<Vec<u8>, ProtocolError> {
+        let length = self.encoded_len()?;
+        let mut wire = vec![0u8; length];
+        let written = self.encode_into(&mut wire)?;
+        wire.truncate(written);
+        Ok(wire)
     }
 
     pub fn decode(payload: &[u8]) -> Result<Self, ProtocolError> {
@@ -109,6 +180,10 @@ impl BlockChanges {
         let base_revision = decoder.u64()?;
         let new_revision = decoder.u64()?;
         let count = decoder.uvarint()?;
+        // The count bound fires before the record-length rule, which is the
+        // order the Go decode arm applies: a count above the ceiling is
+        // refused as a range violation even when the remaining payload is also
+        // too short for the records it names.
         if count > MAX_BLOCK_CHANGES {
             return Err(ProtocolError::InvalidRange);
         }

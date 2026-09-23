@@ -44,7 +44,17 @@
 //! cannot complete reports `Truncated` the way the control message reader
 //! does. No case in the group declares a session, a deadline, a FIFO entry or
 //! a send: addressing, `/warp` handling and chat routing stay outside the
-//! protocol contract.
+//! protocol contract. The eighth group is the two server-to-client world delta
+//! families (`BlockChanges` and `ForgetChunks`), the first variable-count
+//! batch families this suite executes: both carry a canonical uvarint record
+//! count ahead of fixed-stride records, the decode side applies the count
+//! bound before the record-length rule, an empty block-change batch stays
+//! legal as the revision barrier while a zero-count forget batch is refused,
+//! and the forget batch keeps its submitted wire order because uniqueness is
+//! the only relation the wire publishes. The block-change gate's variant
+//! split is a pinned ruling: an unregistered block is `InvalidEnum` and an
+//! out-of-world Y is `InvalidRange`, which are the two categories the Go
+//! producer records for the same bytes.
 //! `CorpusConsumer::Protocol` is registered here as `mornlea_protocol` so a
 //! packet case can name it, while the framing cases stay with the separate
 //! `corpus_frame` consumer the frame regression suite keeps using.
@@ -104,6 +114,9 @@ const QUICK_MOVE_STACK_FAMILY: &str = "protocol.client.QuickMoveStack";
 const DROP_STACK_FAMILY: &str = "protocol.client.DropStack";
 /// The packet family the unsequenced chat command producer group registers.
 const CHAT_COMMAND_FAMILY: &str = "protocol.client.ChatCommand";
+/// The two packet families the world delta producer group registers.
+const BLOCK_CHANGES_FAMILY: &str = "protocol.server.BlockChanges";
+const FORGET_CHUNKS_FAMILY: &str = "protocol.server.ForgetChunks";
 /// The packet families' protocol version, matching the manifest family rows.
 const PACKET_VERSION: &str = "45";
 /// The category label every accepted control packet outcome publishes.
@@ -522,6 +535,135 @@ fn client_chat_fields(text: &str) -> serde_json::Value {
     serde_json::json!({
         "text": text
     })
+}
+
+/// Renders one block change's semantic fields, shared by the decode and encode
+/// arms so both publish the same canonical field encoding.
+///
+/// The position is the absolute world coordinate the record carries and the
+/// block is the plain registered number, so a negative coordinate and a block
+/// above the last registered number both survive the round trip as the
+/// integers they are.
+fn block_change_fields(change: &mornlea_protocol::BlockChange) -> serde_json::Value {
+    serde_json::json!({
+        "x": change.x,
+        "y": change.y,
+        "z": change.z,
+        "block": change.block
+    })
+}
+
+/// Renders one chunk coordinate's semantic fields.
+fn chunk_pos_fields(x: i32, z: i32) -> serde_json::Value {
+    serde_json::json!({
+        "x": x,
+        "z": z
+    })
+}
+
+/// Renders the semantic fields one block-change batch publishes, shared by the
+/// decode and encode arms so both publish the same canonical field encoding.
+///
+/// The revisions render as decimal strings so the full u64 range stays
+/// lossless, and the change list renders in the submitted order the
+/// strictly-increasing rule admits, so an empty revision barrier publishes an
+/// empty array rather than a null.
+fn block_changes_fields(changes: &mornlea_protocol::BlockChanges) -> serde_json::Value {
+    let records: Vec<serde_json::Value> = changes.changes.iter().map(block_change_fields).collect();
+    serde_json::json!({
+        "dimension": changes.dimension.get(),
+        "chunk_x": changes.chunk_x,
+        "chunk_z": changes.chunk_z,
+        "base_revision": changes.base_revision.to_string(),
+        "new_revision": changes.new_revision.to_string(),
+        "changes": records
+    })
+}
+
+/// Renders the semantic fields one forget batch publishes.
+///
+/// The chunk list renders in the submitted wire order, never sorted: the
+/// uniqueness rule is the only relation the wire publishes, so a normalized
+/// comparison that sorted the chunks would hide a reordering the authority
+/// replayed.
+fn forget_chunks_fields(forget: &mornlea_protocol::ForgetChunks) -> serde_json::Value {
+    let records: Vec<serde_json::Value> = forget
+        .chunks
+        .iter()
+        .map(|(x, z)| chunk_pos_fields(*x, *z))
+        .collect();
+    serde_json::json!({
+        "dimension": forget.dimension.get(),
+        "chunks": records
+    })
+}
+
+/// Resolves one dimension field the checked domain value admits.
+///
+/// The record's dimension field is the checked domain `Dimension`, so an
+/// unknown raw dimension cannot be constructed at all: the observable
+/// rejection is published directly, which keeps the category identical to the
+/// Go validator's.
+fn dimension_field(
+    case: &FrozenCase,
+) -> Result<mornlea_domain::Dimension, mornlea_protocol::ProtocolError> {
+    match u8::try_from(unsigned_field(case, "dimension"))
+        .ok()
+        .and_then(|value| mornlea_domain::Dimension::new(value).ok())
+    {
+        Some(dimension) => Ok(dimension),
+        None => Err(mornlea_protocol::ProtocolError::InvalidEnum),
+    }
+}
+
+/// Reads one block change's canonical request fields from the ordered record
+/// array the encode case carries.
+fn block_change_request(
+    entry: &serde_json::Value,
+    case: &FrozenCase,
+) -> mornlea_protocol::BlockChange {
+    let field = |name: &str| -> i64 {
+        entry
+            .get(name)
+            .and_then(|value| value.as_i64())
+            .unwrap_or_else(|| panic!("case {} change names no {name}", case.id))
+    };
+    mornlea_protocol::BlockChange {
+        x: i32::try_from(field("x"))
+            .unwrap_or_else(|_| panic!("case {} change x exceeds i32", case.id)),
+        y: i32::try_from(field("y"))
+            .unwrap_or_else(|_| panic!("case {} change y exceeds i32", case.id)),
+        z: i32::try_from(field("z"))
+            .unwrap_or_else(|_| panic!("case {} change z exceeds i32", case.id)),
+        block: u16::try_from(field("block"))
+            .unwrap_or_else(|_| panic!("case {} change block exceeds u16", case.id)),
+    }
+}
+
+/// Reads one chunk coordinate pair's canonical request fields.
+fn chunk_pos_request(entry: &serde_json::Value, case: &FrozenCase) -> (i32, i32) {
+    let field = |name: &str| -> i32 {
+        i32::try_from(
+            entry
+                .get(name)
+                .and_then(|value| value.as_i64())
+                .unwrap_or_else(|| panic!("case {} chunk names no {name}", case.id)),
+        )
+        .unwrap_or_else(|_| panic!("case {} chunk {name} exceeds i32", case.id))
+    };
+    (field("x"), field("z"))
+}
+
+/// Reads one record array an encode case carries, preserving its order.
+fn record_array<'a>(case: &'a FrozenCase, name: &str) -> Vec<&'a serde_json::Value> {
+    case.input_json
+        .as_ref()
+        .expect("encode case carries JSON fields")
+        .get(name)
+        .and_then(|value| value.as_array())
+        .unwrap_or_else(|| panic!("case {} names no {name} array", case.id))
+        .iter()
+        .collect()
 }
 
 /// Reads one signed move-axis field one encode case carries.
@@ -1350,6 +1492,69 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
             }
             other => panic!("unsupported packet operation for {}: {other}", case.id),
         },
+        BLOCK_CHANGES_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::BlockChanges::decode(&case.input) {
+                Ok(changes) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": block_changes_fields(&changes),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                // The record is built through its public fields, so a mutated
+                // revision, an unregistered block or an out-of-span position
+                // is refused by the production validation rather than by a
+                // constructor guard. The dimension is the checked domain
+                // value, so an unknown raw dimension publishes its rejection
+                // directly instead of being constructible.
+                let dimension = match dimension_field(case) {
+                    Ok(dimension) => dimension,
+                    Err(err) => return packet_error(err),
+                };
+                let changes: Vec<mornlea_protocol::BlockChange> = record_array(case, "changes")
+                    .into_iter()
+                    .map(|entry| block_change_request(entry, case))
+                    .collect();
+                let record = mornlea_protocol::BlockChanges {
+                    dimension,
+                    chunk_x: i32_field(case, "chunk_x"),
+                    chunk_z: i32_field(case, "chunk_z"),
+                    base_revision: unsigned_field(case, "base_revision"),
+                    new_revision: unsigned_field(case, "new_revision"),
+                    changes,
+                };
+                encode_ok_outcome(record.encode(), block_changes_fields(&record))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        FORGET_CHUNKS_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::ForgetChunks::decode(&case.input) {
+                Ok(forget) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": forget_chunks_fields(&forget),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                // The record is built through its public fields, so a mutated
+                // empty batch or a duplicate chunk is refused by the
+                // production validation, and the submitted order is preserved
+                // from the request into the outcome.
+                let dimension = match dimension_field(case) {
+                    Ok(dimension) => dimension,
+                    Err(err) => return packet_error(err),
+                };
+                let chunks: Vec<(i32, i32)> = record_array(case, "chunks")
+                    .into_iter()
+                    .map(|entry| chunk_pos_request(entry, case))
+                    .collect();
+                let record = mornlea_protocol::ForgetChunks { dimension, chunks };
+                encode_ok_outcome(record.encode(), forget_chunks_fields(&record))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
         other => panic!("unsupported packet family for {}: {other}", case.id),
     }
 }
@@ -1390,7 +1595,9 @@ fn dispatch_case(case: &FrozenCase) -> serde_json::Value {
         | MOVE_STACK_PARTIAL_FAMILY
         | QUICK_MOVE_STACK_FAMILY
         | DROP_STACK_FAMILY
-        | CHAT_COMMAND_FAMILY => dispatch_packet(case),
+        | CHAT_COMMAND_FAMILY
+        | BLOCK_CHANGES_FAMILY
+        | FORGET_CHUNKS_FAMILY => dispatch_packet(case),
         other => panic!("unregistered protocol family for {}: {other}", case.id),
     }
 }
@@ -1925,7 +2132,6 @@ const CLIENT_CHAT_CASE_IDS: [&str; 13] = [
 fn is_client_chat_family(family: &str) -> bool {
     family == CHAT_COMMAND_FAMILY
 }
-
 #[test]
 fn protocol_corpus_packet_client_chat_cases_are_executed() {
     // The case assets are exported by the Go producer and integrated by the
@@ -1950,6 +2156,82 @@ fn protocol_corpus_packet_client_chat_cases_are_executed() {
         "the client chat selection executed zero cases"
     );
     for case in client_chat {
+        assert_eq!(
+            case.consumer,
+            CorpusConsumer::Protocol,
+            "case {} carries the wrong consumer",
+            case.id
+        );
+        assert!(
+            !case.operation.is_empty(),
+            "case {} names no operation",
+            case.id
+        );
+        assert_normalized(case, dispatch_packet(case));
+    }
+}
+
+/// The case identities the world delta group registers. They mirror the Go
+/// producer's registration, so a case that only one side names is a mismatch
+/// rather than a shared name. The merged manifest sorts case IDs, so the
+/// comparison sorts this list too.
+///
+/// The count is the reviewed table's enumerated labels: fourteen block-change
+/// cases beside the eight forget-chunk cases.
+const WORLD_DELTA_CASE_IDS: [&str; 22] = [
+    "protocol.server.BlockChanges/45/decode-base-zero",
+    "protocol.server.BlockChanges/45/decode-count-above-max",
+    "protocol.server.BlockChanges/45/decode-empty-barrier",
+    "protocol.server.BlockChanges/45/decode-revision-gap",
+    "protocol.server.BlockChanges/45/decode-trailing-byte",
+    "protocol.server.BlockChanges/45/decode-truncated",
+    "protocol.server.BlockChanges/45/decode-unregistered-block",
+    "protocol.server.BlockChanges/45/decode-unsorted-index",
+    "protocol.server.BlockChanges/45/decode-valid",
+    "protocol.server.BlockChanges/45/decode-wrong-chunk",
+    "protocol.server.BlockChanges/45/decode-y-above-world",
+    "protocol.server.BlockChanges/45/encode-empty-barrier",
+    "protocol.server.BlockChanges/45/encode-valid",
+    "protocol.server.BlockChanges/45/encode-y-above-world",
+    "protocol.server.ForgetChunks/45/decode-dimension-two",
+    "protocol.server.ForgetChunks/45/decode-duplicate-chunk",
+    "protocol.server.ForgetChunks/45/decode-trailing-byte",
+    "protocol.server.ForgetChunks/45/decode-truncated",
+    "protocol.server.ForgetChunks/45/decode-valid",
+    "protocol.server.ForgetChunks/45/decode-zero-count",
+    "protocol.server.ForgetChunks/45/encode-duplicate-chunk",
+    "protocol.server.ForgetChunks/45/encode-valid",
+];
+
+/// Reports whether one family belongs to the world delta producer group.
+fn is_world_delta_family(family: &str) -> bool {
+    family == BLOCK_CHANGES_FAMILY || family == FORGET_CHUNKS_FAMILY
+}
+
+#[test]
+fn protocol_corpus_packet_world_delta_cases_are_executed() {
+    // The case assets are exported by the Go producer and integrated by the
+    // controller, so before that merge this test reports the missing corpus
+    // cases instead of an empty selection that would look like a passing run.
+    let cases = load_cases_for_consumer(CorpusConsumer::Protocol);
+    let world_delta: Vec<&FrozenCase> = cases
+        .iter()
+        .filter(|case| is_world_delta_family(&case.family))
+        .collect();
+    let executed: Vec<&str> = world_delta.iter().map(|case| case.id.as_str()).collect();
+    let mut expected: Vec<&str> = WORLD_DELTA_CASE_IDS.to_vec();
+    // The merged manifest sorts case IDs; compare as the reviewed set, not in
+    // the authoring order of this suite's constant.
+    expected.sort_unstable();
+    assert_eq!(
+        executed, expected,
+        "the world delta selection does not carry the reviewed case set"
+    );
+    assert!(
+        !world_delta.is_empty(),
+        "the world delta selection executed zero cases"
+    );
+    for case in world_delta {
         assert_eq!(
             case.consumer,
             CorpusConsumer::Protocol,

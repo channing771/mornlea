@@ -285,6 +285,29 @@ and the isolated export helpers (`exportGeneratedAssets`,
   `codec_client.go` plus `message_companion.go`, which owns
   `validateCommandText` and the `companion.MaxPlanCommandBytes`-derived wire
   bound.
+- The eighth packet producer group is `protocol_world_delta_test.go`
+  (`protocol.server.BlockChanges` and `protocol.server.ForgetChunks`, decode
+  and encode), the first server-to-client group of the plan. It executes
+  `codec.DecodeServer`/`EncodeServer` in the play state with the case's own
+  `PacketKey`, whose direction is `server-to-client` for both families, and
+  normalizes `base_revision`/`new_revision` as decimal strings with
+  `dimension`, the chunk coordinates, the change coordinates and the block
+  numbers as plain JSON integers; the `changes` and `chunks` arrays publish
+  in wire order, so the forget batch's submitted order survives the
+  comparison rather than being sorted. Both families are the first
+  variable-count batch payloads, so the category table resolves the decode
+  arm's count bound (`packet count is outside 1..4096`, which fires before
+  the arm's own record-length rule) and every validator range rejection to
+  `invalid-value`, the two dimension messages (`block changes dimension is
+  not overworld or depths`, `forget chunks dimension is not overworld or
+  depths`) and an unregistered block to `invalid-enum`, and the arm's length
+  rule (`packet count exceeds remaining payload`) plus `short input` to
+  `truncated` while `trailing bytes` keeps its own category. The zero-change
+  block batch stays legal as the revision barrier while a zero-count forget
+  batch is refused, and the 4096/4097 boundaries are group-test pins in
+  `tests/protocol_world_delta.rs` rather than corpus assets. Provenance is
+  `codec_server.go` plus the family's own message file: `snapshot.go` for
+  `BlockChanges` and `message_chunk.go` for `ForgetChunks`.
 - `validProducerIDs` is the closed exporter allowlist. It carries the 18
   protocol group producer IDs the v45 packet plan names
   (`runtime-oracle/protocol-negotiation`, `-control`, `-client-control`,

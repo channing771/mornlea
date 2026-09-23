@@ -2075,7 +2075,7 @@ fn block_changes_round_trip_preserves_golden_bytes() {
         }],
     )
     .expect("changes");
-    let payload = changes.encode();
+    let payload = changes.encode().expect("encode");
     assert_eq!(
         payload,
         [
@@ -2158,8 +2158,11 @@ fn block_changes_rejects_invalid_revision_position_and_malformed_payload() {
         )
         .is_err()
     );
-    // World span ends below the highest Y.
-    assert!(
+    // World span ends below the highest Y. The Y-span check is the range
+    // boundary, distinct from the unregistered-numbering boundary below: the
+    // Go validator answers the two with different messages, so the split gate
+    // reports a different variant for each.
+    assert_eq!(
         mornlea_protocol::BlockChanges::new(
             mornlea_domain::Dimension::OVERWORLD,
             1,
@@ -2172,11 +2175,11 @@ fn block_changes_rejects_invalid_revision_position_and_malformed_payload() {
                 z: -1,
                 block: 2,
             }],
-        )
-        .is_err()
+        ),
+        Err(mornlea_protocol::ProtocolError::InvalidRange)
     );
-    // Unregistered block numbers are rejected.
-    assert!(
+    // Unregistered block numbers are rejected as the enum boundary.
+    assert_eq!(
         mornlea_protocol::BlockChanges::new(
             mornlea_domain::Dimension::OVERWORLD,
             1,
@@ -2189,8 +2192,8 @@ fn block_changes_rejects_invalid_revision_position_and_malformed_payload() {
                 z: -1,
                 block: 90,
             }],
-        )
-        .is_err()
+        ),
+        Err(mornlea_protocol::ProtocolError::InvalidEnum)
     );
     // Records must be sorted by chunk-ordered block index.
     assert!(
@@ -2213,8 +2216,10 @@ fn block_changes_rejects_invalid_revision_position_and_malformed_payload() {
         .is_err()
     );
     // Truncated and trailing payloads fail before publication.
-    assert!(mornlea_protocol::BlockChanges::decode(&valid.encode()[..42]).is_err());
-    let mut trailing = valid.encode();
+    assert!(
+        mornlea_protocol::BlockChanges::decode(&valid.encode().expect("encode")[..42]).is_err()
+    );
+    let mut trailing = valid.encode().expect("encode");
     trailing.push(0x00);
     assert_eq!(
         mornlea_protocol::BlockChanges::decode(&trailing),
@@ -2229,7 +2234,7 @@ fn forget_chunks_round_trip_preserves_golden_bytes() {
         vec![(1, -1), (2, 3)],
     )
     .expect("forget");
-    let payload = forget.encode();
+    let payload = forget.encode().expect("encode");
     assert_eq!(
         payload,
         [
@@ -2269,10 +2274,12 @@ fn forget_chunks_rejects_empty_duplicate_and_malformed_payload() {
         .is_ok()
     );
     // A truncated batch never publishes partial coordinates.
-    assert!(mornlea_protocol::ForgetChunks::decode(&forget.encode()[..17]).is_err());
+    assert!(
+        mornlea_protocol::ForgetChunks::decode(&forget.encode().expect("encode")[..17]).is_err()
+    );
     // A zero count carries no observable meaning.
     assert!(mornlea_protocol::ForgetChunks::decode(&[0, 0, 0, 0, 0]).is_err());
-    let mut trailing = forget.encode();
+    let mut trailing = forget.encode().expect("encode");
     trailing.push(0x00);
     assert_eq!(
         mornlea_protocol::ForgetChunks::decode(&trailing),
