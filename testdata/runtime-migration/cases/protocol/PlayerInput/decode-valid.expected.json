@@ -1,0 +1,17 @@
+{
+  "category": "packet",
+  "fields": {
+    "eating": false,
+    "jump": true,
+    "mining": true,
+    "move_x": -128,
+    "move_z": 127,
+    "pitch": "40000000",
+    "sequence": "0",
+    "sneaking": false,
+    "sprinting": true,
+    "yaw": "80000000"
+  },
+  "kind": "ok"
+}
+

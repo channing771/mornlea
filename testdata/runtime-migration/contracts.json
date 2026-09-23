@@ -1803,15 +1803,29 @@
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
       "sources": [
         {
+          "path": "packages/shared/network/codec/codec_client.go",
+          "sha256": "sha256:572788394d3bc8b13b42d097beaa3fade87cdc4e9d5d022f7e5c92568c9c70de"
+        },
+        {
           "path": "packages/shared/network/codec/codec_golden_test.go",
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_command.go",
+          "sha256": "sha256:f0a95793cd7021ba7a137373e26cad2d16e6742092f2ecb94d13c44b69d114f1"
         },
         {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.client.PlaceBlock/45/decode-infinite-pitch",
+        "protocol.client.PlaceBlock/45/decode-slot-nine",
+        "protocol.client.PlaceBlock/45/decode-valid",
+        "protocol.client.PlaceBlock/45/encode-slot-nine",
+        "protocol.client.PlaceBlock/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.client.PlaceWater",
@@ -1849,15 +1863,30 @@
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
       "sources": [
         {
+          "path": "packages/shared/network/codec/codec_client.go",
+          "sha256": "sha256:572788394d3bc8b13b42d097beaa3fade87cdc4e9d5d022f7e5c92568c9c70de"
+        },
+        {
           "path": "packages/shared/network/codec/codec_golden_test.go",
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_command.go",
+          "sha256": "sha256:f0a95793cd7021ba7a137373e26cad2d16e6742092f2ecb94d13c44b69d114f1"
         },
         {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.client.PlayerInput/45/decode-bool-two",
+        "protocol.client.PlayerInput/45/decode-nan-yaw",
+        "protocol.client.PlayerInput/45/decode-trailing-byte",
+        "protocol.client.PlayerInput/45/decode-valid",
+        "protocol.client.PlayerInput/45/encode-nan-yaw",
+        "protocol.client.PlayerInput/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.client.QuickMoveStack",
@@ -1895,15 +1924,28 @@
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
       "sources": [
         {
+          "path": "packages/shared/network/codec/codec_client.go",
+          "sha256": "sha256:572788394d3bc8b13b42d097beaa3fade87cdc4e9d5d022f7e5c92568c9c70de"
+        },
+        {
           "path": "packages/shared/network/codec/codec_golden_test.go",
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_command.go",
+          "sha256": "sha256:f0a95793cd7021ba7a137373e26cad2d16e6742092f2ecb94d13c44b69d114f1"
         },
         {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.client.RequestChunkResync/45/decode-dimension-two",
+        "protocol.client.RequestChunkResync/45/decode-valid",
+        "protocol.client.RequestChunkResync/45/encode-dimension-two",
+        "protocol.client.RequestChunkResync/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.client.SelectHotbar",
@@ -1918,15 +1960,28 @@
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
       "sources": [
         {
+          "path": "packages/shared/network/codec/codec_client.go",
+          "sha256": "sha256:572788394d3bc8b13b42d097beaa3fade87cdc4e9d5d022f7e5c92568c9c70de"
+        },
+        {
           "path": "packages/shared/network/codec/codec_golden_test.go",
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_command.go",
+          "sha256": "sha256:f0a95793cd7021ba7a137373e26cad2d16e6742092f2ecb94d13c44b69d114f1"
         },
         {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.client.SelectHotbar/45/decode-slot-nine",
+        "protocol.client.SelectHotbar/45/decode-valid",
+        "protocol.client.SelectHotbar/45/encode-slot-nine",
+        "protocol.client.SelectHotbar/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.client.TakeCraftingOutput",
@@ -16572,6 +16627,462 @@
       "expected": {
         "path": "testdata/runtime-migration/cases/protocol/LoginStart/encode-valid.expected.json",
         "sha256": "sha256:c35cea4533dc4853c8f7acfeb99063183a346a001e2e49f957382ce689616980"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.PlaceBlock/45/decode-infinite-pitch",
+      "family": "protocol.client.PlaceBlock",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 2
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PlaceBlock/decode-infinite-pitch.input.bin",
+        "sha256": "sha256:dc0584feff001519e76c57cf2cf8b09cadd6edbe4b7a0b68f4be810b96ac2610"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PlaceBlock/decode-infinite-pitch.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.PlaceBlock/45/decode-slot-nine",
+      "family": "protocol.client.PlaceBlock",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 2
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PlaceBlock/decode-slot-nine.input.bin",
+        "sha256": "sha256:d995debf9f7c666d374db2b9f0aa618e6c2410b1ffd9702c6c00d8d3888fcfc2"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PlaceBlock/decode-slot-nine.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.PlaceBlock/45/decode-valid",
+      "family": "protocol.client.PlaceBlock",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 2
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PlaceBlock/decode-valid.input.bin",
+        "sha256": "sha256:184596ab48836e55b513068cd0b8e90174a080bdf64d7eaa4361bad1d35d029d"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PlaceBlock/decode-valid.expected.json",
+        "sha256": "sha256:1c65c0a5f62b2f592854eee582fa5343b8b7b2e9995a1a2765d8ff9e6d5d4a44"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.PlaceBlock/45/encode-slot-nine",
+      "family": "protocol.client.PlaceBlock",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 2
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PlaceBlock/encode-slot-nine.input.json",
+        "sha256": "sha256:f6d7b264c7dc7684d3cc38fb1498a54a8e3a9af7ec33c87bb826c8397beea984"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PlaceBlock/encode-slot-nine.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.PlaceBlock/45/encode-valid",
+      "family": "protocol.client.PlaceBlock",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 2
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PlaceBlock/encode-valid.input.json",
+        "sha256": "sha256:3b625a97e015c84ca61c5d580c4b5a604409650304b56484bde32fa119c02ec7"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PlaceBlock/encode-valid.expected.json",
+        "sha256": "sha256:41375009f2961c46a0bd1cd597e3a840f0bf2488b5785422c8b01108118e3af8"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.PlayerInput/45/decode-bool-two",
+      "family": "protocol.client.PlayerInput",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PlayerInput/decode-bool-two.input.bin",
+        "sha256": "sha256:1b1a842947f0bba66036a8aea933cb622e2fc6081ea2974bbc8b6f42c1ce31a4"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PlayerInput/decode-bool-two.expected.json",
+        "sha256": "sha256:986d015321a2eb07422b25a336ae52c8c5cb2dc5199a6fc758e8b0e0bcd32b8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.PlayerInput/45/decode-nan-yaw",
+      "family": "protocol.client.PlayerInput",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PlayerInput/decode-nan-yaw.input.bin",
+        "sha256": "sha256:efbfab84231adbce18a40b64f43e2348f75ccda34617b4f674e606e3a571628f"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PlayerInput/decode-nan-yaw.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.PlayerInput/45/decode-trailing-byte",
+      "family": "protocol.client.PlayerInput",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PlayerInput/decode-trailing-byte.input.bin",
+        "sha256": "sha256:ae49bfc4b5eb94e8ad3b787d699d38132ad75fb7eed80e73835ad25813eed0a8"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PlayerInput/decode-trailing-byte.expected.json",
+        "sha256": "sha256:e86ced1efbf7a5d21ad5044581d2db90ba5286a5cd992edbe27e12b051dd3f85"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.PlayerInput/45/decode-valid",
+      "family": "protocol.client.PlayerInput",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PlayerInput/decode-valid.input.bin",
+        "sha256": "sha256:0bc01f09388518251e834b8d8a51f76b9a59fbf313d278c268243826259889c5"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PlayerInput/decode-valid.expected.json",
+        "sha256": "sha256:020fae3ae0b94ffcbaabf1cba861e79733eb8ba261862337c1246d021a964961"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.PlayerInput/45/encode-nan-yaw",
+      "family": "protocol.client.PlayerInput",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PlayerInput/encode-nan-yaw.input.json",
+        "sha256": "sha256:0515d3b04f184b73497c6905e31de0fbc95e2a9afd452c02f81dde62a60cd2c2"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PlayerInput/encode-nan-yaw.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.PlayerInput/45/encode-valid",
+      "family": "protocol.client.PlayerInput",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PlayerInput/encode-valid.input.json",
+        "sha256": "sha256:602bb8c35a2143dc0d257362338aa3bd0b71e8b54fb8b3b2d40e81068b47deb3"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PlayerInput/encode-valid.expected.json",
+        "sha256": "sha256:dae9898bc187e2d5fe52721a9c4d531b99e5911c486b1e3281cf6a965fe85fe4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.RequestChunkResync/45/decode-dimension-two",
+      "family": "protocol.client.RequestChunkResync",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 3
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RequestChunkResync/decode-dimension-two.input.bin",
+        "sha256": "sha256:3bb26247746878d9db225404fb6e5f1454fbe3357935171017f84107fe73d6ae"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RequestChunkResync/decode-dimension-two.expected.json",
+        "sha256": "sha256:986d015321a2eb07422b25a336ae52c8c5cb2dc5199a6fc758e8b0e0bcd32b8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.RequestChunkResync/45/decode-valid",
+      "family": "protocol.client.RequestChunkResync",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 3
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RequestChunkResync/decode-valid.input.bin",
+        "sha256": "sha256:705154a9b78a5880fbd834863d8894a764dcff7f5f0ccb4fe70387ade1186169"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RequestChunkResync/decode-valid.expected.json",
+        "sha256": "sha256:c065d8f13c7a3be9a6bc23e044a80ac45b1d38458fa031cf0a852349b276149e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.RequestChunkResync/45/encode-dimension-two",
+      "family": "protocol.client.RequestChunkResync",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 3
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RequestChunkResync/encode-dimension-two.input.json",
+        "sha256": "sha256:1988c4b537fabc077aff86418bc732117fa615f60ac4623c54898f2e6f225356"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RequestChunkResync/encode-dimension-two.expected.json",
+        "sha256": "sha256:986d015321a2eb07422b25a336ae52c8c5cb2dc5199a6fc758e8b0e0bcd32b8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.RequestChunkResync/45/encode-valid",
+      "family": "protocol.client.RequestChunkResync",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 3
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/RequestChunkResync/encode-valid.input.json",
+        "sha256": "sha256:e5457735032332e12d807642e844cfe92bde63d5b2f7f3c0bd6df585eaf995e6"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/RequestChunkResync/encode-valid.expected.json",
+        "sha256": "sha256:a0c456221c95891379fec4af342a7a6a804a7efa66cec29e6470e9f52b5b65dc"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.SelectHotbar/45/decode-slot-nine",
+      "family": "protocol.client.SelectHotbar",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 5
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/SelectHotbar/decode-slot-nine.input.bin",
+        "sha256": "sha256:194df0af8a18fd76b5e57fa6122fba63ece450b151bb380dec55569d6ddd3c51"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/SelectHotbar/decode-slot-nine.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.SelectHotbar/45/decode-valid",
+      "family": "protocol.client.SelectHotbar",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 5
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/SelectHotbar/decode-valid.input.bin",
+        "sha256": "sha256:4b7735f6f1a0cef18db371351b21e5fb694b89d3bd90731797ce797746c97dfc"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/SelectHotbar/decode-valid.expected.json",
+        "sha256": "sha256:607f73e9eb05714e9139b719fced8f9783de8bf049451688d9502cb990d0a3c4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.SelectHotbar/45/encode-slot-nine",
+      "family": "protocol.client.SelectHotbar",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 5
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/SelectHotbar/encode-slot-nine.input.json",
+        "sha256": "sha256:a72836545eb5db4b8a810ec1f3614f84ce2c5bd4ea5f8ed230c6c6968878d29b"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/SelectHotbar/encode-slot-nine.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.SelectHotbar/45/encode-valid",
+      "family": "protocol.client.SelectHotbar",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "play",
+        "id": 5
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/SelectHotbar/encode-valid.input.json",
+        "sha256": "sha256:5606b5b0701e3edb6f538ba947a8f7729486a32c2764a76fb2c53d38e19a64b2"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/SelectHotbar/encode-valid.expected.json",
+        "sha256": "sha256:8b5494012208d402988a5f8efe6ba5a356c42de4a9a2b17401421363a1f5568e"
       },
       "checkpoints": [
         "0"

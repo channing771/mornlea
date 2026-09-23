@@ -1,0 +1,9 @@
+{
+  "category": "packet",
+  "fields": {
+    "sequence": "0",
+    "slot": 8
+  },
+  "kind": "ok"
+}
+

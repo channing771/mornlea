@@ -1,0 +1,12 @@
+{
+  "sequence": 0,
+  "move_x": -128,
+  "move_z": 127,
+  "jump": true,
+  "yaw": "80000000",
+  "pitch": "40000000",
+  "mining": true,
+  "eating": false,
+  "sprinting": true,
+  "sneaking": false
+}
