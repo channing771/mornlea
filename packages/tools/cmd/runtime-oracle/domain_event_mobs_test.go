@@ -48,15 +48,14 @@ import (
 // normalized outcome, and a rejected record retains the raw input value of an
 // unknown enum instead of clamping it.
 //
-// The frozen cases this producer materializes are not yet registered in the
-// canonical manifest: registration is a later node's work, so the only
-// publication path is the explicit external export through
-// `RUNTIME_ORACLE_EXPORT_DIR`.
+// The frozen cases are registered in the canonical manifest. Rebuilding a
+// candidate is an explicit external export through
+// `RUNTIME_ORACLE_EXPORT_DIR`; ordinary tests only compare committed assets.
 
 const (
 	// domainEventMobsFamily is the corpus family this package executes. The
-	// family is the existing `domain.event` row, whose eventual owner is the
-	// Rust domain crate that owns the replay observation records.
+	// family is the existing `domain.event` row owned by the Rust domain
+	// crate's checked semantic event values.
 	domainEventMobsFamily = "domain.event"
 	// domainEventMobsVersion is the family's discovered version. A case has
 	// to name its family's version, so the case identities carry this segment
@@ -1703,6 +1702,30 @@ func domainEventMobsExecute(t *testing.T) []domainEventMobsRecord {
 	return records
 }
 
+// This raw probe is outside the frozen 68-case manifest. It verifies the
+// spawn-kind classifier against the Play-state validator without expanding
+// the approved case table, whose unknown-kind row belongs to hostile state.
+func TestDomainEventMobsOracleRejectsUnknownHostileSpawnKind(t *testing.T) {
+	entry := domainEventMobsHostileSpawnCase("probe-hostile-spawn-unknown-kind", func(spawn *protocol.HostileSpawn) {
+		spawn.Spawns[0].Kind = 2
+	})
+	input, err := json.Marshal(entry.input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outcome, _, err := runDomainEventMobs(CaseSpec{ID: "domain.event/1/" + entry.label}, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outcome.Kind != "error" || outcome.Category != "invalid-enum" || outcome.Fields["rule"] != "hostile_spawn.record_0.kind" {
+		t.Fatalf("unknown hostile spawn kind outcome = %+v, want invalid-enum at record_0.kind", outcome)
+	}
+	spawns, ok := outcome.Fields["spawns"].([]map[string]any)
+	if !ok || len(spawns) == 0 || spawns[0]["kind"] != 2 {
+		t.Fatalf("rejected spawn must preserve raw kind 2: %v", outcome.Fields["spawns"])
+	}
+}
+
 // `domainEventMobsSyncCorpus` compares committed assets and optionally
 // exports a complete producer candidate for controller review.
 //
@@ -1808,9 +1831,8 @@ func domainEventMobsCaseID(label string) string {
 // a producer-scoped selection stored in harness-owned temporary storage.
 // `Cases` is narrowed to the hostile and passive mob cases and unrelated
 // family case lists are cleared. The existing `domain.event` identity is
-// retained while its provenance and case list are replaced with this
-// producer's current selection, because the canonical manifest does not yet
-// register these cases; that registration is a later node's work.
+// retained while its provenance and case list are narrowed to this producer
+// so the test runner never hands it another `domain.event` producer's cases.
 func domainEventMobsWorkingManifest(t *testing.T, root string) Inventory {
 	t.Helper()
 	frozen := loadRealManifest(t, root)

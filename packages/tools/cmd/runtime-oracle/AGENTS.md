@@ -53,6 +53,13 @@ or Agent process packages. These boundaries are enforced by `packages/audit`
   `TestContractInventoryRejectsVersionMismatch`,
   `TestContractInventoryRejectsMissingProvenanceSource`,
   `TestContractInventoryRejectsIncompleteIdentity`.
+- When a new producer appends cases to a shared family, rerun the complete
+  `runtime-oracle` package in that node and update every affected exact-total
+  assertion together. A producer-filtered pass cannot detect stale totals in
+  earlier producers.
+- Producer changes that add Go comments also run audit
+  `TestCommentBacktickIdentifiersExist` before node closure. A narrow package
+  test does not check whether backticked names in comments are Go identifiers.
 
 ## Isolated replay (`trace.go`)
 

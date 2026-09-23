@@ -58,15 +58,14 @@ import (
 // semantic inputs, including the unknown numeric enum value, so a replay
 // consumer sees exactly the value the record carried.
 //
-// The frozen cases this producer materializes are not yet registered in the
-// canonical manifest: registration is a later node's work, so the only
-// publication path is the explicit external export through
-// `RUNTIME_ORACLE_EXPORT_DIR`.
+// The frozen cases are registered in the canonical manifest. Rebuilding a
+// candidate is an explicit external export through
+// `RUNTIME_ORACLE_EXPORT_DIR`; ordinary tests only compare committed assets.
 
 const (
 	// domainEventChatFamily is the corpus family this package executes. The
-	// family is the existing `domain.event` row, whose eventual owner is the
-	// Rust domain crate that owns the replay observation records.
+	// family is the existing `domain.event` row owned by the Rust domain
+	// crate's checked semantic event values.
 	domainEventChatFamily = "domain.event"
 	// domainEventChatVersion is the family's discovered version. A case has
 	// to name its family's version, so the case identities carry this
@@ -921,6 +920,48 @@ func domainEventChatExecute(t *testing.T) []domainEventChatRecord {
 	return records
 }
 
+// This probe is intentionally outside the frozen 44-case manifest. It checks
+// that nonzero identities with an invalid UUID version or variant reach the
+// protocol validator and retain their raw spelling on rejection.
+func TestDomainEventChatOracleRejectsMalformedNonzeroUUIDs(t *testing.T) {
+	for _, probe := range []struct {
+		name     string
+		field    string
+		value    string
+		category string
+		rule     string
+	}{
+		{"player-version", "player_id", "00112233445556778899aabbccddeeff", "invalid-identity", "chat_event.player_id"},
+		{"player-variant", "player_id", "00112233445546770899aabbccddeeff", "invalid-identity", "chat_event.player_id"},
+		{"companion-version", "companion_id", "2233445546675889aabbccddeeff00ff", "invalid-value", "chat_event.companion_id"},
+		{"companion-variant", "companion_id", "22334455466748892abbccddeeff00ff", "invalid-value", "chat_event.companion_id"},
+	} {
+		t.Run(probe.name, func(t *testing.T) {
+			input := domainEventChatAcceptedSeed()
+			switch probe.field {
+			case "player_id":
+				input.PlayerID = probe.value
+			case "companion_id":
+				input.CompanionID = probe.value
+			}
+			encoded, err := json.Marshal(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			outcome, _, err := runDomainEventChat(CaseSpec{ID: "domain.event/1/probe-chat-" + probe.name}, encoded)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if outcome.Kind != "error" || outcome.Category != probe.category || outcome.Fields["rule"] != probe.rule {
+				t.Fatalf("malformed UUID outcome = %+v, want %s at %s", outcome, probe.category, probe.rule)
+			}
+			if outcome.Fields[probe.field] != probe.value {
+				t.Fatalf("raw %s = %v, want %s", probe.field, outcome.Fields[probe.field], probe.value)
+			}
+		})
+	}
+}
+
 // `domainEventChatSyncCorpus` compares committed assets and optionally
 // exports a complete producer candidate for controller review.
 //
@@ -1026,9 +1067,8 @@ func domainEventChatCaseID(label string) string {
 // a producer-scoped selection stored in harness-owned temporary storage.
 // `Cases` is narrowed to the chat cases and unrelated family case lists are
 // cleared. The existing `domain.event` identity is retained while its
-// provenance and case list are replaced with this producer's current
-// selection, because the canonical manifest does not yet register these
-// cases; that registration is a later node's work.
+// provenance and case list are narrowed to this producer's selection so the
+// test runner never hands it another `domain.event` producer's cases.
 func domainEventChatWorkingManifest(t *testing.T, root string) Inventory {
 	t.Helper()
 	frozen := loadRealManifest(t, root)

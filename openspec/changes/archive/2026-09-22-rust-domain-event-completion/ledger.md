@@ -475,3 +475,46 @@
   zero-gap acceptance). Only wording drift repaired post-archive: relative
   links to this change and "active successor" phrasing updated to the
   archive path; F2 scope unchanged.
+
+## 2026-09-23 — post-archive whole-change review
+
+- Reviewed the archived implementation against current code, tests, the
+  synchronized spec, target architecture, frozen manifest, and F2 gate. Two
+  independent read-only reviews found 0 Critical and 0 Important issues.
+  No production authority, protocol, storage, ABI, or corpus asset changed.
+- Repaired the one concrete adapter defect found in the prior ledger's
+  Minor list: a missing item-drop `stack` or nested `stack.count` now reports
+  `drops[n].stack`. The new diagnostic test failed before the repair and
+  passed afterward. The `parse_stack` inner result scope is necessary because
+  `?` in a struct expression otherwise returns before a trailing `map_err`;
+  drop parsing still checks `id`, then `block_index`, then `stack`.
+- Added direct, unregistered Go and Rust probes for nonzero UUIDs with wrong
+  version/variant and hostile spawn kind 2. They exercise actual Go Play-state
+  validation and Rust checked-identity/classifier paths while preserving the
+  approved exact 44/68 tables and the 533/321 manifest partition. Corrected
+  three producer comments left in the pre-registration tense and named the
+  current Rust owner as checked semantic event values, not retired replay
+  observations.
+- Qualified the evidence boundary explicitly: the Rust loader verifies
+  frozen asset digests and consumer behavior, while the Go `ReconcileWorking`
+  gate verifies source-provenance hashes. A standalone Rust pass is not a
+  source-provenance claim. The paired-gate rule now lives in
+  `packages/engine/tests/AGENTS.md`.
+- Durable validation lessons now live in
+  `packages/tools/cmd/runtime-oracle/AGENTS.md`: rerun the entire owning Go
+  package and update earlier exact-total assertions whenever a producer
+  appends cases; run audit `TestCommentBacktickIdentifiersExist` in any node
+  adding Go comments. Filtered producer tests missed both classes during
+  the archived execution.
+- Final gates after repair: `make dev-check` passed with a sandbox exception
+  only for localhost test listeners; the first sandboxed run failed at
+  `listen tcp [::1]:0` / `127.0.0.1:0` with `operation not permitted`, not
+  an assertion failure. Full `runtime-oracle` race passed; full Rust domain
+  tests, full audit, Rust format/Clippy, and OpenSpec strict validation
+  passed. The first elevated `dev-check` run reached Rust formatting and
+  found one newly added assertion layout difference; formatting it and
+  rerunning the identical gate passed. Corpus assets remained byte-identical,
+  `source_revision` stayed `736af2f4b8bc3cbea4648733aa07e5ef9ce0e9d5`,
+  and F2 remains blocked on complete F1.
+- Architecture skill: no change. Findings are test-evidence and execution
+  discipline, not a new stable cross-task architecture rule.

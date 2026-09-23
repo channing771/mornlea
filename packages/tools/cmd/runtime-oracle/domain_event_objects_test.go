@@ -52,15 +52,14 @@ import (
 // dimension is therefore an admitted boundary, and the drop ordering compares
 // the raw dimension first.
 //
-// The frozen cases this producer materializes are not yet registered in the
-// canonical manifest: registration is a later node's work, so the only
-// publication path is the explicit external export through
-// `RUNTIME_ORACLE_EXPORT_DIR`.
+// The frozen cases are registered in the canonical manifest. Rebuilding a
+// candidate is an explicit external export through
+// `RUNTIME_ORACLE_EXPORT_DIR`; ordinary tests only compare committed assets.
 
 const (
 	// domainEventObjectsFamily is the corpus family this package executes.
-	// The family is the existing `domain.event` row, whose eventual owner is
-	// the Rust domain crate that owns the replay observation records.
+	// The family is the existing `domain.event` row owned by the Rust domain
+	// crate's checked semantic event values.
 	domainEventObjectsFamily = "domain.event"
 	// domainEventObjectsVersion is the family's discovered version. A case
 	// has to name its family's version, so the case identities carry this
@@ -521,8 +520,8 @@ func domainEventObjectsSeedDropID(slot uint8) core.DropID {
 // domainEventObjectsDropUpsertsSeed is the seed item-drop upsert batch: tick
 // 7 and two strictly ordered identities in the overworld and chunk `[0, 0]`,
 // slots 1 then 2 and generation 1, each carrying one ordinary stone at block
-// indices 17 then 18. This two-record seed is also the exact order-mutation
-// fixture a later node requires.
+// indices 17 then 18. This two-record seed also supplies the order-mutation
+// fixture.
 func domainEventObjectsDropUpsertsSeed() protocol.ItemDropUpserts {
 	return protocol.ItemDropUpserts{
 		ServerTick: 7,
@@ -1566,9 +1565,8 @@ func domainEventObjectsCaseID(label string) string {
 // into a producer-scoped selection stored in harness-owned temporary storage.
 // `Cases` is narrowed to the projectile and item-drop cases and unrelated
 // family case lists are cleared. The existing `domain.event` identity is
-// retained while its provenance and case list are replaced with this
-// producer's current selection, because the canonical manifest does not yet
-// register these cases; that registration is a later node's work.
+// retained while its provenance and case list are narrowed to this producer
+// so the test runner never hands it another `domain.event` producer's cases.
 func domainEventObjectsWorkingManifest(t *testing.T, root string) Inventory {
 	t.Helper()
 	frozen := loadRealManifest(t, root)

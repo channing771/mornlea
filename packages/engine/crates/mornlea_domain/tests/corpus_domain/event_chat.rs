@@ -1067,6 +1067,65 @@ fn event_chat_probes_unfrozen_enum_domains() {
     assert_eq!(outcome["fields"]["kind"], 255);
 }
 
+/// These direct probes stay outside the frozen 44-case manifest. A nonzero
+/// UUID with a wrong version or variant must be rejected by the checked
+/// identity constructor, not mistaken for a valid addressed chat event.
+#[test]
+fn event_chat_rejects_malformed_nonzero_uuids() {
+    let seed = serde_json::json!({
+        "consumer": "mornlea_domain",
+        "rule": "chat",
+        "event_id": "7",
+        "player_id": "00112233445546778899aabbccddeeff",
+        "companion_id": "2233445546674889aabbccddeeff00ff",
+        "player_name": "Alice",
+        "companion_name": "Buddy",
+        "kind": 1,
+        "reason": 0,
+        "command": "gather stone",
+        "speech": "",
+    });
+    for (label, field, value, category, rule) in [
+        (
+            "player-version",
+            "player_id",
+            "00112233445556778899aabbccddeeff",
+            "invalid-identity",
+            "chat_event.player_id",
+        ),
+        (
+            "player-variant",
+            "player_id",
+            "00112233445546770899aabbccddeeff",
+            "invalid-identity",
+            "chat_event.player_id",
+        ),
+        (
+            "companion-version",
+            "companion_id",
+            "2233445546675889aabbccddeeff00ff",
+            "invalid-value",
+            "chat_event.companion_id",
+        ),
+        (
+            "companion-variant",
+            "companion_id",
+            "22334455466748892abbccddeeff00ff",
+            "invalid-value",
+            "chat_event.companion_id",
+        ),
+    ] {
+        let mut input = seed.clone();
+        input[field] = serde_json::json!(value);
+        let case = probe_case(&format!("domain.event/1/probe-chat-{label}"), input);
+        let outcome = execute(&case).expect("execute malformed identity probe");
+        assert_eq!(outcome["kind"], "error", "{label}");
+        assert_eq!(outcome["category"], category, "{label}");
+        assert_eq!(outcome["fields"]["rule"], rule, "{label}");
+        assert_eq!(outcome["fields"][field], value, "{label}");
+    }
+}
+
 /// Builds one synthetic case around a raw input object, the shape the raw
 /// probes execute. The frozen `normalized` value stays null because the
 /// probes compare the executed outcome directly rather than through the

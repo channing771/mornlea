@@ -373,14 +373,17 @@ fn parse_drop_id(case: &FrozenCase, path: &str, value: &Value) -> Result<RawDrop
     })
 }
 
-/// Parses one raw stack from its frozen object rendering.
+/// Parses one raw stack from its frozen object rendering. The inner result
+/// scope keeps `?` from returning before the record path is attached.
 fn parse_stack(case: &FrozenCase, path: &str, object: &JsonMap) -> Result<RawStack, DispatchError> {
-    Ok(RawStack {
-        item: required_u16(case, object, "item")?,
-        count: required_u8(case, object, "count")?,
-        durability: required_u16(case, object, "durability")?,
-    })
-    .map_err(|error| repath(error, path))
+    let parse = || {
+        Ok(RawStack {
+            item: required_u16(case, object, "item")?,
+            count: required_u8(case, object, "count")?,
+            durability: required_u16(case, object, "durability")?,
+        })
+    };
+    parse().map_err(|error| repath(error, path))
 }
 
 /// Rewrites one helper error's field path to carry its record prefix, so a
@@ -403,16 +406,21 @@ fn parse_drops(case: &FrozenCase, input: &JsonMap) -> Result<Vec<RawDrop>, Dispa
         .map(|(index, value)| {
             let path = format!("drops[{index}]");
             let object = value_object(case, &path, value)?;
+            let id = parse_drop_id(
+                case,
+                &format!("{path}.id"),
+                object.get("id").ok_or_else(|| {
+                    invalid_case(case, format!("missing required field '{path}.id'"))
+                })?,
+            )?;
+            let block_index = required_u32(case, object, "block_index")?;
+            let stack_path = format!("{path}.stack");
+            let stack_object = required_object(case, object, "stack")
+                .map_err(|error| repath(error, &stack_path))?;
             Ok(RawDrop {
-                id: parse_drop_id(
-                    case,
-                    &format!("{path}.id"),
-                    object.get("id").ok_or_else(|| {
-                        invalid_case(case, format!("missing required field '{path}.id'"))
-                    })?,
-                )?,
-                block_index: required_u32(case, object, "block_index")?,
-                stack: parse_stack(case, &path, required_object(case, object, "stack")?)?,
+                id,
+                block_index,
+                stack: parse_stack(case, &stack_path, stack_object)?,
             })
         })
         .collect()
@@ -1898,6 +1906,42 @@ fn event_objects_drop_ordering_uses_raw_dimension_first() {
     // column stays first.
     assert_eq!(outcome["fields"]["drops"][0]["id"]["chunk"][0], 5);
     assert_eq!(outcome["fields"]["drops"][1]["id"]["chunk"][0], -9);
+}
+
+/// A malformed record must identify the submitted drop and field; a bare
+/// `stack` diagnostic is ambiguous when the batch has multiple records.
+#[test]
+fn event_objects_malformed_stack_identifies_drop_path() {
+    let mut case = probe_case(
+        "domain.event/1/probe-drop-missing-stack",
+        serde_json::json!({
+            "consumer": "mornlea_domain",
+            "rule": "item-drop-upserts",
+            "server_tick": "7",
+            "spawns": [],
+            "states": [],
+            "ids": [],
+            "drops": [{
+                "id": {"dimension": 0, "chunk": [0, 0], "slot": 1, "generation": 1},
+                "block_index": 17
+            }],
+        }),
+    );
+    let error = execute(&case).expect_err("missing stack must be invalid input");
+    assert!(
+        error.to_string().contains("drops[0].stack"),
+        "diagnostic must identify the offending record and field: {error}"
+    );
+
+    case.input_json.as_mut().expect("probe input")["drops"][0]["stack"] =
+        serde_json::json!({"item": 1, "durability": 0});
+    let error = execute(&case).expect_err("missing stack count must be invalid input");
+    assert!(
+        error
+            .to_string()
+            .contains("drops[0].stack: missing required integer 'count'"),
+        "nested diagnostic must identify the stack count: {error}"
+    );
 }
 
 /// Proves the frozen precedence with direct raw probes: a raw batch count

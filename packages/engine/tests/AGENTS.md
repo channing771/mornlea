@@ -14,6 +14,7 @@
 - Manifest validation enforces schema version 2, unique family and case IDs, case family membership, exact equality between each family's declared case list and registered cases, case version presence in family `supported_versions`, the `<family>/<version>/<label>` ID prefix format, the closed Go operation vocabulary, and nonempty decimal-u64 checkpoints.
 - Case formats are restricted to `InputFormat::Binary` or `InputFormat::Json`; case consumers are restricted to the closed `CorpusConsumer` registry (`corpus_frame`, `mornlea_domain`, `external:agent-contract`, `external:runtime-authority`).
 - SHA-256 content digests are verified for all input, expected, and encoded assets before returning loaded `FrozenCase` records.
+- The Rust loader does not validate the manifest's source-provenance hashes. A Rust-only corpus pass proves asset integrity and consumer behavior, not source provenance; pair it with the Go `ReconcileWorking` inventory gate when qualifying a frozen corpus against current sources.
 
 ## Focused Verification
 
@@ -22,5 +23,6 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract corpus_frame --locked
 rustup run 1.97.1 cargo clippy --manifest-path packages/engine/Cargo.toml -p mornlea_domain -p mornlea_protocol --all-targets --locked -- -D warnings
 rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --all --check
+go test ./packages/tools/cmd/runtime-oracle -run '^TestContractInventoryReconcilesFrozenCorpus$' -count=1
 git diff --exit-code -- testdata/runtime-migration
 ```

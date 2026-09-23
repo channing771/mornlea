@@ -2212,6 +2212,36 @@ fn event_mobs_raw_probe_count_overflow_and_no_sorting() {
     assert_eq!(outcome["fields"]["states"][1]["id"], "4");
 }
 
+/// A raw unknown spawn kind is a classifier-only rejection. This probe
+/// checks that branch without changing the approved 68-case corpus table.
+#[test]
+fn event_mobs_rejects_unknown_hostile_spawn_kind() {
+    let case = probe_case(
+        "domain.event/1/probe-hostile-spawn-unknown-kind",
+        serde_json::json!({
+            "consumer": "mornlea_domain",
+            "rule": "hostile-spawn",
+            "server_tick": "1",
+            "spawns": [{
+                "id": "1",
+                "dimension": 0,
+                "position": ["0", "0", "0"],
+                "yaw": "0",
+                "health": 10,
+                "kind": 2,
+            }],
+            "states": [],
+            "ids": [],
+            "despawns": [],
+        }),
+    );
+    let outcome = execute(&case).expect("execute unknown hostile spawn kind probe");
+    assert_eq!(outcome["kind"], "error");
+    assert_eq!(outcome["category"], "invalid-enum");
+    assert_eq!(outcome["fields"]["rule"], "hostile_spawn.record_0.kind");
+    assert_eq!(outcome["fields"]["spawns"][0]["kind"], 2);
+}
+
 /// Builds one synthetic case around a raw input object, the shape the raw
 /// probes execute. The frozen `normalized` value stays null because the
 /// probes compare the executed outcome directly rather than through the
