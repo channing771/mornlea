@@ -391,9 +391,12 @@ fn protocol_corpus_packet_negotiation_cases_are_executed() {
         .filter(|case| case.family == CLIENT_HELLO_FAMILY || case.family == LOGIN_START_FAMILY)
         .collect();
     let executed: Vec<&str> = negotiation.iter().map(|case| case.id.as_str()).collect();
+    let mut expected: Vec<&str> = NEGOTIATION_CASE_IDS.to_vec();
+    // The merged manifest sorts case IDs; compare as the reviewed set, not in
+    // the authoring order of this suite's constant.
+    expected.sort_unstable();
     assert_eq!(
-        executed,
-        NEGOTIATION_CASE_IDS.to_vec(),
+        executed, expected,
         "the negotiation selection does not carry the reviewed case set"
     );
     assert!(

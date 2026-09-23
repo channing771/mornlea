@@ -1,0 +1,8 @@
+{
+  "category": "packet",
+  "fields": {
+    "protocol_version": 45
+  },
+  "kind": "ok"
+}
+

@@ -1463,15 +1463,28 @@
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
       "sources": [
         {
+          "path": "packages/shared/network/codec/codec_client.go",
+          "sha256": "sha256:572788394d3bc8b13b42d097beaa3fade87cdc4e9d5d022f7e5c92568c9c70de"
+        },
+        {
           "path": "packages/shared/network/codec/codec_golden_test.go",
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet.go",
+          "sha256": "sha256:7f17bfa1ec21e58417c876aec881f7215ab61c04a3fcc0124e91ac9f928f5525"
         },
         {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.client.ClientHello/45/decode-current-version",
+        "protocol.client.ClientHello/45/decode-noncanonical-version",
+        "protocol.client.ClientHello/45/decode-trailing-byte",
+        "protocol.client.ClientHello/45/encode-current-version"
+      ]
     },
     {
       "id": "protocol.client.CloseContainer",
@@ -1624,15 +1637,30 @@
       "numeric_semantics": "little-endian integers; IEEE-754 binary32; canonical uvarint; reject NaN/Inf and unknown IDs",
       "sources": [
         {
+          "path": "packages/shared/network/codec/codec_client.go",
+          "sha256": "sha256:572788394d3bc8b13b42d097beaa3fade87cdc4e9d5d022f7e5c92568c9c70de"
+        },
+        {
           "path": "packages/shared/network/codec/codec_golden_test.go",
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
+        },
+        {
+          "path": "packages/shared/network/protocol/packet.go",
+          "sha256": "sha256:7f17bfa1ec21e58417c876aec881f7215ab61c04a3fcc0124e91ac9f928f5525"
         },
         {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.client.LoginStart/45/decode-invalid-utf8-name",
+        "protocol.client.LoginStart/45/decode-missing-distance",
+        "protocol.client.LoginStart/45/decode-oversized-payload",
+        "protocol.client.LoginStart/45/decode-trailing-byte",
+        "protocol.client.LoginStart/45/decode-valid",
+        "protocol.client.LoginStart/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.client.MoveContainerStack",
@@ -16116,6 +16144,246 @@
         "0"
       ],
       "rust_consumer": "mornlea_domain"
+    },
+    {
+      "id": "protocol.client.ClientHello/45/decode-current-version",
+      "family": "protocol.client.ClientHello",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "handshake",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ClientHello/decode-current-version.input.bin",
+        "sha256": "sha256:3973e022e93220f9212c18d0d0c543ae7c309e46640da93a4a0314de999f5112"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ClientHello/decode-current-version.expected.json",
+        "sha256": "sha256:6be3ac509e894eddacb511e1e52a0808f96fe9a0e3d824ac961df9757744e2e1"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.ClientHello/45/decode-noncanonical-version",
+      "family": "protocol.client.ClientHello",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "handshake",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ClientHello/decode-noncanonical-version.input.bin",
+        "sha256": "sha256:8509b81230019d2ad970d970f791dfbdc8caf54f5c594fcd327cef9feed206c1"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ClientHello/decode-noncanonical-version.expected.json",
+        "sha256": "sha256:063f859b00cf8e79a09a0117be50a671e193abca2a4654b1b9f92a01d1bba454"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.ClientHello/45/decode-trailing-byte",
+      "family": "protocol.client.ClientHello",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "handshake",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ClientHello/decode-trailing-byte.input.bin",
+        "sha256": "sha256:24ea1ebd0bafd39482db46ec2d8959e61353a90efc072719e1308f86c3a106ba"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ClientHello/decode-trailing-byte.expected.json",
+        "sha256": "sha256:e86ced1efbf7a5d21ad5044581d2db90ba5286a5cd992edbe27e12b051dd3f85"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.ClientHello/45/encode-current-version",
+      "family": "protocol.client.ClientHello",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "handshake",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ClientHello/encode-current-version.input.json",
+        "sha256": "sha256:49482515859dd42f40269c6c04ef5b270c436e31cdf39ab5057a862797f9422e"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ClientHello/encode-current-version.expected.json",
+        "sha256": "sha256:4847b32ffcfbcca42c32d6ef15b5f656fb6847d7b02780c0dbba65b6b85becd7"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.LoginStart/45/decode-invalid-utf8-name",
+      "family": "protocol.client.LoginStart",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "login",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginStart/decode-invalid-utf8-name.input.bin",
+        "sha256": "sha256:0b0f4f31dd05c5425cdb0d9a0183e20b3b845181df1e689ddc953739dff37ea1"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginStart/decode-invalid-utf8-name.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.LoginStart/45/decode-missing-distance",
+      "family": "protocol.client.LoginStart",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "login",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginStart/decode-missing-distance.input.bin",
+        "sha256": "sha256:e94caea7f3a533c2f4249095cfd09be0c716e1ee1c47914623d85205ba558f45"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginStart/decode-missing-distance.expected.json",
+        "sha256": "sha256:6a6aba5322f6bb08d116cc9b314494e850b3adbad2801f6f0078ec3215fd5f44"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.LoginStart/45/decode-oversized-payload",
+      "family": "protocol.client.LoginStart",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "login",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginStart/decode-oversized-payload.input.bin",
+        "sha256": "sha256:3266304f31be278d06c3bd3eb9aa3e00c59bedec0a890de466568b0b90b0e01f"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginStart/decode-oversized-payload.expected.json",
+        "sha256": "sha256:23157f4e9cdc29645bef06805ff2bec8e534e5d7de26e0ce55adde595fda17f1"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.LoginStart/45/decode-trailing-byte",
+      "family": "protocol.client.LoginStart",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "login",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginStart/decode-trailing-byte.input.bin",
+        "sha256": "sha256:b83a8a6c791ddd8596710330a5f082c69f6b7501d3861a72f128a2444cfd266d"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginStart/decode-trailing-byte.expected.json",
+        "sha256": "sha256:e86ced1efbf7a5d21ad5044581d2db90ba5286a5cd992edbe27e12b051dd3f85"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.LoginStart/45/decode-valid",
+      "family": "protocol.client.LoginStart",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "login",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginStart/decode-valid.input.bin",
+        "sha256": "sha256:33ebc555eecc499044f3beac717fa5b3f36a40b6d708aeece6c1fb17ebecf001"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginStart/decode-valid.expected.json",
+        "sha256": "sha256:abb51f42b278ba5a9a69163df063b869223da2d9562fe73e22c03a1d1002e6eb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.client.LoginStart/45/encode-valid",
+      "family": "protocol.client.LoginStart",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "client-to-server",
+        "state": "login",
+        "id": 0
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginStart/encode-valid.input.json",
+        "sha256": "sha256:e4eaad3a8fd7833dfe5ed04a3bdb3253d8ee14c1c8425d440d01c57dd0d4bc4a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/LoginStart/encode-valid.expected.json",
+        "sha256": "sha256:c35cea4533dc4853c8f7acfeb99063183a346a001e2e49f957382ce689616980"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
     },
     {
       "id": "protocol.frame/45/encode-id-128",
