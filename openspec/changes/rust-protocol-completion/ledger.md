@@ -59,3 +59,17 @@
 **Rollback:** revert `38cf5eb4`; domain's `trim_pinned_whitespace` is additive, and packet modules return to the deleted local tables within the same commit.
 
 **Architecture skill: no change.**
+
+## Node 1.4 — 2026-09-23
+
+**Status:** complete. Commits `59f545b9` (`feat(protocol): separate inbound admission from parsing`) + controller integration `e7bfbdf5` (`chore(corpus): integrate negotiation packet evidence`) on top of `cf24bed1`.
+
+**Deliverable:** structural `decode_inbound` for ClientHello/LoginStart (canonical uvarint/UTF-8/64 KiB/full-consumption only — old version and over-128-byte raw name survive decoding); pure `validate_hello` (≠45 → `VersionMismatch{45}`) and `admit_login` (UUID → pinned-trim canonical name → distance 2..=64; `InvalidIdentity`/`ProtocolViolation`); `AdmittedLogin` read-only. Corpus: 10 cases under `protocol.client.{ClientHello,LoginStart}/45` (4+6: valid decode + valid encode + malformed decodes) through the real Go codec, `mornlea_protocol` consumer routes, producer `runtime-oracle/protocol-negotiation`. Paired Go evidence: `packages/shared/network/protocol_admission_oracle_test.go` observes `BeginServerLogin` through the existing stream seam (no runtime-oracle import, no duplicated decision tree); 12 paired case IDs matched bidirectionally with the Rust suite.
+
+**Evidence:** protocol_admission 16/16 (reds first: UnsupportedVersion-at-decode + name-limit-before-trim); Go admission oracle 5 tests; negotiation oracle 9; full oracle package ok + `-race` ok (95s); whole protocol crate green post-integration (4 corpus incl. the 10 negotiation cases + 16 admission + 134 runtime_contract); clippy/fmt/vet/gofmt clean; audit ok. Corpus integrity: only the two families changed, case index 691→701 strict superset, `source_revision` preserved, provenance = real production codec/protocol files.
+
+**Controller integration incident + fix:** post-integration the Rust expected-case list compared in authoring order while the merged manifest sorts IDs; fixed by sorting the expected vector (reviewer verified the fix correct and minimal). **Review ruling:** Approved, 0 Crit/0 Imp/6 Minor. Category rulings recorded: invalid UTF-8 name → `invalid-value`; 64 KiB payload refusal → `capacity`; latent declared-length-exceeds-remaining pair (Go `truncated` vs Rust `InvalidString`) — the first node freezing such a case must pin `truncated` (the frozen vocabulary's incomplete-bytes category) and align the Rust derivation; divergence returns to controller. Deferred Minors: doc-comment wording (panic vs compile-time exhaustiveness), dead empty-guard, sort-both-sides robustness suggestion.
+
+**Rollback:** revert `59f545b9..e7bfbdf5`; the two families return to zero cases and the corpus index returns to 691.
+
+**Architecture skill: no change.**
