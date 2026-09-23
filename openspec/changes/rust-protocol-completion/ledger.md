@@ -105,3 +105,21 @@
 **Rollback:** revert `9e707cf5` and `8ce2d132` individually (the interleaved `cdf8676a` is path-disjoint and must not be reverted with them); the four families return to `cases: null` and the corpus index returns to 735.
 
 **Architecture skill: no change.**
+
+## Node 2.2 — 2026-09-23
+
+**Status:** complete. Commits `ed944b5f` (`feat(protocol): qualify client ray actions`) + controller integration `df40d0d3` (`chore(corpus): integrate client ray evidence`) on top of `fd77dc9e`.
+
+**Deliverable:** the five ray action families (`OpenContainer`, `TillSoil`, `BoneMeal`, `CollectWater`, `PlaceWater`, Play C→S IDs 8/13/14/16/17) on the common fallible surface over the node-1.2 writer; each payload is exactly 16 bytes (seq u64 LE, yaw f32 LE bits, pitch f32 LE bits) with no target position, held item, container kind or result; 25 corpus cases (5 per family: decode-valid, encode-valid, decode-nan-yaw, decode-infinite-pitch, encode-nan-yaw) through the real Go codec under the `mornlea_protocol` consumer, producer `runtime-oracle/protocol-client-rays`; the ten decode/encode routes registered in `ORACLE/inventory.go` and pinned in `inventory_test.go`; corpus consumer arms + exact case-ID list in `tests/protocol_corpus.rs`; new group test `tests/protocol_client_rays.rs` (including the `-0.0` bit pin, the 16-byte purity pin, the NaN/Inf mutation matrix and the baseline `.expect`-panic red); mechanical `.encode().expect` updates for the five families in `runtime_contract.rs`; AGENTS.md sync for both guides. Node 2.1's f32 hex-bit encoding ruling applied unchanged and its float request/consumer helpers were reused, not forked.
+
+**Evidence:** group test 8/8 with `--list` nonzero; `runtime_contract` 134/134; Go `TestProtocolClientRaysOracle*` 8/8; `TestPrimitiveFloatRejectsNonFiniteValues` ok (implementer-run). Corpus integrity: exactly 5 families changed (`cases: null` markers removed only), 754→779 strict superset (+25/−0), `source_revision` preserved, provenance = per-family message file (`message_container.go` for OpenContainer, `message_command.go` for the other four) plus `codec_client.go`; controller spot-checked the 16-byte literal, the NaN word at offset 8 and hex-bit request fields before integration. Post-integration whole protocol crate green (`protocol_corpus` 7/7 with the 25 ray cases executed), full oracle package `ok`, audit `ok`.
+
+**Controller integration incident + fix:** `inventory_test.go`'s two zero-case-family fixtures used `protocol.client.BoneMeal`, which this node filled; the fixtures now use `protocol.client.ChatCommand` (still zero-case until node 2.5). This is the documented shared-family maintenance act; the fix is part of the integration commit.
+
+**Review ruling:** Approved, 0 Crit/0 Imp/3 Minor. Deferred Minors for final review triage: the template's allocating `encode` double-validates through `encoded_len` (byte-identical to the node-2.1 template; final review decides whether the template itself is simplified); resolver comment order vs branch order; RED-2 baseline-panic evidence captured via a scratch test deleted after capture (corroborated by the removed `.expect` line in the diff).
+
+**Orchestration note:** both dispatches for this node used the generic subagent type instead of the newly mandated project subagents `superpowers-implementer`/`superpowers-reviewer` (controller error at dispatch time); the full role prompts were embedded verbatim and review remained an independent gate. Subsequent nodes dispatch through the project subagents.
+
+**Rollback:** revert `ed944b5f` and `df40d0d3` individually; the five families return to `cases: null` and the corpus index returns to 754 (the zero-case fixture swap returns with them).
+
+**Architecture skill: no change.**
