@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Fail closed before repository discovery so no validation mode does partial work.
+if ! command -v rg >/dev/null 2>&1; then
+  printf 'missing required executable: rg\n' >&2
+  exit 1
+fi
+
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repository_root="$(cd -- "${script_dir}/../.." && pwd -P)"
 project_root="${MORNLEA_GODOT_PROJECT_ROOT:-${repository_root}/apps/mornlea-godot}"
 failures=0
+rg_findings=""
 
 usage() {
   printf 'usage: %s [--script-ownership] [--desktop-only-fixtures] [--python-isolation-fixtures]\n' "${0##*/}" >&2
@@ -13,6 +20,16 @@ usage() {
 reject() {
   printf '%s\n' "$*" >&2
   failures=1
+}
+
+# Preserve ripgrep's distinct no-match status without masking scan failures.
+scan_rg() {
+  local status=0
+  rg_findings="$(rg "$@")" || status=$?
+  if ((status > 1)); then
+    reject "ripgrep scan failed (exit $status)"
+  fi
+  return "$status"
 }
 
 is_generated_or_development_path() {
@@ -91,23 +108,23 @@ collect_project_text_files() {
 }
 
 validate_resource_closure() {
-  local source_path relative_path findings autoloads descriptor line library_path
+  local source_path relative_path autoloads descriptor line library_path
   local -a text_files=()
   while IFS= read -r -d '' source_path; do
     text_files+=("${source_path}")
   done < <(collect_project_text_files)
 
   if ((${#text_files[@]} > 0)); then
-    if findings="$(rg -n --fixed-strings 'res://../' "${text_files[@]}")"; then
-      printf '%s\n' "${findings}" >&2
+    if scan_rg -n --fixed-strings 'res://../' "${text_files[@]}"; then
+      printf '%s\n' "${rg_findings}" >&2
       reject "resource path escapes the project root"
     fi
-    if findings="$(rg -n --pcre2 '(?:^|[=\"'"'"'( ])(?:/(?:[A-Za-z0-9._-]+/)+[A-Za-z0-9._-]+|[A-Za-z]:[\\/])' "${text_files[@]}")"; then
-      printf '%s\n' "${findings}" >&2
+    if scan_rg -n --pcre2 '(?:^|[=\"'"'"'( ])(?:/(?:[A-Za-z0-9._-]+/)+[A-Za-z0-9._-]+|[A-Za-z]:[\\/])' "${text_files[@]}"; then
+      printf '%s\n' "${rg_findings}" >&2
       reject "absolute development-machine path is forbidden"
     fi
-    if findings="$(rg -n --pcre2 '\b(?:PYTHONPATH|PYTHONHOME|LD_LIBRARY_PATH|DYLD_LIBRARY_PATH)\b' "${text_files[@]}")"; then
-      printf '%s\n' "${findings}" >&2
+    if scan_rg -n --pcre2 '\b(?:PYTHONPATH|PYTHONHOME|LD_LIBRARY_PATH|DYLD_LIBRARY_PATH)\b' "${text_files[@]}"; then
+      printf '%s\n' "${rg_findings}" >&2
       reject "system Python or dynamic-library search is forbidden"
     fi
   fi
@@ -170,7 +187,7 @@ validate_uid_policy() {
 }
 
 validate_comment_language() {
-  local source_path relative_path findings
+  local source_path relative_path
   local -a architecture_sources=()
   while IFS= read -r -d '' source_path; do
     relative_path="${source_path#${project_root}/}"
@@ -182,14 +199,14 @@ validate_comment_language() {
     architecture_sources+=("${source_path}")
   done < <(find "${project_root}" -type f \( -name '*.gd' -o -name '*.py' -o -name '*.pyi' \) -print0)
   if ((${#architecture_sources[@]} > 0)) && \
-    findings="$(rg -n --pcre2 '#[^\r\n]*\p{Han}' "${architecture_sources[@]}")"; then
-    printf '%s\n' "${findings}" >&2
+    scan_rg -n --pcre2 '#[^\r\n]*\p{Han}' "${architecture_sources[@]}"; then
+    printf '%s\n' "${rg_findings}" >&2
     reject "non-English source comment is forbidden in Godot architecture code"
   fi
 }
 
 validate_python_boundary() {
-  local source_path relative_path findings
+  local source_path relative_path
   local -a production_python=()
   while IFS= read -r -d '' source_path; do
     relative_path="${source_path#${project_root}/}"
@@ -202,18 +219,18 @@ validate_python_boundary() {
   done < <(find "${project_root}" -type f \( -name '*.py' -o -name '*.pyi' \) -print0)
   ((${#production_python[@]} > 0)) || return
 
-  if findings="$(rg -n --pcre2 '^\s*(?:from|import)\s+(?:aiohttp|cffi|ctypes|ensurepip|ftplib|http|mornlea_client_core|mornlea_engine|packages\.agent|pip|requests|sitecustomize|socket|subprocess|urllib|usercustomize|uv|venv|websockets)(?:\b|\.)' "${production_python[@]}")"; then
-    printf '%s\n' "${findings}" >&2
+  if scan_rg -n --pcre2 '^\s*(?:from|import)\s+(?:aiohttp|cffi|ctypes|ensurepip|ftplib|http|mornlea_client_core|mornlea_engine|packages\.agent|pip|requests|sitecustomize|socket|subprocess|urllib|usercustomize|uv|venv|websockets)(?:\b|\.)' "${production_python[@]}"; then
+    printf '%s\n' "${rg_findings}" >&2
     reject "forbidden Python runtime dependency"
   fi
-  if findings="$(rg -n --pcre2 "\\b(?:sys\\.path\\.(?:append|extend|insert)|site\\.(?:addsitedir|getusersitepackages)|site\\.(?:USER_SITE|ENABLE_USER_SITE)|os\\.(?:popen|system|exec\\w*|spawn\\w*)|(?:pip|ensurepip|venv)\\.|importlib\\.import_module\\s*\\(\\s*['\\\"](?:pip|ensurepip|uv)['\\\"]|(?:urlopen|urlretrieve)\\s*\\(|requests\\.(?:get|post|put|patch)\\s*\\()" "${production_python[@]}")"; then
-    printf '%s\n' "${findings}" >&2
+  if scan_rg -n --pcre2 "\\b(?:sys\\.path\\.(?:append|extend|insert)|site\\.(?:addsitedir|getusersitepackages)|site\\.(?:USER_SITE|ENABLE_USER_SITE)|os\\.(?:popen|system|exec\\w*|spawn\\w*)|(?:pip|ensurepip|venv)\\.|importlib\\.import_module\\s*\\(\\s*['\\\"](?:pip|ensurepip|uv)['\\\"]|(?:urlopen|urlretrieve)\\s*\\(|requests\\.(?:get|post|put|patch)\\s*\\()" "${production_python[@]}"; then
+    printf '%s\n' "${rg_findings}" >&2
     reject "forbidden Python runtime search, installer, process, or download call"
   fi
 }
 
 validate_desktop_only() {
-  local source_path relative_path findings input_map
+  local source_path relative_path input_map
 
   # Source closure rejects unsupported device and lifecycle declarations before
   # any build or export tool can select platform artifacts.
@@ -230,8 +247,8 @@ validate_desktop_only() {
     /^\[/ { active=0 }
     active { print }
   ' "${project_root}/project.godot")"
-  if findings="$(printf '%s\n' "${input_map}" | rg -n -i '(?:touch(?:screen)?|screen_(?:touch|drag)|accelerometer|gyroscope|magnetometer|gravity_sensor|virtual_joystick)')"; then
-    printf '%s\n' "${findings}" >&2
+  if scan_rg -n -i '(?:touch(?:screen)?|screen_(?:touch|drag)|accelerometer|gyroscope|magnetometer|gravity_sensor|virtual_joystick)' <<<"${input_map}"; then
+    printf '%s\n' "${rg_findings}" >&2
     reject "unsupported touch or mobile-sensor input"
   fi
 
@@ -249,7 +266,7 @@ validate_desktop_only() {
 }
 
 validate_gdscript_runtime_boundary() {
-  local source_path relative_path findings
+  local source_path relative_path
   local -a production_gdscript=()
   while IFS= read -r -d '' source_path; do
     relative_path="${source_path#${project_root}/}"
@@ -262,8 +279,8 @@ validate_gdscript_runtime_boundary() {
   done < <(find "${project_root}" -type f -name '*.gd' -print0)
   ((${#production_gdscript[@]} > 0)) || return
 
-  if findings="$(rg -n --pcre2 '\b(?:HTTPClient|HTTPRequest|WebSocketPeer|StreamPeerTCP)\b|\bOS\.(?:execute|create_process)\s*\(' "${production_gdscript[@]}")"; then
-    printf '%s\n' "${findings}" >&2
+  if scan_rg -n --pcre2 '\b(?:HTTPClient|HTTPRequest|WebSocketPeer|StreamPeerTCP)\b|\bOS\.(?:execute|create_process)\s*\(' "${production_gdscript[@]}"; then
+    printf '%s\n' "${rg_findings}" >&2
     reject "forbidden Godot runtime network, download, or process call"
   fi
 }
@@ -332,7 +349,7 @@ validate_export_preset() {
 validate_export_closure() {
   local presets="${project_root}/export_presets.cfg"
   local line preset_name="" platform="" exclusions="" include_filter="" custom_template="" lower_template=""
-  local preset_count=0 findings relative_path catalog capability_registry
+  local preset_count=0 relative_path catalog capability_registry
   [[ -f "${presets}" ]] || {
     reject "export_presets.cfg is missing"
     return
@@ -370,8 +387,8 @@ validate_export_closure() {
     validate_export_preset "${preset_name}" "${platform}" "${exclusions}" "${include_filter}"
   fi
 
-  if findings="$(rg -n -i '^\s*(?:android|ios|web|wasm|console|xbox|playstation|switch)\.' "${project_root}/addons/mornlea_bridge" -g '*.gdextension')"; then
-    printf '%s\n' "${findings}" >&2
+  if scan_rg -n -i '^\s*(?:android|ios|web|wasm|console|xbox|playstation|switch)\.' "${project_root}/addons/mornlea_bridge" -g '*.gdextension'; then
+    printf '%s\n' "${rg_findings}" >&2
     reject "unsupported platform selector in GDExtension descriptor"
   fi
 

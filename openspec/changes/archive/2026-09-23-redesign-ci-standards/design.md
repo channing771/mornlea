@@ -57,7 +57,7 @@ preflight   frontend   rust-quality   native-linux   native-macos
 
 The independent first wave starts immediately:
 
-- `preflight` checks repository policy, generated-file consistency, OpenSpec validity, workflow invariants, script syntax, package inventory, and required tool availability without requiring native artifacts;
+- `preflight` checks repository policy, OpenSpec validity, workflow invariants, script syntax, package inventory, and required tool availability without requiring native artifacts. It runs the audit suite except the deterministic Godot asset-sync test, whose generator reaches the cgo native engine ABI. The full audit suite, including that test and generated-file consistency, runs in `linux-quality` after the candidate-bound Linux native artifact is verified;
 - `frontend` runs the frontend formatting, lint, type, and unit gates;
 - `rust-quality` runs Rust formatting, linting, and unit tests that do not require platform-specific artifact handoff;
 - `native-linux` builds the Linux server/native bundle and publishes its manifest;
@@ -87,13 +87,15 @@ The `Makefile` exposes named CI entry points for the workflow layers, including 
 
 `scripts/ci/doctor.sh` checks the commands required by a selected profile before validation begins. Missing prerequisites fail immediately with a single actionable diagnostic. Validators may still check their own mandatory dependencies, but they must exit before doing partial work and must never print a success message after a prerequisite failure.
 
+The full repository audit consumes `rg` through Godot project checks. Linux quality and the `rest` race slice each run that audit in a separate clean job, so both must install ripgrep and invoke an `audit` doctor profile before inventory or test execution; installing it only in preflight does not populate those runners.
+
 `scripts/ci/package-inventory.sh` derives the six-module package universe and compares it with the race partitions. The check fails if a package is missing, duplicated, or assigned to more than one partition. The package inventory, not hand-maintained counts, defines completeness.
 
 Because this change makes `.github/workflows` and `scripts/ci` explicit policy and lifecycle boundaries, concise directory-scoped `AGENTS.md` guidance is added or updated beside them.
 
 ### 5. Route validation by supported platform instead of runner convenience
 
-Platform-neutral and server-owned work uses a pinned supported Linux runner. macOS is reserved for artifacts and tests that consume Darwin libraries or exercise the graphical client. Runner labels are explicit supported versions rather than floating `*-latest` aliases.
+Platform-neutral and server-owned work uses a pinned supported Linux runner. Linux quality compiles and vets the complete supported Linux package set. The six-module race inventory remains the Linux/Darwin union, but Linux quality excludes exactly nine Darwin-owned client packages through one audit-checked list: graphical command, app, capture, developer-capture, benchmark, Godot client-core command, render, render/hud, and gfxspike. Linux `go list -e` loadability alone is insufficient because some render files refer to symbols defined only in Darwin-tagged files; the hosted Linux compiler decides support. All excluded packages remain in the complete Darwin client race slice. macOS is reserved for artifacts and tests that consume Darwin libraries or exercise the graphical client. Runner labels are explicit supported versions rather than floating `*-latest` aliases.
 
 Third-party actions are pinned to immutable commit SHAs and selected from revisions compatible with the runner's supported Node runtime. Every job has an explicit timeout and least-privilege permissions. Caches may accelerate a job but are never treated as validation evidence or a substitute for candidate-bound artifacts.
 
@@ -102,7 +104,11 @@ Third-party actions are pinned to immutable commit SHAs and selected from revisi
 The optional Godot workflow has two layers:
 
 - platform-neutral project closure, descriptor, import, and contract checks;
-- platform-specific extension build, runtime smoke, and the existing repeated lifecycle qualification on a supported macOS runner.
+- deterministic-asset generation after six-module Go dependency prefetch and native-engine materialization, followed by pinned Godot/Python runtime materialization, embedded-Python tooling checks, extension build, runtime smoke, and the existing repeated lifecycle qualification on the macOS 26 arm64/Xcode 26.5 environment required by the checked-in runtime inputs.
+
+The deterministic asset command is runtime-owned even though its emitted bytes are platform neutral: its current Go dependency closure reaches the cgo-only native engine ABI. Dependency caches may accelerate this layer, but a cold runner explicitly activates the repository-pinned Rust toolchain and downloads every committed Go module's external requirements before the gate switches back to its locked offline mode. The pinned Godot fetch command materializes the verified editor application at the cache path consumed by headless checks; a downloaded archive alone is not runtime evidence.
+
+The cold GDExtension qualification must build the editor-selected debug library as well as the release distribution library. Verification performs a headless editor import after the debug library is present and before script/scene probes; this discovers the extension in a fresh project's ignored `.godot` cache. A direct release verification without the debug prerequisite fails explicitly. The release build and exported-app probe still qualify the shipped release artifact rather than substituting the debug library for it.
 
 Its path filters include the Godot project, Godot bridge crate, extension build and validation scripts, asset generator and relevant inputs, workflow and Makefile entry points, and executable audit tests. Manual dispatch is always available to diagnose filter mistakes or validate a candidate before cutover.
 
@@ -115,8 +121,23 @@ The implementation starts with regression tests and then makes these narrow repa
 - CPU atlas packing, mip generation, and exported atlas pixels move into platform-neutral asset code; only GPU upload and WebGPU ownership remain Darwin-specific. The generated bytes and asset contract stay unchanged.
 - Godot project validation checks `rg` before any scan, and the CI doctor provisions or rejects the selected environment before invoking the validator. A missing `rg` must produce a non-zero exit and no success output.
 - the Godot extension builder and consumer derive their output path from the same effective Cargo target root, including target-triple and build-profile components.
+- the Godot fetcher atomically materializes the verified editor archive at the cache path used by headless runtime commands instead of relying on a preinstalled application or a warm runner.
 
 These fixes are independently testable and remain useful even if workflow orchestration is rolled back.
+
+The first hosted Linux candidate also exposed a two-ULP mismatch between the Go
+encoder's displacement envelope and the Rust integrator's fixed-step result.
+The native diagnostic identified displacement rejection, not malformed bytes.
+The repair keeps Rust as the sole production integrator and retains its one-ULP
+rejection contract and frozen output vectors. The Go envelope mirrors the
+Rust `vec3_len` square-and-add order with explicit fused operations only along
+the fixed-step target, acceleration, and airborne-clamp path. The shared
+movement-direction helper is also consumed by sneak-edge probing; its resulting
+direction must continue to track the production Rust target and be regression
+tested. This is a parity correction, not a new movement or ABI policy. The
+temporary native stderr probe is removed after the Go-side regression passes,
+and the frozen source-provenance digest is refrozen from the cleaned and
+accurately documented Rust source before PR acceptance.
 
 ### 8. Treat repository settings as an explicit migration step
 
@@ -128,7 +149,7 @@ Implementation follows test-driven development at each boundary:
 
 1. Audit tests first reject the old mixed workflow, missing `merge-gate` dependencies, floating runner labels, mutable action references, absent timeouts, and accidental Godot inclusion in the required graph.
 2. Shell regression tests first demonstrate that missing `rg` fails closed and that an overridden `CARGO_TARGET_DIR` is honored end to end.
-3. A Linux build test first demonstrates that the asset generator can consume the atlas pixels without Darwin-only source files.
+3. A platform-neutral audit first demonstrates that the atlas implementation belongs to the Linux source set; on Linux it also compiles the asset generator, while the required Linux quality entry point provides the real compile acceptance for every candidate.
 4. Native artifact tests cover SHA, platform, ordering, path, size, and digest mutations.
 5. Race inventory tests prove that the union of partitions is the complete six-module package universe and that intersections are empty.
 6. Focused package and script tests run during each repair, followed by the repository's proportionate T1/T2 gates.

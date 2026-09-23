@@ -211,17 +211,16 @@ pub(crate) fn step_input_is_valid(bytes: &[u8]) -> bool {
 
 type Vector = [f32; 3];
 
-// 与 Go mgl32.Vec3.Len 逐位一致：f32 平方和（左结合）→ f64 sqrt → f32。
-//
-// Go 在 arm64 上会把单表达式 x*x + y*y + z*z 收缩为 FMA：
-// ((x*x + y*y) + z*z) → fma(z, z, fma(x, x, y*y))。这里显式用 mul_add
-// 对齐，否则平方和与 Go 相差 1 ulp，会导致 sweep bounds 自检误判位移越界。
+// Match Go's `stepVectorLength` across platforms: round the inner and outer
+// fused sums to f32, take the square root in f64, then round back to f32.
+// Explicit fusion prevents the sweep envelope from depending on Go's target
+// architecture or its optimization of `mgl32.Vec3.Len`.
 fn vec3_len(v: Vector) -> f32 {
     let sum = v[2].mul_add(v[2], v[0].mul_add(v[0], v[1] * v[1]));
     ((sum as f64).sqrt()) as f32
 }
 
-// 与 Go mgl32.Vec3.Normalize 逐位一致：l = 1.0/Len，再逐分量乘。
+// Match Go's fixed-step normalization: divide once, then multiply each component.
 fn vec3_normalize(v: Vector) -> Vector {
     let l = 1.0f32 / vec3_len(v);
     [v[0] * l, v[1] * l, v[2] * l]
@@ -348,9 +347,9 @@ fn write_f32_output(output: &mut [u8], offset: usize, value: f32) {
 pub(crate) fn physics_step(bytes: &[u8]) -> Result<[u8; STEP_OUTPUT_BYTES], StepError> {
     let input = StepInput::decode(bytes);
     let (velocity, displacement) = integrate(&input);
-    // 三轴 sweep bounds 自检带 1 ulp 余量：Go 在 amd64 不做 FMA 收缩，sweep bounds
-    // 与积分位移可差 1 ulp。位移在界内或界外至多 1 ulp 均通过，物理正确性由 prism
-    // 构建的 1e-5 epsilon 边距兜底；相差超过 1 ulp 仍拒绝。
+    // Go mirrors this integrator's fused vector length when encoding sweep bounds.
+    // Keep the one-ULP allowance for residual rounding, but reject wider drift;
+    // the prism's collision margin is a separate geometric safety bound.
     for ((&minimum, &maximum), &offset) in input
         .sweep_min
         .iter()
@@ -764,8 +763,8 @@ mod tests {
 
     #[test]
     fn physics_step_allows_one_ulp_outside_sweep_bounds() {
-        // 位移恰好等于 sweep_max.next_up()（界外 1 ulp）应通过：Go 在 amd64 不收缩
-        // FMA，界与积分位移可差 1 ulp，物理正确性由 prism 的 epsilon 边距兜底。
+        // Accept exactly one ULP outside the supplied envelope as the frozen
+        // ABI contract; explicit Go/Rust FMA parity does not widen this guard.
         let mut bytes = empty_prism_bytes();
         let displacement = {
             let input = StepInput::decode(&bytes);

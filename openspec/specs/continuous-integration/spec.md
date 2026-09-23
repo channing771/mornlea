@@ -1,8 +1,10 @@
+# continuous-integration Specification
+
 ## Purpose
 
 Defines deterministic, platform-aware continuous integration contracts that give pull requests early actionable feedback while preserving complete fail-closed merge validation and explicitly separated migration-only evidence.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Each candidate tree has one active CI identity
 
@@ -72,7 +74,7 @@ Linux and macOS native artifacts MUST be built as separate platform-owned units 
 
 ### Requirement: Required source sets and race coverage remain complete
 
-Required CI MUST compile the repository on Linux and MUST validate the supported macOS native source set. Full Go race coverage MUST include every package from all six modules in committed `go.work`; the race slices MUST have a union equal to the workspace-wide package set and pairwise-empty intersections. Server and platform-neutral slices SHALL use Linux capacity, while a slice MAY use macOS only when its selected source set or runtime contract requires macOS. The independent server probe MUST remain outside race with its existing exact test identity and `-count=1`.
+Required CI MUST compile and vet every package in the repository's supported Linux source set and MUST validate the supported macOS native source set. Full Go race coverage MUST include every package from all six modules in committed `go.work`; the race slices MUST have a union equal to the workspace-wide package set and pairwise-empty intersections. Server and platform-neutral slices SHALL use Linux capacity, while a slice MAY use macOS only when its selected source set or runtime contract requires macOS. The independent server probe MUST remain outside race with its existing exact test identity and `-count=1`.
 
 #### Scenario: Darwin-only API leaks into a Linux command
 
@@ -106,6 +108,10 @@ The repository MUST expose one stable required merge-gate status. It MUST succee
 
 Until an independently approved cutover change promotes the Godot client, Godot project, embedded-Python, bridge, export, and lifecycle qualification MUST execute in a separate workflow outside the required merge gate. The workflow MUST run for relevant Godot, bridge, Python-runtime, deterministic-asset, and gate-definition changes, and MUST support explicit manual execution. Unrelated changes MUST NOT download or build the Godot toolchain. A Godot failure MUST remain red and diagnosable; optional status MUST NOT be implemented by swallowing command failures.
 
+The optional runtime layer MUST select the architecture and Xcode toolchain required by its checked-in build inputs, explicitly populate dependency inputs on a cold runner, build the native engine before any cgo asset consumer, and materialize the checksum-verified Godot editor at the cache path used by headless validation. A workflow cache or preinstalled editor MUST NOT be required for success.
+
+The runtime layer MUST discover the native GDExtension in a fresh project before headless identity and host probes. It MUST provide the editor-selected debug library for discovery while separately building and qualifying the release distribution; a warm `.godot` import cache MUST NOT be required for success.
+
 #### Scenario: Unrelated server-only change avoids Godot setup
 
 - **GIVEN** a pull request changes only authoritative server code and no Godot input, bridge contract, generated-asset input, or gate definition
@@ -118,6 +124,13 @@ Until an independently approved cutover change promotes the Godot client, Godot 
 - **WHEN** the optional Godot workflow runs
 - **THEN** the Godot check MUST report failure with the original command result
 - **AND** the required merge gate MUST continue to reflect only approved required contracts
+
+#### Scenario: Cold Godot project discovers its native bridge
+
+- **GIVEN** a fresh checkout has no generated `.godot` import cache
+- **WHEN** optional runtime qualification builds and verifies the native bridge
+- **THEN** headless editor import MUST discover the debug-selected extension before identity and host probes
+- **AND** the release library and exported application MUST remain separately qualified
 
 ### Requirement: CI commands are locally reproducible and caches are non-authoritative
 

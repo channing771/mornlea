@@ -8,10 +8,11 @@ import (
 
 func moveToward(current, target mgl32.Vec3, maximumDelta float32) mgl32.Vec3 {
 	delta := target.Sub(current)
-	if length := delta.Len(); length <= maximumDelta {
+	length := stepVectorLength(delta)
+	if length <= maximumDelta {
 		return target
 	}
-	return current.Add(delta.Mul(maximumDelta / delta.Len()))
+	return current.Add(delta.Mul(maximumDelta / length))
 }
 
 func validate(state State, input Input) {

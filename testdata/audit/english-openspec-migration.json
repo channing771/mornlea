@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "total_files": 112,
-  "total_lines": 10656,
+  "total_lines": 10655,
   "files": [
     {
       "path": "openspec/specs/authoritative-armor/spec.md",
@@ -510,8 +510,8 @@
     },
     {
       "path": "openspec/specs/test-timing-discipline/spec.md",
-      "count": 96,
-      "digest": "1fc1dd148a85bed0676af430f396a310fd0dd3e5dced3defc9ca8bd41fe4bce4"
+      "count": 95,
+      "digest": "734fbd139949786e22c6b1bf9cacabdad639d79d4ae4ed5680f5f275167335f3"
     },
     {
       "path": "openspec/specs/texture-pack-loading/spec.md",

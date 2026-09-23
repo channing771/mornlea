@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "total_files": 1243,
-  "total_comments": 38586,
+  "total_comments": 38566,
   "files": [
     {
       "path": "packages/audit/armor_domain_test.go",
@@ -25,8 +25,8 @@
     },
     {
       "path": "packages/audit/companion_agent_service_test.go",
-      "count": 8,
-      "digest": "72a694af64e539355b68f9360314cdfe849178eeeccf67a2852dbaae1e686fc2"
+      "count": 4,
+      "digest": "014f18ddb3ed7fcbcba39fcf599c5b9c594dedb71f481ce0d097e305a3199bfa"
     },
     {
       "path": "packages/audit/dependency_test.go",
@@ -75,8 +75,8 @@
     },
     {
       "path": "packages/client/assets/atlas.go",
-      "count": 7,
-      "digest": "8d45d50a734750f497439a68fe2a3c46ce3118dfbda51a2d74a4e857c85aa72a"
+      "count": 2,
+      "digest": "57b68d32b3c8a50d84c487bea1b7f0819e6c8849e2fb60433319c3e0d4a0a151"
     },
     {
       "path": "packages/client/assets/atlas_test.go",
@@ -2480,8 +2480,8 @@
     },
     {
       "path": "packages/engine/crates/mornlea_engine/src/step.rs",
-      "count": 80,
-      "digest": "e541fe31df24a181cf41ba1c22b9f46359dbc754072f95b9bf2209271dc83dde"
+      "count": 70,
+      "digest": "9c43e4096fc0884e0d316e4b50506bd41f5fcc56c0b35f109972a887792b4398"
     },
     {
       "path": "packages/engine/crates/mornlea_engine/src/worldgen.rs",
@@ -5805,8 +5805,8 @@
     },
     {
       "path": "packages/shared/physics/step.go",
-      "count": 26,
-      "digest": "30eb31dde9caefdcbc0272cedce5b8b17dd8c9f83bed86b71747de631dd69a98"
+      "count": 25,
+      "digest": "03314abbe6b404b891a57433404bed2a592ed0778380def4933c855f729a01f6"
     },
     {
       "path": "packages/shared/physics/step_golden_vectors_test.go",

@@ -1,6 +1,6 @@
 ---
 doc_id: development-process
-doc_revision: 2026-09-20.1
+doc_revision: 2026-09-23.1
 language: en
 counterpart: development-process.zh.md
 ---
@@ -48,6 +48,8 @@ Follow `tasks.md` and red → green → refactor. Keep tests with code, one topi
 
 ### 4. Branch review and gates
 
+Use [Continuous integration](continuous-integration.md) for the current required job graph, platform-specific commands, artifact verification, and optional Godot workflow. Run the applicable local gates before publishing a candidate:
+
 ```bash
 make rust
 make test-race
@@ -57,6 +59,8 @@ openspec validate --all --strict --no-interactive
 ```
 
 Add applicable benchmark, fuzz/golden, visual, and platform gates. Benchmarks are informational; overflow, data loss, report identity, and I/O errors are hard failures. Removed automatic Hooks remain removed; maintain only `scripts/agent-hooks/guard.mjs` and its tests.
+
+For required CI failures, repair the cause and rerun the failed job and its dependent gate explicitly. Do not hide a failure with automatic validation retries.
 
 ### 5. Closeout
 Confirm `go test -list` sets when splitting files; sync delta specs and archive each change; update scoped guidance and progress only with verified facts. Behavior changes use PR/CI (`gh pr create`, `gh pr checks --watch`, repair and repeat until green, then `gh pr merge --merge`); pure sync/archive documentation may merge directly after local gates. Preserve historical evidence and unresolved items.
