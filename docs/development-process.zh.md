@@ -1,6 +1,6 @@
 ---
 doc_id: development-process
-doc_revision: 2026-09-20.1
+doc_revision: 2026-09-23.1
 language: zh-CN
 counterpart: development-process.md
 ---
@@ -32,7 +32,7 @@ OpenAI 原生编排采用隔离优先策略。经验证的 OpenAI ChatGPT/Codex 
 1. 实现前将工作分类为 `spike`、`bounded` 或 `architectural`，核对代码/测试/历史和任务来源；一次只问一个澄清问题，说明范围、成功标准和约束，并先取得显式批准。确认通道设备优先（`confirm.sh ask` → 飞书回复 → `feishu-listener.js`/`AGENT_RESUME`）；不可用或超时时改用结构化 GitHub Discussion，并停在确认点。变化时先更新 OpenSpec 产物。
 2. 较大工作使用隔离 worktree/分支；复杂功能、跨包重构、存档/协议、并发或性能契约变化必须有 `proposal.md`、delta specs、`design.md`、`tasks.md`、`ledger.md`，并运行 `openspec validate --all --strict --no-interactive`。
 3. 遵循 `tasks.md` 和 red → green → refactor；测试与代码同目录，一个测试文件一个主题，每包一个共享 helper 中心，跨语言常量在同一任务同步。委派时只提供简洁 brief，包含任务、必要证据和路径、基线 SHA、相关 change 产物、约束、所有权、集成点和精确验证命令，不复制整个控制会话。OpenAI ChatGPT/Codex 控制器自行判断是否需要单独评审者，不强制“一轮实现、一轮评审”；非 OpenAI 或未知提供方仍采用新的实现者和独立评审。在 `ledger.md` 记录进度、实际执行的评审、证据和 `Ruling: <决定> — <理由> — <修正的错误>`；未决项写入 proposal.md 的“延期与放弃”。仅在工作区未变化时按 SHA 复用验证证据；聚焦评审检查改动行为，全量 race 留给门禁。
-4. 运行下列命令，并按需增加 benchmark、fuzz/golden、视觉及平台门禁。自动 Hooks 已移除，只维护 `scripts/agent-hooks/guard.mjs` 及其测试。
+4. 当前必需任务图、平台专属命令、产物验证和可选 Godot 工作流见[持续集成](continuous-integration.zh.md)。运行下列适用的本地门禁，并按需增加 benchmark、fuzz/golden、视觉及平台门禁。自动 Hooks 已移除，只维护 `scripts/agent-hooks/guard.mjs` 及其测试。
 
 ```bash
 make rust
@@ -41,6 +41,7 @@ go vet ./packages/contracts/... ./packages/shared/... ./packages/server/... ./pa
 test -z "$(gofmt -l .)"
 openspec validate --all --strict --no-interactive
 ```
+   必需 CI 失败时，修复原因并显式重跑失败任务及其依赖门禁；不得用自动校验重试掩盖失败。
 5. 拆分测试文件时确认 `go test -list` 集合；同步/归档 OpenSpec，依据已验证事实更新文档。行为变更走 PR/CI（`gh pr create`、`gh pr checks --watch`，修复后重复直到绿色，再 `gh pr merge --merge`）；纯同步/归档文档可在本地门禁全绿后直接合并。保留历史证据和未决项。
 
 协议、存档 schema、engine/client ABI 和 benchmark scenario 升版互斥；版本化核心玩法串行，只有所有权和版本影响不重叠才可并行。
