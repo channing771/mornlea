@@ -90,7 +90,7 @@ pub use block::{
 };
 pub use block_changes::{BlockChange, BlockChanges, MAX_BLOCK_CHANGES};
 pub use bone_meal::BoneMeal;
-pub use chat_command::{CHAT_COMMAND_TEXT_MAX_BYTES, ChatCommand};
+pub use chat_command::{CHAT_COMMAND_MAX_WIRE_BYTES, CHAT_COMMAND_TEXT_MAX_BYTES, ChatCommand};
 pub use chat_event::{
     CHAT_EVENT_ACCEPTED, CHAT_EVENT_COMPANION_SPEECH, CHAT_EVENT_MAX_WIRE_BYTES,
     CHAT_EVENT_REJECTED, CHAT_EVENT_TASK_COMPLETED, CHAT_EVENT_TASK_FAILED,

@@ -264,6 +264,27 @@ and the isolated export helpers (`exportGeneratedAssets`,
   `message_stack_splitting.go` added for `MoveStackPartial` and
   `QuickMoveStack`, and `message_drop_stack.go` added for `DropStack`, because
   the shared reference validators live in `message_container.go`.
+- The seventh packet producer group is `protocol_client_chat_test.go`
+  (`protocol.client.ChatCommand`, decode and encode). It executes
+  `codec.DecodeClient`/`EncodeClient` in the play state with the case's own
+  `PacketKey` and normalizes the single `text` field verbatim, including a
+  leading mention prefix, because the codec performs no addressing. The
+  family is the one variable-length client payload, so the category table
+  resolves the pre-parse payload ceiling (`chat command payload exceeds`, the
+  Go `ChatCommandMaxWireBytes`) to `capacity`, the noncanonical uvarint and
+  the trailing-byte boundaries at their own categories, and the two text
+  validator messages (`invalid chat command text`, `chat command contains
+  control character`) to `invalid-value`. Its string boundary reuses the
+  node 1.5 ruling: a declared length the payload cannot complete is answered
+  by the Go string primitive with the same sentinel as a malformed UTF-8
+  text, so the boundary resolver classifies a rejected proper prefix of the
+  reviewed payload as `truncated` and every other invalid-string rejection as
+  `invalid-value`, and the Rust reader reports `Truncated` for the same bytes.
+  The text-above-bound case is encode-only, because the payload ceiling
+  answers a length the decoder cannot reach first. Provenance is
+  `codec_client.go` plus `message_companion.go`, which owns
+  `validateCommandText` and the `companion.MaxPlanCommandBytes`-derived wire
+  bound.
 - `validProducerIDs` is the closed exporter allowlist. It carries the 18
   protocol group producer IDs the v45 packet plan names
   (`runtime-oracle/protocol-negotiation`, `-control`, `-client-control`,

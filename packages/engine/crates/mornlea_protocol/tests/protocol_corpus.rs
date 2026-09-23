@@ -36,7 +36,15 @@
 //! the 18-byte container reference, which the container view validates as a
 //! real reference and the inventory and crafting views require to be the exact
 //! all-zero sentinel. The moved amount, the transfer destination and the world
-//! drop position stay server-owned, so no payload carries any of them.
+//! drop position stay server-owned, so no payload carries any of them. The
+//! seventh group is the unsequenced chat command family (`ChatCommand`),
+//! executed through that same surface; it is the one variable-length client
+//! payload, so its gate is the domain `CommandText` rule, its decoder applies
+//! the Go payload ceiling before any parse, and a declared length the payload
+//! cannot complete reports `Truncated` the way the control message reader
+//! does. No case in the group declares a session, a deadline, a FIFO entry or
+//! a send: addressing, `/warp` handling and chat routing stay outside the
+//! protocol contract.
 //! `CorpusConsumer::Protocol` is registered here as `mornlea_protocol` so a
 //! packet case can name it, while the framing cases stay with the separate
 //! `corpus_frame` consumer the frame regression suite keeps using.
@@ -94,6 +102,8 @@ const MOVE_CONTAINER_STACK_FAMILY: &str = "protocol.client.MoveContainerStack";
 const MOVE_STACK_PARTIAL_FAMILY: &str = "protocol.client.MoveStackPartial";
 const QUICK_MOVE_STACK_FAMILY: &str = "protocol.client.QuickMoveStack";
 const DROP_STACK_FAMILY: &str = "protocol.client.DropStack";
+/// The packet family the unsequenced chat command producer group registers.
+const CHAT_COMMAND_FAMILY: &str = "protocol.client.ChatCommand";
 /// The packet families' protocol version, matching the manifest family rows.
 const PACKET_VERSION: &str = "45";
 /// The category label every accepted control packet outcome publishes.
@@ -499,6 +509,18 @@ fn client_drop_stack_fields(record: &mornlea_protocol::DropStack) -> serde_json:
         "container": client_container_fields(&record.container),
         "view": record.view,
         "slot": record.slot
+    })
+}
+
+/// Renders the semantic field one chat command publishes, shared by the decode
+/// and encode arms so both publish the same canonical field encoding.
+///
+/// The text is published verbatim, including a leading mention prefix: the
+/// codec performs no addressing, so the wire value and the published value are
+/// the same string and no routing decision rides in the payload.
+fn client_chat_fields(text: &str) -> serde_json::Value {
+    serde_json::json!({
+        "text": text
     })
 }
 
@@ -1308,6 +1330,26 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
             }
             other => panic!("unsupported packet operation for {}: {other}", case.id),
         },
+        CHAT_COMMAND_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::ChatCommand::decode(&case.input) {
+                Ok(command) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": client_chat_fields(&command.text),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                // The record is built through its public field, so an untrimmed,
+                // empty, control-carrying or oversized text is refused by the
+                // production validation rather than by a constructor guard.
+                let command = mornlea_protocol::ChatCommand {
+                    text: text_field(case, "text"),
+                };
+                encode_ok_outcome(command.encode(), client_chat_fields(&command.text))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
         other => panic!("unsupported packet family for {}: {other}", case.id),
     }
 }
@@ -1347,7 +1389,8 @@ fn dispatch_case(case: &FrozenCase) -> serde_json::Value {
         | MOVE_CONTAINER_STACK_FAMILY
         | MOVE_STACK_PARTIAL_FAMILY
         | QUICK_MOVE_STACK_FAMILY
-        | DROP_STACK_FAMILY => dispatch_packet(case),
+        | DROP_STACK_FAMILY
+        | CHAT_COMMAND_FAMILY => dispatch_packet(case),
         other => panic!("unregistered protocol family for {}: {other}", case.id),
     }
 }
@@ -1842,6 +1885,71 @@ fn protocol_corpus_packet_client_stack_views_cases_are_executed() {
         "the client stack view selection executed zero cases"
     );
     for case in client_stack_views {
+        assert_eq!(
+            case.consumer,
+            CorpusConsumer::Protocol,
+            "case {} carries the wrong consumer",
+            case.id
+        );
+        assert!(
+            !case.operation.is_empty(),
+            "case {} names no operation",
+            case.id
+        );
+        assert_normalized(case, dispatch_packet(case));
+    }
+}
+
+/// The case identities the unsequenced chat command group registers. They
+/// mirror the Go producer's registration, so a case that only one side names is
+/// a mismatch rather than a shared name. The merged manifest sorts case IDs,
+/// so the comparison sorts this list too.
+const CLIENT_CHAT_CASE_IDS: [&str; 13] = [
+    "protocol.client.ChatCommand/45/decode-control-text",
+    "protocol.client.ChatCommand/45/decode-empty-text",
+    "protocol.client.ChatCommand/45/decode-invalid-utf8",
+    "protocol.client.ChatCommand/45/decode-max-text",
+    "protocol.client.ChatCommand/45/decode-noncanonical-length",
+    "protocol.client.ChatCommand/45/decode-payload-above-wire-ceiling",
+    "protocol.client.ChatCommand/45/decode-trailing-byte",
+    "protocol.client.ChatCommand/45/decode-truncated",
+    "protocol.client.ChatCommand/45/decode-untrimmed-leading-nbsp",
+    "protocol.client.ChatCommand/45/decode-valid",
+    "protocol.client.ChatCommand/45/encode-empty-text",
+    "protocol.client.ChatCommand/45/encode-text-above-bound",
+    "protocol.client.ChatCommand/45/encode-valid",
+];
+
+/// Reports whether one family belongs to the unsequenced chat command
+/// producer group.
+fn is_client_chat_family(family: &str) -> bool {
+    family == CHAT_COMMAND_FAMILY
+}
+
+#[test]
+fn protocol_corpus_packet_client_chat_cases_are_executed() {
+    // The case assets are exported by the Go producer and integrated by the
+    // controller, so before that merge this test reports the missing corpus
+    // cases instead of an empty selection that would look like a passing run.
+    let cases = load_cases_for_consumer(CorpusConsumer::Protocol);
+    let client_chat: Vec<&FrozenCase> = cases
+        .iter()
+        .filter(|case| is_client_chat_family(&case.family))
+        .collect();
+    let executed: Vec<&str> = client_chat.iter().map(|case| case.id.as_str()).collect();
+    let mut expected: Vec<&str> = CLIENT_CHAT_CASE_IDS.to_vec();
+    // The merged manifest sorts case IDs; compare as the reviewed set, not in
+    // the authoring order of this suite's constant.
+    expected.sort_unstable();
+    assert_eq!(
+        executed, expected,
+        "the client chat selection does not carry the reviewed case set"
+    );
+    assert!(
+        !client_chat.is_empty(),
+        "the client chat selection executed zero cases"
+    );
+    for case in client_chat {
         assert_eq!(
             case.consumer,
             CorpusConsumer::Protocol,

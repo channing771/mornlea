@@ -709,22 +709,52 @@ rather than checking that it omits a few names.
   a decimal number in requests, and `view`/`from`/`to`/`slot` as JSON
   numbers with `single` as a JSON boolean.
 
-## Chat command (`src/chat_command.rs`, `tests/runtime_contract.rs`)
+## Chat command (`src/chat_command.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_chat.rs`)
 
 - Play packet ID 12 payload is a length-prefixed UTF-8 instruction bounded
   by `CHAT_COMMAND_TEXT_MAX_BYTES` (`1024`, shared with the planner
-  instruction limit). The text must be 1..=max bytes, valid UTF-8, free of
-  NUL and Unicode control characters, and untrimmed whitespace is
-  rejected. Failures are `InvalidString`; oversized declared lengths and
-  truncated payloads fail before publication; trailing bytes fail after the
-  last field (`chat_command_round_trip_preserves_golden_bytes`,
+  instruction limit). The family carries the common fallible surface in
+  design §4: `validate(&self)` rechecks the public `text` on each call,
+  checked `encoded_len(&self)` sizes the validated record,
+  `encode_into(&self, dst)` publishes into a caller-owned buffer,
+  `encode(&self)` is the allocating wrapper over it, and `decode(payload)`
+  stays a bounded read plus `done()` plus validation. An invalid value
+  always wins over a short destination, so a record mutated into an
+  untrimmed, empty, control-carrying or oversized text after construction is
+  refused instead of silently published
+  (`chat_command_round_trip_preserves_golden_bytes`,
   `chat_command_rejects_blank_control_and_malformed_payload`).
-- `valid_bounded_text` is this module's local rule: it takes the bound from
-  the caller so the command and speech slots cannot drift apart, and
-  `valid_command_text` binds it to the command bound. Its admitted set is the
-  domain's canonical bounded-text rule; routing it through the domain
-  `CommandText` is the chat node's change, so the local copy stays until then
-  and must not drift from the domain bounds.
+- The text rule is the domain `CommandText` rule: at least one byte, at most
+  1024 bytes, no surrounding whitespace and no control character, with the
+  pinned whitespace and control sets the domain owns. `valid_command_text`
+  routes both the wire slot and the chat event's command restatement through
+  it, so the wire, the domain and the Go `validateCommandText` share one
+  admitted set. Text-bound failures are `InvalidString`; the pre-parse
+  payload ceiling is `CHAT_COMMAND_MAX_WIRE_BYTES` (`1026`, the two-byte
+  maximum prefix plus the text) and an oversized payload is
+  `FrameTooLarge`.
+- A declared string length the remaining payload cannot complete is an
+  incomplete payload and reports `Truncated` rather than the `InvalidString`
+  the shared string primitive reports for the same bytes, mirroring the
+  control message reader in `src/handshake_reject.rs`: the Go
+  `byteDecoder.string` answers that condition with the same sentinel as a
+  malformed UTF-8 text, while the frozen corpus category for an incomplete
+  payload is `truncated`. A noncanonical length prefix stays
+  `NonCanonicalUvarint`; trailing bytes fail after the last field.
+- The text is never interpreted on the wire: a leading `@` is not
+  addressing, a leading `/` is not a warp, and the payload carries no
+  session, sequence or FIFO field, so the exact-literal pins in
+  `tests/protocol_client_chat.rs` are the purity contract.
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.client.ChatCommand` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real
+  Go codec in
+  `packages/tools/cmd/runtime-oracle/protocol_client_chat_test.go`. The
+  normalized field is `{"text": <string>}` with the text verbatim. The
+  text-above-bound case is encode-only, because the payload ceiling answers
+  a length the decoder cannot reach first, and the truncated case is a
+  rejected proper prefix of the reviewed payload, which is the shape the
+  boundary resolver resolves to the truncated category.
 
 ## Player input (`src/player_input.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_control.rs`)
 
@@ -1215,10 +1245,11 @@ rather than checking that it omits a few names.
 - Compact section storage is shared through the two checked conversions in
   `src/chunk_snapshot.rs`; see the chunk snapshot section for the move
   semantics.
-- The chat command's bounded-text rule (`src/chat_command.rs`) is the one
-  local text rule left: its admitted set matches the domain's canonical
-  bounded-text rule, and the chat node routes it through the domain
-  `CommandText`.
+- The crate-private `valid_bounded_text` (`src/chat_command.rs`) is the one
+  local text rule left: only the chat event's speech slot still consumes it,
+  and routing that slot through the domain `SpeechText` is a later node's
+  change. The command slot itself routes through the domain `CommandText`, so
+  no local copy of that rule remains.
 - A family whose Go `Validate` checks fewer fields than the Rust newtype
   enforces is a parity break. Where the Go rule is narrower, as with
   `DropID.Valid` and the dimension, the Rust rule is narrowed to match rather
@@ -1245,6 +1276,7 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_client_rays --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_client_inventory --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_client_stack_views --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_client_chat --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
 

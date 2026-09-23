@@ -393,6 +393,8 @@ func TestContractInventoryRejectsKnownConsumerOnUnsupportedRoute(t *testing.T) {
 				{FamilyID: "protocol.client.QuickMoveStack", Version: "45", Operation: "encode"}:     {},
 				{FamilyID: "protocol.client.DropStack", Version: "45", Operation: "decode"}:          {},
 				{FamilyID: "protocol.client.DropStack", Version: "45", Operation: "encode"}:          {},
+				{FamilyID: "protocol.client.ChatCommand", Version: "45", Operation: "decode"}:        {},
+				{FamilyID: "protocol.client.ChatCommand", Version: "45", Operation: "encode"}:        {},
 				{FamilyID: "protocol.client.KeepAliveReply", Version: "45", Operation: "decode"}:     {},
 				{FamilyID: "protocol.client.KeepAliveReply", Version: "45", Operation: "encode"}:     {},
 				{FamilyID: "protocol.server.Disconnect", Version: "45", Operation: "decode"}:         {},

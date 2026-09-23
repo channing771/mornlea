@@ -1754,7 +1754,7 @@ fn drop_stack_rejects_invalid_view_and_malformed_payload() {
 #[test]
 fn chat_command_round_trip_preserves_golden_bytes() {
     let command = mornlea_protocol::ChatCommand::new("chop oak".to_owned()).expect("command");
-    let payload = command.encode();
+    let payload = command.encode().expect("encode command");
     assert_eq!(
         payload,
         [0x08, 0x63, 0x68, 0x6f, 0x70, 0x20, 0x6f, 0x61, 0x6b]
@@ -1780,6 +1780,7 @@ fn chat_command_rejects_blank_control_and_malformed_payload() {
             &mornlea_protocol::ChatCommand::new(maximum.clone())
                 .expect("maximum")
                 .encode()
+                .expect("encode maximum")
         )
         .expect("decode maximum")
         .text,
@@ -1789,9 +1790,13 @@ fn chat_command_rejects_blank_control_and_malformed_payload() {
         mornlea_protocol::ChatCommand::decode(&[0x00]),
         Err(mornlea_protocol::ProtocolError::InvalidString)
     );
+    // A declared length the remaining payload cannot complete is an
+    // incomplete payload: the family's own reader reports `Truncated`, which
+    // is the frozen corpus category the Go producer publishes for the same
+    // bytes through its rejected-proper-prefix resolver.
     assert_eq!(
         mornlea_protocol::ChatCommand::decode(&[0x08, 0x63, 0x68, 0x6f]),
-        Err(mornlea_protocol::ProtocolError::InvalidString)
+        Err(mornlea_protocol::ProtocolError::Truncated)
     );
     assert_eq!(
         mornlea_protocol::ChatCommand::decode(&[
