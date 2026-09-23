@@ -301,15 +301,66 @@ rather than checking that it omits a few names.
   mutated into slot 9 after construction is refused instead of silently
   published (`client_control_invalid_value_wins_over_short_capacity`).
 
-## Drop selected item (`src/drop_selected_item.rs`, `tests/runtime_contract.rs`)
+## Simple inventory and crafting command packets (`src/move_inventory_stack.rs`, `src/move_crafting_stack.rs`, `src/close_container.rs`, `src/drop_selected_item.rs`, `src/equip_armor.rs`, `src/take_crafting_output.rs`, `tests/protocol_client_inventory.rs`)
+
+- The six Play client-to-server inventory and crafting command families share
+  the client control group's common fallible surface in design §4:
+  `validate(&self)` rechecks every public field on each call, checked
+  `encoded_len(&self)` sizes the validated record, `encode_into(&self, dst)`
+  publishes into a caller-owned buffer, `encode(&self)` is the allocating
+  wrapper over it, and `decode` stays a bounded read plus `done()` plus
+  validation. The infallible `encode`-returning-`Vec` signatures are gone, so
+  a record mutated into an invalid slot pair or a zero `TakeCraftingOutput`
+  sequence after construction is refused instead of silently published, and a
+  short destination reports `OutputTooSmall { needed, available }` with every
+  destination byte unchanged. An invalid value always wins over a short
+  destination.
+- Each family keeps its own struct, packet ID and private field-writing
+  closure over the crate-private `publish_packet` in `server_hello.rs`; no
+  combined exported command payload type exists, so the packet keys
+  (`MoveInventoryStack` C/Play/6, `MoveCraftingStack` C/Play/7,
+  `CloseContainer` C/Play/10, `DropSelectedItem` C/Play/11,
+  `TakeCraftingOutput` C/Play/15, `EquipArmor` C/Play/18) are never erased.
+- Two payload shapes are in scope. The two move payloads are exactly 10 bytes
+  — the sequence and the two slot bytes — with no moved item or count,
+  because inventory contents and the moved count stay server-owned. The four
+  sequence-only payloads are exactly 8 bytes, so an item count, a drop
+  location and a target armor slot are all wire-level decisions the protocol
+  never carries. The rule split follows the Go validators: the move families
+  check range, then the same-slot relation, then the crafting
+  both-in-inventory exclusion, and all report `InvalidRange`; the personal
+  grid's size-dependent extension cells are an authority rule the protocol
+  layer does not publish.
+- The three sequence-only families (`CloseContainer`, `DropSelectedItem`,
+  `EquipArmor`) have no invalid mutable value, so they carry the total
+  `validate` pattern like `src/request_chunk_resync.rs`: the gate returns
+  `Ok(())` for every field state, including a `u64::MAX` sequence, while the
+  fallible surface stays uniform. `TakeCraftingOutput` is the fourth
+  sequence-only family but does carry a rule — a zero sequence cannot take
+  part in command acknowledgement — so its gate refuses it
+  (`client_inventory_invalid_value_wins_over_short_capacity`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.client.{MoveInventoryStack, MoveCraftingStack,
+  CloseContainer, DropSelectedItem, EquipArmor, TakeCraftingOutput}` each
+  register a decode and an encode route under the `mornlea_protocol`
+  consumer, produced by the real Go codec in
+  `packages/tools/cmd/runtime-oracle/protocol_client_inventory_test.go`, with
+  the sequence published and requested as a decimal and the two move slots as
+  JSON numbers.
+
+## Drop selected item (`src/drop_selected_item.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_inventory.rs`)
 
 - Play packet ID 11 payload is a little-endian `u64` sequence. Zero
   sequences are legal. The selected slot and drop position stay
   server-owned. Truncated payloads and trailing bytes fail before
   publication (`drop_selected_item_round_trip_preserves_golden_bytes`,
   `drop_selected_item_rejects_malformed_payload_and_accepts_zero_sequence`).
+- The family carries the simple inventory and crafting command group's
+  fallible surface with a total value gate, so no field mutation can make
+  the record unpublishable and the surface stays uniform
+  (`sequence_only_families_keep_a_total_value_gate`).
 
-## Equip armor (`src/equip_armor.rs`, `tests/runtime_contract.rs`)
+## Equip armor (`src/equip_armor.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_inventory.rs`)
 
 - Play packet ID 18 payload is a little-endian `u64` sequence, the same
   shape as DropSelectedItem. Zero sequences are legal. The selected item
@@ -317,8 +368,12 @@ rather than checking that it omits a few names.
   trailing bytes fail before publication
   (`equip_armor_round_trip_preserves_golden_bytes`,
   `equip_armor_rejects_malformed_payload_and_accepts_zero_sequence`).
+- The family carries the simple inventory and crafting command group's
+  fallible surface with a total value gate, so no field mutation can make
+  the record unpublishable and the surface stays uniform
+  (`sequence_only_families_keep_a_total_value_gate`).
 
-## Take crafting output (`src/take_crafting_output.rs`, `tests/runtime_contract.rs`)
+## Take crafting output (`src/take_crafting_output.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_inventory.rs`)
 
 - Play packet ID 15 payload is a little-endian `u64` sequence. Zero
   sequences are `InvalidRange` because they cannot take part in command
@@ -326,8 +381,12 @@ rather than checking that it omits a few names.
   and trailing bytes fail before publication
   (`take_crafting_output_round_trip_preserves_golden_bytes`,
   `take_crafting_output_rejects_zero_sequence_and_malformed_payload`).
+- The family carries the simple inventory and crafting command group's
+  fallible surface, so a record mutated into a zero sequence after
+  construction is refused instead of silently published
+  (`client_inventory_invalid_value_wins_over_short_capacity`).
 
-## Move inventory stack (`src/move_inventory_stack.rs`, `tests/runtime_contract.rs`)
+## Move inventory stack (`src/move_inventory_stack.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_inventory.rs`)
 
 - Play packet ID 6 payload is a little-endian `u64` sequence plus source
   and target slot bytes. Slots must be distinct and inside
@@ -335,8 +394,12 @@ rather than checking that it omits a few names.
   and out-of-range pairs are `InvalidRange`; trailing bytes fail before
   publication (`move_inventory_stack_round_trip_preserves_golden_bytes`,
   `move_inventory_stack_rejects_invalid_slots_and_malformed_payload`).
+- The family carries the simple inventory and crafting command group's
+  fallible surface, so a record mutated into an out-of-range or same-slot
+  pair after construction is refused instead of silently published
+  (`client_inventory_invalid_value_wins_over_short_capacity`).
 
-## Move crafting stack (`src/move_crafting_stack.rs`, `tests/runtime_contract.rs`)
+## Move crafting stack (`src/move_crafting_stack.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_inventory.rs`)
 
 - Play packet ID 7 payload is a little-endian `u64` sequence plus unified
   view slots. Grid is `0..CRAFTING_GRID_SLOTS-1`; inventory is
@@ -344,14 +407,22 @@ rather than checking that it omits a few names.
   and inventory-to-inventory pairs are `InvalidRange`; trailing bytes fail
   before publication (`move_crafting_stack_round_trip_preserves_golden_bytes`,
   `move_crafting_stack_rejects_invalid_slots_and_malformed_payload`).
+- The family carries the simple inventory and crafting command group's
+  fallible surface, so a record mutated into an out-of-range, same-slot or
+  both-in-inventory pair after construction is refused instead of silently
+  published (`client_inventory_invalid_value_wins_over_short_capacity`).
 
-## Close container (`src/close_container.rs`, `tests/runtime_contract.rs`)
+## Close container (`src/close_container.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_inventory.rs`)
 
 - Play packet ID 10 payload is a little-endian `u64` sequence. Zero
   sequences are legal. The viewed container identity stays server-owned.
   Truncated payloads and trailing bytes fail before publication
   (`close_container_round_trip_preserves_golden_bytes`,
   `close_container_rejects_malformed_payload_and_accepts_zero_sequence`).
+- The family carries the simple inventory and crafting command group's
+  fallible surface with a total value gate, so no field mutation can make
+  the record unpublishable and the surface stays uniform
+  (`sequence_only_families_keep_a_total_value_gate`).
 
 ## Place block (`src/place_block.rs`, `src/bytes.rs`, `tests/runtime_contract.rs`, `tests/protocol_client_control.rs`)
 
@@ -1095,6 +1166,7 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_control --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_client_control --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_client_rays --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_client_inventory --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
 
@@ -1135,6 +1207,14 @@ for every family, the `-0.0` yaw keeps its `0x80000000` bit pattern, a short or
 invalid destination leaves every caller byte untouched, a mutated non-finite
 angle wins over a short destination for each family, and every proper truncation
 plus one trailing byte reject. It also needs no corpus files.
+
+`tests/protocol_client_inventory.rs` pins the six simple inventory and crafting
+command records through that same surface: the 10-byte move and 8-byte
+sequence-only reviewed wire literals round-trip for every family, a short
+destination leaves every caller byte untouched, a mutated slot pair or a mutated
+zero `TakeCraftingOutput` sequence wins over a short destination, the three total
+sequence-only families re-encode a `u64::MAX` sequence byte-exactly, and every
+proper truncation plus one trailing byte reject. It also needs no corpus files.
 
 `tests/protocol_corpus.rs` executes the corpus cases this crate owns through
 the real codec paths — `read_frame`/`write_frame` for framing and

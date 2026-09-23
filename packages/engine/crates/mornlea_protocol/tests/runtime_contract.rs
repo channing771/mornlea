@@ -682,7 +682,7 @@ fn select_hotbar_rejects_invalid_slot_and_malformed_payload() {
 #[test]
 fn drop_selected_item_round_trip_preserves_golden_bytes() {
     let drop = mornlea_protocol::DropSelectedItem::new(0x1122_3344_5566_7788);
-    let payload = drop.encode();
+    let payload = drop.encode().expect("encode drop");
     assert_eq!(payload, [0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11]);
     assert_eq!(mornlea_protocol::DropSelectedItem::PACKET_ID, 11);
     let decoded = mornlea_protocol::DropSelectedItem::decode(&payload).expect("decode");
@@ -702,7 +702,8 @@ fn drop_selected_item_rejects_malformed_payload_and_accepts_zero_sequence() {
     let zero = mornlea_protocol::DropSelectedItem::new(0);
     assert_eq!(zero.sequence, 0);
     assert_eq!(
-        mornlea_protocol::DropSelectedItem::decode(&zero.encode()).expect("decode zero"),
+        mornlea_protocol::DropSelectedItem::decode(&zero.encode().expect("encode zero"))
+            .expect("decode zero"),
         zero
     );
 }
@@ -710,7 +711,7 @@ fn drop_selected_item_rejects_malformed_payload_and_accepts_zero_sequence() {
 #[test]
 fn equip_armor_round_trip_preserves_golden_bytes() {
     let equip = mornlea_protocol::EquipArmor::new(18);
-    let payload = equip.encode();
+    let payload = equip.encode().expect("encode equip");
     assert_eq!(payload, [0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
     assert_eq!(mornlea_protocol::EquipArmor::PACKET_ID, 18);
     let decoded = mornlea_protocol::EquipArmor::decode(&payload).expect("decode");
@@ -730,7 +731,8 @@ fn equip_armor_rejects_malformed_payload_and_accepts_zero_sequence() {
     let zero = mornlea_protocol::EquipArmor::new(0);
     assert_eq!(zero.sequence, 0);
     assert_eq!(
-        mornlea_protocol::EquipArmor::decode(&zero.encode()).expect("decode zero"),
+        mornlea_protocol::EquipArmor::decode(&zero.encode().expect("encode zero"))
+            .expect("decode zero"),
         zero
     );
 }
@@ -738,7 +740,7 @@ fn equip_armor_rejects_malformed_payload_and_accepts_zero_sequence() {
 #[test]
 fn take_crafting_output_round_trip_preserves_golden_bytes() {
     let take = mornlea_protocol::TakeCraftingOutput::new(0x1122_3344_5566_7788).expect("take");
-    let payload = take.encode();
+    let payload = take.encode().expect("encode take");
     assert_eq!(payload, [0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11]);
     assert_eq!(mornlea_protocol::TakeCraftingOutput::PACKET_ID, 15);
     let decoded = mornlea_protocol::TakeCraftingOutput::decode(&payload).expect("decode");
@@ -770,7 +772,7 @@ fn take_crafting_output_rejects_zero_sequence_and_malformed_payload() {
 #[test]
 fn move_inventory_stack_round_trip_preserves_golden_bytes() {
     let mov = mornlea_protocol::MoveInventoryStack::new(10, 3, 35).expect("move");
-    let payload = mov.encode();
+    let payload = mov.encode().expect("encode move");
     assert_eq!(
         payload,
         [0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x23]
@@ -815,7 +817,8 @@ fn move_inventory_stack_rejects_invalid_slots_and_malformed_payload() {
     assert_eq!(first.from, 0);
     assert_eq!(first.to, 35);
     assert_eq!(
-        mornlea_protocol::MoveInventoryStack::decode(&first.encode()).expect("decode boundary"),
+        mornlea_protocol::MoveInventoryStack::decode(&first.encode().expect("encode boundary"))
+            .expect("decode boundary"),
         first
     );
 }
@@ -823,7 +826,7 @@ fn move_inventory_stack_rejects_invalid_slots_and_malformed_payload() {
 #[test]
 fn move_crafting_stack_round_trip_preserves_golden_bytes() {
     let mov = mornlea_protocol::MoveCraftingStack::new(11, 9, 0).expect("move");
-    let payload = mov.encode();
+    let payload = mov.encode().expect("encode move");
     assert_eq!(
         payload,
         [0x0b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09, 0x00]
@@ -873,7 +876,8 @@ fn move_crafting_stack_rejects_invalid_slots_and_malformed_payload() {
     assert_eq!(grid_to_inv.from, 0);
     assert_eq!(grid_to_inv.to, 44);
     assert_eq!(
-        mornlea_protocol::MoveCraftingStack::decode(&grid_to_inv.encode()).expect("decode"),
+        mornlea_protocol::MoveCraftingStack::decode(&grid_to_inv.encode().expect("encode"))
+            .expect("decode"),
         grid_to_inv
     );
 }
@@ -881,7 +885,7 @@ fn move_crafting_stack_rejects_invalid_slots_and_malformed_payload() {
 #[test]
 fn close_container_round_trip_preserves_golden_bytes() {
     let close = mornlea_protocol::CloseContainer::new(5);
-    let payload = close.encode();
+    let payload = close.encode().expect("encode close");
     assert_eq!(payload, [0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
     assert_eq!(mornlea_protocol::CloseContainer::PACKET_ID, 10);
     let decoded = mornlea_protocol::CloseContainer::decode(&payload).expect("decode");
@@ -901,7 +905,8 @@ fn close_container_rejects_malformed_payload_and_accepts_zero_sequence() {
     let zero = mornlea_protocol::CloseContainer::new(0);
     assert_eq!(zero.sequence, 0);
     assert_eq!(
-        mornlea_protocol::CloseContainer::decode(&zero.encode()).expect("decode zero"),
+        mornlea_protocol::CloseContainer::decode(&zero.encode().expect("encode zero"))
+            .expect("decode zero"),
         zero
     );
 }

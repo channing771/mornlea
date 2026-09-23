@@ -23,6 +23,13 @@
 //! `PlaceWater`), executed through that same surface; their payload carries
 //! only the sequence and the two look angles, because the ray-cast target, the
 //! held item, the container kind and the resulting write stay server-owned.
+//! The fifth group is the six simple inventory and crafting command families
+//! (`MoveInventoryStack`, `MoveCraftingStack`, `CloseContainer`,
+//! `DropSelectedItem`, `EquipArmor` and `TakeCraftingOutput`), executed
+//! through that same surface; the two move payloads carry the sequence and
+//! two slot bytes, and the four sequence-only payloads carry the sequence
+//! alone, because inventory contents, the moved count, the output recipe,
+//! the drop position and the equipped slot stay server-owned.
 //! `CorpusConsumer::Protocol` is registered here as `mornlea_protocol` so a
 //! packet case can name it, while the framing cases stay with the separate
 //! `corpus_frame` consumer the frame regression suite keeps using.
@@ -66,6 +73,14 @@ const TILL_SOIL_FAMILY: &str = "protocol.client.TillSoil";
 const BONE_MEAL_FAMILY: &str = "protocol.client.BoneMeal";
 const COLLECT_WATER_FAMILY: &str = "protocol.client.CollectWater";
 const PLACE_WATER_FAMILY: &str = "protocol.client.PlaceWater";
+/// The six packet families the simple inventory and crafting command producer
+/// group registers.
+const MOVE_INVENTORY_STACK_FAMILY: &str = "protocol.client.MoveInventoryStack";
+const MOVE_CRAFTING_STACK_FAMILY: &str = "protocol.client.MoveCraftingStack";
+const CLOSE_CONTAINER_FAMILY: &str = "protocol.client.CloseContainer";
+const DROP_SELECTED_ITEM_FAMILY: &str = "protocol.client.DropSelectedItem";
+const EQUIP_ARMOR_FAMILY: &str = "protocol.client.EquipArmor";
+const TAKE_CRAFTING_OUTPUT_FAMILY: &str = "protocol.client.TakeCraftingOutput";
 /// The packet families' protocol version, matching the manifest family rows.
 const PACKET_VERSION: &str = "45";
 /// The category label every accepted control packet outcome publishes.
@@ -345,6 +360,36 @@ fn client_ray_fields(sequence: u64, yaw: f32, pitch: f32) -> serde_json::Value {
         "sequence": sequence.to_string(),
         "yaw": float_bits_text(yaw),
         "pitch": float_bits_text(pitch)
+    })
+}
+
+/// Reads one move encode case's canonical request fields: the sequence and the
+/// two slot bytes.
+fn client_move_request(case: &FrozenCase) -> (u64, u8, u8) {
+    (
+        unsigned_field(case, "sequence"),
+        byte_field(case, "from"),
+        byte_field(case, "to"),
+    )
+}
+
+/// Renders the semantic fields one move command packet publishes.
+///
+/// The sequence renders as a decimal string so the full u64 range stays
+/// lossless, and the two slots render as JSON numbers, which is the canonical
+/// field encoding the Go producer records.
+fn client_move_fields(sequence: u64, from: u8, to: u8) -> serde_json::Value {
+    serde_json::json!({
+        "sequence": sequence.to_string(),
+        "from": from,
+        "to": to
+    })
+}
+
+/// Renders the semantic fields one sequence-only command packet publishes.
+fn client_sequence_fields(sequence: u64) -> serde_json::Value {
+    serde_json::json!({
+        "sequence": sequence.to_string()
     })
 }
 
@@ -945,6 +990,125 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
             }
             other => panic!("unsupported packet operation for {}: {other}", case.id),
         },
+        MOVE_INVENTORY_STACK_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::MoveInventoryStack::decode(&case.input) {
+                Ok(stack) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": client_move_fields(stack.sequence, stack.from, stack.to),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let (sequence, from, to) = client_move_request(case);
+                // The record is built through its public fields, so an
+                // out-of-range or same-slot pair is refused by the production
+                // validation rather than by a constructor guard.
+                let stack = mornlea_protocol::MoveInventoryStack { sequence, from, to };
+                encode_ok_outcome(
+                    stack.encode(),
+                    client_move_fields(stack.sequence, stack.from, stack.to),
+                )
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        MOVE_CRAFTING_STACK_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::MoveCraftingStack::decode(&case.input) {
+                Ok(stack) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": client_move_fields(stack.sequence, stack.from, stack.to),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let (sequence, from, to) = client_move_request(case);
+                // The record is built through its public fields, so an
+                // out-of-range, same-slot or both-in-inventory pair is refused
+                // by the production validation rather than by a constructor
+                // guard.
+                let stack = mornlea_protocol::MoveCraftingStack { sequence, from, to };
+                encode_ok_outcome(
+                    stack.encode(),
+                    client_move_fields(stack.sequence, stack.from, stack.to),
+                )
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        CLOSE_CONTAINER_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::CloseContainer::decode(&case.input) {
+                Ok(close) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": client_sequence_fields(close.sequence),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                // The value gate is total, so the record is built through its
+                // public field and the surface stays uniform with the families
+                // that do carry a rule.
+                let close = mornlea_protocol::CloseContainer {
+                    sequence: unsigned_field(case, "sequence"),
+                };
+                encode_ok_outcome(close.encode(), client_sequence_fields(close.sequence))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        DROP_SELECTED_ITEM_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::DropSelectedItem::decode(&case.input) {
+                Ok(drop) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": client_sequence_fields(drop.sequence),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let drop = mornlea_protocol::DropSelectedItem {
+                    sequence: unsigned_field(case, "sequence"),
+                };
+                encode_ok_outcome(drop.encode(), client_sequence_fields(drop.sequence))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        EQUIP_ARMOR_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::EquipArmor::decode(&case.input) {
+                Ok(equip) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": client_sequence_fields(equip.sequence),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let equip = mornlea_protocol::EquipArmor {
+                    sequence: unsigned_field(case, "sequence"),
+                };
+                encode_ok_outcome(equip.encode(), client_sequence_fields(equip.sequence))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        TAKE_CRAFTING_OUTPUT_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::TakeCraftingOutput::decode(&case.input) {
+                Ok(take) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": client_sequence_fields(take.sequence),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                // The record is built through its public field, so a zero
+                // sequence is refused by the production validation rather than
+                // by a constructor guard.
+                let take = mornlea_protocol::TakeCraftingOutput {
+                    sequence: unsigned_field(case, "sequence"),
+                };
+                encode_ok_outcome(take.encode(), client_sequence_fields(take.sequence))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
         other => panic!("unsupported packet family for {}: {other}", case.id),
     }
 }
@@ -974,7 +1138,13 @@ fn dispatch_case(case: &FrozenCase) -> serde_json::Value {
         | TILL_SOIL_FAMILY
         | BONE_MEAL_FAMILY
         | COLLECT_WATER_FAMILY
-        | PLACE_WATER_FAMILY => dispatch_packet(case),
+        | PLACE_WATER_FAMILY
+        | MOVE_INVENTORY_STACK_FAMILY
+        | MOVE_CRAFTING_STACK_FAMILY
+        | CLOSE_CONTAINER_FAMILY
+        | DROP_SELECTED_ITEM_FAMILY
+        | EQUIP_ARMOR_FAMILY
+        | TAKE_CRAFTING_OUTPUT_FAMILY => dispatch_packet(case),
         other => panic!("unregistered protocol family for {}: {other}", case.id),
     }
 }
@@ -1288,6 +1458,97 @@ fn protocol_corpus_packet_client_rays_cases_are_executed() {
         "the client ray selection executed zero cases"
     );
     for case in client_rays {
+        assert_eq!(
+            case.consumer,
+            CorpusConsumer::Protocol,
+            "case {} carries the wrong consumer",
+            case.id
+        );
+        assert!(
+            !case.operation.is_empty(),
+            "case {} names no operation",
+            case.id
+        );
+        assert_normalized(case, dispatch_packet(case));
+    }
+}
+
+/// The case identities the simple inventory and crafting command group
+/// registers. They mirror the Go producer's registration, so a case that only
+/// one side names is a mismatch rather than a shared name. The merged manifest
+/// sorts case IDs, so the comparison sorts this list too.
+const CLIENT_INVENTORY_CASE_IDS: [&str; 28] = [
+    "protocol.client.CloseContainer/45/decode-trailing-byte",
+    "protocol.client.CloseContainer/45/decode-truncated-byte",
+    "protocol.client.CloseContainer/45/decode-valid",
+    "protocol.client.CloseContainer/45/encode-valid",
+    "protocol.client.DropSelectedItem/45/decode-trailing-byte",
+    "protocol.client.DropSelectedItem/45/decode-truncated-byte",
+    "protocol.client.DropSelectedItem/45/decode-valid",
+    "protocol.client.DropSelectedItem/45/encode-valid",
+    "protocol.client.EquipArmor/45/decode-trailing-byte",
+    "protocol.client.EquipArmor/45/decode-truncated-byte",
+    "protocol.client.EquipArmor/45/decode-valid",
+    "protocol.client.EquipArmor/45/encode-valid",
+    "protocol.client.MoveCraftingStack/45/decode-above-view",
+    "protocol.client.MoveCraftingStack/45/decode-inventory-to-inventory",
+    "protocol.client.MoveCraftingStack/45/decode-same-slot",
+    "protocol.client.MoveCraftingStack/45/decode-valid",
+    "protocol.client.MoveCraftingStack/45/encode-inventory-to-inventory",
+    "protocol.client.MoveCraftingStack/45/encode-valid",
+    "protocol.client.MoveInventoryStack/45/decode-from-above-range",
+    "protocol.client.MoveInventoryStack/45/decode-same-slot",
+    "protocol.client.MoveInventoryStack/45/decode-to-above-range",
+    "protocol.client.MoveInventoryStack/45/decode-valid",
+    "protocol.client.MoveInventoryStack/45/encode-same-slot",
+    "protocol.client.MoveInventoryStack/45/encode-valid",
+    "protocol.client.TakeCraftingOutput/45/decode-valid",
+    "protocol.client.TakeCraftingOutput/45/decode-zero-sequence",
+    "protocol.client.TakeCraftingOutput/45/encode-valid",
+    "protocol.client.TakeCraftingOutput/45/encode-zero-sequence",
+];
+
+/// Reports whether one family belongs to the simple inventory and crafting
+/// command producer group.
+fn is_client_inventory_family(family: &str) -> bool {
+    matches!(
+        family,
+        MOVE_INVENTORY_STACK_FAMILY
+            | MOVE_CRAFTING_STACK_FAMILY
+            | CLOSE_CONTAINER_FAMILY
+            | DROP_SELECTED_ITEM_FAMILY
+            | EQUIP_ARMOR_FAMILY
+            | TAKE_CRAFTING_OUTPUT_FAMILY
+    )
+}
+
+#[test]
+fn protocol_corpus_packet_client_inventory_cases_are_executed() {
+    // The case assets are exported by the Go producer and integrated by the
+    // controller, so before that merge this test reports the missing corpus
+    // cases instead of an empty selection that would look like a passing run.
+    let cases = load_cases_for_consumer(CorpusConsumer::Protocol);
+    let client_inventory: Vec<&FrozenCase> = cases
+        .iter()
+        .filter(|case| is_client_inventory_family(&case.family))
+        .collect();
+    let executed: Vec<&str> = client_inventory
+        .iter()
+        .map(|case| case.id.as_str())
+        .collect();
+    let mut expected: Vec<&str> = CLIENT_INVENTORY_CASE_IDS.to_vec();
+    // The merged manifest sorts case IDs; compare as the reviewed set, not in
+    // the authoring order of this suite's constant.
+    expected.sort_unstable();
+    assert_eq!(
+        executed, expected,
+        "the client inventory selection does not carry the reviewed case set"
+    );
+    assert!(
+        !client_inventory.is_empty(),
+        "the client inventory selection executed zero cases"
+    );
+    for case in client_inventory {
         assert_eq!(
             case.consumer,
             CorpusConsumer::Protocol,

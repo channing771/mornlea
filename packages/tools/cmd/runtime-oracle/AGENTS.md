@@ -217,6 +217,30 @@ and the isolated export helpers (`exportGeneratedAssets`,
   `codec_client.go` plus the family's own message file, because
   `OpenContainer` lives in `message_container.go` and the other four in
   `message_command.go`.
+- The fifth packet producer group is `protocol_client_inventory_test.go`
+  (`protocol.client.MoveInventoryStack`, `protocol.client.MoveCraftingStack`,
+  `protocol.client.CloseContainer`, `protocol.client.DropSelectedItem`,
+  `protocol.client.EquipArmor` and `protocol.client.TakeCraftingOutput`,
+  decode and encode). It executes `codec.DecodeClient`/`EncodeClient` in the
+  play state with the case's own `PacketKey`, normalizes the DTO fields
+  (`sequence` as a decimal string and the two move slots as JSON numbers),
+  and reads every encoded payload back through the decoder before publishing
+  it. Two payload shapes are in scope: the two move families carry a 10-byte
+  sequence-plus-two-slots vector and the four sequence-only families the
+  8-byte sequence alone, so no case's input carries an item count, a drop
+  position or an equipped armor slot. The canonical `TakeCraftingOutput`
+  vector carries sequence 1, because that family alone refuses a zero
+  sequence. Its category table resolves the Go validators' slot-range,
+  same-slot, both-in-inventory-region and zero-sequence rejections to
+  `invalid-value` (all wrapped by `codecError`, so the shared substrings
+  `slot is outside`, `source equals target`, `both ends in the inventory
+  region` and `sequence is zero` match), while `short input` and `trailing
+  bytes` keep their own categories, so the Rust consumer publishes the same
+  category from its `ProtocolError` variants. Provenance is
+  `codec_client.go` plus the family's own message file: `message_inventory.go`
+  for the two move families and `TakeCraftingOutput`, `message_container.go`
+  for `CloseContainer`, and `message_command.go` for `DropSelectedItem` and
+  `EquipArmor`.
 - `validProducerIDs` is the closed exporter allowlist. It carries the 18
   protocol group producer IDs the v45 packet plan names
   (`runtime-oracle/protocol-negotiation`, `-control`, `-client-control`,
