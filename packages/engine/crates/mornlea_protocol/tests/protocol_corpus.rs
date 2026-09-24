@@ -105,6 +105,21 @@
 //! carries the identity and the position alone, and the despawn record the
 //! bare eight-byte identity.
 //!
+//! The fifteenth group is the single chat event publication family
+//! (`ChatEvent`), executed through the same fallible surface. It is the one
+//! family whose text slot is reused by kind: a companion speech event carries a
+//! model-generated line bounded by the speech slot, and every other kind
+//! restates the player's original command bounded by the planner instruction
+//! limit, so the decoder reads the kind first and then decides which text to
+//! read. The value gate's error variants publish the frozen categories the Go
+//! producer records: a zero event identity or an invalid player identity is
+//! `invalid-identity`, an unknown kind, the reserved reject reason 3 and a
+//! failure reason outside 16..=20 are `invalid-enum`, and every text boundary
+//! and illegal cross-field combination is `invalid-value`. The raw zero
+//! companion identity is the wire-only absent form the two permitted rejection
+//! branches carry; every other branch refuses it, and the domain union maps it
+//! to variant-shaped absence rather than to an identity.
+//!
 //! A packet case whose assets the controller has not integrated yet fails
 //! here as a missing corpus case rather than as a silently empty selection,
 //! which is what keeps the staged state visible until the merge lands.
@@ -160,6 +175,8 @@ const QUICK_MOVE_STACK_FAMILY: &str = "protocol.client.QuickMoveStack";
 const DROP_STACK_FAMILY: &str = "protocol.client.DropStack";
 /// The packet family the unsequenced chat command producer group registers.
 const CHAT_COMMAND_FAMILY: &str = "protocol.client.ChatCommand";
+/// The packet family the chat event producer group registers.
+const CHAT_EVENT_FAMILY: &str = "protocol.server.ChatEvent";
 /// The two packet families the world delta producer group registers.
 const BLOCK_CHANGES_FAMILY: &str = "protocol.server.BlockChanges";
 const FORGET_CHUNKS_FAMILY: &str = "protocol.server.ForgetChunks";
@@ -3840,6 +3857,24 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
             }
             other => panic!("unsupported packet operation for {}: {other}", case.id),
         },
+        CHAT_EVENT_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::ChatEvent::decode(&case.input) {
+                Ok(event) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": chat_event_fields(&event),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let event = match chat_event_request(case) {
+                    Ok(event) => event,
+                    Err(err) => return packet_error(err),
+                };
+                encode_ok_outcome(event.encode(), chat_event_fields(&event))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
         COMPANION_STATES_FAMILY => match case.operation.as_str() {
             "decode" => match mornlea_protocol::CompanionStates::decode(&case.input) {
                 Ok(states) => serde_json::json!({
@@ -4120,6 +4155,7 @@ fn dispatch_case(case: &FrozenCase) -> serde_json::Value {
         | PROJECTILE_SPAWN_FAMILY
         | PROJECTILE_STATE_FAMILY
         | PROJECTILE_DESPAWN_FAMILY => dispatch_packet(case),
+        CHAT_EVENT_FAMILY => dispatch_packet(case),
         other => panic!("unregistered protocol family for {}: {other}", case.id),
     }
 }
@@ -5558,6 +5594,82 @@ const PROJECTILES_CASE_IDS: [&str; 29] = [
     "protocol.server.ProjectileState/45/decode-trailing-byte",
 ];
 
+/// Renders the semantic fields one chat event publishes, shared by the decode
+/// and encode arms so both publish the same canonical field encoding.
+///
+/// The event identity renders as a decimal string so the full `u64` range stays
+/// lossless, both identities render as 32-lowercase-hexadecimal text, and the
+/// names, command and speech render verbatim. The companion identity stays the
+/// raw wire form: the two rejection branches that never addressed a companion
+/// carry the exact zero bytes, which is the wire-only absent form the domain
+/// union cannot express as an identity, so publishing it raw keeps the
+/// distinction observable instead of pre-validating it away. The kind and the
+/// reason render as the plain integers the wire carries, and the one text slot
+/// the kind selected is published beside the empty one, because the wire
+/// carries exactly one slot and both fields are part of the reviewed record.
+fn chat_event_fields(event: &mornlea_protocol::ChatEvent) -> serde_json::Value {
+    serde_json::json!({
+        "event_id": event.event_id.to_string(),
+        "player_id": hex_lower(&event.player_id.bytes()),
+        "player_name": event.player_name,
+        "companion_id": hex_lower(&event.companion_id),
+        "companion_name": event.companion_name,
+        "kind": event.kind,
+        "reason": event.reject_reason,
+        "command": event.command,
+        "speech": event.speech
+    })
+}
+
+/// Builds the chat event one encode case names from its typed fields.
+///
+/// The record is built through its public fields, so a mutated or invalid case
+/// is refused by the production validation rather than by a constructor guard.
+/// The kind decides which text slot the record carries, exactly as the wire
+/// does, and the companion identity is read as the raw hexadecimal text the
+/// case publishes so the absent zero form stays constructible for the two
+/// branches that carry it.
+fn chat_event_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::ChatEvent, mornlea_protocol::ProtocolError> {
+    let identity =
+        |name: &str| -> Result<mornlea_protocol::PlayerId, mornlea_protocol::ProtocolError> {
+            let text = case
+                .input_json
+                .as_ref()
+                .expect("encode case carries JSON fields")
+                .get(name)
+                .and_then(|value| value.as_str())
+                .unwrap_or_else(|| panic!("case {} names no {name}", case.id));
+            let bytes: [u8; 16] = payload_bytes_from_text(case, text)
+                .try_into()
+                .unwrap_or_else(|_| panic!("case {} field {name} is not 16 bytes", case.id));
+            mornlea_protocol::PlayerId::try_from_bytes(bytes)
+                .map_err(|_| mornlea_protocol::ProtocolError::InvalidIdentity)
+        };
+    let companion = case
+        .input_json
+        .as_ref()
+        .expect("encode case carries JSON fields")
+        .get("companion_id")
+        .and_then(|value| value.as_str())
+        .unwrap_or_else(|| panic!("case {} names no companion_id", case.id));
+    let companion_id: [u8; 16] = payload_bytes_from_text(case, companion)
+        .try_into()
+        .unwrap_or_else(|_| panic!("case {} companion_id is not 16 bytes", case.id));
+    Ok(mornlea_protocol::ChatEvent {
+        event_id: unsigned_field(case, "event_id"),
+        player_id: identity("player_id")?,
+        player_name: text_field(case, "player_name"),
+        companion_id,
+        companion_name: text_field(case, "companion_name"),
+        kind: byte_field(case, "kind"),
+        reject_reason: byte_field(case, "reason"),
+        command: text_field(case, "command"),
+        speech: text_field(case, "speech"),
+    })
+}
+
 /// Reports whether one family belongs to the projectile producer group.
 fn is_projectiles_family(family: &str) -> bool {
     matches!(
@@ -5590,6 +5702,80 @@ fn protocol_corpus_packet_projectiles_cases_are_executed() {
         "the projectile selection executed zero cases"
     );
     for case in projectiles {
+        assert_eq!(
+            case.consumer,
+            CorpusConsumer::Protocol,
+            "case {} carries the wrong consumer",
+            case.id
+        );
+        assert!(
+            !case.operation.is_empty(),
+            "case {} names no operation",
+            case.id
+        );
+        assert_normalized(case, dispatch_packet(case));
+    }
+}
+
+/// The case identities the chat event producer group registers. They mirror the
+/// Go producer's registration, so a case that only one side names is a mismatch
+/// rather than a shared name.
+const CHAT_EVENT_CASE_IDS: [&str; 24] = [
+    "protocol.server.ChatEvent/45/decode-accepted",
+    "protocol.server.ChatEvent/45/decode-invalid-format",
+    "protocol.server.ChatEvent/45/decode-unknown-companion",
+    "protocol.server.ChatEvent/45/decode-queue-full",
+    "protocol.server.ChatEvent/45/decode-not-following",
+    "protocol.server.ChatEvent/45/decode-task-started",
+    "protocol.server.ChatEvent/45/decode-task-progress",
+    "protocol.server.ChatEvent/45/decode-task-completed",
+    "protocol.server.ChatEvent/45/decode-task-failed",
+    "protocol.server.ChatEvent/45/decode-task-timed-out",
+    "protocol.server.ChatEvent/45/decode-task-stopped",
+    "protocol.server.ChatEvent/45/decode-speech",
+    "protocol.server.ChatEvent/45/encode-accepted",
+    "protocol.server.ChatEvent/45/encode-speech",
+    "protocol.server.ChatEvent/45/decode-reserved-reason-three",
+    "protocol.server.ChatEvent/45/decode-failed-reason-zero",
+    "protocol.server.ChatEvent/45/decode-non-speech-with-speech",
+    "protocol.server.ChatEvent/45/decode-speech-with-command",
+    "protocol.server.ChatEvent/45/decode-zero-player-uuid",
+    "protocol.server.ChatEvent/45/decode-noncanonical-player-name",
+    "protocol.server.ChatEvent/45/encode-command-above-bound",
+    "protocol.server.ChatEvent/45/decode-speech-above-bound",
+    "protocol.server.ChatEvent/45/decode-zero-event-id",
+    "protocol.server.ChatEvent/45/decode-trailing-byte",
+];
+
+/// Reports whether one family belongs to the chat event producer group.
+fn is_chat_event_family(family: &str) -> bool {
+    family == CHAT_EVENT_FAMILY
+}
+
+#[test]
+fn protocol_corpus_packet_chat_event_cases_are_executed() {
+    // The case assets are exported by the Go producer and integrated by the
+    // controller, so before this merge the test reports the missing corpus
+    // cases instead of an empty selection that would look like a passing run.
+    let cases = load_cases_for_consumer(CorpusConsumer::Protocol);
+    let chat_event: Vec<&FrozenCase> = cases
+        .iter()
+        .filter(|case| is_chat_event_family(&case.family))
+        .collect();
+    let executed: Vec<&str> = chat_event.iter().map(|case| case.id.as_str()).collect();
+    let mut expected: Vec<&str> = CHAT_EVENT_CASE_IDS.to_vec();
+    // The merged manifest sorts case IDs; compare as the reviewed set, not in
+    // the authoring order of this suite's constant.
+    expected.sort_unstable();
+    assert_eq!(
+        executed, expected,
+        "the chat event selection does not carry the reviewed case set"
+    );
+    assert!(
+        !chat_event.is_empty(),
+        "the chat event selection executed zero cases"
+    );
+    for case in chat_event {
         assert_eq!(
             case.consumer,
             CorpusConsumer::Protocol,

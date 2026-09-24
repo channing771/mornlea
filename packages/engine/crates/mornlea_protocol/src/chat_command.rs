@@ -147,21 +147,26 @@ fn command_text_prefix(text: &str) -> u32 {
     u32::try_from(text.len()).expect("validated chat command fits its length prefix")
 }
 
-/// Reads one length-prefixed chat command text in field order.
+/// Reads one length-prefixed bounded text slot in field order.
 ///
-/// The declared length is checked against the family bound and against the
-/// bytes that remain before anything is copied. A declared length the payload
-/// cannot complete is an incomplete payload and reports `Truncated` rather
-/// than the `InvalidString` the shared string primitive reports for the same
-/// bytes, mirroring the control message reader in
+/// The declared length is checked against the slot's byte bound and against
+/// the bytes that remain before anything is copied. A declared length the
+/// payload cannot complete is an incomplete payload and reports `Truncated`
+/// rather than the `InvalidString` the shared string primitive reports for the
+/// same bytes, mirroring the control message reader in
 /// [`crate::handshake_reject::read_control_message`]: the Go
 /// `byteDecoder.string` answers that condition with the same sentinel as a
 /// malformed UTF-8 text, while the frozen corpus category for an incomplete
 /// payload is `truncated`. Applying the same boundary here keeps the Go
-/// producer and the Rust consumer publishing one category for this family too.
-fn read_command_text(decoder: &mut ByteDecoder<'_>) -> Result<String, ProtocolError> {
+/// producer and the Rust consumer publishing one category for every family
+/// that carries a length-prefixed text slot.
+pub(crate) fn read_bounded_text(
+    decoder: &mut ByteDecoder<'_>,
+    max_bytes: usize,
+    max_runes: usize,
+) -> Result<String, ProtocolError> {
     let length = usize::try_from(decoder.uvarint()?).map_err(|_| ProtocolError::InvalidString)?;
-    if length > CHAT_COMMAND_TEXT_MAX_BYTES {
+    if length > max_bytes {
         return Err(ProtocolError::InvalidString);
     }
     if length > decoder.remaining() {
@@ -169,5 +174,20 @@ fn read_command_text(decoder: &mut ByteDecoder<'_>) -> Result<String, ProtocolEr
     }
     let bytes = decoder.take(length)?;
     let text = std::str::from_utf8(bytes).map_err(|_| ProtocolError::InvalidString)?;
+    if text.chars().count() > max_runes {
+        return Err(ProtocolError::InvalidString);
+    }
     Ok(text.to_owned())
+}
+
+/// Reads one length-prefixed chat command text in field order.
+///
+/// The slot's byte and rune bounds are the same number, because a text of at
+/// most `CHAT_COMMAND_TEXT_MAX_BYTES` bytes carries at most that many runes.
+fn read_command_text(decoder: &mut ByteDecoder<'_>) -> Result<String, ProtocolError> {
+    read_bounded_text(
+        decoder,
+        CHAT_COMMAND_TEXT_MAX_BYTES,
+        CHAT_COMMAND_TEXT_MAX_BYTES,
+    )
 }

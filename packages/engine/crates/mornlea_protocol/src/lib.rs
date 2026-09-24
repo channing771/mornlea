@@ -138,6 +138,10 @@ pub use container_ref::{
 pub use crafting_state::{
     CRAFTING_GRID_SIZE_PERSONAL, CRAFTING_GRID_SIZE_WORKBENCH, CraftingState,
 };
+// The domain chat union the bidirectional `ChatEvent` conversion targets. A
+// consumer of this crate names the conversion's other side without depending
+// on `mornlea_domain` directly, and the alias keeps the two `ChatEvent` types
+// distinguishable at the call site.
 pub use disconnect::{
     DISCONNECT_INTERNAL_ERROR, DISCONNECT_PROTOCOL_VIOLATION, DISCONNECT_SERVER_SHUTDOWN,
     DISCONNECT_SLOW_CLIENT, DISCONNECT_TIMEOUT, Disconnect,
@@ -184,6 +188,10 @@ pub use login_start::{
     MAX_SMALL_PAYLOAD_BYTES,
 };
 pub use login_success::LoginSuccess;
+pub use mornlea_domain::{
+    ChatBody, ChatEvent as DomainChatEvent, ChatEventParts, CompanionSpeaker, TaskFailure,
+    TaskState,
+};
 pub use move_container_stack::{
     CHEST_VIEW_SLOTS, FURNACE_OUTPUT_SLOT, FURNACE_VIEW_SLOTS, MoveContainerStack,
 };

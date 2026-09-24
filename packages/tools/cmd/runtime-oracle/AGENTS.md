@@ -531,7 +531,33 @@ and the isolated export helpers (`exportGeneratedAssets`,
   the state record carries the identity and the position alone. Provenance is
   `codec_server.go` plus `message_projectile.go` and `codec_projectile.go`
   for all three families.
-- `validProducerIDs` is the closed exporter allowlist. It carries the 18
+- The eighteenth packet producer group is `protocol_chat_event_test.go`
+  (`protocol.server.ChatEvent`, decode and encode), the chat event union. It
+  executes `codec.DecodeServer`/`EncodeServer` in the play state with the
+  case's own `PacketKey` and normalizes the event identity as a decimal
+  string, both identities as 32-lowercase-hexadecimal text, the names, command
+  and speech verbatim, and the kind and reason as plain integers; the
+  companion identity stays the raw wire form, so the two branches that never
+  addressed a companion publish the exact zero bytes instead of a
+  pre-validated identity. This is the one family whose text slot is reused by
+  kind, so the decoder reads the kind before it decides which text to read and
+  the payload carries exactly one slot. Its category table is a class table
+  rather than a single category per message, because `ChatEvent.Validate`
+  folds several relations into one message: the folded player-identity message
+  publishes either `invalid-identity` (zero event identity, invalid player
+  identity) or `invalid-value` (non-canonical player name), the failed-task
+  message publishes either `invalid-enum` (the failure-reason domain) or
+  `invalid-value` (the payload relations), the reserved reject reason and the
+  unknown kind resolve to `invalid-enum`, every remaining combination message
+  resolves to `invalid-value`, and the structural boundaries keep their own
+  categories. The fixed payload ceiling resolves to `capacity`, and the string
+  boundary reuses the node 1.5 ruling. The two slot-exclusivity combinations
+  are not constructible on the wire, because one payload cannot carry both text
+  fields, so their cases record the branch's own requirement at the slot and
+  the DTO-level exclusivity is pinned by the Rust group test's mutated records.
+  Provenance is `codec_server.go` plus `message_companion.go` and
+  `companion_wire.go`.
+- `validProducerIDs` is the closed exporter allowlist. It carries the 19
   protocol group producer IDs the v45 packet plan names
   (`runtime-oracle/protocol-negotiation`, `-control`, `-client-control`,
   `-client-rays`, `-client-inventory`, `-client-stack-views`, `-client-chat`,
@@ -807,6 +833,7 @@ go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolDropsOracle' -cou
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolHostilesOracle' -count=1
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolPassivesOracle' -count=1
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolProjectilesOracle' -count=1
+go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolChatEventOracle' -count=1
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolCorpus' -count=1
 go test ./packages/tools/cmd/runtime-oracle -race -count=1
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked corpus_frame

@@ -1850,7 +1850,7 @@ rather than checking that it omits a few names.
   order, the count-bound refusal and the padding refusal the exact-length
   rule answers at the truncation category.
 
-## Chat event (`src/chat_event.rs`, `tests/runtime_contract.rs`)
+## Chat event (`src/chat_event.rs`, `tests/runtime_contract.rs`, `tests/protocol_chat_event.rs`)
 
 - Play packet ID 16 payload is the event ID, the player identity and name,
   the companion identity and name, the kind, the reason, and one text slot.
@@ -1871,6 +1871,42 @@ rather than checking that it omits a few names.
   absent companion identity for those cases is `CompanionId::NONE`
   (`chat_event_round_trip_preserves_golden_bytes`,
   `chat_event_rejects_invalid_kind_combinations_and_malformed_payload`).
+- The family carries the common fallible surface (`validate` → checked
+  `encoded_len` → capacity check → private `publish_packet`), and its value
+  gate publishes the frozen corpus categories: a zero event identity or an
+  invalid player identity is `InvalidIdentity`, an unknown kind and the two
+  reason-domain boundaries (the reserved reject reason 3 and a failure reason
+  outside `16..=20`) are `InvalidEnum`, and every text boundary and illegal
+  cross-field combination is `InvalidString`.
+- The fixed payload ceiling `CHAT_EVENT_MAX_WIRE_BYTES` (`1328`) is applied
+  before any parse, which is the `capacity` category the Go decoder's fixed
+  maximum publishes. The ceiling is a guard rather than a record size: the
+  widest admissible record is the 128-byte player name, a companion name
+  inside its 32-rune bound and the maximum-length command, which reaches the
+  bound exactly with three two-byte length prefixes.
+- The three length-prefixed text slots read through the shared
+  `read_bounded_text` reader, so a declared length the payload cannot
+  complete reports `Truncated` rather than the `InvalidString` the shared
+  string primitive reports for the same bytes; the Go producer resolves the
+  same condition from its own derivation base.
+- The bidirectional domain conversion is produced here for the domain
+  evidence node: `TryFrom<ChatEvent> for DomainChatEvent` and its reverse
+  map the closed `ChatBody` union (seven variants unfolding into the sixteen
+  legal branch shapes) to and from the wire record. The raw zero companion
+  identity maps to semantic absence in the two permitted rejection branches
+  alone, and the reverse conversion is the only publisher of that raw form.
+  No conversion fabricates a session recipient, a publish tick or a command
+  sequence: those stay in `RoutedEvent` and the chat FIFO.
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same fallible surface; its cases are the twelve legal branch shapes with
+  the accepted and speech encode pair, the reserved reject reason, the
+  failed-reason domain, the two text-slot boundaries, the identity, name and
+  event-identity gates and one trailing byte, produced by the real Go codec in
+  `packages/tools/cmd/runtime-oracle/protocol_chat_event_test.go`. The two
+  slot-exclusivity combinations are not constructible on the wire, because
+  the payload carries one text slot and the decoder assigns it by kind; their
+  corpus cases record the branch's own requirement at that slot, and the
+  DTO-level exclusivity is pinned by the group test's mutated records.
 
 ## Chunk snapshot (`src/chunk_snapshot.rs`, `tests/runtime_contract.rs`)
 
@@ -2048,6 +2084,8 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_passives --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_projectiles --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_projectiles --locked -- --list
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_chat_event --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_chat_event --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
 
@@ -2252,6 +2290,25 @@ zero-identity despawn published `00` where the identity belongs, a duplicate
 state pair published the same identity twice, and a non-finite component
 reached the primitive's refusal and became a panic at the previous encoder's
 `expect`. It also needs no corpus files, so it runs before the controller
+integrates the exported candidates.
+
+`tests/protocol_chat_event.rs` pins the chat event publication record through
+that same surface: all sixteen legal branch shapes round-trip the reviewed wire
+literal through `validate`/`encoded_len`/`encode_into`/`encode`, the record
+stride is decomposed into its fixed fields and three length-prefixed slots,
+the padded-prefix and sentinel checks hold on every branch, every proper
+truncation of the accepted and speech payloads rejects at the truncation
+boundary, one trailing byte rejects, and the wire ceiling refuses one byte
+above `CHAT_EVENT_MAX_WIRE_BYTES` while admitting a maximum record at exactly
+the bound. Its mutation test quotes the silent publishes the previous surface
+allowed: a record mutated into kind 200 published `0xc8` in the kind byte at
+offset 49, and a task branch's command mutated into 1025 bytes reached the
+primitive's refusal and became a panic at the previous encoder's `expect`. The
+suite also pins the bidirectional domain conversion: every branch maps to its
+`ChatBody` member and back without rewriting the wire record, the absent zero
+companion identity is admitted in the two rejection branches alone and refused
+everywhere else, and the two text slots stay mutually exclusive on mutated
+records. It also needs no corpus files, so it runs before the controller
 integrates the exported candidates.
 
 `tests/protocol_corpus.rs` executes the corpus cases this crate owns through

@@ -4561,7 +4561,7 @@ fn chat_event_round_trip_preserves_golden_bytes() {
         speech: String::new(),
     })
     .expect("accepted chat event");
-    let payload = accepted.encode();
+    let payload = accepted.encode().expect("accepted chat event encodes");
     assert_eq!(mornlea_protocol::ChatEvent::PACKET_ID, 16);
     // 8 event ID + 16 player ID + (1 + 3 name) + 16 companion ID
     // + (1 + 4 name) + 1 kind + 1 reason + (1 + 9 command).
@@ -4591,7 +4591,7 @@ fn chat_event_round_trip_preserves_golden_bytes() {
         ..accepted.clone()
     })
     .expect("speech chat event");
-    let payload = speech.encode();
+    let payload = speech.encode().expect("speech chat event encodes");
     assert_eq!(payload.len(), 63);
     assert_eq!(payload[49], mornlea_protocol::CHAT_EVENT_COMPANION_SPEECH);
     assert_eq!(payload[51], 11);
@@ -4613,7 +4613,9 @@ fn chat_event_round_trip_preserves_golden_bytes() {
         ..accepted.clone()
     })
     .expect("unaddressed chat event");
-    let payload = unaddressed.encode();
+    let payload = unaddressed
+        .encode()
+        .expect("unaddressed chat event encodes");
     assert_eq!(payload.len(), 48);
     assert_eq!(&payload[28..44], &[0u8; 16]);
     assert_eq!(payload[44], 0);
@@ -4763,7 +4765,7 @@ fn chat_event_rejects_invalid_kind_combinations_and_malformed_payload() {
     };
     assert!(speech.validate().is_ok());
 
-    let payload = base.encode();
+    let payload = base.encode().expect("accepted chat event encodes");
     for length in 0..payload.len() {
         assert!(
             mornlea_protocol::ChatEvent::decode(&payload[..length]).is_err(),
