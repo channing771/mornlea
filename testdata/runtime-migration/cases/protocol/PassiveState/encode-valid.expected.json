@@ -1,0 +1,43 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:35513fd068a01d50134519152e7f04492db8c07b3e493cc953bca226da07118f",
+  "fields": {
+    "server_tick": "0",
+    "states": [
+      {
+        "grazing": 1,
+        "health": 13,
+        "id": "1",
+        "position": [
+          "80000000",
+          "3f800000",
+          "40000000"
+        ],
+        "velocity": [
+          "80000000",
+          "3e800000",
+          "40400000"
+        ],
+        "yaw": "3f000000"
+      },
+      {
+        "grazing": 0,
+        "health": 7,
+        "id": "2",
+        "position": [
+          "40400000",
+          "40800000",
+          "40a00000"
+        ],
+        "velocity": [
+          "3f000000",
+          "bfa00000",
+          "00000000"
+        ],
+        "yaw": "c0200000"
+      }
+    ]
+  },
+  "kind": "ok"
+}
+

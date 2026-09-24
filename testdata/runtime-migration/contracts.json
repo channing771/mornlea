@@ -3304,11 +3304,33 @@
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
         },
         {
+          "path": "packages/shared/network/codec/codec_server.go",
+          "sha256": "sha256:733ce941581e6ab2893e81c894d68a2815e14ff67b2c4f2caf6987a9ce6ad67c"
+        },
+        {
+          "path": "packages/shared/network/codec/passive_wire.go",
+          "sha256": "sha256:37bdd7d2200b05e06be19b6ff27d74df0cae6d027b8bc7e7bd226f4df319e1f7"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_passive.go",
+          "sha256": "sha256:0a2c1274aeb40bfd34bec931fa140ec8561ecc325b545c6a7ccf13162b2ab9e4"
+        },
+        {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.server.PassiveDespawn/45/decode-count-above",
+        "protocol.server.PassiveDespawn/45/decode-duplicate-ids",
+        "protocol.server.PassiveDespawn/45/decode-id-zero",
+        "protocol.server.PassiveDespawn/45/decode-reason-two",
+        "protocol.server.PassiveDespawn/45/decode-reversed-ids",
+        "protocol.server.PassiveDespawn/45/decode-trailing-byte",
+        "protocol.server.PassiveDespawn/45/decode-valid",
+        "protocol.server.PassiveDespawn/45/encode-reason-two",
+        "protocol.server.PassiveDespawn/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.server.PassiveSpawn",
@@ -3327,11 +3349,35 @@
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
         },
         {
+          "path": "packages/shared/network/codec/codec_server.go",
+          "sha256": "sha256:733ce941581e6ab2893e81c894d68a2815e14ff67b2c4f2caf6987a9ce6ad67c"
+        },
+        {
+          "path": "packages/shared/network/codec/passive_wire.go",
+          "sha256": "sha256:37bdd7d2200b05e06be19b6ff27d74df0cae6d027b8bc7e7bd226f4df319e1f7"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_passive.go",
+          "sha256": "sha256:0a2c1274aeb40bfd34bec931fa140ec8561ecc325b545c6a7ccf13162b2ab9e4"
+        },
+        {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.server.PassiveSpawn/45/decode-count-sixty-four",
+        "protocol.server.PassiveSpawn/45/decode-dimension-depths",
+        "protocol.server.PassiveSpawn/45/decode-health-above",
+        "protocol.server.PassiveSpawn/45/decode-health-zero",
+        "protocol.server.PassiveSpawn/45/decode-id-zero",
+        "protocol.server.PassiveSpawn/45/decode-nan-position",
+        "protocol.server.PassiveSpawn/45/decode-reversed-ids",
+        "protocol.server.PassiveSpawn/45/decode-trailing-byte",
+        "protocol.server.PassiveSpawn/45/decode-valid",
+        "protocol.server.PassiveSpawn/45/encode-health-above",
+        "protocol.server.PassiveSpawn/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.server.PassiveState",
@@ -3350,11 +3396,34 @@
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
         },
         {
+          "path": "packages/shared/network/codec/codec_server.go",
+          "sha256": "sha256:733ce941581e6ab2893e81c894d68a2815e14ff67b2c4f2caf6987a9ce6ad67c"
+        },
+        {
+          "path": "packages/shared/network/codec/passive_wire.go",
+          "sha256": "sha256:37bdd7d2200b05e06be19b6ff27d74df0cae6d027b8bc7e7bd226f4df319e1f7"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_passive.go",
+          "sha256": "sha256:0a2c1274aeb40bfd34bec931fa140ec8561ecc325b545c6a7ccf13162b2ab9e4"
+        },
+        {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.server.PassiveState/45/decode-count-above",
+        "protocol.server.PassiveState/45/decode-count-sixty-four",
+        "protocol.server.PassiveState/45/decode-duplicate-ids",
+        "protocol.server.PassiveState/45/decode-grazing-two",
+        "protocol.server.PassiveState/45/decode-id-zero",
+        "protocol.server.PassiveState/45/decode-nan-velocity",
+        "protocol.server.PassiveState/45/decode-trailing-byte",
+        "protocol.server.PassiveState/45/decode-valid",
+        "protocol.server.PassiveState/45/encode-grazing-two",
+        "protocol.server.PassiveState/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.server.PlaceBlockSucceeded",
@@ -24450,6 +24519,726 @@
       "expected": {
         "path": "testdata/runtime-migration/cases/protocol/LoginSuccess/encode-zero-seed.expected.json",
         "sha256": "sha256:49321b4442ac6cd1c2818796adc6a9ac375f9db78d784cc5b9820681e45fe3fb"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveDespawn/45/decode-count-above",
+      "family": "protocol.server.PassiveDespawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 28
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveDespawn/decode-count-above.input.bin",
+        "sha256": "sha256:fe3a3baba27acca501edfd11ebaf92452c46ebc9a4bba7739d4cb81120803db9"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveDespawn/decode-count-above.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveDespawn/45/decode-duplicate-ids",
+      "family": "protocol.server.PassiveDespawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 28
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveDespawn/decode-duplicate-ids.input.bin",
+        "sha256": "sha256:8fbb4b0cecbd3fb811bfbb29120af416d1bc69fa8f91728970cefed0a4e2e560"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveDespawn/decode-duplicate-ids.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveDespawn/45/decode-id-zero",
+      "family": "protocol.server.PassiveDespawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 28
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveDespawn/decode-id-zero.input.bin",
+        "sha256": "sha256:5a0f6fdc76ae8e30cfdef94326f26636cc9d400ad9535fefe07cbc175078d3db"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveDespawn/decode-id-zero.expected.json",
+        "sha256": "sha256:e18b772c91375783f134c2837eb4944e794f26958ccdc48661b4f68a1ec3e5f4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveDespawn/45/decode-reason-two",
+      "family": "protocol.server.PassiveDespawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 28
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveDespawn/decode-reason-two.input.bin",
+        "sha256": "sha256:e7a700c178a1350a5fe0030d6190303cf370e58eaab1c10b03c005c0ff8f08bc"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveDespawn/decode-reason-two.expected.json",
+        "sha256": "sha256:986d015321a2eb07422b25a336ae52c8c5cb2dc5199a6fc758e8b0e0bcd32b8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveDespawn/45/decode-reversed-ids",
+      "family": "protocol.server.PassiveDespawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 28
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveDespawn/decode-reversed-ids.input.bin",
+        "sha256": "sha256:88bdea7ba8c633a7b0914ea88a7023f4c2bdfc41babc88619e45ace54d3e34ae"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveDespawn/decode-reversed-ids.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveDespawn/45/decode-trailing-byte",
+      "family": "protocol.server.PassiveDespawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 28
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveDespawn/decode-trailing-byte.input.bin",
+        "sha256": "sha256:b648bc9ecdcb0c3f7493a50d418f58a34ce4450b789175eab1de4734cd8f6e5c"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveDespawn/decode-trailing-byte.expected.json",
+        "sha256": "sha256:6a6aba5322f6bb08d116cc9b314494e850b3adbad2801f6f0078ec3215fd5f44"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveDespawn/45/decode-valid",
+      "family": "protocol.server.PassiveDespawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 28
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveDespawn/decode-valid.input.bin",
+        "sha256": "sha256:c07b30814fb75464d7ee79ce061fcceab590d614e4e7648de0af8a34dfd7a9f6"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveDespawn/decode-valid.expected.json",
+        "sha256": "sha256:fd706cc5430cdc90b5634f4d15702b51ced26128d6fe2ce396b90cd48ddeda2a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveDespawn/45/encode-reason-two",
+      "family": "protocol.server.PassiveDespawn",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 28
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveDespawn/encode-reason-two.input.json",
+        "sha256": "sha256:3840452ffb1551c81870ca38a928689f48bebd8782efd4e9c352664eae7b8b3a"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveDespawn/encode-reason-two.expected.json",
+        "sha256": "sha256:986d015321a2eb07422b25a336ae52c8c5cb2dc5199a6fc758e8b0e0bcd32b8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveDespawn/45/encode-valid",
+      "family": "protocol.server.PassiveDespawn",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 28
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveDespawn/encode-valid.input.json",
+        "sha256": "sha256:8665e9bcad0691aa77d219b669b9ea24a8c6ce59d524d525bb0f2e34f7205509"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveDespawn/encode-valid.expected.json",
+        "sha256": "sha256:1533b6a7345781e3b0d8f74c9088e34bfb3dfe272efa4101f5df46858e3267d6"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveSpawn/45/decode-count-sixty-four",
+      "family": "protocol.server.PassiveSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 26
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/decode-count-sixty-four.input.bin",
+        "sha256": "sha256:4eee360ec9169240555fc3bffa72aafb994154a9125ea1780b186b83bdde80f9"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/decode-count-sixty-four.expected.json",
+        "sha256": "sha256:34894b38bbd14c78f683d414d12db35aff99eead129fd28b3fa37902a5dee864"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveSpawn/45/decode-dimension-depths",
+      "family": "protocol.server.PassiveSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 26
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/decode-dimension-depths.input.bin",
+        "sha256": "sha256:9ec761712a4eed1cfca6c73069a9a7abb021229ffda0a3b9e513230717e175e0"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/decode-dimension-depths.expected.json",
+        "sha256": "sha256:986d015321a2eb07422b25a336ae52c8c5cb2dc5199a6fc758e8b0e0bcd32b8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveSpawn/45/decode-health-above",
+      "family": "protocol.server.PassiveSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 26
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/decode-health-above.input.bin",
+        "sha256": "sha256:7168a23bb8664ef1fd1fc267eca34fd5a4eb84cf3936c58bffaa5091f5b8cea7"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/decode-health-above.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveSpawn/45/decode-health-zero",
+      "family": "protocol.server.PassiveSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 26
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/decode-health-zero.input.bin",
+        "sha256": "sha256:fc821771997a2d914bc0191bab2fe2d629ce657da0f4c1722c00beb4ea071f86"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/decode-health-zero.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveSpawn/45/decode-id-zero",
+      "family": "protocol.server.PassiveSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 26
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/decode-id-zero.input.bin",
+        "sha256": "sha256:24ad90a19774308415840ec518b63be8a8046a0ecaa7f590e68d545b5b125e46"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/decode-id-zero.expected.json",
+        "sha256": "sha256:e18b772c91375783f134c2837eb4944e794f26958ccdc48661b4f68a1ec3e5f4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveSpawn/45/decode-nan-position",
+      "family": "protocol.server.PassiveSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 26
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/decode-nan-position.input.bin",
+        "sha256": "sha256:ab4a0fcd3ce7e2a1787dfa979a0d8b5995f440bd5edf2d9d2b609dc0a587ba86"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/decode-nan-position.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveSpawn/45/decode-reversed-ids",
+      "family": "protocol.server.PassiveSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 26
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/decode-reversed-ids.input.bin",
+        "sha256": "sha256:1c3fc8c4f1bcd7714320fc2e6d08c799bae14cdd8f741db308d098d6d4475898"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/decode-reversed-ids.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveSpawn/45/decode-trailing-byte",
+      "family": "protocol.server.PassiveSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 26
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/decode-trailing-byte.input.bin",
+        "sha256": "sha256:06d9e2d7d5f39fe48734d4bf317d00d6a708931e26691c6201c6dc965ab15cf6"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/decode-trailing-byte.expected.json",
+        "sha256": "sha256:6a6aba5322f6bb08d116cc9b314494e850b3adbad2801f6f0078ec3215fd5f44"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveSpawn/45/decode-valid",
+      "family": "protocol.server.PassiveSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 26
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/decode-valid.input.bin",
+        "sha256": "sha256:c616b8792c05ed82ec094cf2791906c8bcb646888e0d34222a0011505eb8ff07"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/decode-valid.expected.json",
+        "sha256": "sha256:5021792afd93f0be5882dad2d6525b4d5518ba947ea9d41b062c183d504715d8"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveSpawn/45/encode-health-above",
+      "family": "protocol.server.PassiveSpawn",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 26
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/encode-health-above.input.json",
+        "sha256": "sha256:1d5231303258f1c27af68426d984128924e33fdd26da6fe1dc164fe9b19b40ac"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/encode-health-above.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveSpawn/45/encode-valid",
+      "family": "protocol.server.PassiveSpawn",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 26
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/encode-valid.input.json",
+        "sha256": "sha256:2381c418645d252769fbe822f934a169617f86ce381ba29c9cefdb71fb60d02c"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveSpawn/encode-valid.expected.json",
+        "sha256": "sha256:a84b4fbe371de08ca4c1f8108b158470d3c5e3d5ec6321a93c573927892f228e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveState/45/decode-count-above",
+      "family": "protocol.server.PassiveState",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 27
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/decode-count-above.input.bin",
+        "sha256": "sha256:790bb829f86d99cbeac5d3e89963c02899a5237e1ee0bddf39e6b215f1088bf5"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/decode-count-above.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveState/45/decode-count-sixty-four",
+      "family": "protocol.server.PassiveState",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 27
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/decode-count-sixty-four.input.bin",
+        "sha256": "sha256:13d6ea7d521ca5192f00f9bce01d7551dfcba0a8c957e03c55f68ced6e5b0b11"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/decode-count-sixty-four.expected.json",
+        "sha256": "sha256:4fd8493c15ffe98a0ab13e99b4543ef56084bf07a489cd1ce9cac86bc588809b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveState/45/decode-duplicate-ids",
+      "family": "protocol.server.PassiveState",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 27
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/decode-duplicate-ids.input.bin",
+        "sha256": "sha256:a552332678566dfeccaf9d9068f4b91ab7875b88c00e4b86281ebc2b9096a049"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/decode-duplicate-ids.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveState/45/decode-grazing-two",
+      "family": "protocol.server.PassiveState",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 27
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/decode-grazing-two.input.bin",
+        "sha256": "sha256:686f092a9ead171f66a3a91017bb0bad23317632960815751556dfc1b9a5cacb"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/decode-grazing-two.expected.json",
+        "sha256": "sha256:986d015321a2eb07422b25a336ae52c8c5cb2dc5199a6fc758e8b0e0bcd32b8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveState/45/decode-id-zero",
+      "family": "protocol.server.PassiveState",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 27
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/decode-id-zero.input.bin",
+        "sha256": "sha256:18a9f9c85e5d0c795e6a4272c7a8530148d9fccf60fc7cbee7481672f6ac2ae9"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/decode-id-zero.expected.json",
+        "sha256": "sha256:e18b772c91375783f134c2837eb4944e794f26958ccdc48661b4f68a1ec3e5f4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveState/45/decode-nan-velocity",
+      "family": "protocol.server.PassiveState",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 27
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/decode-nan-velocity.input.bin",
+        "sha256": "sha256:abdc718a60fb9ba57ef76847c2bb92aa07540e8e81c7396db633666aca7ceeea"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/decode-nan-velocity.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveState/45/decode-trailing-byte",
+      "family": "protocol.server.PassiveState",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 27
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/decode-trailing-byte.input.bin",
+        "sha256": "sha256:5c49ed5ae44866231205e1a3f483a3b07cf5ac1583ce20912dff93aff8c2382e"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/decode-trailing-byte.expected.json",
+        "sha256": "sha256:6a6aba5322f6bb08d116cc9b314494e850b3adbad2801f6f0078ec3215fd5f44"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveState/45/decode-valid",
+      "family": "protocol.server.PassiveState",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 27
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/decode-valid.input.bin",
+        "sha256": "sha256:35513fd068a01d50134519152e7f04492db8c07b3e493cc953bca226da07118f"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/decode-valid.expected.json",
+        "sha256": "sha256:5929fbdc80d2f2244c0b30e3cdd1e36ec48073a46633ed63613cef06d5696a49"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveState/45/encode-grazing-two",
+      "family": "protocol.server.PassiveState",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 27
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/encode-grazing-two.input.json",
+        "sha256": "sha256:cc0014f69d7f786fea093a1652167589d1cc914e268246ea314ef5c8fa3a8edc"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/encode-grazing-two.expected.json",
+        "sha256": "sha256:986d015321a2eb07422b25a336ae52c8c5cb2dc5199a6fc758e8b0e0bcd32b8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.PassiveState/45/encode-valid",
+      "family": "protocol.server.PassiveState",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 27
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/encode-valid.input.json",
+        "sha256": "sha256:d3bb200f451d5faf16d8cb5071c1f7c3fbd9a80beced7329b0a1cc3e7c40a333"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/PassiveState/encode-valid.expected.json",
+        "sha256": "sha256:b22cff50ffc79c9075b5508e8683364d8218f092e483d96c722df31d22284add"
       },
       "checkpoints": [
         "0"

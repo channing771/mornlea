@@ -1,0 +1,33 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:c616b8792c05ed82ec094cf2791906c8bcb646888e0d34222a0011505eb8ff07",
+  "fields": {
+    "server_tick": "0",
+    "spawns": [
+      {
+        "dimension": 0,
+        "health": 1,
+        "id": "1",
+        "position": [
+          "80000000",
+          "3f800000",
+          "40000000"
+        ],
+        "yaw": "00000000"
+      },
+      {
+        "dimension": 0,
+        "health": 20,
+        "id": "2",
+        "position": [
+          "40400000",
+          "40800000",
+          "40a00000"
+        ],
+        "yaw": "c0200000"
+      }
+    ]
+  },
+  "kind": "ok"
+}
+

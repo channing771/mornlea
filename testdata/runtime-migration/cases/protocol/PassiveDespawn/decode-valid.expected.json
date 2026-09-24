@@ -1,0 +1,18 @@
+{
+  "category": "packet",
+  "fields": {
+    "despawns": [
+      {
+        "id": "1",
+        "reason": 0
+      },
+      {
+        "id": "2",
+        "reason": 1
+      }
+    ],
+    "server_tick": "0"
+  },
+  "kind": "ok"
+}
+

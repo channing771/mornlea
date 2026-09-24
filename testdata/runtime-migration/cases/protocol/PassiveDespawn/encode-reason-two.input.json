@@ -1,0 +1,13 @@
+{
+  "server_tick": 0,
+  "despawns": [
+    {
+      "id": 1,
+      "reason": 2
+    },
+    {
+      "id": 2,
+      "reason": 1
+    }
+  ]
+}

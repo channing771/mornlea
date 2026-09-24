@@ -3856,7 +3856,10 @@ fn dispatch_case(case: &FrozenCase) -> serde_json::Value {
         | ITEM_DROP_REMOVES_FAMILY
         | HOSTILE_SPAWN_FAMILY
         | HOSTILE_STATE_FAMILY
-        | HOSTILE_DESPAWN_FAMILY => dispatch_packet(case),
+        | HOSTILE_DESPAWN_FAMILY
+        | PASSIVE_SPAWN_FAMILY
+        | PASSIVE_STATE_FAMILY
+        | PASSIVE_DESPAWN_FAMILY => dispatch_packet(case),
         other => panic!("unregistered protocol family for {}: {other}", case.id),
     }
 }

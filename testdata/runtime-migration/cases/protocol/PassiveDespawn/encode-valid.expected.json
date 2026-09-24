@@ -1,0 +1,19 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:c07b30814fb75464d7ee79ce061fcceab590d614e4e7648de0af8a34dfd7a9f6",
+  "fields": {
+    "despawns": [
+      {
+        "id": "1",
+        "reason": 0
+      },
+      {
+        "id": "2",
+        "reason": 1
+      }
+    ],
+    "server_tick": "0"
+  },
+  "kind": "ok"
+}
+
