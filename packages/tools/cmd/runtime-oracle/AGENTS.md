@@ -820,6 +820,44 @@ only discriminator the manifest carries.
   tests and reject update, rewrite, regeneration and write flags while leaving
   separately governed storage/protocol golden workflows outside this rule.
 
+## Protocol coverage closure (`protocol_coverage_test.go`)
+
+- `TestProtocolCorpusComplete` is the protocol-only zero-gap gate. It reads the
+  closed route union from three independent sides — live registry discovery,
+  the tracked manifest and `BaselineConsumerRegistry` — and requires the same
+  60-family protocol set from each: 59 packet families beside the framing
+  family, every family carrying both a decode and an encode route at the live
+  protocol version. It then counts the frozen evidence per family: every
+  family holds at least one valid decode, one valid encode and one invalid or
+  boundary case, every protocol case carries exactly one zero checkpoint, and
+  a packet family's case direction agrees with its `protocol.client.` or
+  `protocol.server.` prefix.
+- The same test runs `ReconcileWorking` under the closed union and requires
+  every protocol family/version point to be covered while no protocol point
+  stays uncovered; `ReconcileComplete` must still refuse with only the
+  non-protocol uncovered points, so the protocol closure never claims complete
+  F1. The tracked tree stays byte-identical through the run.
+- `TestProtocolCorpusClosureMutationsFail` pins each drift class the closure
+  names against a synthetic working manifest: a zero-case family, a duplicate
+  case ID, a case with no registered route, a missing source hash, a
+  mismatched digest, an unsupported case version, and a case no producer
+  executes. `TestProtocolCorpusGroupKeysGateExecution` executes one reviewed
+  case per producer group through its own route map and then refuses an
+  altered key, a wrong direction and a wrong state, with the unmutated case
+  reproducing the frozen expectation first so the refusals are attributable to
+  the mutation.
+- `TestProtocolCorpusNonProtocolEvidenceUnchanged` pins the reviewed exact
+  totals — 534 domain, 154 agent and 436 protocol cases — and re-reconciles
+  the complete manifest so any protocol-side rewrite of a domain or agent case
+  fails.
+- `TestProtocolCorpusClosureCandidateExport` stages the one-time source
+  revision refresh as an external candidate through the reviewed
+  create-exclusive exporter: an unset `RUNTIME_ORACLE_EXPORT_DIR` writes
+  nothing, and a set variable publishes the complete manifest with the current
+  `git rev-parse HEAD` revision. The tracked manifest and
+  `BaselineSourceRevision` stay on their recorded value until the controller
+  integrates the reviewed candidate.
+
 ## Focused Verification
 
 ```bash
@@ -834,6 +872,8 @@ go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolHostilesOracle' -
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolPassivesOracle' -count=1
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolProjectilesOracle' -count=1
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolChatEventOracle' -count=1
+go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolCorpus' -count=1
+go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolCorpusComplete' -count=1
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolCorpus' -count=1
 go test ./packages/tools/cmd/runtime-oracle -race -count=1
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked corpus_frame

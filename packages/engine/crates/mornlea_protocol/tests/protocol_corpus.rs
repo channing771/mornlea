@@ -5790,3 +5790,442 @@ fn protocol_corpus_packet_chat_event_cases_are_executed() {
         assert_normalized(case, dispatch_packet(case));
     }
 }
+
+/// The closed protocol family set: 59 packet families the Go registry freezes
+/// beside the one framing family. The suite pins the identities rather than a
+/// count, so a renamed, added or dropped family fails here instead of being
+/// absorbed into a number.
+const PROTOCOL_CORPUS_FAMILY_IDS: [&str; 60] = [
+    "protocol.client.BoneMeal",
+    "protocol.client.ChatCommand",
+    "protocol.client.ClientHello",
+    "protocol.client.CloseContainer",
+    "protocol.client.CollectWater",
+    "protocol.client.DropSelectedItem",
+    "protocol.client.DropStack",
+    "protocol.client.EquipArmor",
+    "protocol.client.KeepAliveReply",
+    "protocol.client.LoginStart",
+    "protocol.client.MoveContainerStack",
+    "protocol.client.MoveCraftingStack",
+    "protocol.client.MoveInventoryStack",
+    "protocol.client.MoveStackPartial",
+    "protocol.client.OpenContainer",
+    "protocol.client.PlaceBlock",
+    "protocol.client.PlaceWater",
+    "protocol.client.PlayerInput",
+    "protocol.client.QuickMoveStack",
+    "protocol.client.RequestChunkResync",
+    "protocol.client.SelectHotbar",
+    "protocol.client.TakeCraftingOutput",
+    "protocol.client.TillSoil",
+    "protocol.frame",
+    "protocol.server.BlockChanges",
+    "protocol.server.ChatEvent",
+    "protocol.server.ChestState",
+    "protocol.server.ChunkSnapshot",
+    "protocol.server.CombatHit",
+    "protocol.server.CommandRejected",
+    "protocol.server.CompanionDespawn",
+    "protocol.server.CompanionSpawn",
+    "protocol.server.CompanionStates",
+    "protocol.server.ContainerClosed",
+    "protocol.server.CraftingState",
+    "protocol.server.Disconnect",
+    "protocol.server.ForgetChunks",
+    "protocol.server.FurnaceState",
+    "protocol.server.HandshakeReject",
+    "protocol.server.HostileDespawn",
+    "protocol.server.HostileSpawn",
+    "protocol.server.HostileState",
+    "protocol.server.InventoryState",
+    "protocol.server.ItemDropRemoves",
+    "protocol.server.ItemDropUpserts",
+    "protocol.server.KeepAlive",
+    "protocol.server.LoginReject",
+    "protocol.server.LoginSuccess",
+    "protocol.server.PassiveDespawn",
+    "protocol.server.PassiveSpawn",
+    "protocol.server.PassiveState",
+    "protocol.server.PlaceBlockSucceeded",
+    "protocol.server.PlayerState",
+    "protocol.server.ProjectileDespawn",
+    "protocol.server.ProjectileSpawn",
+    "protocol.server.ProjectileState",
+    "protocol.server.RemotePlayerDespawn",
+    "protocol.server.RemotePlayerSpawn",
+    "protocol.server.RemotePlayerStates",
+    "protocol.server.ServerHello",
+];
+
+/// Loads the complete protocol selection: the packet consumer's cases beside
+/// the framing consumer's cases, because the two consumers together name every
+/// protocol family this suite executes.
+fn load_complete_protocol_selection() -> Vec<FrozenCase> {
+    let mut cases = load_cases_for_consumer(CorpusConsumer::Protocol);
+    cases.extend(load_cases_for_consumer(CorpusConsumer::Frame));
+    cases
+}
+
+/// One protocol family's executed case profile, counted from the loaded
+/// selection rather than from any registration.
+#[derive(Default)]
+struct ProtocolFamilyProfile {
+    decode_ok: usize,
+    decode_error: usize,
+    encode_ok: usize,
+    encode_error: usize,
+    versions: Vec<String>,
+}
+
+/// Tallies the loaded selection into one profile per family, refusing a family
+/// the closed set does not name.
+fn tally_protocol_families(
+    cases: &[FrozenCase],
+) -> std::collections::BTreeMap<String, ProtocolFamilyProfile> {
+    let mut profiles: std::collections::BTreeMap<String, ProtocolFamilyProfile> =
+        std::collections::BTreeMap::new();
+    for case in cases {
+        if case.normalized["kind"] != "ok" && case.normalized["kind"] != "error" {
+            panic!(
+                "case {} records neither an ok nor an error outcome",
+                case.id
+            );
+        }
+        let profile = profiles.entry(case.family.clone()).or_default();
+        match (case.operation.as_str(), case.normalized["kind"].as_str()) {
+            ("decode", Some("ok")) => profile.decode_ok += 1,
+            ("decode", Some("error")) => profile.decode_error += 1,
+            ("encode", Some("ok")) => profile.encode_ok += 1,
+            ("encode", Some("error")) => profile.encode_error += 1,
+            (operation, kind) => {
+                panic!(
+                    "case {} names operation {operation} with outcome {kind:?}",
+                    case.id
+                )
+            }
+        }
+        if !profile
+            .versions
+            .iter()
+            .any(|version| version == &case.version)
+        {
+            profile.versions.push(case.version.clone());
+        }
+    }
+    profiles
+}
+
+#[test]
+fn protocol_corpus_protocol_family_set_is_closed() {
+    // The closure evidence: the executed families equal the closed set the Go
+    // registry freezes, every family carries the reviewed minimum of one valid
+    // decode, one valid encode and one invalid or boundary case, and the packet
+    // and framing consumers together execute the complete selection.
+    let cases = load_complete_protocol_selection();
+    let mut executed: Vec<&str> = cases.iter().map(|case| case.family.as_str()).collect();
+    executed.sort_unstable();
+    executed.dedup();
+    let mut closed: Vec<&str> = PROTOCOL_CORPUS_FAMILY_IDS.to_vec();
+    closed.sort_unstable();
+    assert_eq!(
+        executed, closed,
+        "the executed protocol family set does not equal the closed set"
+    );
+
+    let packet_cases = cases
+        .iter()
+        .filter(|case| case.consumer == CorpusConsumer::Protocol)
+        .count();
+    let frame_cases = cases
+        .iter()
+        .filter(|case| case.consumer == CorpusConsumer::Frame)
+        .count();
+    assert!(
+        packet_cases >= 177,
+        "the packet selection executes {packet_cases} cases, want at least 177"
+    );
+    assert!(
+        frame_cases >= 3,
+        "the frame selection executes {frame_cases} cases, want at least 3"
+    );
+
+    let profiles = tally_protocol_families(&cases);
+    for family in PROTOCOL_CORPUS_FAMILY_IDS {
+        let profile = profiles
+            .get(family)
+            .unwrap_or_else(|| panic!("closed family {family} executed no case"));
+        assert!(
+            profile.decode_ok >= 1,
+            "family {family} carries {} valid decode cases",
+            profile.decode_ok
+        );
+        assert!(
+            profile.encode_ok >= 1,
+            "family {family} carries {} valid encode cases",
+            profile.encode_ok
+        );
+        assert!(
+            profile.decode_error + profile.encode_error >= 1,
+            "family {family} carries no invalid or boundary case"
+        );
+        assert_eq!(
+            profile.versions,
+            vec![PACKET_VERSION.to_string()],
+            "family {family} names versions {:?}, want exactly {PACKET_VERSION}",
+            profile.versions
+        );
+    }
+    println!(
+        "protocol corpus closure: {} families, {} packet cases, {} frame cases",
+        profiles.len(),
+        packet_cases,
+        frame_cases
+    );
+}
+
+/// The single-value drift one producer group's frozen expectation receives.
+///
+/// The mutation is deliberately type-preserving and minimal: a numeric leaf
+/// becomes the next representable integer and a text leaf gains one character,
+/// so the mutated expectation can only fail the value comparison — never the
+/// manifest load, a hash check or a JSON shape rule.
+#[derive(Clone, Copy, Debug)]
+enum ExpectationDrift {
+    BumpNumber,
+    ExtendText,
+}
+
+impl ExpectationDrift {
+    /// Applies the drift to one leaf and reports whether it fit. A pinned
+    /// field whose JSON type does not fit the mutation is a table error, so a
+    /// renamed or re-shaped field fails the test instead of silently passing.
+    fn apply(&self, leaf: &mut serde_json::Value) -> bool {
+        match self {
+            ExpectationDrift::BumpNumber => {
+                if let Some(next) = leaf.as_u64().and_then(|value| value.checked_add(1)) {
+                    *leaf = serde_json::Value::from(next);
+                    return true;
+                }
+                if let Some(next) = leaf.as_i64().and_then(|value| value.checked_add(1)) {
+                    *leaf = serde_json::Value::from(next);
+                    return true;
+                }
+                false
+            }
+            ExpectationDrift::ExtendText => {
+                if let Some(text) = leaf.as_str() {
+                    let mut extended = text.to_string();
+                    extended.push('0');
+                    *leaf = serde_json::Value::from(extended);
+                    return true;
+                }
+                false
+            }
+        }
+    }
+}
+
+/// One producer group's closure mutation: the reviewed case it executes, the
+/// expectation leaf it drifts, and the drift that leaf receives.
+struct ProtocolGroupMutation {
+    group: &'static str,
+    case_id: &'static str,
+    field: &'static [&'static str],
+    drift: ExpectationDrift,
+}
+
+/// Walks one object path into a mutable leaf, panicking with the failing
+/// segment so a drifted path is diagnosable.
+fn expectation_leaf<'a>(
+    normalized: &'a mut serde_json::Value,
+    path: &[&str],
+) -> &'a mut serde_json::Value {
+    let mut current = normalized;
+    for segment in path {
+        current = current
+            .as_object_mut()
+            .unwrap_or_else(|| panic!("path segment {segment} is not an object"))
+            .get_mut(*segment)
+            .unwrap_or_else(|| panic!("path segment {segment} is absent"));
+    }
+    current
+}
+
+/// The per-group mutation table. It names every packet producer group exactly
+/// once, mirroring the Go closure's group table, so one drifted expectation
+/// per group proves the Rust comparison is a value comparison on both sides.
+const PROTOCOL_GROUP_MUTATIONS: &[ProtocolGroupMutation] = &[
+    ProtocolGroupMutation {
+        group: "negotiation",
+        case_id: "protocol.client.ClientHello/45/decode-current-version",
+        field: &["fields", "protocol_version"],
+        drift: ExpectationDrift::BumpNumber,
+    },
+    ProtocolGroupMutation {
+        group: "control",
+        case_id: "protocol.client.KeepAliveReply/45/decode-valid",
+        field: &["fields", "token"],
+        drift: ExpectationDrift::ExtendText,
+    },
+    ProtocolGroupMutation {
+        group: "client-control",
+        case_id: "protocol.client.PlaceBlock/45/decode-valid",
+        field: &["fields", "slot"],
+        drift: ExpectationDrift::BumpNumber,
+    },
+    ProtocolGroupMutation {
+        group: "client-rays",
+        case_id: "protocol.client.BoneMeal/45/decode-valid",
+        field: &["fields", "sequence"],
+        drift: ExpectationDrift::ExtendText,
+    },
+    ProtocolGroupMutation {
+        group: "client-inventory",
+        case_id: "protocol.client.CloseContainer/45/decode-valid",
+        field: &["fields", "sequence"],
+        drift: ExpectationDrift::ExtendText,
+    },
+    ProtocolGroupMutation {
+        group: "client-stack-views",
+        case_id: "protocol.client.DropStack/45/decode-valid",
+        field: &["fields", "view"],
+        drift: ExpectationDrift::BumpNumber,
+    },
+    ProtocolGroupMutation {
+        group: "client-chat",
+        case_id: "protocol.client.ChatCommand/45/decode-max-text",
+        field: &["fields", "text"],
+        drift: ExpectationDrift::ExtendText,
+    },
+    ProtocolGroupMutation {
+        group: "world-delta",
+        case_id: "protocol.server.BlockChanges/45/decode-empty-barrier",
+        field: &["fields", "dimension"],
+        drift: ExpectationDrift::BumpNumber,
+    },
+    ProtocolGroupMutation {
+        group: "snapshot",
+        case_id: "protocol.server.ChunkSnapshot/45/decode-fixture",
+        field: &["fields", "dimension"],
+        drift: ExpectationDrift::BumpNumber,
+    },
+    ProtocolGroupMutation {
+        group: "player-outcomes",
+        case_id: "protocol.server.CombatHit/45/decode-kind-three",
+        field: &["fields", "damage"],
+        drift: ExpectationDrift::BumpNumber,
+    },
+    ProtocolGroupMutation {
+        group: "inventory-publication",
+        case_id: "protocol.server.CraftingState/45/decode-valid",
+        field: &["fields", "size"],
+        drift: ExpectationDrift::BumpNumber,
+    },
+    ProtocolGroupMutation {
+        group: "remote-players",
+        case_id: "protocol.server.RemotePlayerDespawn/45/decode-valid",
+        field: &["fields", "player_id"],
+        drift: ExpectationDrift::ExtendText,
+    },
+    ProtocolGroupMutation {
+        group: "companions",
+        case_id: "protocol.server.CompanionDespawn/45/decode-valid",
+        field: &["fields", "companion_id"],
+        drift: ExpectationDrift::ExtendText,
+    },
+    ProtocolGroupMutation {
+        group: "drops",
+        case_id: "protocol.server.ItemDropRemoves/45/decode-count-one",
+        field: &["fields", "server_tick"],
+        drift: ExpectationDrift::ExtendText,
+    },
+    ProtocolGroupMutation {
+        group: "hostiles",
+        case_id: "protocol.server.HostileDespawn/45/decode-count-sixty-four",
+        field: &["fields", "server_tick"],
+        drift: ExpectationDrift::ExtendText,
+    },
+    ProtocolGroupMutation {
+        group: "passives",
+        case_id: "protocol.server.PassiveDespawn/45/decode-valid",
+        field: &["fields", "server_tick"],
+        drift: ExpectationDrift::ExtendText,
+    },
+    ProtocolGroupMutation {
+        group: "projectiles",
+        case_id: "protocol.server.ProjectileDespawn/45/decode-count-one-hundred-twenty-eight",
+        field: &["fields", "server_tick"],
+        drift: ExpectationDrift::ExtendText,
+    },
+    ProtocolGroupMutation {
+        group: "chat-event",
+        case_id: "protocol.server.ChatEvent/45/decode-accepted",
+        field: &["fields", "event_id"],
+        drift: ExpectationDrift::ExtendText,
+    },
+];
+
+#[test]
+fn protocol_corpus_every_group_mutation_fails_the_comparison() {
+    // Every producer group's frozen expectation is load-bearing: the case
+    // executes through the real consumer, the unmutated comparison passes
+    // first outside `catch_unwind`, and exactly one drifted value then makes
+    // the same comparison panic. The failure therefore comes from the Rust
+    // value comparison rather than from a manifest, hash or shape problem.
+    let cases = load_complete_protocol_selection();
+    let mut seen_groups: Vec<&str> = Vec::new();
+    for entry in PROTOCOL_GROUP_MUTATIONS {
+        assert!(
+            !seen_groups.contains(&entry.group),
+            "producer group {} is registered twice in the mutation table",
+            entry.group
+        );
+        seen_groups.push(entry.group);
+        let case = cases
+            .iter()
+            .find(|case| case.id == entry.case_id)
+            .unwrap_or_else(|| panic!("mutation table names missing case {}", entry.case_id));
+        assert_eq!(
+            case.consumer,
+            CorpusConsumer::Protocol,
+            "case {} carries the wrong consumer",
+            case.id
+        );
+        let actual = dispatch_packet(case);
+        assert_normalized(case, actual.clone());
+
+        let mut mutated = case.clone();
+        let leaf = expectation_leaf(&mut mutated.normalized, entry.field);
+        let prior = leaf.clone();
+        assert!(
+            entry.drift.apply(leaf),
+            "group {}: drift does not fit field {:?}",
+            entry.group,
+            entry.field
+        );
+        let drifted = {
+            let leaf = expectation_leaf(&mut mutated.normalized, entry.field);
+            leaf.clone()
+        };
+        assert_ne!(
+            prior, drifted,
+            "group {}: the drift did not change the pinned leaf",
+            entry.group
+        );
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            assert_normalized(&mutated, actual.clone());
+        }));
+        assert!(
+            outcome.is_err(),
+            "group {}: a drifted expectation must fail the Rust value comparison",
+            entry.group
+        );
+    }
+    assert_eq!(
+        seen_groups.len(),
+        18,
+        "the mutation table names {} groups, want 18",
+        seen_groups.len()
+    );
+}

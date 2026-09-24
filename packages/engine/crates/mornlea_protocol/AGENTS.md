@@ -2477,3 +2477,18 @@ could not catch; for the one compressed family, the corpus digest is the
 SHA-256 of the canonical logical payload rather than of the compressed bytes,
 because the two implementations' encoders legitimately publish different
 compressed blocks.
+
+The suite also carries the protocol-only closure evidence for the complete
+corpus. `protocol_corpus_protocol_family_set_is_closed` pins the executed
+family set against the closed 60-family identity list — 59 packet families
+beside the framing family — and requires every family's minimum of one valid
+decode, one valid encode and one invalid or boundary case at packet version
+45, with the packet and framing selections counted separately beside the
+reviewed 177-packet and 3-frame minimums.
+`protocol_corpus_every_group_mutation_fails_the_comparison` runs one reviewed
+case per producer group through the real dispatch, asserts the unmutated
+comparison passes first outside `catch_unwind`, and then fails the same
+comparison with exactly one drifted expectation value (a bumped number or an
+extended text), so every group's frozen expectation is proven load-bearing on
+the Rust side as well. Both tests need no corpus files beyond the merged
+manifest, so they run before the controller integrates any exported candidate.
