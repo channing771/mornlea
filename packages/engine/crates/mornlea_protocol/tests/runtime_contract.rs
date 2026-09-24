@@ -2342,6 +2342,11 @@ fn hostile_id(id: u64) -> mornlea_protocol::HostileId {
     mornlea_protocol::HostileId::try_new(id).expect("reviewed nonzero hostile identity")
 }
 
+/// Wraps one nonzero passive identity the domain rule admits.
+fn passive_id(id: u64) -> mornlea_protocol::PassiveId {
+    mornlea_protocol::PassiveId::try_new(id).expect("reviewed nonzero passive identity")
+}
+
 #[test]
 fn hostile_despawn_round_trip_preserves_batch_bytes() {
     let despawn = mornlea_protocol::HostileDespawn::new(
@@ -2442,17 +2447,17 @@ fn passive_despawn_round_trip_preserves_batch_bytes() {
         0x0102_0304_0506_0708,
         vec![
             mornlea_protocol::PassiveDespawnRecord {
-                id: 4,
+                id: passive_id(4),
                 reason: mornlea_protocol::PASSIVE_DESPAWN_VANISHED,
             },
             mornlea_protocol::PassiveDespawnRecord {
-                id: 9,
+                id: passive_id(9),
                 reason: mornlea_protocol::PASSIVE_DESPAWN_DIED,
             },
         ],
     )
     .expect("batch");
-    let payload = despawn.encode();
+    let payload = despawn.encode().expect("encode");
     assert_eq!(
         payload,
         [
@@ -2471,26 +2476,31 @@ fn passive_despawn_round_trip_preserves_batch_bytes() {
 #[test]
 fn passive_despawn_rejects_unsorted_zero_reason_and_malformed_payload() {
     let vanished = mornlea_protocol::PassiveDespawnRecord {
-        id: 4,
+        id: passive_id(4),
         reason: mornlea_protocol::PASSIVE_DESPAWN_VANISHED,
     };
     let died = mornlea_protocol::PassiveDespawnRecord {
-        id: 9,
+        id: passive_id(9),
         reason: mornlea_protocol::PASSIVE_DESPAWN_DIED,
     };
     assert!(mornlea_protocol::PassiveDespawn::new(1, Vec::new()).is_err());
     assert!(mornlea_protocol::PassiveDespawn::new(1, vec![died, vanished]).is_err());
-    assert!(
-        mornlea_protocol::PassiveDespawn::new(
-            1,
-            vec![mornlea_protocol::PassiveDespawnRecord { id: 0, reason: 1 }],
-        )
-        .is_err()
+    // A zero identity is refused where the identity is read, because the
+    // checked domain `PassiveId` has no zero form to construct.
+    let mut zero_id = vec![1, 0, 0, 0, 0, 0, 0, 0, 0x01];
+    zero_id.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 0]);
+    zero_id.push(0);
+    assert_eq!(
+        mornlea_protocol::PassiveDespawn::decode(&zero_id),
+        Err(mornlea_protocol::ProtocolError::InvalidIdentity)
     );
     assert_eq!(
         mornlea_protocol::PassiveDespawn::new(
             1,
-            vec![mornlea_protocol::PassiveDespawnRecord { id: 4, reason: 2 }],
+            vec![mornlea_protocol::PassiveDespawnRecord {
+                id: passive_id(4),
+                reason: 2
+            }],
         ),
         Err(mornlea_protocol::ProtocolError::InvalidEnum)
     );
@@ -4080,14 +4090,14 @@ fn passive_spawn_round_trip_preserves_batch_bytes() {
         0x0102_0304_0506_0708,
         vec![
             mornlea_protocol::PassiveSpawnRecord {
-                id: 7,
+                id: passive_id(7),
                 dimension: mornlea_domain::Dimension::OVERWORLD,
                 position: [2.5, 1.0, -3.25],
                 yaw: 1.25,
                 health: 14,
             },
             mornlea_protocol::PassiveSpawnRecord {
-                id: 9,
+                id: passive_id(9),
                 dimension: mornlea_domain::Dimension::OVERWORLD,
                 position: [-8.5, 65.5, 12.75],
                 yaw: -2.5,
@@ -4096,7 +4106,7 @@ fn passive_spawn_round_trip_preserves_batch_bytes() {
         ],
     )
     .expect("spawn");
-    let payload = spawn.encode();
+    let payload = spawn.encode().expect("encode");
     assert_eq!(mornlea_protocol::PassiveSpawn::PACKET_ID, 26);
     assert_eq!(payload.len(), 8 + 1 + 2 * 29);
     assert_eq!(&payload[..8], &0x0102_0304_0506_0708u64.to_le_bytes());
@@ -4118,15 +4128,13 @@ fn passive_spawn_round_trip_preserves_batch_bytes() {
 #[test]
 fn passive_spawn_rejects_invalid_records_and_malformed_payload() {
     let record = mornlea_protocol::PassiveSpawnRecord {
-        id: 7,
+        id: passive_id(7),
         dimension: mornlea_domain::Dimension::OVERWORLD,
         position: [1.0, 2.0, 3.0],
         yaw: 0.5,
         health: 10,
     };
 
-    let mut zero_id = record;
-    zero_id.id = 0;
     let mut foreign = record;
     foreign.dimension = mornlea_domain::Dimension::DEPTHS;
     let mut bad_health = record;
@@ -4135,7 +4143,7 @@ fn passive_spawn_rejects_invalid_records_and_malformed_payload() {
     over_health.health = 21;
     let mut bad_yaw = record;
     bad_yaw.yaw = f32::NAN;
-    for bad in [zero_id, foreign, bad_health, over_health, bad_yaw] {
+    for bad in [foreign, bad_health, over_health, bad_yaw] {
         assert!(
             mornlea_protocol::PassiveSpawn::new(1, vec![bad]).is_err(),
             "accepted invalid passive spawn record"
@@ -4146,15 +4154,26 @@ fn passive_spawn_rejects_invalid_records_and_malformed_payload() {
     // The protocol ceiling is the record budget, not the smaller live capacity
     // the authority converges on.
     let full: Vec<_> = (1..=mornlea_protocol::MAX_PASSIVE_SPAWN_RECORDS as u64)
-        .map(|id| mornlea_protocol::PassiveSpawnRecord { id, ..record })
+        .map(|id| mornlea_protocol::PassiveSpawnRecord {
+            id: passive_id(id),
+            ..record
+        })
         .collect();
     assert!(
         mornlea_protocol::PassiveSpawn::new(1, full).is_ok(),
         "rejected a full passive spawn batch"
     );
+    // A zero identity is refused where the identity is read, because the
+    // checked domain `PassiveId` has no zero form to construct.
+    let mut zero_id = vec![0, 0, 0, 0, 0, 0, 0, 0, 0x01];
+    zero_id.extend_from_slice(&[0u8; 29]);
+    assert_eq!(
+        mornlea_protocol::PassiveSpawn::decode(&zero_id),
+        Err(mornlea_protocol::ProtocolError::InvalidIdentity)
+    );
 
     let valid = mornlea_protocol::PassiveSpawn::new(1, vec![record]).expect("spawn");
-    let payload = valid.encode();
+    let payload = valid.encode().expect("encode");
     for length in 0..payload.len() {
         assert!(
             mornlea_protocol::PassiveSpawn::decode(&payload[..length]).is_err(),
@@ -4187,7 +4206,7 @@ fn passive_state_round_trip_preserves_batch_bytes() {
         0x0102_0304_0506_0708,
         vec![
             mornlea_protocol::PassiveStateRecord {
-                id: 7,
+                id: passive_id(7),
                 position: [2.5, 1.0, -3.25],
                 velocity: [0.5, -1.25, 0.0],
                 yaw: 1.25,
@@ -4195,7 +4214,7 @@ fn passive_state_round_trip_preserves_batch_bytes() {
                 grazing: 1,
             },
             mornlea_protocol::PassiveStateRecord {
-                id: 9,
+                id: passive_id(9),
                 position: [-8.5, 65.5, 12.75],
                 velocity: [0.0, 0.0, 0.0],
                 yaw: -2.5,
@@ -4205,7 +4224,7 @@ fn passive_state_round_trip_preserves_batch_bytes() {
         ],
     )
     .expect("state");
-    let payload = state.encode();
+    let payload = state.encode().expect("encode");
     assert_eq!(mornlea_protocol::PassiveState::PACKET_ID, 27);
     assert_eq!(payload.len(), 8 + 1 + 2 * 38);
     assert_eq!(&payload[..8], &0x0102_0304_0506_0708u64.to_le_bytes());
@@ -4234,7 +4253,7 @@ fn passive_state_round_trip_preserves_batch_bytes() {
 #[test]
 fn passive_state_rejects_invalid_records_and_malformed_payload() {
     let record = mornlea_protocol::PassiveStateRecord {
-        id: 7,
+        id: passive_id(7),
         position: [1.0, 2.0, 3.0],
         velocity: [0.0, 0.0, 0.0],
         yaw: 0.5,
@@ -4242,8 +4261,6 @@ fn passive_state_rejects_invalid_records_and_malformed_payload() {
         grazing: 0,
     };
 
-    let mut zero_id = record;
-    zero_id.id = 0;
     let mut bad_velocity = record;
     bad_velocity.velocity = [f32::INFINITY, 0.0, 0.0];
     let mut bad_health = record;
@@ -4252,7 +4269,7 @@ fn passive_state_rejects_invalid_records_and_malformed_payload() {
     over_health.health = 21;
     let mut bad_grazing = record;
     bad_grazing.grazing = 2;
-    for bad in [zero_id, bad_velocity, bad_health, over_health, bad_grazing] {
+    for bad in [bad_velocity, bad_health, over_health, bad_grazing] {
         assert!(
             mornlea_protocol::PassiveState::new(1, vec![bad]).is_err(),
             "accepted invalid passive state record"
@@ -4260,9 +4277,17 @@ fn passive_state_rejects_invalid_records_and_malformed_payload() {
     }
     assert!(mornlea_protocol::PassiveState::new(1, vec![record, record]).is_err());
     assert!(mornlea_protocol::PassiveState::new(1, Vec::new()).is_err());
+    // A zero identity is refused where the identity is read, because the
+    // checked domain `PassiveId` has no zero form to construct.
+    let mut zero_id = vec![0, 0, 0, 0, 0, 0, 0, 0, 0x01];
+    zero_id.extend_from_slice(&[0u8; 38]);
+    assert_eq!(
+        mornlea_protocol::PassiveState::decode(&zero_id),
+        Err(mornlea_protocol::ProtocolError::InvalidIdentity)
+    );
 
     let valid = mornlea_protocol::PassiveState::new(1, vec![record]).expect("state");
-    let payload = valid.encode();
+    let payload = valid.encode().expect("encode");
     for length in 0..payload.len() {
         assert!(
             mornlea_protocol::PassiveState::decode(&payload[..length]).is_err(),

@@ -1080,7 +1080,7 @@ rather than checking that it omits a few names.
   (`projectile_despawn_round_trip_preserves_batch_bytes`,
   `projectile_despawn_rejects_unsorted_zero_and_malformed_payload`).
 
-## Passive despawn (`src/passive_despawn.rs`, `tests/runtime_contract.rs`)
+## Passive despawn (`src/passive_despawn.rs`, `tests/runtime_contract.rs`, `tests/protocol_passives.rs`)
 
 - Play packet ID 28 payload is a `u64` server tick, a one-byte record count,
   and the fixed 9-byte records of an ID plus the removal reason. The count is
@@ -1089,6 +1089,41 @@ rather than checking that it omits a few names.
   else is `InvalidEnum`; records must be strictly ascending and non-zero
   (`passive_despawn_round_trip_preserves_batch_bytes`,
   `passive_despawn_rejects_unsorted_zero_reason_and_malformed_payload`).
+- The identity is the checked domain `PassiveId` re-exported from
+  `src/passive_id.rs`, which also owns the fixed eight-byte wire read and
+  write the three passive families share. Zero is the absent form of every
+  entity family, so it is refused where the identity is read
+  (`InvalidIdentity`) and cannot be constructed on the outbound surface at
+  all, which is the boundary the Go `network: passive despawn ID is zero`
+  message names. The shim mirrors `src/hostile_id.rs` rather than
+  generalizing it, because the two identities are distinct domain newtypes
+  over the same bits and a generic module would erase that distinction.
+- The family carries the passive group's common fallible surface
+  (`validate(&self)` → private `valid` → checked `encoded_len` →
+  `encode_into` through the crate-private `publish_packet` → allocating
+  `encode`), and its gate is count-first: the batch count bound, then per
+  record the closed reason match with the strictly increasing identity order.
+  A batch mutated into an empty or over-full record set, an unordered
+  identity or an unpublished reason after construction is refused instead of
+  silently published, and a short destination reports
+  `OutputTooSmall { needed, available }` with every destination byte
+  unchanged (`passive_despawn_round_trips_through_the_fallible_surface`,
+  `passive_despawn_invalid_value_wins_over_short_capacity`,
+  `passive_mutated_public_fields_are_never_published`).
+- The batch applies the exact-remaining-length rule rather than the
+  minimum-records rule, because the Go decoder rejects a payload whose
+  remaining length is not exactly `count` records before it reads one, so a
+  padded payload answers at the truncation boundary on both sides
+  (`passive_decode_rejects_one_trailing_byte`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.PassiveDespawn` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real Go
+  codec in
+  `packages/tools/cmd/runtime-oracle/protocol_passives_test.go`. The frozen
+  cases are the canonical vector pair, the zero identity, the closed reason
+  pair with its encode twin, the duplicate and descending order refusals, the
+  count-bound refusal, and the padding refusal the exact-length rule answers
+  at the truncation category.
 
 ## Chest state (`src/chest_state.rs`, `tests/runtime_contract.rs`)
 
@@ -1599,7 +1634,7 @@ rather than checking that it omits a few names.
   boundary-admitting counts (one and seven records) freeze the count domain
   beside the fixed wire ceiling.
 
-## Passive spawn (`src/passive_spawn.rs`, `tests/runtime_contract.rs`)
+## Passive spawn (`src/passive_spawn.rs`, `tests/runtime_contract.rs`, `tests/protocol_passives.rs`)
 
 - Play packet ID 26 payload is a `u64` server tick, a one-byte record count,
   and the fixed 29-byte spawn records of ID, dimension, position, yaw, and
@@ -1610,8 +1645,40 @@ rather than checking that it omits a few names.
   converges on
   (`passive_spawn_round_trip_preserves_batch_bytes`,
   `passive_spawn_rejects_invalid_records_and_malformed_payload`).
+- The family carries the passive group's common fallible surface, and its
+  record gate keeps the Go `PassiveSpawnRecord.validate` order: the
+  dimension, the pose finiteness and the health span. The identity is
+  already checked by the domain `PassiveId`, so the record gate restates no
+  identity rule, and the batch gate adds the count bound and the strict
+  identity order in the Go batch order. A record mutated into a foreign
+  dimension, a non-finite pose or an out-of-range health after construction
+  is refused instead of silently published, and a short destination reports
+  `OutputTooSmall { needed, available }` with every destination byte
+  unchanged (`passive_spawn_round_trips_through_the_fallible_surface`,
+  `passive_spawn_invalid_value_wins_over_short_capacity`,
+  `passive_health_span_is_one_to_twenty`).
+- The dimension is the raw wire `i32` matched against the two known dimension
+  IDs rather than narrowed to a `u8`, so a value such as `256` is an
+  `InvalidEnum` instead of a reinterpreted dimension, and the negative-zero
+  pose bits survive the round trip
+  (`passive_spawn_dimension_is_matched_against_the_known_ids`,
+  `passive_records_preserve_negative_zero_pose_bits`).
+- The batch applies the exact-remaining-length rule, the count bound fires
+  before it on both sides, and the 64-record ceiling is admitted on all three
+  passive families with the 32-actor live cap named in the group test as the
+  authority-only concern it is (`passive_count_bound_fires_before_the_record_rule`,
+  `passive_batches_admit_the_full_record_ceiling`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.PassiveSpawn` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real Go
+  codec in
+  `packages/tools/cmd/runtime-oracle/protocol_passives_test.go`. The frozen
+  cases are the canonical vector pair, the 64-record ceiling, the zero
+  identity, the depths dimension, the two health boundaries with the
+  health-above encode twin, the non-finite position, the descending order
+  refusal, and the padding refusal at the truncation category.
 
-## Passive state (`src/passive_state.rs`, `tests/runtime_contract.rs`)
+## Passive state (`src/passive_state.rs`, `tests/runtime_contract.rs`, `tests/protocol_passives.rs`)
 
 - Play packet ID 27 payload is a `u64` server tick, a one-byte record count,
   and the fixed 38-byte state records of ID, position, velocity, yaw, health,
@@ -1621,6 +1688,26 @@ rather than checking that it omits a few names.
   reinterpreted
   (`passive_state_round_trip_preserves_batch_bytes`,
   `passive_state_rejects_invalid_records_and_malformed_payload`).
+- The family carries the passive group's common fallible surface. Its record
+  is the spawn record with the dimension exchanged for the velocity and the
+  grazing bit closing the record, so the gate order is the finiteness of the
+  position, the velocity and the yaw as one message, then the health span,
+  then the closed grazing match, with the count bound and the strict identity
+  order in the batch gate. The 9-byte difference between the two strides is
+  the dimension-for-velocity exchange plus the grazing bit, which the group
+  test pins directly (`passive_state_round_trips_through_the_fallible_surface`,
+  `passive_state_invalid_value_wins_over_short_capacity`,
+  `passive_spawn_omits_kind_and_state_omits_dimension`,
+  `passive_grazing_and_reason_are_closed_pairs`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.PassiveState` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real Go
+  codec in
+  `packages/tools/cmd/runtime-oracle/protocol_passives_test.go`. The frozen
+  cases are the canonical vector pair, the 64-record ceiling, the closed
+  grazing pair with its grazing-two encode twin, the non-finite velocity, the
+  zero identity, the duplicate identity refusal, the count-bound refusal, and
+  the padding refusal at the truncation category.
 
 ## Projectile spawn (`src/projectile_spawn.rs`, `tests/runtime_contract.rs`)
 
@@ -1839,6 +1926,8 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_drops --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_hostiles --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_hostiles --locked -- --list
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_passives --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_passives --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
 
@@ -1998,6 +2087,27 @@ those values byte for byte, while a non-finite pose reached the primitive's
 own refusal and became a panic at the previous encoder's `expect`. It also
 needs no corpus files, so it runs before the controller integrates the
 exported candidates.
+
+`tests/protocol_passives.rs` pins the three passive-mob publication records
+through that same surface: the reviewed 67-byte spawn, 85-byte state and
+27-byte despawn literals round-trip byte for byte with the negative-zero pose
+bits preserved, the record strides 29/38/9 with the dimension-for-velocity
+exchange and the grazing bit that distinguish the two full-body records and
+no kind byte on either, the closed grazing and reason pairs (0/1 admitted, 2
+refused at the enum boundary on every entry point), the inclusive 1..=20
+health span, the raw-`i32` dimension match that refuses 256 as an enum
+violation, the 64-record ceiling on all three families with the 32-actor
+live cap named in the test as the authority-only concern that never enters
+the packet layer, the exact-remaining-length batch rule (every proper
+truncation plus one padded byte reject at the same boundary), and the packet
+IDs 26/27/28. Its mutation test quotes the silent publishes the previous
+surface allowed: a spawn record mutated into the depths dimension, health 21
+or a zero identity, a state record mutated into grazing 2 or a non-finite
+velocity, a descending pair and an empty batch all published those values
+byte for byte, with the health-21 spawn publishing `..., 0x15]` and the
+grazing-2 state record publishing `0a, 02` in its health and grazing bytes.
+It also needs no corpus files, so it runs before the controller integrates
+the exported candidates.
 
 `tests/protocol_corpus.rs` executes the corpus cases this crate owns through
 the real codec paths — `read_frame`/`write_frame` for framing,

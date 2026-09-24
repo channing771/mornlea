@@ -64,6 +64,7 @@ mod move_inventory_stack;
 mod move_stack_partial;
 mod open_container;
 mod passive_despawn;
+mod passive_id;
 mod passive_spawn;
 mod passive_state;
 mod place_block;
@@ -193,15 +194,17 @@ pub use move_stack_partial::{
 };
 pub use open_container::OpenContainer;
 pub use passive_despawn::{
-    MAX_PASSIVE_RECORDS, PASSIVE_DESPAWN_DIED, PASSIVE_DESPAWN_VANISHED, PassiveDespawn,
-    PassiveDespawnRecord,
+    MAX_PASSIVE_RECORDS, PASSIVE_DESPAWN_DIED, PASSIVE_DESPAWN_MAX_WIRE_BYTES,
+    PASSIVE_DESPAWN_VANISHED, PASSIVE_DESPAWN_WIRE_BYTES, PassiveDespawn, PassiveDespawnRecord,
 };
+pub use passive_id::{PASSIVE_ID_WIRE_BYTES, PassiveId};
 pub use passive_spawn::{
     MAX_PASSIVE_SPAWN_RECORDS, PASSIVE_SPAWN_MAX_WIRE_BYTES, PASSIVE_SPAWN_WIRE_BYTES,
     PassiveSpawn, PassiveSpawnRecord,
 };
 pub use passive_state::{
-    PASSIVE_STATE_MAX_WIRE_BYTES, PASSIVE_STATE_WIRE_BYTES, PassiveState, PassiveStateRecord,
+    MAX_PASSIVE_STATE_RECORDS, PASSIVE_STATE_MAX_WIRE_BYTES, PASSIVE_STATE_WIRE_BYTES,
+    PassiveState, PassiveStateRecord,
 };
 pub use place_block::PlaceBlock;
 pub use place_block_succeeded::PlaceBlockSucceeded;

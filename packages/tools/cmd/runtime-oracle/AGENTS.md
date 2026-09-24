@@ -473,6 +473,25 @@ and the isolated export helpers (`exportGeneratedAssets`,
   boundary, which both sides publish as a value violation). Provenance is
   `codec_server.go` plus `message_drop.go` and `codec_values.go` for both
   families.
++- The sixteenth packet producer group is `protocol_passives_test.go`
+  (`protocol.server.PassiveSpawn`, `protocol.server.PassiveState` and
+  `protocol.server.PassiveDespawn`, decode and encode), the passive-mob
+  publications. It executes `codec.DecodeServer`/`EncodeServer` in the play
+  state with the case's own `PacketKey`, normalizes the `server_tick` and
+  each record identity as decimal strings, the dimension as a plain integer,
+  each vector as its ordered bit-string array, and the health, grazing and
+  reason as JSON numbers; the records publish in wire order. Its category
+  table resolves the boundaries the Go decoder and validators actually name:
+  the batch count message and the strict-order message to `invalid-value`,
+  the remaining-length check to `truncated` because all three decoders apply
+  the exact-remaining-length rule before they read a record, the per-record
+  identity message to `invalid-identity`, the dimension, grazing and reason
+  messages to `invalid-enum` because each names a closed wire set, and the
+  pose and health messages to `invalid-value`. The 64-record wire bound is
+  the protocol budget every family admits, and the smaller live capacity the
+  authority converges on is deliberately absent from this layer. Provenance
+  is `codec_server.go` plus `message_passive.go` and `passive_wire.go` for
+  all three families.
 - The fifteenth packet producer group is `protocol_hostiles_test.go`
   (`protocol.server.HostileSpawn`, `protocol.server.HostileState` and
   `protocol.server.HostileDespawn`, decode and encode), the hostile-mob
@@ -765,6 +784,7 @@ go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolRemotePlayersOrac
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolCompanionsOracle' -count=1
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolDropsOracle' -count=1
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolHostilesOracle' -count=1
+go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolPassivesOracle' -count=1
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolCorpus' -count=1
 go test ./packages/tools/cmd/runtime-oracle -race -count=1
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked corpus_frame
