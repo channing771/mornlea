@@ -438,3 +438,22 @@
 **Rollback:** revert `accdb5d7`, `b6043f00` and `29ec84e0` individually; the corpus keeps all 60 families and the revision returns to `736af2f4`.
 
 **Architecture skill: no change.**
+
+
+## Node 4.4 — 2026-09-24
+
+**Status:** complete. All stage gates green on HEAD `a3018819`:
+
+- `rustup run 1.97.1 cargo fmt --manifest-path packages/engine/Cargo.toml --all --check` — exit 0.
+- `openspec validate --all --strict --no-interactive` — 128 passed, 0 failed.
+- `go test ./packages/audit -count=1` — ok (24.7s).
+- `make rust-check` — exit 0 (54 Rust test binaries all ok, incl. every protocol/domain/storage suite).
+- `make dev-check` — exit 0.
+- `make test-race` — exit 0, 0 FAIL, every workspace module ok (incl. the full `-race` oracle at the refreshed `b6043f00` source revision).
+- `git diff --exit-code -- testdata/runtime-migration` — clean (the frozen corpus is byte-identical post-closure).
+
+**Standing notes:** the whole-change review (the SDD final whole-branch review with the accumulated Minor-findings triage) remains the one open item outside the checkbox scope — the branch `codex/rust-protocol-completion` from `0f5ff747` to HEAD carries 45 scoped commits across nodes 1.1–4.3; the change ledger records every node's evidence, rulings, and rollback. No failed required gate was accepted.
+
+**Architecture skill: no change** (final promotion review deferred to the whole-change review).
+
+**Node 4.4 commit:** this ledger entry plus the `tasks.md` checkbox.
