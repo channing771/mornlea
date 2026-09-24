@@ -473,25 +473,6 @@ and the isolated export helpers (`exportGeneratedAssets`,
   boundary, which both sides publish as a value violation). Provenance is
   `codec_server.go` plus `message_drop.go` and `codec_values.go` for both
   families.
-+- The sixteenth packet producer group is `protocol_passives_test.go`
-  (`protocol.server.PassiveSpawn`, `protocol.server.PassiveState` and
-  `protocol.server.PassiveDespawn`, decode and encode), the passive-mob
-  publications. It executes `codec.DecodeServer`/`EncodeServer` in the play
-  state with the case's own `PacketKey`, normalizes the `server_tick` and
-  each record identity as decimal strings, the dimension as a plain integer,
-  each vector as its ordered bit-string array, and the health, grazing and
-  reason as JSON numbers; the records publish in wire order. Its category
-  table resolves the boundaries the Go decoder and validators actually name:
-  the batch count message and the strict-order message to `invalid-value`,
-  the remaining-length check to `truncated` because all three decoders apply
-  the exact-remaining-length rule before they read a record, the per-record
-  identity message to `invalid-identity`, the dimension, grazing and reason
-  messages to `invalid-enum` because each names a closed wire set, and the
-  pose and health messages to `invalid-value`. The 64-record wire bound is
-  the protocol budget every family admits, and the smaller live capacity the
-  authority converges on is deliberately absent from this layer. Provenance
-  is `codec_server.go` plus `message_passive.go` and `passive_wire.go` for
-  all three families.
 - The fifteenth packet producer group is `protocol_hostiles_test.go`
   (`protocol.server.HostileSpawn`, `protocol.server.HostileState` and
   `protocol.server.HostileDespawn`, decode and encode), the hostile-mob
@@ -510,6 +491,25 @@ and the isolated export helpers (`exportGeneratedAssets`,
   dimension and kind messages to `invalid-enum`, and the pose and health
   messages to `invalid-value`. Provenance is `codec_server.go` plus
   `message_hostile.go` and `hostile_wire.go` for all three families.
+- The sixteenth packet producer group is `protocol_passives_test.go`
+  (`protocol.server.PassiveSpawn`, `protocol.server.PassiveState` and
+  `protocol.server.PassiveDespawn`, decode and encode), the passive-mob
+  publications. It executes `codec.DecodeServer`/`EncodeServer` in the play
+  state with the case's own `PacketKey`, normalizes the `server_tick` and
+  each record identity as decimal strings, the dimension as a plain integer,
+  each vector as its ordered bit-string array, and the health, grazing and
+  reason as JSON numbers; the records publish in wire order. Its category
+  table resolves the boundaries the Go decoder and validators actually name:
+  the batch count message and the strict-order message to `invalid-value`,
+  the remaining-length check to `truncated` because all three decoders apply
+  the exact-remaining-length rule before they read a record, the per-record
+  identity message to `invalid-identity`, the dimension, grazing and reason
+  messages to `invalid-enum` because each names a closed wire set, and the
+  pose and health messages to `invalid-value`. The 64-record wire bound is
+  the protocol budget every family admits, and the smaller live capacity the
+  authority converges on is deliberately absent from this layer. Provenance
+  is `codec_server.go` plus `message_passive.go` and `passive_wire.go` for
+  all three families.
 - `validProducerIDs` is the closed exporter allowlist. It carries the 18
   protocol group producer IDs the v45 packet plan names
   (`runtime-oracle/protocol-negotiation`, `-control`, `-client-control`,

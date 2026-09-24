@@ -903,6 +903,16 @@ rather than checking that it omits a few names.
   chunk-ordered block index that sorted block-change batches compare, and
   `MAX_CHUNK_BLOCK_INDEX`, the exclusive upper bound an item drop's block
   index must stay below.
+- The byte-count batch families carry one recorded latent class: the Go
+  decode path applies a fixed per-family wire ceiling before the family
+  decoder (an over-ceiling payload answers `capacity`), while the hostile
+  and passive decoders here size by the count bound and the
+  exact-remaining-length rule, so the same bytes answer `Truncated`. No
+  corpus case sits on that boundary, and the family-specific
+  `*_MAX_WIRE_BYTES` constants the passive modules derive from their
+  strides mirror the Go declarations without gating the Rust decode. A
+  later family wanting an over-ceiling corpus case returns to the
+  controller for a ruling instead of freezing the divergence.
 
 ## World delta packets (`src/block_changes.rs`, `src/forget_chunks.rs`, `tests/protocol_world_delta.rs`, `tests/protocol_corpus.rs`)
 
