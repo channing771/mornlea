@@ -1,6 +1,8 @@
-use crate::bytes::{ByteDecoder, ByteEncoder};
+use crate::bytes::{ByteDecoder, ByteEncoder, SliceWriter};
 use crate::error::ProtocolError;
 use crate::player_id::{self, PlayerId};
+use crate::server_hello::publish_packet;
+use crate::varint::canonical_uvarint_length;
 use mornlea_domain::{DisplayName, trim_pinned_whitespace};
 
 const DISPLAY_NAME_MAX_BYTES: usize = 128;
@@ -104,6 +106,13 @@ impl LoginStart {
 /// name as written, and the declared view distance. Admission is the only
 /// place those raw values become checked ones, so a rejection can name the
 /// earliest rule the record breaks.
+///
+/// The record's wire form is exactly the bytes the decoder admitted, and
+/// re-publishing it writes them back verbatim. That is why the identity rule,
+/// the canonical display-name rule and the view-distance interval stay in
+/// [`crate::admission::admit_login`] and in the outbound [`LoginStart`] instead
+/// of in this raw record's gate: the gate restates no admission rule, so no
+/// mutation after construction can make the record unpublishable.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InboundLoginStart {
     player_id: [u8; 16],
@@ -125,6 +134,64 @@ impl InboundLoginStart {
     /// The view distance exactly as the peer declared it.
     pub fn view_distance(&self) -> u8 {
         self.view_distance
+    }
+
+    /// The total value gate this record's encoder shares with its siblings.
+    ///
+    /// Every field is a raw value the structural decoder already admitted, and
+    /// the wire form is those bytes verbatim, so there is no field state the
+    /// gate can refuse. The rules that do apply to a login — the UUIDv4
+    /// identity, the canonical name after the pinned trim and the view-distance
+    /// interval — are admission decisions owned by [`crate::admission`].
+    pub fn validate(&self) -> Result<(), ProtocolError> {
+        Ok(())
+    }
+
+    /// The exact encoded length of the raw record.
+    ///
+    /// The three additions are checked, so a length that cannot be represented
+    /// is [`ProtocolError::Allocation`] rather than a wrapped size.
+    pub fn encoded_len(&self) -> Result<usize, ProtocolError> {
+        self.validate()?;
+        let prefix = canonical_uvarint_length(
+            u32::try_from(self.display_name.len()).map_err(|_| ProtocolError::Allocation)?,
+        );
+        self.player_id
+            .len()
+            .checked_add(prefix)
+            .and_then(|length| length.checked_add(self.display_name.len()))
+            .and_then(|length| length.checked_add(1))
+            .ok_or(ProtocolError::Allocation)
+    }
+
+    /// Publishes the record into a caller-owned buffer and returns the bytes
+    /// written.
+    ///
+    /// The order is the crate-wide packet pattern: validate, compute the exact
+    /// length, test the destination, and only then write `dst[..length]`. A
+    /// short call reports `OutputTooSmall` and leaves every destination byte
+    /// unchanged. The name keeps the raw bytes the decoder admitted, including
+    /// a name the canonical rule would refuse, because this record is the raw
+    /// half of the inbound path.
+    pub fn encode_into(&self, dst: &mut [u8]) -> Result<usize, ProtocolError> {
+        let length = self.encoded_len()?;
+        publish_packet(length, dst, |writer| {
+            writer.bytes(&self.player_id);
+            let prefix = u32::try_from(self.display_name.len())
+                .expect("the display name length already fitted the prefix");
+            writer.uvarint(prefix);
+            writer.bytes(self.display_name.as_bytes());
+            writer.u8(self.view_distance);
+        })
+    }
+
+    /// The allocating compatibility wrapper over `encode_into`.
+    pub fn encode(&self) -> Result<Vec<u8>, ProtocolError> {
+        let length = self.encoded_len()?;
+        let mut wire = vec![0u8; length];
+        let written = self.encode_into(&mut wire)?;
+        wire.truncate(written);
+        Ok(wire)
     }
 }
 

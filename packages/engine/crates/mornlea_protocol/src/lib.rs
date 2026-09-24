@@ -77,6 +77,7 @@ mod projectile_despawn;
 mod projectile_id;
 mod projectile_spawn;
 mod projectile_state;
+mod registry;
 mod remote_player_despawn;
 mod remote_player_spawn;
 mod remote_player_states;
@@ -237,6 +238,9 @@ pub use projectile_spawn::{
 pub use projectile_state::{
     PROJECTILE_STATE_MAX_WIRE_BYTES, PROJECTILE_STATE_WIRE_BYTES, ProjectileState,
     ProjectileStateRecord,
+};
+pub use registry::{
+    ClientPacket, Direction, PacketKey, ServerPacket, State, decode_client, encode_client_into,
 };
 pub use remote_player_despawn::RemotePlayerDespawn;
 pub use remote_player_spawn::RemotePlayerSpawn;

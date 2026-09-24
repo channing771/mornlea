@@ -19,6 +19,63 @@ rather than checking that it omits a few names.
   and malformed-input cases; this crate must not infer parity from a covered
   subset.
 
+## Typed packet registry (`src/registry.rs`, `tests/protocol_registry.rs`)
+
+- `Direction::{ClientToServer,ServerToClient}`, `State::{Handshake,Login,Play}`
+  and `PacketKey { direction, state, id }` are the three-part key the Go
+  `registry.go` freezes. Numeric IDs collide across direction and state by
+  design — C/Play/4 is a keep alive reply while S/Play/4 is a command
+  rejection — so the complete key, never the bare ID, identifies a family and
+  a per-struct `PACKET_ID` cannot serve as the registry key.
+- `ClientPacket` and `ServerPacket` are exhaustive enums over exactly the 59
+  Go v45 keys: 23 client keys (C/Handshake/0, C/Login/0 and the 21 registered
+  C/Play IDs) and 36 server keys (S/Handshake/0..1, S/Login/0..1 and the 32
+  registered S/Play IDs). Framing stays outside both enums because the
+  registry owns packet keys, not the frame envelope. There is no catch-all
+  variant, no `Box<dyn Packet>` and no string-keyed module lookup, so a new
+  packet is a new variant plus a new match arm and a missing arm is a compile
+  error rather than a silent fallback.
+- `decode_client(state, id, payload)` is a free function and
+  `ProtocolCodec::decode_server(state, id, payload)` is a method on the owned
+  snapshot context; both dispatch over the complete `(state, id)` pair. The
+  two client negotiation variants hold the raw `InboundHello` /
+  `InboundLoginStart` records rather than the strict outbound types, because a
+  peer running another version has to receive the negotiated mismatch answer
+  instead of a bare decode failure; every other variant holds its concrete
+  packet type. `encode_client_into` / `ProtocolCodec::encode_server_into`
+  obtain the key from the variant and delegate to the concrete `encode_into`,
+  and because the output path carries no state argument a record cannot be
+  encoded under a state it was not decoded under, so wrong-state encoding is
+  unrepresentable rather than refused.
+- Unregistered keys are `ProtocolError::UnknownPacket` before a DTO is
+  published, including the retired C/Play/1, the unassigned C/Play/22 and the
+  unassigned S/Play/32. The Go codec's 64 KiB small-payload ceiling
+  (`MAX_SMALL_PAYLOAD_BYTES`) is applied by the dispatcher to every family
+  except the compressed snapshot, whose own compressed and decoded ceilings
+  bound it — the same split the Go decoder makes between its control decoder
+  and its snapshot codec.
+- The snapshot variant is the one family whose payload length is not
+  precomputed, so `encode_server_into` routes it through the codec's owned
+  compressor and `decode_server` through its owned decompressor; the
+  snapshot-only `decode_snapshot` / `encode_snapshot_into` entry points stay
+  in place for the corpus and the group suite.
+- `InboundHello` and `InboundLoginStart` carry the crate's common fallible
+  surface (`validate` → checked `encoded_len` → `encode_into` → allocating
+  `encode`) so the client enum is encodable without a refusal branch. Their
+  gates are total and their `encode_into` re-publishes the raw bytes the
+  structural decoder admitted: the version rule and the canonical
+  display-name rule belong to `validate_hello` / `admit_login` and to the
+  outbound `ClientHello` / `LoginStart`, so a raw record restates no admission
+  rule.
+- The Go `registry.go` table is the read-only source of this map; the runtime
+  never reads Go source or the test manifest. `tests/protocol_registry.rs`
+  pins the map against one reviewed Go-produced payload per key, asserts the
+  23/36 split and the 59-row closure by key and variant rather than by count,
+  and pins the three table-tamper detections, the reserved and unassigned ID
+  refusals, the complete-key resolution of the C/Handshake/0 versus
+  S/Handshake/0 collision, and the old-version hello reaching `validate_hello`
+  through the structural path.
+
 ## Framing (`src/frame.rs`, `src/varint.rs`, `src/bytes.rs`, `tests/runtime_contract.rs`, `tests/protocol_frame.rs`)
 
 - `write_frame_into` / `read_frame_ref` are the caller-owned packet boundary.
@@ -2051,6 +2108,8 @@ candidates.
 ## Focused Verification
 
 ```bash
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_registry --locked -- --list
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_registry --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_values --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_values --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_admission --locked -- --list
@@ -2088,6 +2147,18 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_chat_event --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
+
+`tests/protocol_registry.rs` pins the closed typed dispatch: one reviewed
+Go-produced payload per key decodes and re-encodes through the real boundary,
+the 23 client and 36 server keys are asserted by key and variant rather than by
+count, the three table-tamper detections (dropped row, duplicated key, swapped
+server IDs) report the offending key, and the reserved C/Play/1, the unassigned
+C/Play/22 and S/Play/32, an unknown state under every ID, a login payload under
+a Play ID and an over-ceiling payload are all refused at their own boundary.
+The one family whose re-encoding is not byte-identical is the compressed
+snapshot, whose acceptance is a semantic round trip through the owned context.
+It needs no corpus files, so it runs before the controller integrates the
+exported candidates.
 
 `tests/protocol_values.rs` pins the shared-value boundary: the raw container
 dimension is kept raw through `read` and refused by the checked conversion
