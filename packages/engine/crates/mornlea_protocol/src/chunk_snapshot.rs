@@ -332,12 +332,22 @@ impl TryFrom<(PalettedSection, i32)> for SectionData {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SnapshotEnvelope {
     /// Length the envelope declares for the decoded logical payload.
-    pub decoded_length: usize,
+    decoded_length: usize,
     /// The zstd frame, exactly the bytes the envelope declares.
-    pub compressed: Vec<u8>,
+    compressed: Vec<u8>,
 }
 
 impl SnapshotEnvelope {
+    /// Returns the checked logical length declared by the envelope.
+    pub fn decoded_length(&self) -> usize {
+        self.decoded_length
+    }
+
+    /// Borrows the bounded zstd frame carried by the envelope.
+    pub fn compressed(&self) -> &[u8] {
+        &self.compressed
+    }
+
     /// Decompresses the frame into a destination of exactly `decoded_length`
     /// bytes through a one-shot context, matching the Go `DecodeAll` call.
     ///
@@ -378,6 +388,9 @@ fn decompress_frame(
     decoded_length: usize,
     decompressor: Option<&mut zstd::bulk::Decompressor<'_>>,
 ) -> Result<Vec<u8>, ProtocolError> {
+    if decoded_length > MAX_DECODED_SNAPSHOT || compressed.len() > MAX_COMPRESSED_SNAPSHOT {
+        return Err(ProtocolError::FrameTooLarge);
+    }
     let decoded = match decompressor {
         Some(context) => context.decompress(compressed, decoded_length),
         None => zstd::bulk::decompress(compressed, decoded_length),
@@ -618,11 +631,11 @@ pub(crate) fn compress_frame(
     logical: &[u8],
     compressor: &mut zstd::bulk::Compressor<'_>,
 ) -> Result<Vec<u8>, ProtocolError> {
+    let bound = compress_scratch_bound(logical.len())?;
     compressor
         .context_mut()
         .set_pledged_src_size(Some(logical.len() as u64))
         .map_err(|_| ProtocolError::Allocation)?;
-    let bound = zstd::zstd_safe::compress_bound(logical.len());
     let mut compressed = Vec::new();
     compressed
         .try_reserve(bound)
@@ -645,7 +658,21 @@ pub(crate) fn compress_frame(
 /// compressed block payload legitimately differs from the Go encoder's; see the
 /// module documentation.
 pub fn compress_logical(logical: &[u8]) -> Result<Vec<u8>, ProtocolError> {
+    // Reject impossible frames before constructing a one-shot zstd context.
+    compress_scratch_bound(logical.len())?;
     compress_frame(logical, &mut new_compressor()?)
+}
+
+/// Computes the worst-case scratch reservation before compression allocates.
+fn compress_scratch_bound(logical_len: usize) -> Result<usize, ProtocolError> {
+    if logical_len > MAX_DECODED_SNAPSHOT {
+        return Err(ProtocolError::FrameTooLarge);
+    }
+    let bound = zstd::zstd_safe::compress_bound(logical_len);
+    if bound > MAX_COMPRESSED_SNAPSHOT {
+        return Err(ProtocolError::FrameTooLarge);
+    }
+    Ok(bound)
 }
 
 /// Rejects a declared field count the remaining logical payload cannot back,
@@ -751,4 +778,39 @@ fn read_packed_words(
         packed.push(decoder.u64()?);
     }
     Ok(packed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn forged_envelope_cannot_decompress_beyond_protocol_bounds() {
+        let decoded_over = SnapshotEnvelope {
+            decoded_length: MAX_DECODED_SNAPSHOT + 1,
+            compressed: vec![0],
+        };
+        assert_eq!(decoded_over.decompress(), Err(ProtocolError::FrameTooLarge));
+
+        let compressed_over = SnapshotEnvelope {
+            decoded_length: 1,
+            compressed: vec![0; MAX_COMPRESSED_SNAPSHOT + 1],
+        };
+        assert_eq!(
+            compressed_over.decompress(),
+            Err(ProtocolError::FrameTooLarge)
+        );
+    }
+
+    #[test]
+    fn one_shot_compression_rejects_oversized_requests() {
+        assert_eq!(
+            compress_logical(&vec![0; MAX_DECODED_SNAPSHOT + 1]),
+            Err(ProtocolError::FrameTooLarge)
+        );
+        assert_eq!(
+            compress_logical(&vec![0; MAX_COMPRESSED_SNAPSHOT]),
+            Err(ProtocolError::FrameTooLarge)
+        );
+    }
 }

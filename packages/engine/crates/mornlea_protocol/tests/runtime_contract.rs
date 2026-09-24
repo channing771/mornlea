@@ -4926,8 +4926,8 @@ fn chunk_snapshot_round_trip_preserves_golden_bytes() {
     let fixture = read_go_snapshot_fixture();
     let envelope =
         mornlea_protocol::ChunkSnapshot::decode_envelope(&fixture).expect("fixture envelope");
-    assert_eq!(envelope.decoded_length, 86_295);
-    assert_eq!(envelope.compressed.len(), 439);
+    assert_eq!(envelope.decoded_length(), 86_295);
+    assert_eq!(envelope.compressed().len(), 439);
     assert_eq!(envelope.decompress().expect("fixture logical"), logical);
     assert_eq!(
         mornlea_protocol::ChunkSnapshot::decode(&fixture).expect("fixture decode"),
@@ -5049,7 +5049,7 @@ fn chunk_snapshot_rejects_malformed_envelope_and_bounds() {
     // A frame that decodes past the declared ceiling is an expansion bomb and
     // must be rejected rather than decompressed into a larger buffer.
     let bomb = vec![0u8; mornlea_protocol::MAX_DECODED_SNAPSHOT + 1];
-    let frame = mornlea_protocol::compress_logical(&bomb).expect("compress bomb");
+    let frame = zstd::bulk::compress(&bomb, 3).expect("compress test-only bomb");
     let payload = snapshot_envelope(mornlea_protocol::MAX_DECODED_SNAPSHOT as u32, &frame);
     assert!(mornlea_protocol::ChunkSnapshot::decode(&payload).is_err());
 }

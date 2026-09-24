@@ -181,8 +181,8 @@ fn snapshot_committed_fixture_decodes_to_the_golden_logical_payload() {
 
     let envelope =
         mornlea_protocol::ChunkSnapshot::decode_envelope(&fixture).expect("fixture envelope");
-    assert_eq!(envelope.decoded_length, 86_295);
-    assert_eq!(envelope.compressed.len(), 439);
+    assert_eq!(envelope.decoded_length(), 86_295);
+    assert_eq!(envelope.compressed().len(), 439);
     assert_eq!(
         envelope.decompress().expect("fixture logical"),
         logical,
@@ -533,7 +533,7 @@ fn snapshot_expansion_beyond_the_decoded_ceiling_is_refused() {
     // ceiling. The envelope accepts the declared length, and the bounded
     // decompression refuses the frame instead of expanding past the ceiling.
     let bomb = vec![0u8; MAX_DECODED_SNAPSHOT + 1];
-    let frame = mornlea_protocol::compress_logical(&bomb).expect("compress bomb");
+    let frame = zstd::bulk::compress(&bomb, 3).expect("compress test-only bomb");
     assert!(frame.len() <= MAX_COMPRESSED_SNAPSHOT);
     let mut payload = Vec::with_capacity(8 + frame.len());
     payload.extend_from_slice(&(MAX_DECODED_SNAPSHOT as u32).to_le_bytes());

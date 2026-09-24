@@ -2031,8 +2031,9 @@ rather than checking that it omits a few names.
   payload is compressed, and it is the only reason this crate is allowed the
   `zstd` dependency.
 - `MAX_COMPRESSED_SNAPSHOT` and `MAX_DECODED_SNAPSHOT` are the two ceilings,
-  and both are checked before the frame is touched. Every declared palette and
-  word count is checked against the bytes that remain before the matching
+  and both are checked before the frame is touched, including when callers use
+  the public one-shot helpers. Every declared palette and word count is
+  checked against the bytes that remain before the matching
   buffer is allocated, so a corrupt count cannot become a large allocation.
 - Section containers are a closed set of three kinds. A `Single` section
   carries one block ID, an `Indexed` section a palette plus 4- or 8-bit slots,
@@ -2065,7 +2066,9 @@ rather than checking that it omits a few names.
 - Intermediate layers (`encode_logical_checked`, `decode_logical`,
   `decode_envelope`, `SnapshotEnvelope::decompress`, `compress_logical`) are
   public so contract tests can prove decode exactness byte for byte and
-  rejection before allocation without reaching into private state
+  rejection before allocation without reaching into private state. The
+  envelope's fields remain private: callers inspect them through getters,
+  and decompression rechecks both limits before it allocates
   (`chunk_snapshot_round_trip_preserves_golden_bytes`,
   `chunk_snapshot_round_trips_through_committed_fixture`,
   `chunk_snapshot_rejects_malformed_envelope_and_bounds`,
@@ -2077,8 +2080,9 @@ rather than checking that it omits a few names.
   call constructs a context of its own. `compress_logical` stays the one-shot
   frame builder the contract tests use to construct malformed payloads from
   mutated logical bytes; production compression runs through the owned context.
-  One call's scratch is bounded by the 2 MiB logical and 1 MiB compressed
-  ceilings, with `try_reserve` for the compressed scratch and
+  The one-shot helper checks the worst-case scratch bound before constructing
+  its zstd context. One call's scratch is bounded by the 2 MiB logical and
+  1 MiB compressed ceilings, with `try_reserve` for the compressed scratch and
   `ProtocolError::Allocation` for an unreservable request; the infallible
   `encode`/`encode_logical` entry points are removed, so a record mutated after
   construction is refused instead of panicking inside the encoder
