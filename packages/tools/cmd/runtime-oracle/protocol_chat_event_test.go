@@ -389,31 +389,40 @@ func chatEventAcceptedWire() []byte {
 // keeps every other field at its reviewed value.
 //
 // The player name is the first length-prefixed slot, so its prefix sits at the
-// fixed offset after the event identity and the player identity.
+// fixed offset after the event identity and the player identity. The splice
+// replaces the whole slot — the declared length and the name bytes — and shifts
+// every later field by the difference, so the payload stays fully decodable and
+// the untrimmed name is the only violation the record carries. A splice that
+// kept the old name bytes would shift the tail and move the refusal to a
+// different boundary on each side.
 func chatEventPlayerNameWire(playerName string) []byte {
 	wire := append([]byte(nil), chatEventAcceptedWire()...)
 	start := 8 + 16
-	prefix, err := chatEventDecodePrefix(wire, start)
+	declared, prefix, err := chatEventDecodeStringPrefix(wire, start)
 	if err != nil {
 		panic("runtime-oracle: the reviewed payload names no player name prefix: " + err.Error())
 	}
 	replacement := chatEventString(playerName)
-	rewritten := make([]byte, 0, len(wire)-prefix+len(replacement))
+	rewritten := make([]byte, 0, len(wire)-prefix-declared+len(replacement))
 	rewritten = append(rewritten, wire[:start]...)
 	rewritten = append(rewritten, replacement...)
-	rewritten = append(rewritten, wire[start+prefix:]...)
+	rewritten = append(rewritten, wire[start+prefix+declared:]...)
 	return rewritten
 }
 
-// chatEventDecodePrefix reports the byte length of the canonical uvarint length
-// prefix that starts at one offset.
-func chatEventDecodePrefix(wire []byte, offset int) (int, error) {
+// chatEventDecodeStringPrefix reports the declared byte length and the byte
+// length of the canonical uvarint length prefix that starts at one offset, so a
+// caller can replace the whole length-prefixed slot rather than only its value.
+func chatEventDecodeStringPrefix(wire []byte, offset int) (int, int, error) {
+	value := 0
 	for index := offset; index < len(wire) && index < offset+5; index++ {
-		if wire[index] < 0x80 {
-			return index - offset + 1, nil
+		digit := int(wire[index])
+		if digit < 0x80 {
+			return value | digit, index - offset + 1, nil
 		}
+		value |= (digit & 0x7f) << (7 * (index - offset))
 	}
-	return 0, fmt.Errorf("no canonical uvarint prefix at offset %d", offset)
+	return 0, 0, fmt.Errorf("no canonical uvarint prefix at offset %d", offset)
 }
 
 // chatEventPacketKey resolves one packet key to the Go state and numeric ID
