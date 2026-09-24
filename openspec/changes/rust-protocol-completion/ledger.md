@@ -386,3 +386,18 @@
 **Rollback:** revert `46b71203` as one unit; the concrete codecs are untouched.
 
 **Architecture skill: no change.**
+
+
+## Node 4.2 — 2026-09-24
+
+**Status:** complete. Commit `9706c644` (`feat(protocol): add exhaustive semantic adapters`) on top of `7574ec63`. NO corpus change.
+
+**Deliverable:** `src/semantic.rs` — `PlayIntent` and the four `TryFrom` pairs over the 4.1 typed enums and the checked domain Command/Event values: 19 sequenced client commands (the `StackView` split through the 1.3 neutral gate), Chat/KeepAliveReply only, Handshake/Login refused; 30 publications mapped to the same-named Event variants (ChatEvent→Event::Chat), the six control variants refused; EVERY wire cap (4/7/32/64/128/4096×2) checked by one shared `check_record_cap` as the first statement of all 15 batch arms before any copy; no session/tick/arrival/recipient invention; `CommandEnvelope` never constructed (documented + needle-scanned). Group test `tests/protocol_semantic.rs` 19/19 incl. the independent 23/36-row key tables (double-swap-proof), the 5-record companion rejection, all cap boundaries, the dimension no-alias set, the chat absence mapping, and the six-field mutation tests.
+
+**Rulings frozen (reviewer-verified):** (A) the brief's claim that TakeCraftingOutput's wire packet accepts sequence 0 was WRONG — both the packet gate and the domain envelope refuse it; the adapter carries the value verbatim and both gates are pinned; (B) the CommandEnvelope pin by needle-scan + docs is adequate (clippy closes the escape forms); (C) every inbound arm re-runs the record's own gate, keeping the view-reference regime and caps honest for hand-assembled variants.
+
+**Evidence:** group 19/19; whole crate green at 530 tests / 24 binaries, NO staged red; fmt/clippy clean; domain `event_surface` 4/4; audit ok; corpus tree unchanged. **Review ruling:** Approved, 0 Crit/0 Imp/4 Minor (an unreachable `InvalidContainerGeneration`→`InvalidIdentity` mapping arm; plan-node numbers in four doc comments; one needle-list completion; an outbound `.expect` vs the inbound checked precedent).
+
+**Rollback:** revert `9706c644` as one unit.
+
+**Architecture skill: no change.**
