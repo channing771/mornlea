@@ -335,3 +335,20 @@
 **Rollback:** revert `cb53f365`, `f26f7690` and `4f103497` individually; corpus returns to 1041.
 
 **Architecture skill: no change.**
+
+
+## Node 3.10 — 2026-09-24
+
+**Status:** complete. Commits `cbbd1de9` (`feat(protocol): qualify projectile packets`) + controller integration `1b65ad28` on top of `fe92253b`.
+
+**Deliverable:** the three projectile families (`ProjectileSpawn` 29, `ProjectileState` 30, `ProjectileDespawn` 31) on the common fallible surface; `src/projectile_id.rs` shim (domain `ProjectileId` + 8-byte wire edge); strides 37/20/8 (kind before dimension on spawn; state carries ID+position only — the narrowest record); kind×dimension independence (all four combos admit, the server's narrower rule stays off this wire); count 1..=128 before record scan; exact remaining-length → trailing `truncated`; AND the over-ceiling latent class RESOLVED — pre-parse `FrameTooLarge` ceilings (4745/2569/1033, derived 9+128×stride) on all three Rust decoders, one `ProjectileDespawn/decode-over-ceiling` → capacity corpus case frozen on the real Go message, the crate-guide note updated (projectiles resolved; hostile/passive keep the recorded divergence). 29 corpus cases (11/9/9), producer `runtime-oracle/protocol-projectiles`; 6 routes; group test 20/20.
+
+**Rulings frozen:** the category mapping per the hostile/passive template; the over-ceiling resolution ruling (the node-3.6 despawn pre-parse precedent generalized to all three families); the dispatch-arm constants present this time (no 3.9-style integration incident).
+
+**Evidence:** group 20/20; `runtime_contract` 134/134; Go producer 13/13 (+`-race`, 320s); codec projectile filters ok; full oracle ok; audit ok (one Go comment reworded to avoid backticking the Rust name `FrameTooLarge` — the audit identifier gate); fmt/clippy/gofmt/vet clean. Corpus integrity: 3 families changed, 1071→1100 (+29/−0), `source_revision` preserved. Post-integration whole protocol crate 408/408.
+
+**Review ruling:** Approved, 0 Crit/0 Imp/2 Minor (report-wording on where the baseline bytes are recorded; the unused `PROJECTILE_ID_WIRE_BYTES` re-export).
+
+**Rollback:** revert `cbbd1de9` and `1b65ad28` individually; corpus returns to 1071.
+
+**Architecture skill: no change.**
