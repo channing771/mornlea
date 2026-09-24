@@ -1680,3 +1680,51 @@ func TestProtocolSnapshotOracleCandidatesExportForReview(t *testing.T) {
 		t.Fatalf("manifest candidate does not reconcile: %v", err)
 	}
 }
+
+// `TestRustSnapshotDecodesInGo` pins the Go decoder's acceptance of the Rust
+// codec's compressed output while comparing complete logical packet values.
+func TestRustSnapshotDecodesInGo(t *testing.T) {
+	root, err := RepositoryRoot()
+	if err != nil {
+		t.Fatalf("repository root: %v", err)
+	}
+	readFixture := func(relative string) []byte {
+		t.Helper()
+		payload, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(relative)))
+		if readErr != nil {
+			t.Fatalf("read %s: %v", relative, readErr)
+		}
+		return payload
+	}
+	rustBytes := readFixture("packages/engine/crates/mornlea_protocol/tests/testdata/rust-chunk-snapshot-v45.bin")
+	goBytes := readFixture("packages/shared/network/codec/testdata/chunk-snapshot-v1.bin")
+	if bytes.Equal(rustBytes, goBytes) {
+		t.Fatal("Rust and Go fixtures unexpectedly have identical compressed bytes")
+	}
+
+	wireCodec, err := codec.NewCodec()
+	if err != nil {
+		t.Fatalf("new Go codec: %v", err)
+	}
+	defer wireCodec.Close()
+	rustPacket, err := wireCodec.DecodeServer(protocol.StatePlay, 0, rustBytes)
+	if err != nil {
+		t.Fatalf("decode Rust fixture: %v", err)
+	}
+	if _, ok := rustPacket.(protocol.ChunkSnapshot); !ok {
+		t.Fatalf("Rust fixture decoded as %T, want protocol.ChunkSnapshot", rustPacket)
+	}
+	goPacket, err := wireCodec.DecodeServer(protocol.StatePlay, 0, goBytes)
+	if err != nil {
+		t.Fatalf("decode Go fixture: %v", err)
+	}
+	if !reflect.DeepEqual(rustPacket, goPacket) {
+		t.Fatal("Rust and Go fixtures decode to different complete snapshots")
+	}
+
+	corrupted := bytes.Clone(rustBytes)
+	corrupted[len(corrupted)-1] ^= 0xff // The final byte belongs to the zstd content checksum.
+	if _, err := wireCodec.DecodeServer(protocol.StatePlay, 0, corrupted); err == nil {
+		t.Fatal("Go accepted the Rust frame with a flipped content checksum")
+	}
+}
