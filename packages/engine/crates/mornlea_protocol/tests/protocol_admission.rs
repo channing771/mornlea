@@ -292,3 +292,55 @@ fn strict_outbound_records_still_apply_their_own_policy() {
         Err(ProtocolError::InvalidString)
     );
 }
+
+#[test]
+fn mutated_outbound_hello_refuses_publication_without_touching_destination() {
+    let mut hello = ClientHello::new(45).expect("current protocol");
+    hello.protocol_version = 44;
+    let mut destination = [0xa5; 4];
+    assert_eq!(hello.validate(), Err(ProtocolError::UnsupportedVersion));
+    assert_eq!(hello.encoded_len(), Err(ProtocolError::UnsupportedVersion));
+    assert_eq!(
+        hello.encode_into(&mut destination),
+        Err(ProtocolError::UnsupportedVersion)
+    );
+    assert_eq!(destination, [0xa5; 4]);
+    assert_eq!(hello.encode(), Err(ProtocolError::UnsupportedVersion));
+}
+
+#[test]
+fn mutated_outbound_login_checks_name_then_distance_before_capacity() {
+    let id = mornlea_protocol::PlayerId::try_from_bytes(valid_uuidv4()).expect("uuid v4");
+    let mut login = LoginStart::new(id, "Alice", 8).expect("valid login");
+    login.display_name = "a".repeat(129);
+    login.view_distance = 1;
+    let mut destination = [0xa5; 32];
+    assert_eq!(login.validate(), Err(ProtocolError::InvalidString));
+    assert_eq!(login.encoded_len(), Err(ProtocolError::InvalidString));
+    assert_eq!(
+        login.encode_into(&mut destination[..0]),
+        Err(ProtocolError::InvalidString)
+    );
+    assert_eq!(destination, [0xa5; 32]);
+    assert_eq!(login.encode(), Err(ProtocolError::InvalidString));
+
+    login.display_name = "Alice".to_string();
+    assert_eq!(login.encode(), Err(ProtocolError::InvalidRange));
+    assert_eq!(
+        login.encode_into(&mut destination),
+        Err(ProtocolError::InvalidRange)
+    );
+    assert_eq!(destination, [0xa5; 32]);
+
+    login.view_distance = 8;
+    let needed = login.encoded_len().expect("valid encoded length");
+    assert_eq!(needed, 16 + 1 + 5 + 1);
+    assert_eq!(
+        login.encode_into(&mut destination[..needed - 1]),
+        Err(ProtocolError::OutputTooSmall {
+            needed,
+            available: needed - 1,
+        })
+    );
+    assert_eq!(destination, [0xa5; 32]);
+}

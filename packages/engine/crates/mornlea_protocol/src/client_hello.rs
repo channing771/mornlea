@@ -1,7 +1,7 @@
 use crate::bytes::ByteDecoder;
 use crate::error::ProtocolError;
 use crate::server_hello::publish_packet;
-use crate::varint::{canonical_uvarint_length, decode_uvarint, encode_uvarint};
+use crate::varint::{canonical_uvarint_length, decode_uvarint};
 
 /// Handshake ClientHello payload. Unknown protocol versions fail before the
 /// record is published; structurally truncated or trailing bytes never decode
@@ -15,14 +15,40 @@ impl ClientHello {
     pub const PACKET_ID: u32 = 0;
 
     pub fn new(protocol_version: u32) -> Result<Self, ProtocolError> {
-        if protocol_version != mornlea_domain::Identities::current().protocol {
-            return Err(ProtocolError::UnsupportedVersion);
-        }
-        Ok(Self { protocol_version })
+        let hello = Self { protocol_version };
+        hello.validate()?;
+        Ok(hello)
     }
 
-    pub fn encode(self) -> Vec<u8> {
-        encode_uvarint(self.protocol_version)
+    /// Rechecks the current version because the field may change after construction.
+    pub fn validate(&self) -> Result<(), ProtocolError> {
+        if self.protocol_version != mornlea_domain::Identities::current().protocol {
+            return Err(ProtocolError::UnsupportedVersion);
+        }
+        Ok(())
+    }
+
+    /// Returns the canonical wire length after validating the version.
+    pub fn encoded_len(&self) -> Result<usize, ProtocolError> {
+        self.validate()?;
+        Ok(canonical_uvarint_length(self.protocol_version))
+    }
+
+    /// Writes only after validation and destination-capacity checks succeed.
+    pub fn encode_into(&self, dst: &mut [u8]) -> Result<usize, ProtocolError> {
+        let length = self.encoded_len()?;
+        publish_packet(length, dst, |writer| {
+            writer.uvarint(self.protocol_version);
+        })
+    }
+
+    /// Allocates the exact validated length and publishes through `encode_into`.
+    pub fn encode(&self) -> Result<Vec<u8>, ProtocolError> {
+        let length = self.encoded_len()?;
+        let mut wire = vec![0u8; length];
+        let written = self.encode_into(&mut wire)?;
+        wire.truncate(written);
+        Ok(wire)
     }
 
     pub fn decode(payload: &[u8]) -> Result<Self, ProtocolError> {

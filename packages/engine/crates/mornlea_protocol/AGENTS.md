@@ -267,6 +267,10 @@ rather than checking that it omits a few names.
   `client_hello_rejects_unknown_version_and_malformed_payload`). The strict
   `decode` is the outbound record's convenience path and is never the inbound
   one.
+- The strict outbound record rechecks that version on `validate`,
+  `encoded_len`, `encode_into`, and fallible `encode`, since its public field can
+  be mutated after construction. An invalid version wins over destination
+  capacity, and no refused call writes caller bytes.
 - `ClientHello::decode_inbound` is the structural inbound path: it applies the
   canonical uvarint and full-consumption rules and keeps the peer's version in
   `InboundHello`, because a peer running another version has to receive the
@@ -313,6 +317,10 @@ rather than checking that it omits a few names.
   before publication
   (`login_start_round_trip_preserves_golden_bytes`,
   `login_start_rejects_invalid_identity_name_range_and_malformed_payload`).
+- The strict outbound encoder repeats the canonical name check before the
+  distance check on every call. Its checked length and caller-owned buffer
+  publication refuse mutated records with typed errors and never panic or
+  partially write. Raw inbound records keep their separate admission path.
 - `LoginStart::decode_inbound` is the structural inbound path: it checks the
   64 KiB small-payload ceiling (`MAX_SMALL_PAYLOAD_BYTES`) before any field,
   accepts a canonical length prefix and valid UTF-8 up to that ceiling, and
@@ -1097,6 +1105,9 @@ rather than checking that it omits a few names.
   `block_changes_rejects_invalid_revision_position_and_malformed_payload`,
   `world_delta_block_changes_round_trips_through_the_fallible_surface`,
   `world_delta_the_variant_split_is_pinned`).
+- Validation checks all submitted fields before index order, preserving the
+  error precedence of a later invalid block. It then compares adjacent
+  indices without allocating a temporary vector on the encode path.
 
 ## Forget chunks (`src/forget_chunks.rs`, `tests/runtime_contract.rs`, `tests/protocol_world_delta.rs`)
 

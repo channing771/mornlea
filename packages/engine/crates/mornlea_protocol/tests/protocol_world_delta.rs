@@ -374,6 +374,27 @@ fn world_delta_block_changes_count_boundaries_are_pinned() {
 }
 
 #[test]
+fn world_delta_block_fields_precede_unsorted_index_error() {
+    let first = canonical_change();
+    let second = BlockChange { x: -2, ..first };
+    assert_eq!(
+        BlockChanges::new(Dimension::DEPTHS, -1, 0, 1, 2, vec![first, second]),
+        Err(ProtocolError::InvalidRange),
+        "descending block indices are refused"
+    );
+
+    let invalid = BlockChange {
+        block: u16::MAX,
+        ..second
+    };
+    assert_eq!(
+        BlockChanges::new(Dimension::DEPTHS, -1, 0, 1, 2, vec![first, second, invalid]),
+        Err(ProtocolError::InvalidEnum),
+        "a later invalid field is reported before index order"
+    );
+}
+
+#[test]
 fn world_delta_forget_chunks_count_boundaries_are_pinned() {
     // The maximum unique column admits, and one more or zero are refused.
     assert_eq!(MAX_FORGET_CHUNKS, 4096);

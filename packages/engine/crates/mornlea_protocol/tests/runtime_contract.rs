@@ -156,7 +156,7 @@ fn canonical_uvarint_round_trips_and_rejects_malformed() {
 #[test]
 fn client_hello_round_trip_preserves_current_version_bytes() {
     let hello = mornlea_protocol::ClientHello::new(45).expect("current hello");
-    let payload = hello.encode();
+    let payload = hello.encode().expect("encode current hello");
     assert_eq!(payload, [0x2d]);
     assert_eq!(mornlea_protocol::ClientHello::PACKET_ID, 0);
     let decoded = mornlea_protocol::ClientHello::decode(&payload).expect("decode hello");
@@ -277,7 +277,7 @@ const GOLDEN_PLAYER_ID: [u8; 16] = [
 fn login_start_round_trip_preserves_golden_bytes() {
     let id = mornlea_protocol::PlayerId::try_from_bytes(GOLDEN_PLAYER_ID).expect("uuid v4");
     let login = mornlea_protocol::LoginStart::new(id, "Chen", 32).expect("login");
-    let payload = login.encode();
+    let payload = login.encode().expect("encode current login");
     assert_eq!(
         payload,
         [

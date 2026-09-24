@@ -1,4 +1,4 @@
-use crate::bytes::{ByteDecoder, ByteEncoder, SliceWriter};
+use crate::bytes::ByteDecoder;
 use crate::error::ProtocolError;
 use crate::player_id::{self, PlayerId};
 use crate::server_hello::publish_packet;
@@ -41,27 +41,60 @@ impl LoginStart {
         view_distance: u8,
     ) -> Result<Self, ProtocolError> {
         let display_name = display_name.into();
-        if !valid_display_name(&display_name) {
-            return Err(ProtocolError::InvalidString);
-        }
-        if !(LOGIN_VIEW_DISTANCE_MIN..=LOGIN_VIEW_DISTANCE_MAX).contains(&view_distance) {
-            return Err(ProtocolError::InvalidRange);
-        }
-        Ok(Self {
+        let start = Self {
             player_id,
             display_name,
             view_distance,
+        };
+        start.validate()?;
+        Ok(start)
+    }
+
+    /// Rechecks the canonical name before distance, including after field mutation.
+    pub fn validate(&self) -> Result<(), ProtocolError> {
+        if !valid_display_name(&self.display_name) {
+            return Err(ProtocolError::InvalidString);
+        }
+        if !(LOGIN_VIEW_DISTANCE_MIN..=LOGIN_VIEW_DISTANCE_MAX).contains(&self.view_distance) {
+            return Err(ProtocolError::InvalidRange);
+        }
+        Ok(())
+    }
+
+    /// Returns the complete payload length after the value gate succeeds.
+    pub fn encoded_len(&self) -> Result<usize, ProtocolError> {
+        self.validate()?;
+        let name_len = self.display_name.len();
+        let prefix = canonical_uvarint_length(
+            u32::try_from(name_len).map_err(|_| ProtocolError::Allocation)?,
+        );
+        self.player_id
+            .bytes()
+            .len()
+            .checked_add(prefix)
+            .and_then(|length| length.checked_add(name_len))
+            .and_then(|length| length.checked_add(1))
+            .ok_or(ProtocolError::Allocation)
+    }
+
+    /// Writes the validated record only when the destination fits in full.
+    pub fn encode_into(&self, dst: &mut [u8]) -> Result<usize, ProtocolError> {
+        let length = self.encoded_len()?;
+        publish_packet(length, dst, |writer| {
+            writer.bytes(&self.player_id.bytes());
+            writer.uvarint(self.display_name.len() as u32);
+            writer.bytes(self.display_name.as_bytes());
+            writer.u8(self.view_distance);
         })
     }
 
-    pub fn encode(&self) -> Vec<u8> {
-        let mut encoder = ByteEncoder::new();
-        encoder.bytes(&self.player_id.bytes());
-        encoder.string(&self.display_name, DISPLAY_NAME_MAX_BYTES);
-        encoder.u8(self.view_distance);
-        encoder
-            .finish()
-            .expect("validated login start is encodable")
+    /// Allocates the exact validated length and publishes through `encode_into`.
+    pub fn encode(&self) -> Result<Vec<u8>, ProtocolError> {
+        let length = self.encoded_len()?;
+        let mut wire = vec![0u8; length];
+        let written = self.encode_into(&mut wire)?;
+        wire.truncate(written);
+        Ok(wire)
     }
 
     pub fn decode(payload: &[u8]) -> Result<Self, ProtocolError> {

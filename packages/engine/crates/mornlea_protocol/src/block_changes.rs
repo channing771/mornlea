@@ -1,4 +1,3 @@
-use crate::batch::strictly_increasing;
 use crate::block::{chunk_block_index, chunk_of, inside_world, registered_block};
 use crate::bytes::{ByteDecoder, SliceWriter};
 use crate::error::ProtocolError;
@@ -94,7 +93,6 @@ impl BlockChanges {
         {
             return Err(ProtocolError::InvalidRange);
         }
-        let mut indices = Vec::with_capacity(self.changes.len());
         for change in &self.changes {
             if !registered_block(change.block) {
                 return Err(ProtocolError::InvalidEnum);
@@ -105,9 +103,15 @@ impl BlockChanges {
             if chunk_of(change.x, change.z) != (self.chunk_x, self.chunk_z) {
                 return Err(ProtocolError::InvalidRange);
             }
-            indices.push(chunk_block_index(change.x, change.y, change.z));
         }
-        if !strictly_increasing(&indices) {
+        // Check order only after all fields, preserving the published error
+        // precedence while avoiding scratch allocation on the encode path.
+        if self.changes.windows(2).any(|pair| {
+            let left = pair[0];
+            let right = pair[1];
+            chunk_block_index(left.x, left.y, left.z)
+                >= chunk_block_index(right.x, right.y, right.z)
+        }) {
             return Err(ProtocolError::InvalidRange);
         }
         Ok(())

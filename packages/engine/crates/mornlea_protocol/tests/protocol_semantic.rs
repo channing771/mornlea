@@ -427,7 +427,7 @@ fn server_play_key(id: u32) -> PacketKey {
 fn client_table() -> Vec<(ClientPacket, PacketKey, &'static str)> {
     let mut table = Vec::new();
     let hello = ClientHello::new(45).expect("a current client hello");
-    let payload = hello.encode();
+    let payload = hello.encode().expect("encode current hello");
     table.push((
         ClientPacket::ClientHello(ClientHello::decode_inbound(&payload).expect("an inbound hello")),
         PacketKey {
@@ -438,7 +438,7 @@ fn client_table() -> Vec<(ClientPacket, PacketKey, &'static str)> {
         "Refused",
     ));
     let login = LoginStart::new(player_id(), "Player", 8).expect("a login start");
-    let payload = login.encode();
+    let payload = login.encode().expect("encode current login");
     table.push((
         ClientPacket::LoginStart(
             LoginStart::decode_inbound(&payload).expect("an inbound login start"),

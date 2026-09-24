@@ -2906,7 +2906,7 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
                     .unwrap_or_else(|| panic!("case {} names no protocol_version", case.id));
                 let hello = mornlea_protocol::ClientHello::new(version)
                     .unwrap_or_else(|err| panic!("case {} encode refused: {err:?}", case.id));
-                let wire = hello.encode();
+                let wire = hello.encode().expect("validated client hello encodes");
                 let mut hasher = Sha256::new();
                 hasher.update(&wire);
                 serde_json::json!({
@@ -2940,7 +2940,7 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
                     view_distance_field(case),
                 )
                 .unwrap_or_else(|err| panic!("case {} encode refused: {err:?}", case.id));
-                let wire = start.encode();
+                let wire = start.encode().expect("validated login start encodes");
                 let mut hasher = Sha256::new();
                 hasher.update(&wire);
                 serde_json::json!({
