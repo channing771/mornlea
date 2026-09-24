@@ -510,6 +510,27 @@ and the isolated export helpers (`exportGeneratedAssets`,
   authority converges on is deliberately absent from this layer. Provenance
   is `codec_server.go` plus `message_passive.go` and `passive_wire.go` for
   all three families.
+- The seventeenth packet producer group is `protocol_projectiles_test.go`
+  (`protocol.server.ProjectileSpawn`, `protocol.server.ProjectileState` and
+  `protocol.server.ProjectileDespawn`, decode and encode), the projectile
+  publications. It executes `codec.DecodeServer`/`EncodeServer` in the play
+  state with the case's own `PacketKey`, normalizes the `server_tick` and
+  each record identity as decimal strings, the kind and the dimension as
+  plain integers, and each vector as its ordered bit-string array; the
+  records publish in wire order. Its category table resolves the boundaries
+  the Go decoder and validators actually name: the pre-parse fixed payload
+  maximum to `capacity`, because this group is the one that resolved the
+  over-ceiling latent class the Rust decoders mirrored by adding the same
+  pre-parse size check, the batch count message and the strict-order message
+  to `invalid-value`, the remaining-length check to `truncated` because all
+  three decoders apply the exact-remaining-length rule before they read a
+  record, the per-record identity message to `invalid-identity`, and the
+  kind, dimension and pose messages to `invalid-enum` and `invalid-value`
+  respectively. The 128-record wire bound is the protocol budget every
+  family admits, the kind and the dimension are independent on this wire, and
+  the state record carries the identity and the position alone. Provenance is
+  `codec_server.go` plus `message_projectile.go` and `codec_projectile.go`
+  for all three families.
 - `validProducerIDs` is the closed exporter allowlist. It carries the 18
   protocol group producer IDs the v45 packet plan names
   (`runtime-oracle/protocol-negotiation`, `-control`, `-client-control`,
@@ -785,6 +806,7 @@ go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolCompanionsOracle'
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolDropsOracle' -count=1
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolHostilesOracle' -count=1
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolPassivesOracle' -count=1
+go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolProjectilesOracle' -count=1
 go test ./packages/tools/cmd/runtime-oracle -run '^TestProtocolCorpus' -count=1
 go test ./packages/tools/cmd/runtime-oracle -race -count=1
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test runtime_contract --locked corpus_frame

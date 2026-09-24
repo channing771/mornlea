@@ -74,6 +74,7 @@ mod player_id;
 mod player_input;
 mod player_state;
 mod projectile_despawn;
+mod projectile_id;
 mod projectile_spawn;
 mod projectile_state;
 mod remote_player_despawn;
@@ -217,8 +218,10 @@ pub use player_state::{
     SEASON_WINTER, WEATHER_CLEAR, WEATHER_RAIN, WEATHER_THUNDER,
 };
 pub use projectile_despawn::{
-    MAX_PROJECTILE_RECORDS, PROJECTILE_DESPAWN_WIRE_BYTES, ProjectileDespawn,
+    MAX_PROJECTILE_RECORDS, PROJECTILE_DESPAWN_MAX_WIRE_BYTES, PROJECTILE_DESPAWN_WIRE_BYTES,
+    ProjectileDespawn,
 };
+pub use projectile_id::{PROJECTILE_ID_WIRE_BYTES, ProjectileId};
 pub use projectile_spawn::{
     PROJECTILE_KIND_ARROW, PROJECTILE_KIND_SHARD, PROJECTILE_SPAWN_MAX_WIRE_BYTES,
     PROJECTILE_SPAWN_WIRE_BYTES, ProjectileSpawn, ProjectileSpawnRecord,

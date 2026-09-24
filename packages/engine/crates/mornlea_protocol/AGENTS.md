@@ -903,16 +903,21 @@ rather than checking that it omits a few names.
   chunk-ordered block index that sorted block-change batches compare, and
   `MAX_CHUNK_BLOCK_INDEX`, the exclusive upper bound an item drop's block
   index must stay below.
-- The byte-count batch families carry one recorded latent class: the Go
-  decode path applies a fixed per-family wire ceiling before the family
-  decoder (an over-ceiling payload answers `capacity`), while the hostile
-  and passive decoders here size by the count bound and the
-  exact-remaining-length rule, so the same bytes answer `Truncated`. No
-  corpus case sits on that boundary, and the family-specific
-  `*_MAX_WIRE_BYTES` constants the passive modules derive from their
-  strides mirror the Go declarations without gating the Rust decode. A
-  later family wanting an over-ceiling corpus case returns to the
-  controller for a ruling instead of freezing the divergence.
+- The byte-count batch families carry one recorded latent class, which the
+  projectile group resolved and the others keep: the Go decode path applies
+  a fixed per-family wire ceiling before the family decoder, so an
+  over-ceiling payload answers `capacity` there. The three projectile
+  decoders close the class by applying the same ceiling as a pre-parse size
+  check before a single byte is read — the node precedent
+  `src/companion_despawn.rs` set — so `ProjectileDespawn/decode-over-ceiling`
+  freezes one category on both sides and the ceiling fires before every
+  count, length and record rule. The hostile and passive decoders still size
+  by the count bound and the exact-remaining-length rule, so the same bytes
+  answer `Truncated` there; no corpus case sits on that boundary, and their
+  family-specific `*_MAX_WIRE_BYTES` constants mirror the Go declarations
+  without gating the Rust decode. A later family wanting an over-ceiling
+  corpus case follows the projectile ruling rather than freezing the
+  divergence again.
 
 ## World delta packets (`src/block_changes.rs`, `src/forget_chunks.rs`, `tests/protocol_world_delta.rs`, `tests/protocol_corpus.rs`)
 
@@ -1080,15 +1085,56 @@ rather than checking that it omits a few names.
   refusal, and the padding refusal the exact-length rule answers at the
   truncation category.
 
-## Projectile despawn (`src/projectile_despawn.rs`, `tests/runtime_contract.rs`)
+## Projectile despawn (`src/projectile_despawn.rs`, `tests/runtime_contract.rs`, `tests/protocol_projectiles.rs`)
 
 - Play packet ID 31 payload is a `u64` server tick, a one-byte record count,
   and the fixed 8-byte projectile IDs. The count is bounded by
-  `MAX_PROJECTILE_RECORDS` (`128`), a zero count and zero IDs are
-  `InvalidRange`, records must be strictly ascending, and a remaining length
-  that is not exactly `count` records is `Truncated` before publication
+  `MAX_PROJECTILE_RECORDS` (`128`), a zero count is `InvalidRange`, records must
+  be strictly ascending, and a remaining length that is not exactly `count`
+  records is `Truncated` before publication
   (`projectile_despawn_round_trip_preserves_batch_bytes`,
   `projectile_despawn_rejects_unsorted_zero_and_malformed_payload`).
+- The identity is the checked domain `ProjectileId` re-exported from
+  `src/projectile_id.rs`, which also owns the fixed eight-byte wire read and
+  write the three projectile families share. Zero is the absent form of every
+  entity family, so it is refused where the identity is read
+  (`InvalidIdentity`) and cannot be constructed on the outbound surface at
+  all, which is the boundary the Go `network: projectile despawn %d ID is zero`
+  message names. The order comparison is over the typed identity, so no batch
+  rule compares a reinterpreted byte string.
+- The family carries the projectile group's common fallible surface
+  (`validate(&self)` → private `valid` → checked `encoded_len` →
+  `encode_into` through the crate-private `publish_packet` → allocating
+  `encode`), and its gate is count-first: the batch count bound, then the
+  strictly increasing identity order. A batch mutated into an empty or
+  over-full record set or an unordered identity after construction is refused
+  instead of silently published, and a short destination reports
+  `OutputTooSmall { needed, available }` with every destination byte
+  unchanged (`projectile_despawn_round_trips_through_the_fallible_surface`,
+  `projectile_despawn_invalid_value_wins_over_short_capacity`,
+  `projectile_mutated_public_fields_are_never_published`).
+- The batch applies the exact-remaining-length rule rather than the
+  minimum-records rule, because the Go decoder rejects a payload whose
+  remaining length is not exactly `count` records before it reads one, so a
+  padded payload answers at the truncation boundary on both sides
+  (`projectile_decode_rejects_one_trailing_byte`).
+- The decoder applies `PROJECTILE_DESPAWN_MAX_WIRE_BYTES` — derived from the
+  eight-byte stride and the 128-record bound — as a pre-parse size check
+  before the header is read, mirroring the Go decode path's fixed maximum.
+  An over-ceiling payload therefore answers `FrameTooLarge`, the capacity
+  boundary, rather than the truncation boundary the length rule would
+  report, and the ceiling precedes every count, length and record rule
+  (`projectile_decode_refuses_an_over_ceiling_payload_before_any_read`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.ProjectileDespawn` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real Go
+  codec in
+  `packages/tools/cmd/runtime-oracle/protocol_projectiles_test.go`. The
+  frozen cases are the canonical vector pair, the 128-record ceiling, the
+  zero identity, the duplicate and descending order refusals, the count-bound
+  refusal, the padding refusal the exact-length rule answers at the
+  truncation category, and the over-ceiling refusal the pre-parse ceiling
+  answers at the capacity category.
 
 ## Passive despawn (`src/passive_despawn.rs`, `tests/runtime_contract.rs`, `tests/protocol_passives.rs`)
 
@@ -1719,7 +1765,7 @@ rather than checking that it omits a few names.
   zero identity, the duplicate identity refusal, the count-bound refusal, and
   the padding refusal at the truncation category.
 
-## Projectile spawn (`src/projectile_spawn.rs`, `tests/runtime_contract.rs`)
+## Projectile spawn (`src/projectile_spawn.rs`, `tests/runtime_contract.rs`, `tests/protocol_projectiles.rs`)
 
 - Play packet ID 29 payload is a `u64` server tick, a one-byte record count,
   and the fixed 37-byte spawn records of ID, kind, dimension, position, and
@@ -1731,8 +1777,45 @@ rather than checking that it omits a few names.
   this codec does not enforce
   (`projectile_spawn_round_trip_preserves_batch_bytes`,
   `projectile_spawn_rejects_invalid_records_and_malformed_payload`).
+- The identity is the checked domain `ProjectileId` re-exported from
+  `src/projectile_id.rs`, so the record gate restates no identity rule: the
+  gate keeps the Go `ProjectileSpawnRecord.validate` order of the closed kind
+  match and the pose-and-velocity finiteness, and the batch gate adds the
+  count bound and the strict identity order in the Go batch order. The
+  dimension is the checked domain value read from the raw wire `i32` matched
+  against the two known IDs, so a value such as `256` is an `InvalidEnum`
+  rather than a reinterpreted dimension.
+- The kind and the dimension are independent on this wire: all four
+  combinations admit, because a shard in the depths and an arrow in the
+  overworld are both publishable records at this boundary. The narrower
+  authority rule is deliberately not published here, and the group test pins
+  the independence so a later change cannot quietly add the policy to the
+  wire (`projectile_kind_and_dimension_are_independent_on_the_wire`,
+  `projectile_kind_is_a_closed_match`,
+  `projectile_spawn_dimension_is_matched_against_the_known_ids`).
+- The family carries the projectile group's common fallible surface, and the
+  batch applies the exact-remaining-length rule with the count bound firing
+  before it on both sides, so a padded payload answers at the truncation
+  boundary and a declared count above the ceiling answers at the count bound
+  (`projectile_count_bound_fires_before_the_record_rule`,
+  `projectile_batches_admit_the_full_record_ceiling`).
+- The decoder applies `PROJECTILE_SPAWN_MAX_WIRE_BYTES` — derived from the
+  37-byte stride and the 128-record bound — as a pre-parse size check before
+  the header is read, so an over-ceiling payload answers `FrameTooLarge`, the
+  capacity boundary the Go fixed maximum publishes
+  (`projectile_decode_refuses_an_over_ceiling_payload_before_any_read`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.ProjectileSpawn` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real Go
+  codec in
+  `packages/tools/cmd/runtime-oracle/protocol_projectiles_test.go`. The
+  frozen cases are the canonical vector pair that carries both kinds across
+  both dimensions, the 128-record ceiling, the zero identity, the closed kind
+  pair with its encode twin, the dimension boundary, the non-finite position,
+  the descending order, the count-bound refusal and the padding refusal the
+  exact-length rule answers at the truncation category.
 
-## Projectile state (`src/projectile_state.rs`, `tests/runtime_contract.rs`)
+## Projectile state (`src/projectile_state.rs`, `tests/runtime_contract.rs`, `tests/protocol_projectiles.rs`)
 
 - Play packet ID 30 payload is a `u64` server tick, a one-byte record count,
   and the fixed 20-byte state records of ID and position. This is the
@@ -1741,6 +1824,31 @@ rather than checking that it omits a few names.
   state batch only moves the body
   (`projectile_state_round_trip_preserves_batch_bytes`,
   `projectile_state_rejects_invalid_records_and_malformed_payload`).
+- The family carries the projectile group's common fallible surface, and its
+  record gate restates no identity rule — the identity is the checked domain
+  `ProjectileId` — and carries no kind, dimension or velocity gate, because
+  this wire publishes none of the three and infers none of them. The batch
+  gate adds the count bound and the strict identity order in the Go batch
+  order, and the group test pins the stride against the spawn and despawn
+  strides so a layout change on any of the three fails before it reaches a
+  corpus case (`projectile_state_carries_only_identity_and_position`,
+  `projectile_state_invalid_value_wins_over_short_capacity`).
+- The decoder applies `PROJECTILE_STATE_MAX_WIRE_BYTES` — derived from the
+  20-byte stride and the 128-record bound — as a pre-parse size check before
+  the header is read, and the batch applies the exact-remaining-length rule
+  with the count bound firing first, so the padded and over-count payloads
+  answer the same boundaries the Go decoder publishes
+  (`projectile_decode_refuses_an_over_ceiling_payload_before_any_read`,
+  `projectile_batches_admit_the_full_record_ceiling`).
+- The corpus evidence is executed by `tests/protocol_corpus.rs` through the
+  same surface: `protocol.server.ProjectileState` registers a decode and an
+  encode route under the `mornlea_protocol` consumer, produced by the real Go
+  codec in
+  `packages/tools/cmd/runtime-oracle/protocol_projectiles_test.go`. The
+  frozen cases are the canonical vector pair, the 128-record ceiling, the
+  zero identity, the non-finite position with its encode twin, the duplicate
+  order, the count-bound refusal and the padding refusal the exact-length
+  rule answers at the truncation category.
 
 ## Chat event (`src/chat_event.rs`, `tests/runtime_contract.rs`)
 
@@ -1938,6 +2046,8 @@ rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornl
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_hostiles --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_passives --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_passives --locked -- --list
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_projectiles --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_projectiles --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_corpus --locked
 ```
 
@@ -2118,6 +2228,31 @@ byte for byte, with the health-21 spawn publishing `..., 0x15]` and the
 grazing-2 state record publishing `0a, 02` in its health and grazing bytes.
 It also needs no corpus files, so it runs before the controller integrates
 the exported candidates.
+
+`tests/protocol_projectiles.rs` pins the three projectile publication records
+through that same surface: the reviewed 83-byte spawn, 49-byte state and
+25-byte despawn literals round-trip byte for byte with the negative-zero
+position and velocity bits preserved, the record strides 37/20/8 with the
+kind-before-dimension order the spawn record carries and the bare identity
+the state record reduces to, the closed kind pair (0/1 admitted, 2 refused at
+the enum boundary on every entry point), the kind-by-dimension independence
+(all four combinations admit on this wire, because a shard in the depths and
+an arrow in the overworld are both publishable records and the narrower
+authority rule never enters the packet layer), the raw-`i32` dimension match
+that refuses 256 as an enum violation, the 128-record ceiling on all three
+families with the derived `PROJECTILE_*_MAX_WIRE_BYTES` payload bounds
+(9 + 128×37 / 9 + 128×20 / 9 + 128×8), the exact-remaining-length batch rule
+(every proper truncation plus one padded byte reject at the same boundary),
+the pre-parse wire ceiling (one byte above each derived bound answers
+`FrameTooLarge` before any read, including over a simultaneously broken
+count), and the packet IDs 29/30/31. Its mutation test quotes the silent
+publishes the previous surface allowed: a spawn record mutated into kind 2
+published `0x02` in the kind byte at offset 17, a zero-identity spawn and a
+zero-identity despawn published `00` where the identity belongs, a duplicate
+state pair published the same identity twice, and a non-finite component
+reached the primitive's refusal and became a panic at the previous encoder's
+`expect`. It also needs no corpus files, so it runs before the controller
+integrates the exported candidates.
 
 `tests/protocol_corpus.rs` executes the corpus cases this crate owns through
 the real codec paths — `read_frame`/`write_frame` for framing,

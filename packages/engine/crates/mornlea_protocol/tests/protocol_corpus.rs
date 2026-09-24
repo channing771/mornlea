@@ -92,6 +92,18 @@
 //! because a passive mob has no category to publish, and the 64-record wire
 //! bound is admitted while the smaller live capacity the authority converges
 //! on stays out of this packet layer.
+//! The fourteenth group is the three projectile publication families
+//! (`ProjectileSpawn`, `ProjectileState` and `ProjectileDespawn`), executed
+//! through the same fallible surface; all three order their records by the
+//! checked domain `ProjectileId`, all three apply the exact-remaining-length
+//! batch rule so a padded payload answers at the truncation boundary, and all
+//! three apply the family's fixed wire ceiling as a pre-parse size check so an
+//! over-ceiling payload answers the capacity boundary the Go decoder's fixed
+//! maximum publishes. The spawn record carries the kind before the dimension
+//! and both playable dimensions are legal, because the kind-by-dimension
+//! policy is an authority rule this wire does not enforce; the state record
+//! carries the identity and the position alone, and the despawn record the
+//! bare eight-byte identity.
 //!
 //! A packet case whose assets the controller has not integrated yet fails
 //! here as a missing corpus case rather than as a silently empty selection,
@@ -184,6 +196,10 @@ const HOSTILE_DESPAWN_FAMILY: &str = "protocol.server.HostileDespawn";
 const PASSIVE_SPAWN_FAMILY: &str = "protocol.server.PassiveSpawn";
 const PASSIVE_STATE_FAMILY: &str = "protocol.server.PassiveState";
 const PASSIVE_DESPAWN_FAMILY: &str = "protocol.server.PassiveDespawn";
+/// The three packet families the projectile producer group registers.
+const PROJECTILE_SPAWN_FAMILY: &str = "protocol.server.ProjectileSpawn";
+const PROJECTILE_STATE_FAMILY: &str = "protocol.server.ProjectileState";
+const PROJECTILE_DESPAWN_FAMILY: &str = "protocol.server.ProjectileDespawn";
 /// The packet families' protocol version, matching the manifest family rows.
 const PACKET_VERSION: &str = "45";
 /// The category label every accepted control packet outcome publishes.
@@ -2415,6 +2431,193 @@ fn passive_despawn_request(
     })
 }
 
+/// Renders one projectile spawn record's semantic fields.
+///
+/// The identity publishes as a decimal string so the full `u64` range stays
+/// lossless, the kind and the dimension as the plain wire integers, and the
+/// position and velocity as bit-string arrays so a negative zero stays
+/// distinct. The record carries no yaw and no health, because a projectile is
+/// a point-like transient whose orientation the client derives from its
+/// velocity.
+fn projectile_spawn_record_fields(
+    record: &mornlea_protocol::ProjectileSpawnRecord,
+) -> serde_json::Value {
+    serde_json::json!({
+        "id": record.id.get().to_string(),
+        "kind": record.kind,
+        "dimension": i32::from(record.dimension.get()),
+        "position": [
+            float_bits_text(record.position[0]),
+            float_bits_text(record.position[1]),
+            float_bits_text(record.position[2])
+        ],
+        "velocity": [
+            float_bits_text(record.velocity[0]),
+            float_bits_text(record.velocity[1]),
+            float_bits_text(record.velocity[2])
+        ]
+    })
+}
+
+/// Renders one projectile spawn batch's semantic fields.
+///
+/// The records publish in wire order, never sorted, so a batch the authority
+/// ordered is observed in the order it carried.
+fn projectile_spawn_fields(spawn: &mornlea_protocol::ProjectileSpawn) -> serde_json::Value {
+    let records: Vec<serde_json::Value> = spawn
+        .spawns
+        .iter()
+        .map(projectile_spawn_record_fields)
+        .collect();
+    serde_json::json!({
+        "server_tick": spawn.server_tick.to_string(),
+        "spawns": records
+    })
+}
+
+/// Renders one projectile state record's semantic fields, which carry the
+/// identity and the position alone: the kind, the dimension and the velocity
+/// are fixed for the projectile's whole life, so the mirror records them at
+/// spawn and the state batch only moves the body.
+fn projectile_state_record_fields(
+    record: &mornlea_protocol::ProjectileStateRecord,
+) -> serde_json::Value {
+    serde_json::json!({
+        "id": record.id.get().to_string(),
+        "position": [
+            float_bits_text(record.position[0]),
+            float_bits_text(record.position[1]),
+            float_bits_text(record.position[2])
+        ]
+    })
+}
+
+/// Renders one projectile state batch's semantic fields.
+fn projectile_state_fields(state: &mornlea_protocol::ProjectileState) -> serde_json::Value {
+    let records: Vec<serde_json::Value> = state
+        .states
+        .iter()
+        .map(projectile_state_record_fields)
+        .collect();
+    serde_json::json!({
+        "server_tick": state.server_tick.to_string(),
+        "states": records
+    })
+}
+
+/// Renders one projectile despawn batch's semantic fields.
+fn projectile_despawn_fields(despawn: &mornlea_protocol::ProjectileDespawn) -> serde_json::Value {
+    let ids: Vec<String> = despawn.ids.iter().map(|id| id.get().to_string()).collect();
+    serde_json::json!({
+        "server_tick": despawn.server_tick.to_string(),
+        "ids": ids
+    })
+}
+
+/// Reads one projectile identity an encode case carries.
+///
+/// The identity is the checked domain `ProjectileId`, so a zero value is
+/// refused at the identity boundary rather than being reinterpreted.
+fn projectile_id_field(value: &serde_json::Value) -> Result<mornlea_protocol::ProjectileId, ()> {
+    let id = value.as_u64().ok_or(())?;
+    mornlea_protocol::ProjectileId::try_new(id).map_err(|_| ())
+}
+
+/// Builds one projectile spawn record its JSON object names.
+fn projectile_spawn_record_request(
+    entry: &serde_json::Value,
+) -> Result<mornlea_protocol::ProjectileSpawnRecord, mornlea_protocol::ProtocolError> {
+    let id = projectile_id_field(
+        entry
+            .get("id")
+            .ok_or(mornlea_protocol::ProtocolError::InvalidIdentity)?,
+    )
+    .map_err(|_| mornlea_protocol::ProtocolError::InvalidIdentity)?;
+    let dimension = record_dimension_field(
+        entry
+            .get("dimension")
+            .ok_or(mornlea_protocol::ProtocolError::InvalidEnum)?,
+    )?;
+    let position = record_bits_array(entry, "position")
+        .map_err(|_| mornlea_protocol::ProtocolError::InvalidFloat)?;
+    let velocity = record_bits_array(entry, "velocity")
+        .map_err(|_| mornlea_protocol::ProtocolError::InvalidFloat)?;
+    let kind =
+        record_byte(entry, "kind").map_err(|_| mornlea_protocol::ProtocolError::InvalidEnum)?;
+    Ok(mornlea_protocol::ProjectileSpawnRecord {
+        id,
+        kind,
+        dimension,
+        position,
+        velocity,
+    })
+}
+
+/// Builds one projectile state record its JSON object names.
+fn projectile_state_record_request(
+    entry: &serde_json::Value,
+) -> Result<mornlea_protocol::ProjectileStateRecord, mornlea_protocol::ProtocolError> {
+    let id = projectile_id_field(
+        entry
+            .get("id")
+            .ok_or(mornlea_protocol::ProtocolError::InvalidIdentity)?,
+    )
+    .map_err(|_| mornlea_protocol::ProtocolError::InvalidIdentity)?;
+    let position = record_bits_array(entry, "position")
+        .map_err(|_| mornlea_protocol::ProtocolError::InvalidFloat)?;
+    Ok(mornlea_protocol::ProjectileStateRecord { id, position })
+}
+
+/// Builds the projectile spawn batch one encode case names from its typed
+/// fields.
+///
+/// The record is built through its public fields, so a mutated or invalid case
+/// is refused by the production validation rather than by a constructor guard.
+fn projectile_spawn_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::ProjectileSpawn, mornlea_protocol::ProtocolError> {
+    let server_tick = unsigned_field(case, "server_tick");
+    let mut spawns = Vec::new();
+    for entry in record_array(case, "spawns") {
+        spawns.push(projectile_spawn_record_request(entry)?);
+    }
+    Ok(mornlea_protocol::ProjectileSpawn {
+        server_tick,
+        spawns,
+    })
+}
+
+/// Builds the projectile state batch one encode case names from its typed
+/// fields.
+fn projectile_state_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::ProjectileState, mornlea_protocol::ProtocolError> {
+    let server_tick = unsigned_field(case, "server_tick");
+    let mut states = Vec::new();
+    for entry in record_array(case, "states") {
+        states.push(projectile_state_record_request(entry)?);
+    }
+    Ok(mornlea_protocol::ProjectileState {
+        server_tick,
+        states,
+    })
+}
+
+/// Builds the projectile despawn batch one encode case names from its typed
+/// fields.
+fn projectile_despawn_request(
+    case: &FrozenCase,
+) -> Result<mornlea_protocol::ProjectileDespawn, mornlea_protocol::ProtocolError> {
+    let server_tick = unsigned_field(case, "server_tick");
+    let mut ids = Vec::new();
+    for entry in record_array(case, "ids") {
+        let id = projectile_id_field(entry)
+            .map_err(|_| mornlea_protocol::ProtocolError::InvalidIdentity)?;
+        ids.push(id);
+    }
+    Ok(mornlea_protocol::ProjectileDespawn { server_tick, ids })
+}
+
 /// Builds the inventory state one encode case names from its typed fields.
 ///
 /// The record is built through its public fields, so a mutated or invalid
@@ -3793,6 +3996,60 @@ fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
             }
             other => panic!("unsupported packet operation for {}: {other}", case.id),
         },
+        PROJECTILE_SPAWN_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::ProjectileSpawn::decode(&case.input) {
+                Ok(spawn) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": projectile_spawn_fields(&spawn),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let spawn = match projectile_spawn_request(case) {
+                    Ok(spawn) => spawn,
+                    Err(err) => return packet_error(err),
+                };
+                encode_ok_outcome(spawn.encode(), projectile_spawn_fields(&spawn))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        PROJECTILE_STATE_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::ProjectileState::decode(&case.input) {
+                Ok(state) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": projectile_state_fields(&state),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let state = match projectile_state_request(case) {
+                    Ok(state) => state,
+                    Err(err) => return packet_error(err),
+                };
+                encode_ok_outcome(state.encode(), projectile_state_fields(&state))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
+        PROJECTILE_DESPAWN_FAMILY => match case.operation.as_str() {
+            "decode" => match mornlea_protocol::ProjectileDespawn::decode(&case.input) {
+                Ok(despawn) => serde_json::json!({
+                    "category": PACKET_OUTCOME_CATEGORY,
+                    "fields": projectile_despawn_fields(&despawn),
+                    "kind": "ok"
+                }),
+                Err(err) => packet_error(err),
+            },
+            "encode" => {
+                let despawn = match projectile_despawn_request(case) {
+                    Ok(despawn) => despawn,
+                    Err(err) => return packet_error(err),
+                };
+                encode_ok_outcome(despawn.encode(), projectile_despawn_fields(&despawn))
+            }
+            other => panic!("unsupported packet operation for {}: {other}", case.id),
+        },
         other => panic!("unsupported packet family for {}: {other}", case.id),
     }
 }
@@ -3859,7 +4116,10 @@ fn dispatch_case(case: &FrozenCase) -> serde_json::Value {
         | HOSTILE_DESPAWN_FAMILY
         | PASSIVE_SPAWN_FAMILY
         | PASSIVE_STATE_FAMILY
-        | PASSIVE_DESPAWN_FAMILY => dispatch_packet(case),
+        | PASSIVE_DESPAWN_FAMILY
+        | PROJECTILE_SPAWN_FAMILY
+        | PROJECTILE_STATE_FAMILY
+        | PROJECTILE_DESPAWN_FAMILY => dispatch_packet(case),
         other => panic!("unregistered protocol family for {}: {other}", case.id),
     }
 }
@@ -5237,6 +5497,99 @@ fn protocol_corpus_packet_passives_cases_are_executed() {
         "the passive selection executed zero cases"
     );
     for case in passives {
+        assert_eq!(
+            case.consumer,
+            CorpusConsumer::Protocol,
+            "case {} carries the wrong consumer",
+            case.id
+        );
+        assert!(
+            !case.operation.is_empty(),
+            "case {} names no operation",
+            case.id
+        );
+        assert_normalized(case, dispatch_packet(case));
+    }
+}
+
+/// The case identities the projectile producer group registers. They mirror
+/// the Go producer's registration, so a case that only one side names is a
+/// mismatch rather than a shared name. The merged manifest sorts case IDs, so
+/// the comparison sorts this list too.
+///
+/// The count is the reviewed table's enumerated labels: each family's canonical
+/// vector pair, one full-record ceiling admit per family, the spawn's identity,
+/// kind and dimension boundaries with its kind encode twin, the spawn's
+/// nonfinite-pose and order refusals, the state's identity, nonfinite, order
+/// and count refusals with its nonfinite encode twin, the despawn's identity
+/// and order refusals, the count-bound refusal per family, the padding refusal
+/// the exact-length rule answers at the truncation category, and the
+/// despawn's over-ceiling refusal the pre-parse wire ceiling answers at the
+/// capacity category.
+const PROJECTILES_CASE_IDS: [&str; 29] = [
+    "protocol.server.ProjectileDespawn/45/decode-valid",
+    "protocol.server.ProjectileDespawn/45/encode-valid",
+    "protocol.server.ProjectileDespawn/45/decode-id-zero",
+    "protocol.server.ProjectileDespawn/45/decode-duplicate-ids",
+    "protocol.server.ProjectileDespawn/45/decode-reversed-ids",
+    "protocol.server.ProjectileDespawn/45/decode-count-above",
+    "protocol.server.ProjectileDespawn/45/decode-count-one-hundred-twenty-eight",
+    "protocol.server.ProjectileDespawn/45/decode-trailing-byte",
+    "protocol.server.ProjectileDespawn/45/decode-over-ceiling",
+    "protocol.server.ProjectileSpawn/45/decode-valid",
+    "protocol.server.ProjectileSpawn/45/encode-valid",
+    "protocol.server.ProjectileSpawn/45/decode-count-one-hundred-twenty-eight",
+    "protocol.server.ProjectileSpawn/45/decode-id-zero",
+    "protocol.server.ProjectileSpawn/45/decode-kind-two",
+    "protocol.server.ProjectileSpawn/45/encode-kind-two",
+    "protocol.server.ProjectileSpawn/45/decode-dimension-two",
+    "protocol.server.ProjectileSpawn/45/decode-nan-position",
+    "protocol.server.ProjectileSpawn/45/decode-reversed-ids",
+    "protocol.server.ProjectileSpawn/45/decode-count-above",
+    "protocol.server.ProjectileSpawn/45/decode-trailing-byte",
+    "protocol.server.ProjectileState/45/decode-valid",
+    "protocol.server.ProjectileState/45/encode-valid",
+    "protocol.server.ProjectileState/45/decode-id-zero",
+    "protocol.server.ProjectileState/45/decode-nan-position",
+    "protocol.server.ProjectileState/45/encode-nan-position",
+    "protocol.server.ProjectileState/45/decode-duplicate-ids",
+    "protocol.server.ProjectileState/45/decode-count-above",
+    "protocol.server.ProjectileState/45/decode-count-one-hundred-twenty-eight",
+    "protocol.server.ProjectileState/45/decode-trailing-byte",
+];
+
+/// Reports whether one family belongs to the projectile producer group.
+fn is_projectiles_family(family: &str) -> bool {
+    matches!(
+        family,
+        PROJECTILE_SPAWN_FAMILY | PROJECTILE_STATE_FAMILY | PROJECTILE_DESPAWN_FAMILY
+    )
+}
+
+#[test]
+fn protocol_corpus_packet_projectiles_cases_are_executed() {
+    // The case assets are exported by the Go producer and integrated by the
+    // controller, so before this merge the test reports the missing corpus
+    // cases instead of an empty selection that would look like a passing run.
+    let cases = load_cases_for_consumer(CorpusConsumer::Protocol);
+    let projectiles: Vec<&FrozenCase> = cases
+        .iter()
+        .filter(|case| is_projectiles_family(&case.family))
+        .collect();
+    let executed: Vec<&str> = projectiles.iter().map(|case| case.id.as_str()).collect();
+    let mut expected: Vec<&str> = PROJECTILES_CASE_IDS.to_vec();
+    // The merged manifest sorts case IDs; compare as the reviewed set, not in
+    // the authoring order of this suite's constant.
+    expected.sort_unstable();
+    assert_eq!(
+        executed, expected,
+        "the projectile selection does not carry the reviewed case set"
+    );
+    assert!(
+        !projectiles.is_empty(),
+        "the projectile selection executed zero cases"
+    );
+    for case in projectiles {
         assert_eq!(
             case.consumer,
             CorpusConsumer::Protocol,

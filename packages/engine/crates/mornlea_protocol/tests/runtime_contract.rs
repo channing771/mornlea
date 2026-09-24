@@ -2347,6 +2347,10 @@ fn passive_id(id: u64) -> mornlea_protocol::PassiveId {
     mornlea_protocol::PassiveId::try_new(id).expect("reviewed nonzero passive identity")
 }
 
+fn projectile_id(id: u64) -> mornlea_protocol::ProjectileId {
+    mornlea_protocol::ProjectileId::try_new(id).expect("reviewed nonzero projectile identity")
+}
+
 #[test]
 fn hostile_despawn_round_trip_preserves_batch_bytes() {
     let despawn = mornlea_protocol::HostileDespawn::new(
@@ -2410,9 +2414,12 @@ fn hostile_despawn_rejects_unsorted_zero_and_malformed_payload() {
 
 #[test]
 fn projectile_despawn_round_trip_preserves_batch_bytes() {
-    let despawn = mornlea_protocol::ProjectileDespawn::new(0x0102_0304_0506_0708, vec![3, 200])
-        .expect("batch");
-    let payload = despawn.encode();
+    let despawn = mornlea_protocol::ProjectileDespawn::new(
+        0x0102_0304_0506_0708,
+        vec![projectile_id(3), projectile_id(200)],
+    )
+    .expect("batch");
+    let payload = despawn.encode().expect("encode");
     assert_eq!(
         payload,
         [
@@ -2431,10 +2438,29 @@ fn projectile_despawn_round_trip_preserves_batch_bytes() {
 #[test]
 fn projectile_despawn_rejects_unsorted_zero_and_malformed_payload() {
     assert!(mornlea_protocol::ProjectileDespawn::new(1, Vec::new()).is_err());
-    assert!(mornlea_protocol::ProjectileDespawn::new(1, vec![0]).is_err());
-    assert!(mornlea_protocol::ProjectileDespawn::new(1, vec![4, 4]).is_err());
-    assert!(mornlea_protocol::ProjectileDespawn::new(1, vec![9, 4]).is_err());
-    let over: Vec<u64> = (1..=(u64::from(mornlea_protocol::MAX_PROJECTILE_RECORDS) + 1)).collect();
+    assert!(
+        mornlea_protocol::ProjectileDespawn::new(1, vec![projectile_id(4), projectile_id(4)])
+            .is_err()
+    );
+    assert!(
+        mornlea_protocol::ProjectileDespawn::new(1, vec![projectile_id(9), projectile_id(4)])
+            .is_err()
+    );
+    // A zero identity is refused where the identity is read, because the
+    // checked domain `ProjectileId` has no zero form to construct.
+    let mut zero_id = vec![1, 0, 0, 0, 0, 0, 0, 0, 0x01];
+    zero_id.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(
+        mornlea_protocol::ProjectileDespawn::decode(&zero_id),
+        Err(mornlea_protocol::ProtocolError::InvalidIdentity)
+    );
+    let mut over = Vec::new();
+    for id in 1..=mornlea_protocol::MAX_PROJECTILE_RECORDS {
+        over.push(projectile_id(u64::from(id)));
+    }
+    over.push(projectile_id(
+        u64::from(mornlea_protocol::MAX_PROJECTILE_RECORDS) + 1,
+    ));
     assert!(mornlea_protocol::ProjectileDespawn::new(1, over).is_err());
     let short = vec![1, 0, 0, 0, 0, 0, 0, 0, 0x02, 3, 0, 0, 0, 0, 0, 0, 0];
     assert!(mornlea_protocol::ProjectileDespawn::decode(&short).is_err());
@@ -4325,14 +4351,14 @@ fn projectile_spawn_round_trip_preserves_batch_bytes() {
         0x0102_0304_0506_0708,
         vec![
             mornlea_protocol::ProjectileSpawnRecord {
-                id: 7,
+                id: projectile_id(7),
                 kind: mornlea_protocol::PROJECTILE_KIND_ARROW,
                 dimension: mornlea_domain::Dimension::OVERWORLD,
                 position: [2.5, 1.0, -3.25],
                 velocity: [0.5, -1.25, 0.0],
             },
             mornlea_protocol::ProjectileSpawnRecord {
-                id: 9,
+                id: projectile_id(9),
                 kind: mornlea_protocol::PROJECTILE_KIND_SHARD,
                 dimension: mornlea_domain::Dimension::DEPTHS,
                 position: [-8.5, 65.5, 12.75],
@@ -4341,7 +4367,7 @@ fn projectile_spawn_round_trip_preserves_batch_bytes() {
         ],
     )
     .expect("spawn");
-    let payload = spawn.encode();
+    let payload = spawn.encode().expect("encode");
     assert_eq!(mornlea_protocol::ProjectileSpawn::PACKET_ID, 29);
     assert_eq!(payload.len(), 8 + 1 + 2 * 37);
     assert_eq!(&payload[..8], &0x0102_0304_0506_0708u64.to_le_bytes());
@@ -4364,20 +4390,18 @@ fn projectile_spawn_round_trip_preserves_batch_bytes() {
 #[test]
 fn projectile_spawn_rejects_invalid_records_and_malformed_payload() {
     let record = mornlea_protocol::ProjectileSpawnRecord {
-        id: 7,
+        id: projectile_id(7),
         kind: mornlea_protocol::PROJECTILE_KIND_SHARD,
         dimension: mornlea_domain::Dimension::OVERWORLD,
         position: [1.0, 2.0, 3.0],
         velocity: [0.5, 0.0, 0.0],
     };
 
-    let mut zero_id = record;
-    zero_id.id = 0;
     let mut bad_kind = record;
     bad_kind.kind = 2;
     let mut bad_velocity = record;
     bad_velocity.velocity = [f32::NAN, 0.0, 0.0];
-    for bad in [zero_id, bad_kind, bad_velocity] {
+    for bad in [bad_kind, bad_velocity] {
         assert!(
             mornlea_protocol::ProjectileSpawn::new(1, vec![bad]).is_err(),
             "accepted invalid projectile spawn record"
@@ -4394,7 +4418,16 @@ fn projectile_spawn_rejects_invalid_records_and_malformed_payload() {
     assert!(mornlea_protocol::ProjectileSpawn::new(1, vec![depths]).is_ok());
 
     let valid = mornlea_protocol::ProjectileSpawn::new(1, vec![record]).expect("spawn");
-    let payload = valid.encode();
+    let payload = valid.encode().expect("encode");
+    // A zero identity is refused where the identity is read, because the
+    // checked domain `ProjectileId` has no zero form to construct.
+    let mut zero_id = payload[..9].to_vec();
+    zero_id.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 0]);
+    zero_id.extend_from_slice(&payload[17..]);
+    assert_eq!(
+        mornlea_protocol::ProjectileSpawn::decode(&zero_id),
+        Err(mornlea_protocol::ProtocolError::InvalidIdentity)
+    );
     for length in 0..payload.len() {
         assert!(
             mornlea_protocol::ProjectileSpawn::decode(&payload[..length]).is_err(),
@@ -4427,17 +4460,17 @@ fn projectile_state_round_trip_preserves_batch_bytes() {
         0x0102_0304_0506_0708,
         vec![
             mornlea_protocol::ProjectileStateRecord {
-                id: 7,
+                id: projectile_id(7),
                 position: [2.5, 1.0, -3.25],
             },
             mornlea_protocol::ProjectileStateRecord {
-                id: 9,
+                id: projectile_id(9),
                 position: [-8.5, 65.5, 12.75],
             },
         ],
     )
     .expect("state");
-    let payload = state.encode();
+    let payload = state.encode().expect("encode");
     assert_eq!(mornlea_protocol::ProjectileState::PACKET_ID, 30);
     assert_eq!(payload.len(), 8 + 1 + 2 * 20);
     assert_eq!(&payload[..8], &0x0102_0304_0506_0708u64.to_le_bytes());
@@ -4457,25 +4490,30 @@ fn projectile_state_round_trip_preserves_batch_bytes() {
 #[test]
 fn projectile_state_rejects_invalid_records_and_malformed_payload() {
     let record = mornlea_protocol::ProjectileStateRecord {
-        id: 7,
+        id: projectile_id(7),
         position: [1.0, 2.0, 3.0],
     };
 
-    let mut zero_id = record;
-    zero_id.id = 0;
     let mut bad_position = record;
     bad_position.position = [f32::INFINITY, 0.0, 0.0];
-    for bad in [zero_id, bad_position] {
-        assert!(
-            mornlea_protocol::ProjectileState::new(1, vec![bad]).is_err(),
-            "accepted invalid projectile state record"
-        );
-    }
+    assert!(
+        mornlea_protocol::ProjectileState::new(1, vec![bad_position]).is_err(),
+        "accepted invalid projectile state record"
+    );
     assert!(mornlea_protocol::ProjectileState::new(1, vec![record, record]).is_err());
     assert!(mornlea_protocol::ProjectileState::new(1, Vec::new()).is_err());
 
     let valid = mornlea_protocol::ProjectileState::new(1, vec![record]).expect("state");
-    let payload = valid.encode();
+    let payload = valid.encode().expect("encode");
+    // A zero identity is refused where the identity is read, because the
+    // checked domain `ProjectileId` has no zero form to construct.
+    let mut zero_id = payload[..9].to_vec();
+    zero_id.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 0]);
+    zero_id.extend_from_slice(&payload[17..]);
+    assert_eq!(
+        mornlea_protocol::ProjectileState::decode(&zero_id),
+        Err(mornlea_protocol::ProtocolError::InvalidIdentity)
+    );
     for length in 0..payload.len() {
         assert!(
             mornlea_protocol::ProjectileState::decode(&payload[..length]).is_err(),
