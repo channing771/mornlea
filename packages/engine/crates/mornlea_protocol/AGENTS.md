@@ -76,6 +76,63 @@ rather than checking that it omits a few names.
   S/Handshake/0 collision, and the old-version hello reaching `validate_hello`
   through the structural path.
 
+## Semantic adapters (`src/semantic.rs`, `tests/protocol_semantic.rs`)
+
+- `PlayIntent` is the client-side semantic surface:
+  `Sequenced { sequence: u64, command: DOMAIN::Command }`,
+  `Chat(DOMAIN::ChatIntent)` and `KeepAliveReply { token: u64 }`. Three
+  `TryFrom` pairs cross the seam: `TryFrom<ClientPacket> for PlayIntent`,
+  `TryFrom<ServerPacket> for DOMAIN::Event`, and the outbound
+  `TryFrom<PlayIntent> for ClientPacket` / `TryFrom<DOMAIN::Event> for
+  ServerPacket`. Errors are `ProtocolError` with explicit mappings, and there
+  is no catch-all arm in any direction: a new registry variant or a new domain
+  variant is a compile error rather than a silent fallthrough.
+- The client map is one intent per registered client key: the 19 sequenced
+  Play commands map to exactly one `DOMAIN::Command` variant each (the domain
+  `input/inventory.rs` payloads are the targets, including the `StackView
+  {Inventory, Crafting, Container(ContainerRef)}` split the three
+  view-addressed commands need), `ChatCommand` maps only to `Chat`,
+  `KeepAliveReply` only to `KeepAliveReply`, and the two negotiation records
+  are refused with `UnknownPacket`. The server map is one publication per
+  registered server key: the 30 publication packets map to the same-named
+  `DOMAIN::Event` variants (`ChatEvent` maps to `Event::Chat` through the
+  bidirectional pair in `src/chat_event.rs`), and the six control families
+  (`ServerHello`, `HandshakeReject`, `LoginSuccess`, `LoginReject`,
+  `KeepAlive`, `Disconnect`) are refused with `UnknownPacket`.
+- No conversion invents `session`, `tick`, `arrival_index`, a routing
+  recipient or an authoritative result. `PlayIntent::Sequenced` and the
+  outbound conversion are the only places the wire sequence is detached and
+  reattached, because the domain payload families carry none;
+  `DOMAIN::CommandEnvelope` is never constructed here — the envelope is the
+  ordering layer's owner of intake metadata — and `RoutedEvent` recipients
+  stay outside `ServerPacket`. The `TakeCraftingOutput` nonzero-sequence rule
+  is not restated by the adapter: the packet gate refuses a zero sequence and
+  the domain envelope refuses it independently, and the adapter carries the
+  wire value verbatim for every command that admits it.
+- Every inbound arm runs the record's own `validate` first, which is what
+  applies the family's wire caps and field rules before any domain value is
+  assembled; the checked domain constructors behind the match then restate no
+  rule. Every outbound batch arm applies its wire record cap BEFORE any record
+  is converted or a buffer reserved, so a domain-valid batch above a cap is
+  refused as one packet (`InvalidRange`, the same variant the family gate
+  answers a count above its bound with) instead of being truncated into a
+  silently partial publication. The caps are 4 companion records
+  (`MAX_COMPANION_STATES`), 7 remote-player records
+  (`MAX_REMOTE_PLAYER_STATES`), 32 drops (`MAX_ITEM_DROP_BATCH`), 64 hostile
+  and 64 passive records, 128 projectile records (`MAX_PROJECTILE_RECORDS`),
+  and 4096 block changes / forget chunks (`MAX_BLOCK_CHANGES`,
+  `MAX_FORGET_CHUNKS`); the submitted record order is preserved exactly.
+- Raw wire exceptions go through the gates earlier nodes published rather
+  than through restated rules: a container reference converts through
+  `ContainerRef::to_domain_present` (so dimension `256` and `-1` fail rather
+  than aliasing into the overworld), a reject reason through
+  `reject_reason_from_wire` / `reject_reason_to_wire`, a chat event through
+  the `src/chat_event.rs` pair, and chunk sections through the compact
+  `TryFrom` conversions in `src/chunk_snapshot.rs` — never by expanding a
+  section's 4096 cells. Domain rejections map onto the protocol vocabulary
+  through the module-private `wire_error`, which keeps the identity, enum,
+  text and float boundaries distinct.
+
 ## Framing (`src/frame.rs`, `src/varint.rs`, `src/bytes.rs`, `tests/runtime_contract.rs`, `tests/protocol_frame.rs`)
 
 - `write_frame_into` / `read_frame_ref` are the caller-owned packet boundary.
@@ -2110,6 +2167,9 @@ candidates.
 ```bash
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_registry --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_registry --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_semantic --locked -- --list
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_semantic --locked
+rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_domain --test event_surface --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_values --locked -- --list
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_values --locked
 rustup run 1.97.1 cargo test --manifest-path packages/engine/Cargo.toml -p mornlea_protocol --test protocol_admission --locked -- --list
@@ -2159,6 +2219,25 @@ The one family whose re-encoding is not byte-identical is the compressed
 snapshot, whose acceptance is a semantic round trip through the owned context.
 It needs no corpus files, so it runs before the controller integrates the
 exported candidates.
+
+`tests/protocol_semantic.rs` pins the adapter seam. It enumerates every
+registered client and server key in a table, asserts the key each packet
+publishes and the intent or event label the adapter answers with, and asserts
+the executed counts (19 sequenced commands, one chat intent, one keep alive
+reply and two negotiation refusals; 30 publications and six control
+refusals). Every non-refused intent and event round-trips through the real
+wire boundary (`encode_client_into` / `decode_client` and
+`ProtocolCodec::encode_server_into` / `decode_server`) and back into an equal
+semantic value. The suite also pins the 5-record companion rejection, every
+wire cap boundary from the admitted count to the refused one (including the
+4096-record world-delta batches and the domain work cap that refuses 4097
+before the adapter is reached), a nonzero container reference with dimension
+256 / −1 / 1 failing rather than aliasing into the overworld, the exact absent
+companion identity mapping to variant-shaped absence while a companion-bearing
+branch publishes the checked identity, six normalized-expectation mutations
+(sequence, world dimension, actor health, record order, chat kind, chat and
+command reject reason), and the absence of any `CommandEnvelope` construction
+in the adapter source.
 
 `tests/protocol_values.rs` pins the shared-value boundary: the raw container
 dimension is kept raw through `read` and refused by the checked conversion

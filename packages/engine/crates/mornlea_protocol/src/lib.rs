@@ -83,6 +83,7 @@ mod remote_player_spawn;
 mod remote_player_states;
 mod request_chunk_resync;
 mod select_hotbar;
+mod semantic;
 mod server_hello;
 mod take_crafting_output;
 mod till_soil;
@@ -250,6 +251,7 @@ pub use remote_player_states::{
 };
 pub use request_chunk_resync::RequestChunkResync;
 pub use select_hotbar::SelectHotbar;
+pub use semantic::PlayIntent;
 pub use server_hello::ServerHello;
 pub use take_crafting_output::TakeCraftingOutput;
 pub use till_soil::TillSoil;
