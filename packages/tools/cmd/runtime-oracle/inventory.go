@@ -16,7 +16,7 @@ import (
 
 const (
 	inventorySchemaVersion = 2
-	BaselineSourceRevision = "736af2f4b8bc3cbea4648733aa07e5ef9ce0e9d5"
+	BaselineSourceRevision = "b6043f004176055a2e39a98508b662691c3e4ef7"
 	MaxManifestBytes       = 4 * 1024 * 1024
 	MaxCaseJSONBytes       = 256 * 1024
 	MaxBinaryBytes         = 4 * 1024 * 1024
