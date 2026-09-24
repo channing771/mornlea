@@ -1,0 +1,13 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:51eb84ce6e9154390e97851efec09da9475ccde8fac49413886e64401f6d07ac",
+  "fields": {
+    "ids": [
+      "1",
+      "2"
+    ],
+    "server_tick": "0"
+  },
+  "kind": "ok"
+}
+

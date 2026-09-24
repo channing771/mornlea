@@ -1,0 +1,12 @@
+{
+  "category": "packet",
+  "fields": {
+    "ids": [
+      "1",
+      "2"
+    ],
+    "server_tick": "0"
+  },
+  "kind": "ok"
+}
+

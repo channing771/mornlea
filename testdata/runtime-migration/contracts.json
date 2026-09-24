@@ -3524,11 +3524,33 @@
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
         },
         {
+          "path": "packages/shared/network/codec/codec_projectile.go",
+          "sha256": "sha256:04aaecdf4b6626e8137aa24203085bf09081e289d24a41ddf815db6f27d3f3df"
+        },
+        {
+          "path": "packages/shared/network/codec/codec_server.go",
+          "sha256": "sha256:733ce941581e6ab2893e81c894d68a2815e14ff67b2c4f2caf6987a9ce6ad67c"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_projectile.go",
+          "sha256": "sha256:1afe1670226f5c5e1800f9f34a1fd9a8019c8dfcef095ae5557aa21d898d8d87"
+        },
+        {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.server.ProjectileDespawn/45/decode-count-above",
+        "protocol.server.ProjectileDespawn/45/decode-count-one-hundred-twenty-eight",
+        "protocol.server.ProjectileDespawn/45/decode-duplicate-ids",
+        "protocol.server.ProjectileDespawn/45/decode-id-zero",
+        "protocol.server.ProjectileDespawn/45/decode-over-ceiling",
+        "protocol.server.ProjectileDespawn/45/decode-reversed-ids",
+        "protocol.server.ProjectileDespawn/45/decode-trailing-byte",
+        "protocol.server.ProjectileDespawn/45/decode-valid",
+        "protocol.server.ProjectileDespawn/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.server.ProjectileSpawn",
@@ -3547,11 +3569,35 @@
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
         },
         {
+          "path": "packages/shared/network/codec/codec_projectile.go",
+          "sha256": "sha256:04aaecdf4b6626e8137aa24203085bf09081e289d24a41ddf815db6f27d3f3df"
+        },
+        {
+          "path": "packages/shared/network/codec/codec_server.go",
+          "sha256": "sha256:733ce941581e6ab2893e81c894d68a2815e14ff67b2c4f2caf6987a9ce6ad67c"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_projectile.go",
+          "sha256": "sha256:1afe1670226f5c5e1800f9f34a1fd9a8019c8dfcef095ae5557aa21d898d8d87"
+        },
+        {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.server.ProjectileSpawn/45/decode-count-above",
+        "protocol.server.ProjectileSpawn/45/decode-count-one-hundred-twenty-eight",
+        "protocol.server.ProjectileSpawn/45/decode-dimension-two",
+        "protocol.server.ProjectileSpawn/45/decode-id-zero",
+        "protocol.server.ProjectileSpawn/45/decode-kind-two",
+        "protocol.server.ProjectileSpawn/45/decode-nan-position",
+        "protocol.server.ProjectileSpawn/45/decode-reversed-ids",
+        "protocol.server.ProjectileSpawn/45/decode-trailing-byte",
+        "protocol.server.ProjectileSpawn/45/decode-valid",
+        "protocol.server.ProjectileSpawn/45/encode-kind-two",
+        "protocol.server.ProjectileSpawn/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.server.ProjectileState",
@@ -3570,11 +3616,33 @@
           "sha256": "sha256:16bebcef16401e98e4706745c6946afb9d68e1b0f35d02ace84785999d848327"
         },
         {
+          "path": "packages/shared/network/codec/codec_projectile.go",
+          "sha256": "sha256:04aaecdf4b6626e8137aa24203085bf09081e289d24a41ddf815db6f27d3f3df"
+        },
+        {
+          "path": "packages/shared/network/codec/codec_server.go",
+          "sha256": "sha256:733ce941581e6ab2893e81c894d68a2815e14ff67b2c4f2caf6987a9ce6ad67c"
+        },
+        {
+          "path": "packages/shared/network/protocol/message_projectile.go",
+          "sha256": "sha256:1afe1670226f5c5e1800f9f34a1fd9a8019c8dfcef095ae5557aa21d898d8d87"
+        },
+        {
           "path": "packages/shared/network/protocol/packet_test.go",
           "sha256": "sha256:2d8cd5cf00bd24b4f354c5700b527bb37dfd6b7e2386340875d4cb07035b1142"
         }
       ],
-      "cases": null
+      "cases": [
+        "protocol.server.ProjectileState/45/decode-count-above",
+        "protocol.server.ProjectileState/45/decode-count-one-hundred-twenty-eight",
+        "protocol.server.ProjectileState/45/decode-duplicate-ids",
+        "protocol.server.ProjectileState/45/decode-id-zero",
+        "protocol.server.ProjectileState/45/decode-nan-position",
+        "protocol.server.ProjectileState/45/decode-trailing-byte",
+        "protocol.server.ProjectileState/45/decode-valid",
+        "protocol.server.ProjectileState/45/encode-nan-position",
+        "protocol.server.ProjectileState/45/encode-valid"
+      ]
     },
     {
       "id": "protocol.server.RemotePlayerDespawn",
@@ -25671,6 +25739,702 @@
       "expected": {
         "path": "testdata/runtime-migration/cases/protocol/PlayerState/encode-valid.expected.json",
         "sha256": "sha256:2d18ea2ba23de1e5b11d7b023d4d749ea72ee4c6b3b8ac7b8e493c7f03836d5b"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileDespawn/45/decode-count-above",
+      "family": "protocol.server.ProjectileDespawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 31
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileDespawn/decode-count-above.input.bin",
+        "sha256": "sha256:dab28956cb5edf67a5e4e66d269acacbe8c41629cf01d896452683378762a164"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileDespawn/decode-count-above.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileDespawn/45/decode-count-one-hundred-twenty-eight",
+      "family": "protocol.server.ProjectileDespawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 31
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileDespawn/decode-count-one-hundred-twenty-eight.input.bin",
+        "sha256": "sha256:5b138661b103336f196ee4ced2ae097b1b8114bb5d79805584de716fe73ca84c"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileDespawn/decode-count-one-hundred-twenty-eight.expected.json",
+        "sha256": "sha256:f852cf34db580640e6802afcd577e42053aa5dc04364628912744dc2a683c7e6"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileDespawn/45/decode-duplicate-ids",
+      "family": "protocol.server.ProjectileDespawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 31
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileDespawn/decode-duplicate-ids.input.bin",
+        "sha256": "sha256:271db5e3defacae4a5e932b99b194800abb2d4645d82e6388af2959b2ac86d52"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileDespawn/decode-duplicate-ids.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileDespawn/45/decode-id-zero",
+      "family": "protocol.server.ProjectileDespawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 31
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileDespawn/decode-id-zero.input.bin",
+        "sha256": "sha256:5590b4a4eb4b7a9dba75b0176d06fbdabd8798d4b444741bb8efff24ad5b63f1"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileDespawn/decode-id-zero.expected.json",
+        "sha256": "sha256:e18b772c91375783f134c2837eb4944e794f26958ccdc48661b4f68a1ec3e5f4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileDespawn/45/decode-over-ceiling",
+      "family": "protocol.server.ProjectileDespawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 31
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileDespawn/decode-over-ceiling.input.bin",
+        "sha256": "sha256:8bd51781d6b051711333f48c35f928adacdeeee84f9996ddd8e82cf97827ec50"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileDespawn/decode-over-ceiling.expected.json",
+        "sha256": "sha256:23157f4e9cdc29645bef06805ff2bec8e534e5d7de26e0ce55adde595fda17f1"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileDespawn/45/decode-reversed-ids",
+      "family": "protocol.server.ProjectileDespawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 31
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileDespawn/decode-reversed-ids.input.bin",
+        "sha256": "sha256:186440da2fb01801ed7b74f6f6160f663c414fd0428536f5dc4d8403ea655c87"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileDespawn/decode-reversed-ids.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileDespawn/45/decode-trailing-byte",
+      "family": "protocol.server.ProjectileDespawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 31
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileDespawn/decode-trailing-byte.input.bin",
+        "sha256": "sha256:64864e6979e177743fffd8a5f7b7e71724acceaa54184ca1102ac65f7f6b8f2d"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileDespawn/decode-trailing-byte.expected.json",
+        "sha256": "sha256:6a6aba5322f6bb08d116cc9b314494e850b3adbad2801f6f0078ec3215fd5f44"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileDespawn/45/decode-valid",
+      "family": "protocol.server.ProjectileDespawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 31
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileDespawn/decode-valid.input.bin",
+        "sha256": "sha256:51eb84ce6e9154390e97851efec09da9475ccde8fac49413886e64401f6d07ac"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileDespawn/decode-valid.expected.json",
+        "sha256": "sha256:fcd50696f6b8ae354544046d5d5aee26bb7df8107beccbcdd21d4e3fca7ef61e"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileDespawn/45/encode-valid",
+      "family": "protocol.server.ProjectileDespawn",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 31
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileDespawn/encode-valid.input.json",
+        "sha256": "sha256:1add0053eb8c6b0fbe430aae8298738db8fd36f594b46f05a755e6537ea54eeb"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileDespawn/encode-valid.expected.json",
+        "sha256": "sha256:c01ffe1f3e4a07bd2c42768b7ce12786d30f62b05754dd384a26af6cd939a390"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileSpawn/45/decode-count-above",
+      "family": "protocol.server.ProjectileSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 29
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/decode-count-above.input.bin",
+        "sha256": "sha256:c743e179f70df0c549faf1954dc32c4ac05227d5cc276bbab742ead8ab751fcd"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/decode-count-above.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileSpawn/45/decode-count-one-hundred-twenty-eight",
+      "family": "protocol.server.ProjectileSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 29
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/decode-count-one-hundred-twenty-eight.input.bin",
+        "sha256": "sha256:459c0db5caefec12a5955441e472b064df64b89962180d5dfbea7e4b0e7be455"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/decode-count-one-hundred-twenty-eight.expected.json",
+        "sha256": "sha256:b0aa7304313c309f54616e2f333b3ae68aaee0ea9cc22621e927da00d2615f34"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileSpawn/45/decode-dimension-two",
+      "family": "protocol.server.ProjectileSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 29
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/decode-dimension-two.input.bin",
+        "sha256": "sha256:4ece9106e839207fb8b763b4d3d00aaa8737cd19b575aa6f6488327d7419a093"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/decode-dimension-two.expected.json",
+        "sha256": "sha256:986d015321a2eb07422b25a336ae52c8c5cb2dc5199a6fc758e8b0e0bcd32b8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileSpawn/45/decode-id-zero",
+      "family": "protocol.server.ProjectileSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 29
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/decode-id-zero.input.bin",
+        "sha256": "sha256:7895d1993c1644868088556491b798e2893938750cd1f563d7ebb698597641be"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/decode-id-zero.expected.json",
+        "sha256": "sha256:e18b772c91375783f134c2837eb4944e794f26958ccdc48661b4f68a1ec3e5f4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileSpawn/45/decode-kind-two",
+      "family": "protocol.server.ProjectileSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 29
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/decode-kind-two.input.bin",
+        "sha256": "sha256:7417d2236eee8fe18442f56fc271f5a72c1476f445649ccec2b4e309205f6125"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/decode-kind-two.expected.json",
+        "sha256": "sha256:986d015321a2eb07422b25a336ae52c8c5cb2dc5199a6fc758e8b0e0bcd32b8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileSpawn/45/decode-nan-position",
+      "family": "protocol.server.ProjectileSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 29
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/decode-nan-position.input.bin",
+        "sha256": "sha256:c68df686cb69cb1345ac66409278faa0df9ec73d26555e41bbea945e604d8509"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/decode-nan-position.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileSpawn/45/decode-reversed-ids",
+      "family": "protocol.server.ProjectileSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 29
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/decode-reversed-ids.input.bin",
+        "sha256": "sha256:63d9672fd588baa04cde029f43275a30ea9ba42a742f34e65bbdffa7921713aa"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/decode-reversed-ids.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileSpawn/45/decode-trailing-byte",
+      "family": "protocol.server.ProjectileSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 29
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/decode-trailing-byte.input.bin",
+        "sha256": "sha256:fbc91eeded7b95e41a89682edb78945ef1859ef1db294ab812f446ad11598197"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/decode-trailing-byte.expected.json",
+        "sha256": "sha256:6a6aba5322f6bb08d116cc9b314494e850b3adbad2801f6f0078ec3215fd5f44"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileSpawn/45/decode-valid",
+      "family": "protocol.server.ProjectileSpawn",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 29
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/decode-valid.input.bin",
+        "sha256": "sha256:b4b32ec4098b435fd4d2f6ac412eaf6d0e05e586e9ca67ca37824a70be3fde73"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/decode-valid.expected.json",
+        "sha256": "sha256:46a3e3bc9eee097c69dbd31b64069369efea6ac771bdd2fb60ea45c513609ad8"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileSpawn/45/encode-kind-two",
+      "family": "protocol.server.ProjectileSpawn",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 29
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/encode-kind-two.input.json",
+        "sha256": "sha256:75a0a3e9e01b17b3b4605f078c8845a70e043efa3ccc2b5d25f01b81c9379cdf"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/encode-kind-two.expected.json",
+        "sha256": "sha256:986d015321a2eb07422b25a336ae52c8c5cb2dc5199a6fc758e8b0e0bcd32b8a"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileSpawn/45/encode-valid",
+      "family": "protocol.server.ProjectileSpawn",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 29
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/encode-valid.input.json",
+        "sha256": "sha256:41518f5e14d4bac5080936c6f537f63634a4ed2f57e8dbf84c3f2c5803acfe1f"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileSpawn/encode-valid.expected.json",
+        "sha256": "sha256:64fb41d2cc45723926360d196273bd838db9819166299aa8582b44aa552bc2e5"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileState/45/decode-count-above",
+      "family": "protocol.server.ProjectileState",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 30
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileState/decode-count-above.input.bin",
+        "sha256": "sha256:cbdef1e3adebf86eac6c0a997aaf70bfef4c043fae8c4a047c67ddcbe7f8afc0"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileState/decode-count-above.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileState/45/decode-count-one-hundred-twenty-eight",
+      "family": "protocol.server.ProjectileState",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 30
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileState/decode-count-one-hundred-twenty-eight.input.bin",
+        "sha256": "sha256:32c9f5dd79ebe7985fdb02031cd379f80f36a407d53e528fa0b29dd5d906abdc"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileState/decode-count-one-hundred-twenty-eight.expected.json",
+        "sha256": "sha256:c8f222d8a59e018e5ba6efec00f380b8b24c3dc8b0cba2940252b16402cad230"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileState/45/decode-duplicate-ids",
+      "family": "protocol.server.ProjectileState",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 30
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileState/decode-duplicate-ids.input.bin",
+        "sha256": "sha256:b0f5fecd0ec10fb434d4d81161db391024cb50ae0439bdf11b18b1c937c8a1aa"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileState/decode-duplicate-ids.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileState/45/decode-id-zero",
+      "family": "protocol.server.ProjectileState",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 30
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileState/decode-id-zero.input.bin",
+        "sha256": "sha256:346d8bb7622cd1eea52360a620f3c4c6f7401dd8c94b5108de966e8e55850330"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileState/decode-id-zero.expected.json",
+        "sha256": "sha256:e18b772c91375783f134c2837eb4944e794f26958ccdc48661b4f68a1ec3e5f4"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileState/45/decode-nan-position",
+      "family": "protocol.server.ProjectileState",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 30
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileState/decode-nan-position.input.bin",
+        "sha256": "sha256:393ce2b7d7585b1bf8b83ca1dc648f5bc49d7621482dc6044d191a727cb0000f"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileState/decode-nan-position.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileState/45/decode-trailing-byte",
+      "family": "protocol.server.ProjectileState",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 30
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileState/decode-trailing-byte.input.bin",
+        "sha256": "sha256:0449304d08b584d8d41bb16158cf35927aca18354e2c6c7a0ab08a4abcaa1022"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileState/decode-trailing-byte.expected.json",
+        "sha256": "sha256:6a6aba5322f6bb08d116cc9b314494e850b3adbad2801f6f0078ec3215fd5f44"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileState/45/decode-valid",
+      "family": "protocol.server.ProjectileState",
+      "version": "45",
+      "operation": "decode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 30
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileState/decode-valid.input.bin",
+        "sha256": "sha256:af0f8f263dee372180a41c4250011efabaab8800b914cdcae34826cabdd9860a"
+      },
+      "input_format": "binary",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileState/decode-valid.expected.json",
+        "sha256": "sha256:129fb12d5e2193cba64d582499e71af157ca7713227bf92132c1af3fd963c189"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileState/45/encode-nan-position",
+      "family": "protocol.server.ProjectileState",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 30
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileState/encode-nan-position.input.json",
+        "sha256": "sha256:999ad5792e6e6c5626388aa35da10b2d955af5144cf51d331f078dcf01b4f668"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileState/encode-nan-position.expected.json",
+        "sha256": "sha256:4f4dd5dba0a7a5160713835c2f6772610a1b6a65dae69246f672ea0d2242f0a2"
+      },
+      "checkpoints": [
+        "0"
+      ],
+      "rust_consumer": "mornlea_protocol"
+    },
+    {
+      "id": "protocol.server.ProjectileState/45/encode-valid",
+      "family": "protocol.server.ProjectileState",
+      "version": "45",
+      "operation": "encode",
+      "packet_key": {
+        "direction": "server-to-client",
+        "state": "play",
+        "id": 30
+      },
+      "input": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileState/encode-valid.input.json",
+        "sha256": "sha256:939f95df2a794eb83443b69c2e2011ea0086f26126f3d4e0d146bc9d7a92e697"
+      },
+      "input_format": "json",
+      "expected": {
+        "path": "testdata/runtime-migration/cases/protocol/ProjectileState/encode-valid.expected.json",
+        "sha256": "sha256:eb6cab9712c316112eab353878f03d4023a550de61fcbeed10adbd31c1a52565"
       },
       "checkpoints": [
         "0"

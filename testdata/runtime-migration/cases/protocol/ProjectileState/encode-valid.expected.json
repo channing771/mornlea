@@ -1,0 +1,27 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:af0f8f263dee372180a41c4250011efabaab8800b914cdcae34826cabdd9860a",
+  "fields": {
+    "server_tick": "0",
+    "states": [
+      {
+        "id": "1",
+        "position": [
+          "80000000",
+          "3f800000",
+          "40000000"
+        ]
+      },
+      {
+        "id": "2",
+        "position": [
+          "40400000",
+          "40800000",
+          "40a00000"
+        ]
+      }
+    ]
+  },
+  "kind": "ok"
+}
+
