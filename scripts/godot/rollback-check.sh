@@ -13,6 +13,7 @@ reject() {
 legacy_targets=(build test run companion-agent-check)
 makefile="${repository_root}/Makefile"
 workflow="${repository_root}/.github/workflows/ci.yml"
+optional_workflow="${repository_root}/.github/workflows/godot.yml"
 
 for target in "${legacy_targets[@]}"; do
   recipe="$(awk -v target="${target}" '
@@ -25,8 +26,41 @@ for target in "${legacy_targets[@]}"; do
   fi
 done
 
-if grep -E 'needs:.*godot' "${workflow}" >/dev/null; then
-  reject "required CI test job must not depend on the optional Godot job"
+if [[ ! -f "${workflow}" ]]; then
+  reject "required CI workflow is missing"
+elif ! awk '
+  /^[[:space:]]*#/ {next}
+  /^jobs:/ {active=1; next}
+  active && /^[^[:space:]]/ {active=0}
+  active && tolower($0) ~ /godot/ {found=1}
+  END {exit found ? 1 : 0}
+' "${workflow}"; then
+  reject "required CI merge gate and job blocks must stay independent of Godot"
+fi
+
+# The optional workflow remains real validation evidence after extraction;
+# deleting it or reconnecting merge authority is not a successful rollback.
+if [[ ! -f "${optional_workflow}" ]]; then
+  reject "optional Godot workflow is missing"
+else
+  for entry in '  godot-static:' '  godot-runtime:' \
+    'make godot-project-check' 'make godot-asset-check' \
+    'make godot-python-check' 'make godot-smoke'; do
+    if ! awk -v entry="${entry}" '
+      /^[[:space:]]*#/ {next}
+      index($0, entry) {found=1}
+      END {exit found ? 0 : 1}
+    ' "${optional_workflow}"; then
+      reject "optional Godot workflow is missing validation entry: ${entry}"
+    fi
+  done
+  if ! awk '
+    /^[[:space:]]*#/ {next}
+    /merge-gate|continue-on-error/ {found=1}
+    END {exit found ? 1 : 0}
+  ' "${optional_workflow}"; then
+    reject "optional Godot workflow must fail closed without required CI merge gate authority"
+  fi
 fi
 
 if ! grep -q 'Decision: GO' "${repository_root}/docs/notes/godot-client-pilot-report.md"; then

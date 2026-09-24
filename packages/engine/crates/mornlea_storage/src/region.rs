@@ -3,11 +3,11 @@
 //! Ported from the Go `region` storage codec. A region file is a fixed
 //! superblock followed by two mutually-backing banks; a chunk payload lives in
 //! the data area after the fixed headers. Selection prefers the newest valid
-//! bank and ties break to bank A, so a crash always leaves a committed index.
+//! committed bank; identical ties select bank A and divergent ties fail.
 
 use crate::bytes::is_zero;
 use crate::crc32c::{crc32c, crc32c_join};
-use crate::error::{StorageResult, corrupt, future_version};
+use crate::error::{StorageError, StorageResult, corrupt, future_version};
 
 /// Sector granularity of a region file; every extent offset and length is a
 /// multiple of this.
@@ -102,11 +102,12 @@ pub struct Entry {
     pub payload_crc32c: u32,
 }
 
-/// One of the two backing bank indexes inside a region file.
+/// One of the two backing bank indexes inside a region file. Its boxed array
+/// keeps slot cardinality fixed without placing the full bank on the stack.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Bank {
     pub generation: u64,
-    pub entries: Vec<Entry>,
+    pub entries: Box<[Entry; REGION_SLOTS]>,
 }
 
 /// A chunk coordinate used to derive the owning region and slot.
@@ -122,27 +123,66 @@ impl Bank {
     pub fn empty() -> Self {
         Self {
             generation: 0,
-            entries: vec![Entry::default(); REGION_SLOTS],
+            entries: vec![Entry::default(); REGION_SLOTS]
+                .into_boxed_slice()
+                .try_into()
+                .expect("fixed number of region slots"),
         }
+    }
+
+    /// Takes ownership of exactly one bank of entries and rejects any
+    /// noncanonical structure before it can be published by an encoder.
+    pub fn try_from_entries(generation: u64, entries: Vec<Entry>) -> StorageResult<Self> {
+        if entries.len() != REGION_SLOTS {
+            return Err(corrupt(
+                "region bank entries",
+                format!("{} entries, want {REGION_SLOTS}", entries.len()),
+            ));
+        }
+        let entries: Box<[Entry; REGION_SLOTS]> = entries
+            .into_boxed_slice()
+            .try_into()
+            .map_err(|_| corrupt("region bank entries", "invalid fixed length"))?;
+        let bank = Self {
+            generation,
+            entries,
+        };
+        validate_region_bank(&bank, 0, false)?;
+        Ok(bank)
     }
 }
 
 /// Encodes the region superblock for `key`.
 pub fn encode_superblock(key: RegionKey) -> [u8; SUPERBLOCK_LENGTH] {
     let mut encoded = [0u8; SUPERBLOCK_LENGTH];
-    encoded[SUPER_MAGIC..SUPER_MAGIC + 4].copy_from_slice(&SUPERBLOCK_MAGIC);
-    put_u32(&mut encoded, SUPER_VERSION, CURRENT_VERSION);
-    put_u32(&mut encoded, SUPER_SECTOR_SIZE, SECTOR_SIZE);
-    put_u32(&mut encoded, SUPER_DIMENSION, key.dimension as u32);
-    put_u32(&mut encoded, SUPER_REGION_X, key.x as u32);
-    put_u32(&mut encoded, SUPER_REGION_Z, key.z as u32);
-    put_u32(&mut encoded, SUPER_BANK_A_START, BANK_A_START_SECTOR);
-    put_u32(&mut encoded, SUPER_BANK_B_START, BANK_B_START_SECTOR);
-    put_u32(&mut encoded, SUPER_BANK_SECTORS, BANK_SECTORS);
-    put_u32(&mut encoded, SUPER_DATA_START, DATA_START_SECTOR);
-    let checksum = crc32c(&encoded[..SUPERBLOCK_CRC_OFFSET]);
-    put_u32(&mut encoded, SUPERBLOCK_CRC_OFFSET, checksum);
+    encode_superblock_into(key, &mut encoded).expect("fixed superblock output capacity");
     encoded
+}
+
+/// Writes a complete superblock into a caller buffer, preserving the tail and
+/// leaving the entire buffer unchanged if it is too short.
+pub fn encode_superblock_into(key: RegionKey, dst: &mut [u8]) -> StorageResult<usize> {
+    if dst.len() < SUPERBLOCK_LENGTH {
+        return Err(StorageError::OutputTooSmall {
+            needed: SUPERBLOCK_LENGTH,
+            available: dst.len(),
+        });
+    }
+    let encoded = &mut dst[..SUPERBLOCK_LENGTH];
+    encoded.fill(0);
+    encoded[SUPER_MAGIC..SUPER_MAGIC + 4].copy_from_slice(&SUPERBLOCK_MAGIC);
+    put_u32(encoded, SUPER_VERSION, CURRENT_VERSION);
+    put_u32(encoded, SUPER_SECTOR_SIZE, SECTOR_SIZE);
+    put_u32(encoded, SUPER_DIMENSION, key.dimension as u32);
+    put_u32(encoded, SUPER_REGION_X, key.x as u32);
+    put_u32(encoded, SUPER_REGION_Z, key.z as u32);
+    put_u32(encoded, SUPER_BANK_A_START, BANK_A_START_SECTOR);
+    put_u32(encoded, SUPER_BANK_B_START, BANK_B_START_SECTOR);
+    put_u32(encoded, SUPER_BANK_SECTORS, BANK_SECTORS);
+    put_u32(encoded, SUPER_DATA_START, DATA_START_SECTOR);
+    let checksum = crc32c(&encoded[..SUPERBLOCK_CRC_OFFSET]);
+    put_u32(encoded, SUPERBLOCK_CRC_OFFSET, checksum);
+    Ok(SUPERBLOCK_LENGTH)
 }
 
 /// Decodes and validates the region superblock against `key`.
@@ -192,47 +232,50 @@ pub fn decode_superblock(key: RegionKey, encoded: &[u8]) -> StorageResult<()> {
 /// Encodes one region bank for `key`, rejecting structures that could never be
 /// read back.
 pub fn encode_region_bank(key: RegionKey, bank: &Bank) -> StorageResult<[u8; BANK_SIZE]> {
-    validate_region_bank(bank, 0, false)?;
     let mut encoded = [0u8; BANK_SIZE];
+    encode_region_bank_into(key, bank, &mut encoded)?;
+    Ok(encoded)
+}
+
+/// Writes one canonical bank directly into a caller buffer. All validation
+/// and capacity checks precede the first write, so failure publishes no bytes.
+pub fn encode_region_bank_into(
+    key: RegionKey,
+    bank: &Bank,
+    dst: &mut [u8],
+) -> StorageResult<usize> {
+    validate_region_bank(bank, 0, false)?;
+    if dst.len() < BANK_SIZE {
+        return Err(StorageError::OutputTooSmall {
+            needed: BANK_SIZE,
+            available: dst.len(),
+        });
+    }
+    let encoded = &mut dst[..BANK_SIZE];
+    encoded.fill(0);
     encoded[BANK_MAGIC_OFFSET..BANK_MAGIC_OFFSET + 4].copy_from_slice(&BANK_MAGIC);
-    put_u32(&mut encoded, BANK_VERSION, CURRENT_VERSION);
-    put_u32(&mut encoded, BANK_SECTOR_SIZE, SECTOR_SIZE);
-    put_u32(&mut encoded, BANK_DIMENSION, key.dimension as u32);
-    put_u32(&mut encoded, BANK_REGION_X, key.x as u32);
-    put_u32(&mut encoded, BANK_REGION_Z, key.z as u32);
+    put_u32(encoded, BANK_VERSION, CURRENT_VERSION);
+    put_u32(encoded, BANK_SECTOR_SIZE, SECTOR_SIZE);
+    put_u32(encoded, BANK_DIMENSION, key.dimension as u32);
+    put_u32(encoded, BANK_REGION_X, key.x as u32);
+    put_u32(encoded, BANK_REGION_Z, key.z as u32);
     encoded[BANK_GENERATION..BANK_GENERATION + 8].copy_from_slice(&bank.generation.to_le_bytes());
-    put_u32(&mut encoded, BANK_ENTRY_COUNT, REGION_SLOTS as u32);
-    put_u32(&mut encoded, BANK_ENTRY_SIZE, REGION_ENTRY_SIZE as u32);
-    put_u32(&mut encoded, BANK_SECTORS_OFFSET, BANK_SECTORS);
-    put_u32(&mut encoded, BANK_DATA_START, DATA_START_SECTOR);
+    put_u32(encoded, BANK_ENTRY_COUNT, REGION_SLOTS as u32);
+    put_u32(encoded, BANK_ENTRY_SIZE, REGION_ENTRY_SIZE as u32);
+    put_u32(encoded, BANK_SECTORS_OFFSET, BANK_SECTORS);
+    put_u32(encoded, BANK_DATA_START, DATA_START_SECTOR);
     for (slot, entry) in bank.entries.iter().enumerate() {
         let offset = BANK_ENTRIES + slot * REGION_ENTRY_SIZE;
-        put_u32(
-            &mut encoded,
-            offset + ENTRY_OFFSET_SECTOR,
-            entry.offset_sector,
-        );
-        put_u32(
-            &mut encoded,
-            offset + ENTRY_SECTOR_COUNT,
-            entry.sector_count,
-        );
-        put_u32(
-            &mut encoded,
-            offset + ENTRY_PAYLOAD_LENGTH,
-            entry.payload_length,
-        );
+        put_u32(encoded, offset + ENTRY_OFFSET_SECTOR, entry.offset_sector);
+        put_u32(encoded, offset + ENTRY_SECTOR_COUNT, entry.sector_count);
+        put_u32(encoded, offset + ENTRY_PAYLOAD_LENGTH, entry.payload_length);
         encoded[offset + ENTRY_REVISION..offset + ENTRY_REVISION + 8]
             .copy_from_slice(&entry.revision.to_le_bytes());
-        put_u32(
-            &mut encoded,
-            offset + ENTRY_PAYLOAD_CRC32C,
-            entry.payload_crc32c,
-        );
+        put_u32(encoded, offset + ENTRY_PAYLOAD_CRC32C, entry.payload_crc32c);
     }
-    let checksum = region_bank_checksum(&encoded);
-    put_u32(&mut encoded, BANK_CRC_OFFSET, checksum);
-    Ok(encoded)
+    let checksum = region_bank_checksum(encoded);
+    put_u32(encoded, BANK_CRC_OFFSET, checksum);
+    Ok(BANK_SIZE)
 }
 
 /// Decodes and validates one region bank. `file_size` is the physical region
@@ -280,9 +323,9 @@ pub fn decode_region_bank(key: RegionKey, encoded: &[u8], file_size: i64) -> Sto
     if !is_zero(&encoded[BANK_PADDING..]) {
         return Err(corrupt("region bank padding", "nonzero"));
     }
-    let generation = u64_at(encoded, BANK_GENERATION);
-    let mut entries = vec![Entry::default(); REGION_SLOTS];
-    for (slot, entry) in entries.iter_mut().enumerate() {
+    let mut bank = Bank::empty();
+    bank.generation = u64_at(encoded, BANK_GENERATION);
+    for (slot, entry) in bank.entries.iter_mut().enumerate() {
         let offset = BANK_ENTRIES + slot * REGION_ENTRY_SIZE;
         *entry = Entry {
             offset_sector: u32_at(encoded, offset + ENTRY_OFFSET_SECTOR),
@@ -292,10 +335,6 @@ pub fn decode_region_bank(key: RegionKey, encoded: &[u8], file_size: i64) -> Sto
             payload_crc32c: u32_at(encoded, offset + ENTRY_PAYLOAD_CRC32C),
         };
     }
-    let bank = Bank {
-        generation,
-        entries,
-    };
     validate_region_bank(&bank, file_size, true)?;
     Ok(bank)
 }

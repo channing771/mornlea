@@ -1,6 +1,6 @@
 ---
 doc_id: documentation-map
-doc_revision: 2026-09-15.2
+doc_revision: 2026-09-23.1
 language: en
 counterpart: README.zh.md
 ---
@@ -18,6 +18,7 @@ This index is navigation only; it does not repeat the content of the linked docu
 | Active changes | [`openspec/changes/`](../openspec/changes/) | Changes being proposed or implemented |
 | OpenSpec workflow | [`docs/openspec.md`](openspec.md) | Proposal, implementation, validation, and archive rules |
 | Development process | [`docs/development-process.md`](development-process.md) | Task roles, execution stages, review, and gates |
+| Continuous integration | [`docs/continuous-integration.md`](continuous-integration.md) | Required and optional workflows, platform routing, artifacts, and local entry points |
 | Test organization and quick checks | [`docs/test-organization.md`](test-organization.md), [`docs/notes/test-quickstart.md`](notes/test-quickstart.md) | Test-file organization, tiers, and focused commands |
 | Progress and backlog | [`docs/notes/progress.md`](notes/progress.md), [`docs/feature-backlog.md`](feature-backlog.md) | Implementation chronology, current plans, and backlog |
 | Agent automation | [`docs/agents/README.md`](agents/README.md), [`docs/notes/dev-capture.md`](notes/dev-capture.md) | Worker roles, scheduling entry points, the local status board, and capture from a running client |

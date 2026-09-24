@@ -30,8 +30,8 @@ go: bash go gofmt
 native-linux: bash cargo cc go ldd make nm readelf rustc rustup shasum
 native-macos: bash cargo codesign go install_name_tool make nm rustc rustup shasum
 agent: bash go python3 uv
-godot-static: bash go rg uv
-godot-runtime: bash cargo nm rg rustc rustup uv
+godot-static: bash make rg
+godot-runtime: bash cargo cc clang++ codesign curl ditto git go install_name_tool make nm patch perl pgrep rg rustc rustup sandbox-exec shasum tar unzip uv xcrun
 ```
 
 It checks every command, reports all missing names in lexical order as `missing required executable for <profile>: <name>`, and exits 1 when any are absent. Unknown profiles exit 2 with a usage line. A success prints `CI dependency profile passed: <profile>`.
@@ -40,10 +40,10 @@ It checks every command, reports all missing names in lexical order as `missing 
 
 `scripts/ci/package-inventory.sh` supports `--all`, `--slice client|server|rest`, and `--check`:
 
-- `--all` is the sorted union of Linux/amd64 and Darwin/arm64 `go list -e` results for all module directories parsed from `go work edit -json`.
-- `client` uses the Darwin/arm64 client module package set plus `github.com/channing771/mornlea/packages/tools/gfxspike`.
-- `server` uses the Linux/amd64 server module package set.
-- `rest` uses the Linux/amd64 contracts, shared, tools, and audit package sets; Linux excludes the Darwin-only `gfxspike` package.
+- `--all` is the sorted union of Linux/amd64 and Darwin/arm64 `go list -e` results for all module directories parsed from `go work edit -json`. Both supported source-set queries set `CGO_ENABLED=1`; otherwise a cross-platform query from macOS silently omits the established Linux `packages/shared/nativeabi` package before compilation.
+- `client` uses the cgo-enabled Darwin/arm64 client module package set plus `github.com/channing771/mornlea/packages/tools/gfxspike`.
+- `server` uses the cgo-enabled Linux/amd64 server module package set.
+- `rest` uses the cgo-enabled Linux/amd64 contracts, shared, tools, and audit package sets; Linux excludes the Darwin-only `gfxspike` package while retaining `packages/shared/nativeabi`.
 - `--check` materializes those four lists and invokes `check-package-partitions.sh`.
 
 The script verifies that the parsed module directory set is exactly `packages/audit`, `packages/client`, `packages/contracts`, `packages/server`, `packages/shared`, and `packages/tools` before listing packages. It does not keep a second package-count constant. Planning evidence is 57 packages on Darwin and 54 on Linux; counts are informational, not acceptance constants.
@@ -55,7 +55,7 @@ client: go test "${packages[@]}" -race -p=1 -skip '^TestScenarioV7EightSessionSe
 server/rest: go test "${packages[@]}" -race -p=1
 ```
 
-`make ci-preflight` runs, in order: `doctor.sh preflight`, gofmt cleanliness, `openspec validate --all --strict --no-interactive` through pinned `npx --yes @fission-ai/openspec@1.7.0`, `node --test scripts/agent-hooks/guard.test.mjs`, `make comment-language-check`, `package-inventory.sh --check`, and `go test ./packages/audit -count=1`. It never invokes Cargo, `make rust`, artifact download/verification, or a Godot runtime.
+`make ci-preflight` runs, in order: `doctor.sh preflight`, gofmt cleanliness, `openspec validate --all --strict --no-interactive` through pinned `npx --yes @fission-ai/openspec@1.7.0`, `node --test scripts/agent-hooks/guard.test.mjs`, `make comment-language-check`, `package-inventory.sh --check`, and `go test ./packages/audit -skip '^TestGodotAssetSyncIsDeterministicAndRejectsManualFiles$' -count=1`. The exact asset-sync test is deferred because its generator links the native engine. The full audit suite runs after Linux artifact verification in `linux-quality`. Preflight never invokes Cargo, `make rust`, artifact download/verification, or a Godot runtime.
 
 ## Test-first steps
 
@@ -63,7 +63,7 @@ server/rest: go test "${packages[@]}" -race -p=1
 
 2. Add partition fixtures for a valid four-file set and mutations with a duplicate, client/server overlap, missing package, unexpected package, unsorted line, and empty slice. Each mutation asserts its stable diagnostic and nonzero status.
 
-3. Add a repository test that runs `package-inventory.sh --check`, asserts the exact six module directories through `go work edit -json`, and verifies `gfxspike` occurs exactly once in `client` and never in `rest`.
+3. Add a repository test that runs `package-inventory.sh --check`, asserts the exact six module directories through `go work edit -json`, verifies `gfxspike` occurs exactly once in `client` and never in `rest`, and verifies `packages/shared/nativeabi` occurs exactly once in `rest`. Its fake-command/source assertions pin `CGO_ENABLED=1` for both supported platform queries.
 
 4. Run the red suite:
 

@@ -278,7 +278,7 @@ func requireLinuxServerBundleIdentity(t *testing.T, root string) {
 	if err != nil {
 		t.Fatalf("读取 CI workflow: %v", err)
 	}
-	for _, required := range []string{"linux-server:", "runs-on: ubuntu-latest", "make build-linux-server"} {
+	for _, required := range []string{"native-linux:", "runs-on: ubuntu-24.04", `make ci-native-linux CI_CANDIDATE_SHA="$GITHUB_SHA"`} {
 		if !bytes.Contains(workflow, []byte(required)) {
 			t.Errorf("CI workflow 缺少 Linux native bundle 标记 %q", required)
 		}

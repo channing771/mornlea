@@ -18,8 +18,8 @@ func TestEnglishCommentGateIntegration(t *testing.T) {
 			"make comment-language-check",
 		},
 		filepath.Join(".github", "workflows", "ci.yml"): {
-			"Source comment language gate",
-			"make comment-language-check",
+			"preflight:",
+			"make ci-preflight",
 		},
 	}
 	for path, required := range checks {
@@ -29,5 +29,9 @@ func TestEnglishCommentGateIntegration(t *testing.T) {
 				t.Errorf("%s is missing English-comment gate fragment %q", path, fragment)
 			}
 		}
+	}
+	makefile := readBaselineDoc(t, root, "Makefile")
+	if !strings.Contains(makeTargetRecipe(t, makefile, "ci-preflight"), "$(MAKE) comment-language-check") {
+		t.Error("ci-preflight must invoke the source comment language gate")
 	}
 }

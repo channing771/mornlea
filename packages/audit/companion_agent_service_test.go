@@ -113,38 +113,6 @@ func TestCompanionAgentCIGates(t *testing.T) {
 	}
 }
 
-// TestVerifyNativeArtifactScript 钉住 scripts/ci/verify-native-artifact.sh 的
-// 承重语句。校验逻辑从 ci.yml 的内联块收敛进脚本后，workflow 侧只钉「恰好
-// 调用一次且位于 make 门禁之前」的编排位置；脚本本体若被删改（丢掉行数、
-// SHA 或 sha256 任一环）在这里暴露，否则三个 job 共享的信任基准静默变松。
-func TestVerifyNativeArtifactScript(t *testing.T) {
-	script := readBaselineDoc(t, repositoryRoot(t), filepath.Join("scripts", "ci", "verify-native-artifact.sh"))
-	for _, required := range []string{
-		"set -euo pipefail",
-		"ENGINE_DYLIB=packages/engine/target/release/libmornlea_engine.dylib",
-		"CLIENT_DYLIB=packages/engine/target/release/libmornlea_client.dylib",
-		`test "$(cat packages/engine/target/release/native-source-sha.txt)" = "$GITHUB_SHA"`,
-		`test "$(wc -l < "$MANIFEST" | tr -d ' ')" = 3`,
-		`IFS=' ' read -r kind sha extra`,
-		`test "$kind" = sha`,
-		`test "$sha" = "$GITHUB_SHA"`,
-		`test -z "$extra"`,
-		`expected_path=$1`,
-		`IFS=' ' read -r path size digest extra`,
-		`test "$path" = "$expected_path"`,
-		`test -z "$extra"`,
-		`case "$size" in ''|*[!0-9]*) exit 1 ;; esac`,
-		`test "$size" = "$(stat -f '%z' "$path")"`,
-		`test "$digest" = "$(shasum -a 256 "$path" | awk '{print $1}')"`,
-		`validate_artifact "$ENGINE_DYLIB"`,
-		`validate_artifact "$CLIENT_DYLIB"`,
-	} {
-		if !strings.Contains(script, required) {
-			t.Errorf("verify-native-artifact.sh 缺少承重语句 %s", required)
-		}
-	}
-}
-
 func TestCompanionGoProductionDoesNotEmbedPython(t *testing.T) {
 	graph, err := loadCompanionProductionImportGraph(repositoryRoot(t))
 	if err != nil {
@@ -156,17 +124,29 @@ func TestCompanionGoProductionDoesNotEmbedPython(t *testing.T) {
 }
 
 type companionWorkflow struct {
-	Jobs map[string]companionWorkflowJob `yaml:"jobs"`
+	Name        string               `yaml:"name"`
+	On          map[string]yaml.Node `yaml:"on"`
+	Concurrency struct {
+		Group  string `yaml:"group"`
+		Cancel bool   `yaml:"cancel-in-progress"`
+	} `yaml:"concurrency"`
+	Permissions map[string]string               `yaml:"permissions"`
+	Env         map[string]string               `yaml:"env"`
+	Jobs        map[string]companionWorkflowJob `yaml:"jobs"`
 }
 
 type companionWorkflowJob struct {
-	If     companionYAMLString     `yaml:"if"`
-	Needs  companionWorkflowNeeds  `yaml:"needs"`
-	RunsOn companionYAMLString     `yaml:"runs-on"`
-	Steps  []companionWorkflowStep `yaml:"steps"`
+	Timeout     int                     `yaml:"timeout-minutes"`
+	Permissions map[string]string       `yaml:"permissions"`
+	Env         map[string]string       `yaml:"env"`
+	If          companionYAMLString     `yaml:"if"`
+	Needs       companionWorkflowNeeds  `yaml:"needs"`
+	RunsOn      companionYAMLString     `yaml:"runs-on"`
+	Steps       []companionWorkflowStep `yaml:"steps"`
 }
 
 type companionWorkflowStep struct {
+	If   companionYAMLString          `yaml:"if"`
 	Name string                       `yaml:"name"`
 	Uses string                       `yaml:"uses"`
 	Run  string                       `yaml:"run"`
@@ -225,18 +205,18 @@ func companionAgentWorkflowViolations(source []byte) []string {
 		return []string{fmt.Sprintf("CI YAML 结构或 scalar 类型非法: %v", err)}
 	}
 	var violations []string
-	integration, ok := workflow.Jobs["integration"]
+	integration, ok := workflow.Jobs["integration-server"]
 	if !ok {
 		return []string{"CI 缺少 integration job"}
 	}
-	if !slices.Equal([]string(integration.Needs), []string{"native-macos"}) {
-		violations = append(violations, fmt.Sprintf("integration needs=%v，必须精确依赖 native-macos", integration.Needs))
+	if !slices.Equal([]string(integration.Needs), []string{"native-linux"}) {
+		violations = append(violations, fmt.Sprintf("integration needs=%v，必须精确依赖 native-linux", integration.Needs))
 	}
-	if integration.RunsOn.Value != "macos-latest" {
-		violations = append(violations, fmt.Sprintf("integration runs-on=%q，必须是 macos-latest", integration.RunsOn.Value))
+	if integration.RunsOn.Value != "ubuntu-24.04" {
+		violations = append(violations, fmt.Sprintf("integration runs-on=%q，必须是 ubuntu-24.04", integration.RunsOn.Value))
 	}
 
-	pythonIndexes := workflowUsesStepIndexes(integration.Steps, "actions/setup-python@v5")
+	pythonIndexes := workflowUsesStepIndexes(integration.Steps, "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1")
 	if len(pythonIndexes) != 1 {
 		violations = append(violations, fmt.Sprintf("integration setup-python 步骤数=%d，想要 1", len(pythonIndexes)))
 	} else if value, err := workflowStringWith(integration.Steps[pythonIndexes[0]], "python-version"); err != nil {
@@ -245,7 +225,7 @@ func companionAgentWorkflowViolations(source []byte) []string {
 		violations = append(violations, fmt.Sprintf("integration Python 3.12 被改为 %q", value))
 	}
 
-	uvIndexes := workflowUsesStepIndexes(integration.Steps, "astral-sh/setup-uv@v6")
+	uvIndexes := workflowUsesStepIndexes(integration.Steps, "astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78")
 	if len(uvIndexes) != 1 {
 		violations = append(violations, fmt.Sprintf("integration setup-uv 步骤数=%d，想要 1", len(uvIndexes)))
 	} else {
@@ -275,44 +255,40 @@ func companionAgentWorkflowViolations(source []byte) []string {
 		}
 	}
 
-	downloadIndexes := workflowUsesStepIndexes(integration.Steps, "actions/download-artifact@v4")
+	downloadIndexes := workflowUsesStepIndexes(integration.Steps, "actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0")
 	downloadIndex := uniqueWorkflowStepIndex(&violations, "same-SHA native artifact download", downloadIndexes)
 	if downloadIndex >= 0 {
 		step := integration.Steps[downloadIndex]
-		if value, err := workflowStringWith(step, "name"); err != nil || value != "native-macos-${{ github.sha }}" {
-			violations = append(violations, "native artifact download 必须使用 same-SHA 名称 native-macos-${{ github.sha }}")
+		if value, err := workflowStringWith(step, "name"); err != nil || value != "native-linux-${{ github.sha }}" {
+			violations = append(violations, "native artifact download 必须使用 same-SHA 名称 native-linux-${{ github.sha }}")
 		}
-		if value, err := workflowStringWith(step, "path"); err != nil || value != "packages/engine/target/release" {
-			violations = append(violations, "native artifact download path 必须是 packages/engine/target/release")
+		if value, err := workflowStringWith(step, "path"); err != nil || value != "." {
+			violations = append(violations, "native artifact download path 必须是 .")
 		}
 	}
 
-	verifyIndex := uniqueWorkflowStepIndex(&violations, "native artifact 校验脚本调用",
-		workflowExactCommandStepIndexes(integration.Steps, "scripts/ci/verify-native-artifact.sh"))
-	checkIndex := uniqueWorkflowStepIndex(&violations, "make companion-agent-check", workflowExactCommandStepIndexes(integration.Steps, "make companion-agent-check"))
-	processIndex := uniqueWorkflowStepIndex(&violations, "make companion-agent-integration", workflowExactCommandStepIndexes(integration.Steps, "make companion-agent-integration"))
-	if downloadIndex >= 0 && verifyIndex >= 0 && checkIndex >= 0 && processIndex >= 0 &&
-		!(downloadIndex < verifyIndex && verifyIndex < checkIndex && verifyIndex < processIndex) {
-		violations = append(violations, "same-SHA artifact download 与校验脚本必须在两条 Agent make 门禁 before 执行")
+	commandIndex := uniqueWorkflowStepIndex(&violations, "make ci-integration-server", workflowExactCommandStepIndexes(integration.Steps, `make ci-integration-server CI_CANDIDATE_SHA="$GITHUB_SHA"`))
+	if downloadIndex >= 0 && commandIndex >= 0 && downloadIndex >= commandIndex {
+		violations = append(violations, "same-SHA artifact download must execute before make ci-integration-server")
 	}
 	for _, setup := range append(slices.Clone(pythonIndexes), uvIndexes...) {
-		if (checkIndex >= 0 && setup >= checkIndex) || (processIndex >= 0 && setup >= processIndex) {
-			violations = append(violations, "Python/uv setup 必须先于两条 Agent make 门禁")
+		if commandIndex >= 0 && setup >= commandIndex {
+			violations = append(violations, "Python/uv setup must execute before make ci-integration-server")
 		}
 	}
 
-	summary, ok := workflow.Jobs["test"]
+	summary, ok := workflow.Jobs["merge-gate"]
 	if !ok {
-		violations = append(violations, "CI 缺少最终 test job")
+		violations = append(violations, "CI 缺少最终 merge-gate job")
 	} else {
 		if summary.If.Value != "${{ always() }}" {
-			violations = append(violations, "最终 test job if 必须精确为 ${{ always() }}")
+			violations = append(violations, "最终 merge-gate job if 必须精确为 ${{ always() }}")
 		}
-		if !slices.Contains([]string(summary.Needs), "integration") {
-			violations = append(violations, "最终 test job needs integration")
+		if !slices.Contains([]string(summary.Needs), "integration-server") {
+			violations = append(violations, "最终 merge-gate job needs integration")
 		}
-		if len(workflowStatementStepIndexes(summary.Steps, `test "${{ needs.integration.result }}" = success`)) != 1 {
-			violations = append(violations, "最终 test job 缺少精确的 integration result success 断言")
+		if len(workflowStatementStepIndexes(summary.Steps, `test "${{ needs.integration-server.result }}" = success`)) != 1 {
+			violations = append(violations, "最终 merge-gate job 缺少精确的 integration result success 断言")
 		}
 	}
 	slices.Sort(violations)

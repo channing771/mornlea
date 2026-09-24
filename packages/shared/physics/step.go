@@ -63,15 +63,25 @@ func StepWithTunables(
 	return decodeStepOutput(output[:])
 }
 
-// movementTargetFromYaw 与 Rust 的 movement_target 逐位一致（三角已由调用方算好）。
+// stepVectorLength mirrors Rust's fused vector length for finite fixed-step inputs. The
+// explicit fused boundaries keep the sweep envelope aligned on architectures
+// where Go does not fuse the equivalent `mgl32.Vec3.Len` expression.
+func stepVectorLength(v mgl32.Vec3) float32 {
+	inner := float32(math.FMA(float64(v[0]), float64(v[0]), float64(v[1]*v[1])))
+	sum := float32(math.FMA(float64(v[2]), float64(v[2]), float64(inner)))
+	return float32(math.Sqrt(float64(sum)))
+}
+
+// movementTargetFromYaw mirrors the Rust movement target after the caller computes trigonometry.
 func movementTargetFromYaw(moveX, moveZ int8, walkSpeed, yawSin, yawCos float32) mgl32.Vec3 {
 	forward := mgl32.Vec3{-yawSin, 0, -yawCos}
 	right := mgl32.Vec3{yawCos, 0, -yawSin}
 	intent := right.Mul(float32(moveX)).Add(forward.Mul(float32(moveZ)))
-	if intent.Len() == 0 {
+	length := stepVectorLength(intent)
+	if length == 0 {
 		return mgl32.Vec3{}
 	}
-	return intent.Normalize().Mul(walkSpeed)
+	return intent.Mul(1 / length).Mul(walkSpeed)
 }
 
 // stepSweepBounds 计算积分位移的凸包界。Rust 积分后自检位移落在界内。
@@ -90,15 +100,15 @@ func stepSweepBounds(state State, input Input, tunables Tunables, yawSin, yawCos
 	target := movementTargetFromYaw(input.MoveX, input.MoveZ, walkSpeed, yawSin, yawCos)
 	horizontal := mgl32.Vec3{state.Velocity.X(), 0, state.Velocity.Z()}
 	if state.OnGround {
-		if target.Len() == 0 {
+		if stepVectorLength(target) == 0 {
 			horizontal = moveToward(horizontal, mgl32.Vec3{}, tunables.GroundDeceleration*FixedDeltaSeconds)
 		} else {
 			horizontal = moveToward(horizontal, target, tunables.GroundAcceleration*FixedDeltaSeconds)
 		}
 	} else {
 		horizontal = moveToward(horizontal, target, tunables.AirAcceleration*FixedDeltaSeconds)
-		if horizontal.Len() > tunables.WalkSpeed {
-			horizontal = horizontal.Normalize().Mul(tunables.WalkSpeed)
+		if length := stepVectorLength(horizontal); length > tunables.WalkSpeed {
+			horizontal = horizontal.Mul(1 / length).Mul(tunables.WalkSpeed)
 		}
 	}
 	if input.BodyInFluid {

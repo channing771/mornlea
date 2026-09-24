@@ -1,81 +1,32 @@
-name: CI
+name: Required CI
 
 on:
   push:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: required-ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_TARGET_DIR: ${{ github.workspace }}/packages/engine/target/cargo
+
 jobs:
-  native-macos:
-    runs-on: macos-latest
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - name: 记录开始时间
+      - name: Record start time
         run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
-      - uses: actions/checkout@v4
-
-      - name: Rust 工具链身份
-        run: |
-          cd packages/engine
-          rustup show active-toolchain
-          rustc --version
-          cargo --version
-
-      - name: Rust 格式、静态检查与单测
-        run: make rust-check
-
-      - name: 构建 Rust cdylib
-        run: make rust
-
-      - name: 写入构建元数据
-        run: |
-          echo "$GITHUB_SHA" > packages/engine/target/release/native-source-sha.txt
-          {
-            printf 'sha %s\n' "$GITHUB_SHA"
-            for path in \
-              packages/engine/target/release/libmornlea_engine.dylib \
-              packages/engine/target/release/libmornlea_client.dylib; do
-              printf '%s %s %s\n' \
-                "$path" \
-                "$(stat -f '%z' "$path")" \
-                "$(shasum -a 256 "$path" | awk '{print $1}')"
-            done
-          } > packages/engine/target/release/native-artifact-manifest.txt
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: native-macos-${{ github.sha }}
-          if-no-files-found: error
-          retention-days: 1
-          path: |
-            packages/engine/target/release/libmornlea_engine.dylib
-            packages/engine/target/release/libmornlea_client.dylib
-            packages/engine/target/release/native-source-sha.txt
-            packages/engine/target/release/native-artifact-manifest.txt
-
-      - name: 记录 native 构建信息
-        if: ${{ always() }}
-        run: |
-          {
-            echo "native-macos seconds: $(( $(date +%s) - CI_START_EPOCH ))"
-            echo "runner: ${RUNNER_OS}/$(uname -m)"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  quality:
-    needs: native-macos
-    runs-on: macos-latest
-    steps:
-      - name: 记录开始时间
-        run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: '1.26'
-          # 根模块已解散，go.sum 分散在各单元模块；setup-go 的缓存 key 需要覆盖
-          # 全部模块的依赖清单。
+          # Header changes invalidate cached cgo ABI constants.
           cache-dependency-path: |
             packages/shared/go.sum
             packages/server/go.sum
@@ -84,80 +35,46 @@ jobs:
             packages/audit/go.sum
             packages/engine/include/mornlea_engine.h
             packages/engine/include/mornlea_client.h
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          node-version: '20'
-      - uses: actions/download-artifact@v4
-        with:
-          name: native-macos-${{ github.sha }}
-          path: packages/engine/target/release
-      - name: 校验 native artifact
-        run: scripts/ci/verify-native-artifact.sh
-      - name: OpenSpec 规格门禁
-        run: npx --yes @fission-ai/openspec@1.7.0 validate --all --strict --no-interactive
-      - name: Agent Hooks 策略测试
-        run: node --test scripts/agent-hooks/guard.test.mjs
-      - name: Source comment language gate
-        run: make comment-language-check
-      - name: 架构、存储与协议门禁
-        run: go test ./packages/audit ./packages/server/storage/... ./packages/shared/network/... ./packages/shared/physics -v
-      - name: Race 分片全集自检
+          node-version: '24'
+      - name: Install policy dependencies
         run: |
-          # 根模块已解散：全部包都在 packages/ 下的六个 workspace 模块里，
-          # `go list ./...` 在仓库根不可用；分片联合集必须与六模块全集同源。
-          {
-            go list ./packages/contracts/...
-            go list ./packages/shared/...
-            go list ./packages/server/...
-            go list ./packages/client/...
-            go list ./packages/tools/...
-            go list ./packages/audit/...
-          } | sort -u > /tmp/all-packages.txt
-          {
-            go list ./packages/client/...
-            go list ./packages/server/...
-            go list ./packages/contracts/... ./packages/shared/... ./packages/tools/... ./packages/audit/...
-          } | sort -u > /tmp/sharded-packages.txt
-          diff -u /tmp/all-packages.txt /tmp/sharded-packages.txt
-      - name: 静态检查
-        run: |
-          go vet ./packages/contracts/... ./packages/shared/... ./packages/server/... ./packages/client/... ./packages/tools/... ./packages/audit/...
-          gofmt -l . | tee /tmp/fmt.txt
-          test ! -s /tmp/fmt.txt
-      - name: 记录 quality 信息
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
+      - name: Run preflight
+        run: make ci-preflight
+      - name: Record duration and runner
         if: ${{ always() }}
         run: |
           {
-            echo "quality seconds: $(( $(date +%s) - CI_START_EPOCH ))"
+            echo "preflight seconds: $(( $(date +%s) - CI_START_EPOCH ))"
             echo "runner: ${RUNNER_OS}/$(uname -m)"
           } >> "$GITHUB_STEP_SUMMARY"
 
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     env:
-      # corepack 下载钉版 pnpm 前的确认提示在非 TTY 下会挂起 job，统一关闭。
       COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
     steps:
-      - name: 记录开始时间
+      - name: Record start time
         run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
-      - uses: actions/checkout@v4
-      # pnpm 版本读 frontend package.json 的 packageManager 字段，经 corepack
-      # 按钉版供给（与本地 make frontend-check 的姿势同源，不再经
-      # pnpm/action-setup 另装一份）；先在 frontend 目录预取一次钉版 pnpm 并
-      # 写入 PATH shim，setup-node 才能调用 pnpm store 解析缓存。
-      - name: 启用 corepack pnpm
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      # Bootstrap the packageManager-pinned pnpm before setup-node resolves its cache.
+      - name: Enable Corepack pnpm
         run: |
           corepack enable
-          cd packages/engine/crates/mornlea_client/frontend && corepack pnpm --version
-      - uses: actions/setup-node@v4
+          cd packages/engine/crates/mornlea_client/frontend
+          corepack pnpm --version
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          # 与 frontend engines（>=22 <25）一致的大版本。
           node-version: '24'
           cache: pnpm
           cache-dependency-path: packages/engine/crates/mornlea_client/frontend/pnpm-lock.yaml
-      - name: 前端门禁（冻结安装 + typecheck + vitest + 构建 + dist 一致）
-        run: make frontend-check
-      - name: 记录 frontend 信息
+      - name: Run frontend
+        run: make ci-frontend
+      - name: Record duration and runner
         if: ${{ always() }}
         run: |
           {
@@ -165,67 +82,40 @@ jobs:
             echo "runner: ${RUNNER_OS}/$(uname -m)"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  go-race:
-    needs: native-macos
-    runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # 分片=模块（设计 §5）：client 模块含图形客户端命令与 benchmark 场景
-          # 测试（skip 面向的入口随模块迁移）。
-          - shard: client
-            packages: "$(go list ./packages/client/...)"
-            extra: -skip '^TestScenarioV7EightSessionServerProbeIsRealAndBounded$'
-          - shard: server
-            packages: ./packages/server/...
-            extra: ''
-          # rest = 其余四个模块（contracts/shared/tools/audit）；全集自检保证
-          # 三分片联合恰为六模块全包。
-          - shard: rest
-            packages: "$(go list ./packages/contracts/...) $(go list ./packages/shared/...) $(go list ./packages/tools/...) ./packages/audit"
-            extra: ''
+  rust-quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - name: 记录开始时间
+      - name: Record start time
         run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.26'
-          cache-dependency-path: |
-            packages/shared/go.sum
-            packages/server/go.sum
-            packages/client/go.sum
-            packages/tools/go.sum
-            packages/audit/go.sum
-            packages/engine/include/mornlea_engine.h
-            packages/engine/include/mornlea_client.h
-      - uses: actions/download-artifact@v4
-        with:
-          name: native-macos-${{ github.sha }}
-          path: packages/engine/target/release
-      - name: 校验 native artifact
-        run: scripts/ci/verify-native-artifact.sh
-      - name: Race tests
-        run: go test ${{ matrix.packages }} -race -p=1 ${{ matrix.extra }}
-      - name: 记录 race 分片信息
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Activate repository-pinned Rust toolchain
+        run: |
+          cd packages/engine
+          rustup show active-toolchain
+          rustc --version
+          cargo --version
+      - name: Run rust-quality
+        run: make ci-rust-quality
+      - name: Record duration and runner
         if: ${{ always() }}
         run: |
           {
-            echo "go-race ${{ matrix.shard }} seconds: $(( $(date +%s) - CI_START_EPOCH ))"
+            echo "rust-quality seconds: $(( $(date +%s) - CI_START_EPOCH ))"
             echo "runner: ${RUNNER_OS}/$(uname -m)"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  integration:
-    needs: native-macos
-    runs-on: macos-latest
+  native-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - name: 记录开始时间
+      - name: Record start time
         run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: '1.26'
+          # Header changes invalidate cached cgo ABI constants.
           cache-dependency-path: |
             packages/shared/go.sum
             packages/server/go.sum
@@ -234,157 +124,315 @@ jobs:
             packages/audit/go.sum
             packages/engine/include/mornlea_engine.h
             packages/engine/include/mornlea_client.h
-      - uses: actions/setup-python@v5
+      - name: Activate repository-pinned Rust toolchain
+        run: |
+          cd packages/engine
+          rustup show active-toolchain
+          rustc --version
+          cargo --version
+      - name: Run native-linux
+        run: make ci-native-linux CI_CANDIDATE_SHA="$GITHUB_SHA"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-linux-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 1
+          path: |
+            build/ci/native-linux.manifest
+            bin/mornlea-server
+            bin/libmornlea_engine.so
+            packages/engine/target/release/libmornlea_engine.so
+      - name: Record duration and runner
+        if: ${{ always() }}
+        run: |
+          {
+            echo "native-linux seconds: $(( $(date +%s) - CI_START_EPOCH ))"
+            echo "runner: ${RUNNER_OS}/$(uname -m)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  native-macos:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Record start time
+        run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26'
+          # Header changes invalidate cached cgo ABI constants.
+          cache-dependency-path: |
+            packages/shared/go.sum
+            packages/server/go.sum
+            packages/client/go.sum
+            packages/tools/go.sum
+            packages/audit/go.sum
+            packages/engine/include/mornlea_engine.h
+            packages/engine/include/mornlea_client.h
+      - name: Activate repository-pinned Rust toolchain
+        run: |
+          cd packages/engine
+          rustup show active-toolchain
+          rustc --version
+          cargo --version
+      - name: Run native-macos
+        run: make ci-native-macos CI_CANDIDATE_SHA="$GITHUB_SHA"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-macos-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 1
+          path: |
+            build/ci/native-macos.manifest
+            packages/engine/target/release/libmornlea_engine.dylib
+            packages/engine/target/release/libmornlea_client.dylib
+      - name: Record duration and runner
+        if: ${{ always() }}
+        run: |
+          {
+            echo "native-macos seconds: $(( $(date +%s) - CI_START_EPOCH ))"
+            echo "runner: ${RUNNER_OS}/$(uname -m)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  linux-quality:
+    needs: native-linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Record start time
+        run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26'
+          # Header changes invalidate cached cgo ABI constants.
+          cache-dependency-path: |
+            packages/shared/go.sum
+            packages/server/go.sum
+            packages/client/go.sum
+            packages/tools/go.sum
+            packages/audit/go.sum
+            packages/engine/include/mornlea_engine.h
+            packages/engine/include/mornlea_client.h
+      - name: Install policy dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: native-linux-${{ github.sha }}
+          path: .
+      - name: Run linux-quality
+        run: make ci-linux-quality CI_CANDIDATE_SHA="$GITHUB_SHA"
+      - name: Record duration and runner
+        if: ${{ always() }}
+        run: |
+          {
+            echo "linux-quality seconds: $(( $(date +%s) - CI_START_EPOCH ))"
+            echo "runner: ${RUNNER_OS}/$(uname -m)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  race-server:
+    needs: native-linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Record start time
+        run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26'
+          # Header changes invalidate cached cgo ABI constants.
+          cache-dependency-path: |
+            packages/shared/go.sum
+            packages/server/go.sum
+            packages/client/go.sum
+            packages/tools/go.sum
+            packages/audit/go.sum
+            packages/engine/include/mornlea_engine.h
+            packages/engine/include/mornlea_client.h
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: native-linux-${{ github.sha }}
+          path: .
+      - name: Run race-server
+        run: make ci-race-server CI_CANDIDATE_SHA="$GITHUB_SHA"
+      - name: Record duration and runner
+        if: ${{ always() }}
+        run: |
+          {
+            echo "race-server seconds: $(( $(date +%s) - CI_START_EPOCH ))"
+            echo "runner: ${RUNNER_OS}/$(uname -m)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  race-rest:
+    needs: native-linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Record start time
+        run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26'
+          # Header changes invalidate cached cgo ABI constants.
+          cache-dependency-path: |
+            packages/shared/go.sum
+            packages/server/go.sum
+            packages/client/go.sum
+            packages/tools/go.sum
+            packages/audit/go.sum
+            packages/engine/include/mornlea_engine.h
+            packages/engine/include/mornlea_client.h
+      - name: Install policy dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: native-linux-${{ github.sha }}
+          path: .
+      - name: Run race-rest
+        run: make ci-race-rest CI_CANDIDATE_SHA="$GITHUB_SHA"
+      - name: Record duration and runner
+        if: ${{ always() }}
+        run: |
+          {
+            echo "race-rest seconds: $(( $(date +%s) - CI_START_EPOCH ))"
+            echo "runner: ${RUNNER_OS}/$(uname -m)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  race-client:
+    needs: native-macos
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Record start time
+        run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26'
+          # Header changes invalidate cached cgo ABI constants.
+          cache-dependency-path: |
+            packages/shared/go.sum
+            packages/server/go.sum
+            packages/client/go.sum
+            packages/tools/go.sum
+            packages/audit/go.sum
+            packages/engine/include/mornlea_engine.h
+            packages/engine/include/mornlea_client.h
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: native-macos-${{ github.sha }}
+          path: .
+      - name: Run race-client
+        run: make ci-race-client CI_CANDIDATE_SHA="$GITHUB_SHA"
+      - name: Record duration and runner
+        if: ${{ always() }}
+        run: |
+          {
+            echo "race-client seconds: $(( $(date +%s) - CI_START_EPOCH ))"
+            echo "runner: ${RUNNER_OS}/$(uname -m)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  integration-server:
+    needs: native-linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Record start time
+        run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26'
+          # Header changes invalidate cached cgo ABI constants.
+          cache-dependency-path: |
+            packages/shared/go.sum
+            packages/server/go.sum
+            packages/client/go.sum
+            packages/tools/go.sum
+            packages/audit/go.sum
+            packages/engine/include/mornlea_engine.h
+            packages/engine/include/mornlea_client.h
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           version: '0.12.5'
           enable-cache: true
           cache-dependency-glob: |
             packages/agent/pyproject.toml
             packages/agent/uv.lock
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
-          name: native-macos-${{ github.sha }}
-          path: packages/engine/target/release
-      - name: 校验 native artifact
-        run: scripts/ci/verify-native-artifact.sh
-      - name: 伙伴 Agent Python 门禁
-        run: make companion-agent-check
-      - name: 伙伴 Agent 真进程合同
-        run: make companion-agent-integration
-      - name: 50ms 服务端探针门禁
-        run: go test ./packages/client/cmd/mornlea/benchmark -run '^TestScenarioV7EightSessionServerProbeIsRealAndBounded$' -count=1
-      - name: TCP 重启与 Memory/TCP parity 重复门禁
-        run: go test ./packages/server/server -run 'TestTCPPlayerAndWorld|TestMemoryTCPParity' -race -count=10
-      - name: M3C v6 八玩家与性能报告门禁
-        run: go test ./packages/client/client ./packages/server/server ./packages/client/cmd/mornlea/benchmark ./packages/tools/perfcheck -run 'Test(PerfReportV6|ScenarioV6|PerfcheckV6|PerfcheckV5SameScenario|PerformanceThresholds|InterestObserver|HostStats|BenchmarkServerEpoch|BenchmarkServerMeasuredWindow)' -count=1
-      - name: 微基准与平台无关阈值
-        run: go test ./packages/contracts/... ./packages/shared/... ./packages/server/... ./packages/client/... ./packages/tools/... ./packages/audit/... -bench=. -benchtime=1x -run='^$'
-      - name: M3C 多人微基准可执行性
-        run: go test ./packages/shared/network ./packages/server/server ./packages/client/render -run '^$' -bench '(RemotePlayerStateCodec|EightPlayerInterest|RemoteAvatarNameTag)' -benchmem -benchtime=100x -count=1
-      - name: 记录 integration 信息
+          name: native-linux-${{ github.sha }}
+          path: .
+      - name: Run integration-server
+        run: make ci-integration-server CI_CANDIDATE_SHA="$GITHUB_SHA"
+      - name: Record duration and runner
         if: ${{ always() }}
         run: |
           {
-            echo "integration seconds: $(( $(date +%s) - CI_START_EPOCH ))"
+            echo "integration-server seconds: $(( $(date +%s) - CI_START_EPOCH ))"
             echo "runner: ${RUNNER_OS}/$(uname -m)"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  linux-server:
-    runs-on: ubuntu-latest
+  integration-client:
+    needs: native-macos
+    runs-on: macos-15
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Record start time
+        run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: '1.26'
-          # Go 的构建缓存不追踪 cgo `#include` 进来的 C 头文件，而 setup-go 默认只用
-          # go.sum 做缓存 key。engine ABI 升版只改头文件、不动 go.sum，于是缓存会命中
-          # 上一个 ABI 版本编译出的 packages/shared/nativeabi 目标文件：运行时库报新版本、
-          # 编译进 Go 的常量仍是旧版本，表现为 ABI 版本不匹配，且因缓存命中有竞态而
-          # 时红时绿。把头文件纳入 key，ABI 变更即强制冷编译。
+          # Header changes invalidate cached cgo ABI constants.
           cache-dependency-path: |
             packages/shared/go.sum
             packages/server/go.sum
+            packages/client/go.sum
+            packages/tools/go.sum
+            packages/audit/go.sum
             packages/engine/include/mornlea_engine.h
-
-      - name: Rust 工具链身份
-        run: |
-          cd packages/engine
-          rustup show active-toolchain
-          rustc --version
-          cargo --version
-
-      - name: 构建并测试 native collision bundle
-        run: |
-          make rust
-          go test ./packages/shared/nativeabi ./packages/shared/core ./packages/shared/physics ./packages/client/mesh -race -count=1
-          make build-linux-server
-
-      - name: Linux 专服架构与 ELF 门禁
-        run: |
-          go test ./packages/audit -count=1
-          test -z "$(CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go list -deps ./packages/server/cmd/mornlea-server |
-            grep -E 'packages/client/(client|mesh|render)|gfxspike|glfw|webgpu|x/image/font')"
-          readelf -d bin/mornlea-server | grep -F 'libmornlea_engine.so'
-          readelf -d bin/mornlea-server | grep -F '$ORIGIN'
-          nm -D --defined-only bin/libmornlea_engine.so > /tmp/mornlea-engine-symbols.txt
-          for symbol in mornlea_engine_abi_version mornlea_mesh_section mornlea_collision_resolve mornlea_raycast_batch; do
-            awk '{print $NF}' /tmp/mornlea-engine-symbols.txt | grep -Fx "$symbol"
-          done
-
-      - name: 脱离 Cargo target 加载相邻 so
-        run: |
-          native_target_backup="$(mktemp -d)/target"
-          trap 'test -e packages/engine/target || mv "$native_target_backup" packages/engine/target' EXIT
-          mv packages/engine/target "$native_target_backup"
-          ldd bin/mornlea-server > /tmp/mornlea-server-ldd.txt
-          grep -F "$(pwd)/bin/libmornlea_engine.so" /tmp/mornlea-server-ldd.txt
-          set +e
-          bin/mornlea-server -h >/tmp/mornlea-server-help.txt 2>&1
-          native_help_rc=$?
-          set -e
-          mv "$native_target_backup" packages/engine/target
-          trap - EXIT
-          test "$native_help_rc" -eq 1
-          grep -F 'flag: help requested' /tmp/mornlea-server-help.txt
-          ! grep -E 'error while loading shared libraries|cannot open shared object' /tmp/mornlea-server-help.txt
-
-  godot:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: 记录开始时间
-        run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
-      # macOS runners do not preinstall ripgrep and the Godot project
-      # validation script needs it. Keep ripgrep usage inside that script:
-      # the repository identity audit rejects an inline ripgrep invocation
-      # in this workflow file.
-      - name: 安装 ripgrep
-        run: brew install ripgrep
-      # rust-toolchain.toml pins the toolchain identity; the godot gates drive
-      # build-extension.sh, which needs cargo from that pinned toolchain.
-      - name: Rust 工具链身份
-        run: |
-          cd packages/engine
-          rustup show active-toolchain
-          rustc --version
-          cargo --version
-      - name: 拉取钉版 Godot
-        run: scripts/godot/fetch.sh
-      # ONLINE first materialization of the embedded Python runtime; --offline
-      # is only valid on a warm cache. The script enforces the pinned Apple
-      # clang 21.0.0 and macOS SDK 26.5 toolchain identity.
-      - name: 物化钉版 Godot Python 运行时
-        run: scripts/godot/build-python-runtime.sh --verify
-      - uses: astral-sh/setup-uv@v6
+            packages/engine/include/mornlea_client.h
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
-          version: '0.12.5'
-      - name: Godot 项目结构门禁
-        run: make godot-project-check
-      - name: Godot Python 门禁
-        run: make godot-python-check
-      - name: Godot 冒烟门禁
-        run: make godot-smoke
-      - name: 记录 godot 信息
+          name: native-macos-${{ github.sha }}
+          path: .
+      - name: Run integration-client
+        run: make ci-integration-client CI_CANDIDATE_SHA="$GITHUB_SHA"
+      - name: Record duration and runner
         if: ${{ always() }}
         run: |
           {
-            echo "godot seconds: $(( $(date +%s) - CI_START_EPOCH ))"
+            echo "integration-client seconds: $(( $(date +%s) - CI_START_EPOCH ))"
             echo "runner: ${RUNNER_OS}/$(uname -m)"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  test:
+  # Every predecessor must succeed; skipped and cancelled work cannot authorize a merge.
+  merge-gate:
     if: ${{ always() }}
-    needs: [native-macos, quality, frontend, go-race, integration, linux-server]
-    runs-on: ubuntu-latest
+    needs: [preflight, frontend, rust-quality, native-linux, native-macos, linux-quality, race-server, race-rest, race-client, integration-server, integration-client]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
-      - name: 汇总全部必需门禁
+      - name: Assert every required result
         run: |
-          test "${{ needs.native-macos.result }}" = success
-          test "${{ needs.quality.result }}" = success
+          test "${{ needs.preflight.result }}" = success
           test "${{ needs.frontend.result }}" = success
-          test "${{ needs['go-race'].result }}" = success
-          test "${{ needs.integration.result }}" = success
-          test "${{ needs.linux-server.result }}" = success
+          test "${{ needs.rust-quality.result }}" = success
+          test "${{ needs.native-linux.result }}" = success
+          test "${{ needs.native-macos.result }}" = success
+          test "${{ needs.linux-quality.result }}" = success
+          test "${{ needs.race-server.result }}" = success
+          test "${{ needs.race-rest.result }}" = success
+          test "${{ needs.race-client.result }}" = success
+          test "${{ needs.integration-server.result }}" = success
+          test "${{ needs.integration-client.result }}" = success

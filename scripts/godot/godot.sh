@@ -31,4 +31,13 @@ case "${actual_version}" in
     ;;
 esac
 
+if [[ "${1:-}" == "--print-path" ]]; then
+  (($# == 1)) || {
+    printf 'Godot resolver --print-path takes no other arguments\n' >&2
+    exit 2
+  }
+  printf '%s\n' "${godot_binary}"
+  exit 0
+fi
+
 exec "${godot_binary}" "$@"
