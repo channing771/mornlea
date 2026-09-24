@@ -1727,4 +1727,29 @@ func TestRustSnapshotDecodesInGo(t *testing.T) {
 	if _, err := wireCodec.DecodeServer(protocol.StatePlay, 0, corrupted); err == nil {
 		t.Fatal("Go accepted the Rust frame with a flipped content checksum")
 	}
+
+	for _, trial := range []struct {
+		windowDescriptor byte
+		accepted         bool
+	}{
+		{windowDescriptor: 0x58, accepted: true},  // Exactly 2 MiB.
+		{windowDescriptor: 0x59, accepted: false}, // 2 MiB plus one eighth.
+		{windowDescriptor: 0x88, accepted: false}, // 128 MiB.
+	} {
+		windowFrame := bytes.Clone(goBytes)
+		if windowFrame[12] != 0xa4 {
+			t.Fatalf("Go fixture frame descriptor = %#x, want 0xa4", windowFrame[12])
+		}
+		windowFrame[12] = 0x84 // Clear single-segment to expose the window descriptor.
+		windowFrame = append(windowFrame[:13], append([]byte{trial.windowDescriptor}, windowFrame[13:]...)...)
+		binary.LittleEndian.PutUint32(windowFrame[4:8], uint32(len(windowFrame)-8))
+		decoded, decodeErr := wireCodec.DecodeServer(protocol.StatePlay, 0, windowFrame)
+		if trial.accepted {
+			if decodeErr != nil || !reflect.DeepEqual(decoded, goPacket) {
+				t.Fatalf("Go refused exact-limit window %#x: %v", trial.windowDescriptor, decodeErr)
+			}
+		} else if decodeErr == nil {
+			t.Fatalf("Go accepted oversized window %#x", trial.windowDescriptor)
+		}
+	}
 }

@@ -341,8 +341,10 @@ and the isolated export helpers (`exportGeneratedAssets`,
 - `TestRustSnapshotDecodesInGo` reads the Rust-owned fixture from the protocol
   crate and the Go fixture, decodes both with the production `codec.DecodeServer`
   path, and compares complete `ChunkSnapshot` values. It also rejects a
-  flipped zstd checksum. The Rust snapshot suite pins that fixture to its
-  current owned encoder; compressed bytes are intentionally different.
+  flipped zstd checksum and mutates the Go fixture's window descriptor to pin
+  acceptance at 2 MiB and rejection just above it and at 128 MiB. The Rust
+  snapshot suite pins that fixture to its current owned encoder and checks the
+  same window boundary; compressed bytes are intentionally different.
 - The tenth packet producer group is `protocol_player_outcomes_test.go`
   (`protocol.server.PlayerState`, `protocol.server.CommandRejected`,
   `protocol.server.PlaceBlockSucceeded` and `protocol.server.CombatHit`,

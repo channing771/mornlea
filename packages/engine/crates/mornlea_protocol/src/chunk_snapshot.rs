@@ -62,9 +62,9 @@ pub const MAX_COMPRESSED_SNAPSHOT: usize = 1 << 20;
 /// and the size of an encoded logical payload.
 pub const MAX_DECODED_SNAPSHOT: usize = 2 << 20;
 
-/// Window-log ceiling of the decoder context, derived from the decoded
-/// ceiling: a frame declaring a larger window is refused before its window is
-/// allocated, which is the Rust side of the Go decoder's memory limit.
+/// Window-log ceiling on the decoder context as a secondary limit. The bulk
+/// one-shot path ignores this parameter, so `preflight_zstd_windows` enforces
+/// the Go decoder's memory limit before either decompression entry point.
 const MAX_DECODED_WINDOW_LOG: u32 = MAX_DECODED_SNAPSHOT.trailing_zeros();
 
 /// Fixed envelope header: the declared decoded length, then the declared
@@ -391,6 +391,7 @@ fn decompress_frame(
     if decoded_length > MAX_DECODED_SNAPSHOT || compressed.len() > MAX_COMPRESSED_SNAPSHOT {
         return Err(ProtocolError::FrameTooLarge);
     }
+    preflight_zstd_windows(compressed)?;
     let decoded = match decompressor {
         Some(context) => context.decompress(compressed, decoded_length),
         None => zstd::bulk::decompress(compressed, decoded_length),
@@ -400,6 +401,52 @@ fn decompress_frame(
         return Err(ProtocolError::Truncated);
     }
     Ok(decoded)
+}
+
+/// Checks every frame's declared history window before bulk decompression.
+///
+/// libzstd applies `WindowLogMax` in streaming mode but not in its one-shot
+/// `decompressDCtx` path. Its frame-size parser locates bounded frame headers;
+/// this check then enforces the same 2 MiB memory ceiling as Go `DecodeAll`.
+/// No output or proportional scratch is allocated while scanning the at-most
+/// 1 MiB compressed payload.
+fn preflight_zstd_windows(mut compressed: &[u8]) -> Result<(), ProtocolError> {
+    const ZSTD_MAGIC: [u8; 4] = [0x28, 0xb5, 0x2f, 0xfd];
+    const SKIPPABLE_MAGIC_START: u32 = 0x184d2a50;
+
+    while !compressed.is_empty() {
+        let frame_size = zstd::zstd_safe::find_frame_compressed_size(compressed)
+            .map_err(|_| ProtocolError::Integrity)?;
+        let frame = compressed
+            .get(..frame_size)
+            .filter(|frame| !frame.is_empty())
+            .ok_or(ProtocolError::Integrity)?;
+        let magic: [u8; 4] = frame
+            .get(..4)
+            .ok_or(ProtocolError::Integrity)?
+            .try_into()
+            .map_err(|_| ProtocolError::Integrity)?;
+        if magic == ZSTD_MAGIC {
+            let descriptor = *frame.get(4).ok_or(ProtocolError::Integrity)?;
+            let window = if descriptor & 0x20 != 0 {
+                zstd::zstd_safe::get_frame_content_size(frame)
+                    .ok()
+                    .flatten()
+                    .ok_or(ProtocolError::Integrity)?
+            } else {
+                let window_descriptor = *frame.get(5).ok_or(ProtocolError::Integrity)?;
+                let base = 1u64 << (10 + u32::from(window_descriptor >> 3));
+                base + (base >> 3) * u64::from(window_descriptor & 7)
+            };
+            if window > MAX_DECODED_SNAPSHOT as u64 {
+                return Err(ProtocolError::Integrity);
+            }
+        } else if u32::from_le_bytes(magic) & 0xfffffff0 != SKIPPABLE_MAGIC_START {
+            return Err(ProtocolError::Integrity);
+        }
+        compressed = &compressed[frame_size..];
+    }
+    Ok(())
 }
 
 /// Play ChunkSnapshot payload: one chunk column of the authoritative world.
@@ -811,6 +858,20 @@ mod tests {
         assert_eq!(
             compress_logical(&vec![0; MAX_COMPRESSED_SNAPSHOT]),
             Err(ProtocolError::FrameTooLarge)
+        );
+    }
+
+    #[test]
+    fn window_preflight_checks_later_frames_too() {
+        let mut frames = compress_logical(b"first").expect("first bounded frame");
+        let mut second = compress_logical(b"second").expect("second bounded frame");
+        assert_ne!(second[4] & 0x20, 0, "test frame is single-segment");
+        second[4] &= !0x20;
+        second.insert(5, 0x88);
+        frames.extend(second);
+        assert_eq!(
+            preflight_zstd_windows(&frames),
+            Err(ProtocolError::Integrity)
         );
     }
 }

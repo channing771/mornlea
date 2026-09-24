@@ -2046,6 +2046,12 @@ rather than checking that it omits a few names.
   the public one-shot helpers. Every declared palette and word count is
   checked against the bytes that remain before the matching
   buffer is allocated, so a corrupt count cannot become a large allocation.
+- The zstd frame's declared history window is also bounded by the decoded
+  2 MiB ceiling before either decompressor entry point. The owned context's
+  `WindowLogMax` alone does not enforce this in libzstd's one-shot bulk path;
+  `preflight_zstd_windows` scans every bounded frame and rejects an oversized
+  window as `Integrity`. The Go decoder admits exactly 2 MiB and rejects a
+  descriptor one eighth above it, as the paired fixture mutation tests pin.
 - Section containers are a closed set of three kinds. A `Single` section
   carries one block ID, an `Indexed` section a palette plus 4- or 8-bit slots,
   and a `Direct` section 15-bit slots with no palette. A section must not carry

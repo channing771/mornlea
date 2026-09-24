@@ -55,6 +55,20 @@ fn read_rust_snapshot_fixture() -> Vec<u8> {
     fs::read(&path).unwrap_or_else(|err| panic!("read {}: {err}", path.display()))
 }
 
+/// Rewrites only the Go fixture's zstd window declaration.
+fn go_fixture_with_zstd_window(window_descriptor: u8) -> Vec<u8> {
+    let mut payload = read_go_snapshot_fixture();
+    assert_eq!(
+        payload[12], 0xa4,
+        "fixture starts with a single-segment frame"
+    );
+    payload[12] = 0x84;
+    payload.insert(13, window_descriptor);
+    let compressed_length = u32::try_from(payload.len() - 8).expect("bounded test fixture");
+    payload[4..8].copy_from_slice(&compressed_length.to_le_bytes());
+    payload
+}
+
 /// Packs one section's cells the way the Go fixture builder does, so the
 /// golden snapshot is the same logical value the committed fixture carries.
 fn packed_words(bits: u8, modulus: usize, seed: usize) -> Vec<u64> {
@@ -222,6 +236,45 @@ fn snapshot_rust_fixture_matches_current_owned_codec_output() {
         encode_with_codec(&mut codec, &golden_snapshot()),
         fixture,
         "the Go-decoded Rust fixture must track the current owned encoder"
+    );
+}
+
+#[test]
+fn snapshot_declared_zstd_window_above_go_limit_is_refused() {
+    for window_descriptor in [0x59, 0x88] {
+        let payload = go_fixture_with_zstd_window(window_descriptor);
+        assert!(
+            matches!(
+                mornlea_protocol::ChunkSnapshot::decode(&payload),
+                Err(ProtocolError::Integrity)
+            ),
+            "one-shot decode accepted oversized zstd window {window_descriptor:#x}"
+        );
+        let mut codec = ProtocolCodec::new().expect("snapshot codec");
+        assert!(
+            matches!(
+                codec.decode_snapshot(&payload),
+                Err(ProtocolError::Integrity)
+            ),
+            "owned decode accepted oversized zstd window {window_descriptor:#x}"
+        );
+    }
+}
+
+#[test]
+fn snapshot_declared_zstd_window_at_go_limit_is_accepted() {
+    let payload = go_fixture_with_zstd_window(0x58);
+    let expected = golden_snapshot();
+    assert_eq!(
+        mornlea_protocol::ChunkSnapshot::decode(&payload).expect("one-shot exact-limit decode"),
+        expected
+    );
+    let mut codec = ProtocolCodec::new().expect("snapshot codec");
+    assert_eq!(
+        codec
+            .decode_snapshot(&payload)
+            .expect("owned exact-limit decode"),
+        expected
     );
 }
 
