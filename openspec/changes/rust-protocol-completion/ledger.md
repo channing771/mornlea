@@ -316,3 +316,22 @@
 **Rollback:** revert `cc852015` and `d8368493` individually; corpus returns to 1011.
 
 **Architecture skill: no change.**
+
+
+## Node 3.9 — 2026-09-24
+
+**Status:** complete. Commits `cb53f365` (`feat(protocol): qualify passive packets`) + review-fix `f26f7690` (`docs(protocol): record batch wire-ceiling latent class` — the reviewer's one Important finding, applied by the controller verbatim) + controller integration `4f103497` (`chore(corpus): integrate passive evidence`, incl. the dispatch-arm fix) on top of `a40e57db`.
+
+**Deliverable:** the three passive families (`PassiveSpawn` 26, `PassiveState` 27, `PassiveDespawn` 28) on the common fallible surface; `src/passive_id.rs` shim (domain `PassiveId` + 8-byte wire edge, zero unconstructible outbound); strides 29/38/9 (spawn omits kind, state omits dimension); count 1..=64 with the 64-vs-32 pin (the 32-actor live cap named authority-only, kept out of the packet layer); exact-remaining-length → trailing `truncated` (verified in `passive_wire.go`); grazing/reason closed 0/1 matches. 30 corpus cases (11/10/9), producer `runtime-oracle/protocol-passives`; 6 routes; group test 19/19.
+
+**Rulings frozen:** distinct-message category mapping (no latent classes on exercised boundaries); the OVER-CEILING latent class — Go's fixed per-family wire ceiling answers `capacity` while the Rust hostile/passive decoders answer `Truncated` — recorded in BOTH guides by the review fix (the projectiles node must rule before freezing any such case); hostile-prefixed corpus JSON readers renamed to neutral `record_*` (purely mechanical, ~10 hostile call-sites); `PASSIVE_*_MAX_WIRE_BYTES` derived from strides (mirror the Go declarations without gating Rust decode); the real codec passive filters are `TestPassiveMessagesWireLayoutIsFrozen|TestPassiveMessagesDecodeRejectsInvalidWire|TestPassiveMessagesWireLimitsAreFrozen|TestPassiveMessageCodecRoundTripsProperty`.
+
+**Controller integration incident + fix (the node-1.5 pattern):** the generic `dispatch_case` lacked the three passive family constants (the passive group test used its own dispatch) — fixed inside the integration commit; producer-paragraph ordering in the oracle guide (passive inserted before hostile) also corrected in the review-fix commit.
+
+**Evidence:** group 19/19; `runtime_contract` 134/134; Go producer 8/8; codec passive filters ok; full oracle ok; audit ok; fmt/clippy/gofmt/vet clean; the 30 exported cases ran through the real Rust consumer pre-commit. Corpus integrity: 3 families changed, 1041→1071 (+30/−0), `source_revision` preserved. Post-integration whole protocol crate 387/387 after the dispatch fix.
+
+**Review ruling:** Approved, 0 Crit/1 Imp(docs — fixed by `f26f7690`)/3 Minor (the 9-byte header stride consolidation; `*_MAX_WIRE_BYTES` retention inconsistency vs hostile; the state cap sourced from the sibling module).
+
+**Rollback:** revert `cb53f365`, `f26f7690` and `4f103497` individually; corpus returns to 1041.
+
+**Architecture skill: no change.**
