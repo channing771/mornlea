@@ -338,6 +338,11 @@ and the isolated export helpers (`exportGeneratedAssets`,
   256 KiB JSON case budget. Provenance is `codec_server.go` plus
   `chunk_codec.go`, which owns the envelope and the logical layers, and
   `snapshot.go`, which owns the validators.
+- `TestRustSnapshotDecodesInGo` reads the Rust-owned fixture from the protocol
+  crate and the Go fixture, decodes both with the production `codec.DecodeServer`
+  path, and compares complete `ChunkSnapshot` values. It also rejects a
+  flipped zstd checksum. The Rust snapshot suite pins that fixture to its
+  current owned encoder; compressed bytes are intentionally different.
 - The tenth packet producer group is `protocol_player_outcomes_test.go`
   (`protocol.server.PlayerState`, `protocol.server.CommandRejected`,
   `protocol.server.PlaceBlockSucceeded` and `protocol.server.CombatHit`,

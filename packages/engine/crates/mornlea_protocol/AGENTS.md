@@ -2063,6 +2063,12 @@ rather than checking that it omits a few names.
   The frame magic, the frame header descriptor, the four-byte content size, and
   the trailing content checksum are pinned separately because those parts are
   identical across the two implementations.
+- `tests/testdata/rust-chunk-snapshot-v45.bin` is emitted by the owned Rust
+  `ProtocolCodec` for the same golden snapshot as the Go fixture. The Rust
+  snapshot suite pins the fixture to current encoder bytes; the Go
+  runtime-oracle suite decodes both fixtures through the production Go codec,
+  compares the complete packets, and rejects a flipped Rust frame checksum.
+  The compressed frames may differ, so equality belongs to decoded values.
 - Intermediate layers (`encode_logical_checked`, `decode_logical`,
   `decode_envelope`, `SnapshotEnvelope::decompress`, `compress_logical`) are
   public so contract tests can prove decode exactness byte for byte and

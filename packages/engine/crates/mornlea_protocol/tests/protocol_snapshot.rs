@@ -48,6 +48,13 @@ fn read_go_snapshot_fixture() -> Vec<u8> {
     fs::read(&path).unwrap_or_else(|err| panic!("read {}: {err}", path.display()))
 }
 
+/// Reads the Rust codec output the Go decoder test consumes.
+fn read_rust_snapshot_fixture() -> Vec<u8> {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/testdata/rust-chunk-snapshot-v45.bin");
+    fs::read(&path).unwrap_or_else(|err| panic!("read {}: {err}", path.display()))
+}
+
 /// Packs one section's cells the way the Go fixture builder does, so the
 /// golden snapshot is the same logical value the committed fixture carries.
 fn packed_words(bits: u8, modulus: usize, seed: usize) -> Vec<u64> {
@@ -204,6 +211,17 @@ fn snapshot_committed_fixture_decodes_to_the_golden_logical_payload() {
         &fixture[fixture.len() - 4..],
         &reencoded[reencoded.len() - 4..],
         "xxhash-64 content checksum must match across implementations"
+    );
+}
+
+#[test]
+fn snapshot_rust_fixture_matches_current_owned_codec_output() {
+    let fixture = read_rust_snapshot_fixture();
+    let mut codec = ProtocolCodec::new().expect("snapshot codec");
+    assert_eq!(
+        encode_with_codec(&mut codec, &golden_snapshot()),
+        fixture,
+        "the Go-decoded Rust fixture must track the current owned encoder"
     );
 }
 
