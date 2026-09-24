@@ -352,3 +352,22 @@
 **Rollback:** revert `cbbd1de9` and `1b65ad28` individually; corpus returns to 1071.
 
 **Architecture skill: no change.**
+
+
+## Node 3.11 — 2026-09-24
+
+**Status:** complete. Commits `38de05b5` (`feat(protocol): qualify chat event union`) + producer-splice fix `758b21a3` (`fix(runtime-oracle): splice chat event name mutation correctly`) + controller integration `c172e6a9` (`chore(corpus): integrate chat event evidence`, incl. the zeroCasePoint move and the producer-count doc fix) on top of `d5e48c60`. GROUP 3 CLOSED: all 60 protocol families now carry executed corpus cases.
+
+**Deliverable:** the ChatEvent family (S/Play/16) on the common fallible surface; the closed `(kind,reason)` match chooses exactly one text slot and identity shape; the bidirectional `TryFrom` pair to the domain `ChatBody` union exported for node 4.2 (raw zero companion UUID → semantic absence only in InvalidFormat/UnknownCompanion); the Go Validate precedence mirrored (global gates → kind dispatch → speech-slot exclusivity → per-branch rules); the 1328-byte per-payload ceiling verified decode-reachable and mirrored pre-parse (exactly-1328 admits). 24 corpus cases (14 valid branches incl. encode pairs + 10 negatives), producer `runtime-oracle/protocol-chat-event`; 2 routes; group test 13/13 incl. the 16-branch × both-directions domain matrix.
+
+**Rulings frozen:** the slot-exclusivity negatives are not wire-constructible (one kind-chosen slot) — the two cases record the branch's own requirement at that slot (both invalid-value, genuine single-violation Go rejections) and the DTO-level exclusivity is group-test-pinned (reviewer-verified honest); the folded player-identity gate is classified per-case from real bytes; the producer-count doc error (19→18) fixed at integration.
+
+**Integration incidents + fixes:** (1) the `decode-noncanonical-player-name` export spliced the name mutation wrong (inserted over the old name, shifting all later fields — both sides rejected at different boundaries); the resumed implementer fixed the splice to a proper replace-and-shift, verified both sides publish invalid-value on the corrected bytes, and re-exported; the controller re-integrated the one case's bytes and manifest. (2) With ChatEvent filled, NO protocol family remains zero-case — the `zeroCasePoint` fixtures moved to `kernel.mornlea_collision_resolve`/11 inside the integration commit.
+
+**Evidence:** group 13/13; `runtime_contract` 134/134; Go producer 8/8 (and 9/9 with the fixed splice); companion-message golden/invalid filters ok; domain `event_chat` 10/10 unchanged; full oracle ok; audit ok; fmt/clippy/gofmt/vet clean. Corpus integrity: 1 family changed, 1100→1124 (+24/−0), `source_revision` preserved. Post-integration whole protocol crate 422/422.
+
+**Review ruling:** Approved, 0 Crit/1 Imp(docs — fixed at integration)/5 Minor (case-ID naming for the substituted pair; the dead `chatEventDerivedFrom` truncated arm; a node-reference in a comment; a wording ambiguity; report-wording).
+
+**Rollback:** revert `38de05b5`, `758b21a3` and `c172e6a9` individually; corpus returns to 1100 and the fixtures move back.
+
+**Architecture skill: no change.**
