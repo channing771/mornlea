@@ -216,8 +216,8 @@ func TestContractInventoryWorkingReportsZeroCaseFamilies(t *testing.T) {
 	}
 
 	zeroCasePoint := CoveragePoint{
-		FamilyID: "protocol.server.ChatEvent",
-		Version:  "45",
+		FamilyID: "kernel.mornlea_collision_resolve",
+		Version:  "11",
 	}
 	foundUncovered := false
 	for _, pt := range report.Uncovered {
@@ -264,8 +264,8 @@ func TestContractInventoryCompleteRejectsZeroCaseFamilies(t *testing.T) {
 	}
 
 	zeroCasePoint := CoveragePoint{
-		FamilyID: "protocol.server.ChatEvent",
-		Version:  "45",
+		FamilyID: "kernel.mornlea_collision_resolve",
+		Version:  "11",
 	}
 	foundInError := false
 	for _, prob := range invErr.Problems {

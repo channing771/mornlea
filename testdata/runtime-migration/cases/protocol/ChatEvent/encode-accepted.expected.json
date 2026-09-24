@@ -1,0 +1,17 @@
+{
+  "category": "packet",
+  "encoded_payload_digest": "sha256:d54b4dbc98ed3f08dcd61c50b04152180db588049ba4dc258b2f815f9ed11411",
+  "fields": {
+    "command": "@mira follow",
+    "companion_id": "000102030405460788090a0b0c0d0e10",
+    "companion_name": "Mira",
+    "event_id": "72623859790382856",
+    "kind": 1,
+    "player_id": "000102030405460788090a0b0c0d0e0f",
+    "player_name": "Alice",
+    "reason": 0,
+    "speech": ""
+  },
+  "kind": "ok"
+}
+
