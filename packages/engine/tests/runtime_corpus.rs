@@ -91,6 +91,15 @@ impl std::fmt::Display for CorpusError {
 
 impl std::error::Error for CorpusError {}
 
+/// Test-only manifest identity, retained separately from production packet types.
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct FrozenPacketKey {
+    pub direction: String,
+    pub state: String,
+    pub id: u32,
+}
+
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct FrozenCase {
@@ -98,6 +107,7 @@ pub struct FrozenCase {
     pub family: String,
     pub version: String,
     pub consumer: CorpusConsumer,
+    pub packet_key: Option<FrozenPacketKey>,
     pub operation: String,
     pub arguments: serde_json::Value,
     pub input_format: InputFormat,
@@ -106,6 +116,56 @@ pub struct FrozenCase {
     pub normalized: serde_json::Value,
     pub encoded: Option<Vec<u8>>,
     pub category: String,
+}
+
+fn parse_packet_key(
+    case: &serde_json::Value,
+    cid: &str,
+    family: &str,
+) -> Result<Option<FrozenPacketKey>, CorpusError> {
+    let required = family.starts_with("protocol.client.") || family.starts_with("protocol.server.");
+    let Some(value) = case.get("packet_key") else {
+        if required {
+            return Err(CorpusError {
+                message: format!("case {cid} missing packet_key"),
+            });
+        }
+        return Ok(None);
+    };
+    if family == "protocol.frame" {
+        return Err(CorpusError {
+            message: format!("frame case {cid} must not carry packet_key"),
+        });
+    }
+    let object = value.as_object().ok_or_else(|| CorpusError {
+        message: format!("case {cid} packet_key must be an object"),
+    })?;
+    if object.len() != 3
+        || !object.contains_key("direction")
+        || !object.contains_key("state")
+        || !object.contains_key("id")
+    {
+        return Err(CorpusError {
+            message: format!("case {cid} packet_key must contain exactly direction, state, id"),
+        });
+    }
+    let direction = object["direction"].as_str().ok_or_else(|| CorpusError {
+        message: format!("case {cid} packet_key direction must be a string"),
+    })?;
+    let state = object["state"].as_str().ok_or_else(|| CorpusError {
+        message: format!("case {cid} packet_key state must be a string"),
+    })?;
+    let id = object["id"]
+        .as_u64()
+        .and_then(|id| u32::try_from(id).ok())
+        .ok_or_else(|| CorpusError {
+            message: format!("case {cid} packet_key id must be a u32"),
+        })?;
+    Ok(Some(FrozenPacketKey {
+        direction: direction.to_string(),
+        state: state.to_string(),
+        id,
+    }))
 }
 
 struct StrictValueVisitor;
@@ -671,6 +731,7 @@ fn load_cases_filtered(
             })?;
             validate_sha256_format(enc_sha, &format!("case {cid} encoded"))?;
         }
+        parse_packet_key(c, cid, family)?;
     }
 
     for (fid, fam_meta) in &family_map {
@@ -813,6 +874,7 @@ fn load_cases_filtered(
             family: family.to_string(),
             version: version.to_string(),
             consumer,
+            packet_key: parse_packet_key(c, cid, family)?,
             operation: operation.to_string(),
             arguments,
             input_format,

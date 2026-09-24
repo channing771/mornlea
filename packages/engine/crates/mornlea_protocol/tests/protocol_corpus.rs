@@ -125,6 +125,8 @@
 //! which is what keeps the staged state visible until the merge lands.
 
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
+use std::sync::OnceLock;
 
 #[path = "../../../tests/runtime_corpus.rs"]
 mod runtime_corpus;
@@ -132,6 +134,100 @@ mod runtime_corpus;
 use runtime_corpus::{
     CorpusConsumer, FrozenCase, assert_normalized, load_case, load_cases_for_consumer,
 };
+
+/// Successful frozen decodes establish the family key through public dispatch.
+/// Other cases compare against this map before their concrete codec outcome.
+struct PacketKeyEvidence {
+    families: BTreeMap<String, mornlea_protocol::PacketKey>,
+    decode_probes: usize,
+}
+
+fn frozen_packet_key(case: &FrozenCase) -> mornlea_protocol::PacketKey {
+    use mornlea_protocol::{Direction, PacketKey, State};
+
+    let frozen = case
+        .packet_key
+        .as_ref()
+        .unwrap_or_else(|| panic!("case {} has no packet key", case.id));
+    let direction = match frozen.direction.as_str() {
+        "client-to-server" => Direction::ClientToServer,
+        "server-to-client" => Direction::ServerToClient,
+        other => panic!("case {} has unknown packet direction {other}", case.id),
+    };
+    let state = match frozen.state.as_str() {
+        "handshake" => State::Handshake,
+        "login" => State::Login,
+        "play" => State::Play,
+        other => panic!("case {} has unknown packet state {other}", case.id),
+    };
+    PacketKey {
+        direction,
+        state,
+        id: frozen.id,
+    }
+}
+
+fn packet_key_evidence() -> &'static PacketKeyEvidence {
+    static EVIDENCE: OnceLock<PacketKeyEvidence> = OnceLock::new();
+    EVIDENCE.get_or_init(|| {
+        use mornlea_protocol::{Direction, ProtocolCodec, decode_client};
+
+        let cases = load_cases_for_consumer(CorpusConsumer::Protocol);
+        let mut codec = ProtocolCodec::new().expect("protocol codec context");
+        let mut families = BTreeMap::new();
+        let mut decode_probes = 0;
+        for case in &cases {
+            if case.operation != "decode" || case.normalized["kind"] != "ok" {
+                continue;
+            }
+            let frozen = frozen_packet_key(case);
+            let decoded = match frozen.direction {
+                Direction::ClientToServer => {
+                    decode_client(frozen.state, frozen.id, &case.input).map(|packet| packet.key())
+                }
+                Direction::ServerToClient => codec
+                    .decode_server(frozen.state, frozen.id, &case.input)
+                    .map(|packet| packet.key()),
+            }
+            .unwrap_or_else(|error| panic!("case {} typed decode failed: {error:?}", case.id));
+            assert_eq!(
+                decoded, frozen,
+                "case {} typed decoder returned a different packet key",
+                case.id
+            );
+            if let Some(prior) = families.insert(case.family.clone(), frozen) {
+                assert_eq!(
+                    prior, frozen,
+                    "family {} has inconsistent successful decode keys",
+                    case.family
+                );
+            }
+            decode_probes += 1;
+        }
+        assert_eq!(
+            families.len(),
+            59,
+            "successful typed decode did not cover all packet families"
+        );
+        PacketKeyEvidence {
+            families,
+            decode_probes,
+        }
+    })
+}
+
+fn assert_family_packet_key(case: &FrozenCase) {
+    let expected = packet_key_evidence()
+        .families
+        .get(&case.family)
+        .unwrap_or_else(|| panic!("case {} has no successful decode family key", case.id));
+    assert_eq!(
+        frozen_packet_key(case),
+        *expected,
+        "case {} packet key differs from its family",
+        case.id
+    );
+}
 
 /// The reviewed frame the encode case publishes: canonical length prefix 5,
 /// the two-byte canonical uvarint packet ID 128, and the three-byte payload.
@@ -2788,6 +2884,7 @@ fn player_state_request(
 /// comparison covers the exact bytes rather than their length.
 fn dispatch_packet(case: &FrozenCase) -> serde_json::Value {
     assert_eq!(case.version, PACKET_VERSION, "unexpected packet version");
+    assert_family_packet_key(case);
     match case.family.as_str() {
         CLIENT_HELLO_FAMILY => match case.operation.as_str() {
             "decode" => match mornlea_protocol::ClientHello::decode_inbound(&case.input) {
@@ -4191,6 +4288,42 @@ fn protocol_corpus_packet_consumer_selection_is_executable() {
     // executed through the codec path it belongs to.
     let cases = load_cases_for_consumer(CorpusConsumer::Protocol);
     execute_selection(CorpusConsumer::Protocol, &cases);
+}
+
+#[test]
+fn protocol_corpus_rejects_mutated_packet_keys_without_payload_changes() {
+    let case = load_case("protocol.client.PlayerInput/45/decode-valid");
+    execute_selection(CorpusConsumer::Protocol, std::slice::from_ref(&case));
+
+    for (part, value) in [
+        ("direction", "server-to-client"),
+        ("state", "login"),
+        ("id", "1"),
+    ] {
+        let mut mutated = case.clone();
+        let key = mutated
+            .packet_key
+            .as_mut()
+            .expect("PlayerInput has a frozen packet key");
+        match part {
+            "direction" => key.direction = value.to_string(),
+            "state" => key.state = value.to_string(),
+            "id" => key.id = value.parse().expect("literal packet id"),
+            _ => unreachable!(),
+        }
+        assert_eq!(mutated.input, case.input, "{part} mutation changed payload");
+        assert_eq!(
+            mutated.normalized, case.normalized,
+            "{part} mutation changed expected fields"
+        );
+        let result = std::panic::catch_unwind(|| {
+            execute_selection(CorpusConsumer::Protocol, std::slice::from_ref(&mutated));
+        });
+        assert!(
+            result.is_err(),
+            "{part} mutation did not fail Rust corpus verification"
+        );
+    }
 }
 
 /// The negotiation group's cases execute through the real inbound decoders and
@@ -5941,6 +6074,35 @@ fn protocol_corpus_protocol_family_set_is_closed() {
         .iter()
         .filter(|case| case.consumer == CorpusConsumer::Frame)
         .count();
+    let key_bearing_packet_cases = cases
+        .iter()
+        .filter(|case| case.consumer == CorpusConsumer::Protocol && case.packet_key.is_some())
+        .count();
+    assert_eq!(
+        packet_cases, 433,
+        "packet selection changed from the reviewed corpus"
+    );
+    assert_eq!(
+        key_bearing_packet_cases, 433,
+        "a packet case lost its frozen key"
+    );
+    assert!(
+        cases
+            .iter()
+            .filter(|case| case.consumer == CorpusConsumer::Frame)
+            .all(|case| case.packet_key.is_none()),
+        "a frame case carries a packet key"
+    );
+    let key_evidence = packet_key_evidence();
+    assert_eq!(
+        key_evidence.families.len(),
+        59,
+        "packet family keys are incomplete"
+    );
+    assert!(
+        key_evidence.decode_probes >= 59,
+        "too few typed valid decode probes"
+    );
     assert!(
         packet_cases >= 177,
         "the packet selection executes {packet_cases} cases, want at least 177"
