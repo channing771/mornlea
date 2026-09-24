@@ -622,6 +622,7 @@ mod tests {
             family: "domain.test".to_string(),
             version: "1".to_string(),
             consumer: CorpusConsumer::Domain,
+            packet_key: None,
             operation: "admit".to_string(),
             arguments: serde_json::Value::Null,
             input_format: InputFormat::Json,

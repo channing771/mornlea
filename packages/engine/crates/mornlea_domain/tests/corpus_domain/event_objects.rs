@@ -2013,6 +2013,7 @@ fn probe_case(id: &str, input: serde_json::Value) -> FrozenCase {
         family: "domain.event".to_string(),
         version: "1".to_string(),
         consumer: CorpusConsumer::Domain,
+        packet_key: None,
         operation: "admit".to_string(),
         arguments: serde_json::Value::Null,
         input_format: crate::runtime_corpus::InputFormat::Json,

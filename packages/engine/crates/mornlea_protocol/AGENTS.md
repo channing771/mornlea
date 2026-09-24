@@ -2474,6 +2474,11 @@ against the outcome the independent Go producer recorded. It loads the
 `corpus_frame` selection and the `mornlea_protocol` selection the packet groups
 register into; a packet family whose cases the controller has not integrated
 yet fails as a missing corpus case rather than as an empty selection. The
+shared loader retains each packet case's frozen direction/state/ID key. Valid
+decode cases pass through public typed dispatch and establish all 59 family
+keys; every concrete corpus comparison checks its case key against that family
+before comparing bytes or fields. The frame family has no packet key, and
+direction, state, or ID mutation must fail with unchanged payload bytes. The
 preexisting `runtime_contract` framing test stays a separate regression suite.
 The rejection categories the consumer derives from this crate's error variants
 include the `integrity` boundary for a compressed stream the envelope checks
