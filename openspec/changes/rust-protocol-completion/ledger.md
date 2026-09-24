@@ -421,3 +421,20 @@
 **Rollback:** revert the single commit as one unit; the tracked corpus, the route union and `BaselineSourceRevision` are untouched, so a revert restores the exact pre-node state.
 
 **Architecture skill: no change** (the closure-evidence pattern — three-side family-set equality plus a per-group value-mutation proof — is change-local; the durable route-runner and producer/consumer separation rules are already recorded in the synchronized skill).
+
+
+## Node 4.3 — 2026-09-24
+
+**Status:** complete. Commits `b6043f00` (`test(protocol): close executable v45 corpus coverage`) + review-fix `accdb5d7` (`test(runtime-oracle): pin altered-source provenance rejection`) + controller integration `29ec84e0` (`chore(corpus): refresh protocol closure source revision`) on top of `c747ee21`.
+
+**Deliverable:** the protocol-only zero-gap closure. `TestProtocolCorpusComplete` proves the 60-family set three-way (live Go discovery = frozen manifest = closed route union), counts per-family minimums from the actual manifest (436 protocol cases: 433 packet + 3 frame ≥ the 180 minimum), asserts ZERO uncovered `protocol.*` in `ReconcileWorking` while `ReconcileComplete` still refuses the 45 non-protocol points (F1 unclaimed), and verifies every failure-mode mutation class (zero-case, duplicate, missing route/hash, altered key, wrong direction/state/version, unexecuted, mismatched digest) plus one REAL-Rust-consumer value-mutation comparison failure per each of the 18 producer groups. The review fix added the named disposable-copy Go source-byte provenance rejection (`TestProtocolCorpusCompleteRejectsAlteredGoSourceByte` — the production source-hash-content branch now covered; unmutated-then-mutated discipline).
+
+**Source revision refresh (the plan's single act):** `source_revision` and `BaselineSourceRevision` refreshed ONCE together to `b6043f004176055a2e39a98508b662691c3e4ef7` (the closure-evidence commit that contains every Go producer; the fix commit `accdb5d7` intentionally follows it — the revision names the evidence baseline, not HEAD). Both sides changed in the same integration commit; the node's own gate pins their equality.
+
+**Evidence:** 7 new Go tests + 2 new Rust tests; the `^TestProtocolCorpus` family 21/21; full oracle ok (implementer also ran `-race`, 351s); whole protocol crate 513/513; network subtree `-race` ok; audit ok; fmt/clippy/gofmt/vet clean; tracked corpus unchanged until the controller's two-field integration commit. **Non-protocol uncovered (45, exactly as visible):** `domain.input/45`; 11 kernel points; `save.chunk/1..9`, `save.companion/1..5`, `save.hostile/1..2`, `save.passive/1`, `save.player/1..9`, `save.region/1`, `save.world-metadata/1..6`.
+
+**Review ruling:** initially Needs fixes on the one missing provenance check (Important) — fixed by `accdb5d7` and verified; 2 Minor (the producer-path reuse comment — added in the fix; coarse ledger evidence counts — recorded here).
+
+**Rollback:** revert `accdb5d7`, `b6043f00` and `29ec84e0` individually; the corpus keeps all 60 families and the revision returns to `736af2f4`.
+
+**Architecture skill: no change.**
