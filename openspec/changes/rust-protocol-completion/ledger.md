@@ -371,3 +371,18 @@
 **Rollback:** revert `38de05b5`, `758b21a3` and `c172e6a9` individually; corpus returns to 1100 and the fixtures move back.
 
 **Architecture skill: no change.**
+
+
+## Node 4.1 — 2026-09-24
+
+**Status:** complete. Commit `46b71203` (`feat(protocol): close typed packet registry`) on top of `d3adc8d9`. NO corpus change — this is the typed-dispatch closure.
+
+**Deliverable:** `src/registry.rs` with the design §1 API — `Direction`/`State`/`PacketKey`, the 23-variant `ClientPacket` (raw `InboundHello`/`InboundLoginStart` for the two negotiation variants) and 36-variant `ServerPacket`, exhaustive `(state,id)` dispatch in `decode_client` and `ProtocolCodec::decode_server`/`encode_server_into`, `key()` on both enums — verified line by line against Go `registry.go` (all 59 keys exact, C/Play/1 reserved, C/Play/22 and S/Play/32 unassigned). Group test `tests/protocol_registry.rs` 70/70: 59 named per-key dispatch cases over embedded Go-produced literals, direction/state mutation invariants over the REQUESTED key, the cross-legitimate C/Handshake/0↔S/Handshake/0 collision pinned and documented, the three table-tamper detections by key/variant, and the old-version hello decoding structurally then answering `VersionMismatch{45}` through `validate_hello`.
+
+**Rulings frozen (reviewer-verified):** (A) the raw inbound records gained the standard fallible encode surface so `encode_client_into` stays exhaustive — no admission rule leaks, gates total; (B) the direction-mutation invariant is asserted over the requested key with `UnknownPacket` only for unregistered keys; (C) the encode-side 64 KiB ceiling is genuinely unreachable (largest non-snapshot payload ≈57.4 KiB BlockChanges) and the decode-side ceiling matches Go's pre-switch placement with the snapshot routed away; (D) an unknown state byte is unrepresentable in the closed `State` enum, pinned Go-side. The registry route table in `ORACLE/inventory.go` was already complete (60 families integrated at 3.11) — no controller merge was needed.
+
+**Evidence:** group 70/70; whole crate ALL GREEN with no staged red (`protocol_corpus` 134, `runtime_contract` 134); fmt/clippy clean; audit ok; Go registry ID tests pass. **Review ruling:** Approved, 0 Crit/0 Imp/3 Minor (a `mutated_keys` doc undercount; one wrong supporting number in the report; a future-proofing catch-all in `ClientPacket::key()`'s state match).
+
+**Rollback:** revert `46b71203` as one unit; the concrete codecs are untouched.
+
+**Architecture skill: no change.**
