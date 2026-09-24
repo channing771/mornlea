@@ -699,11 +699,67 @@ func TestProtocolCorpusNonProtocolEvidenceUnchanged(t *testing.T) {
 	}
 }
 
+// TestProtocolCorpusCompleteRejectsAlteredGoSourceByte pins the production
+// source-hash-content branch: a working-manifest fixture whose family
+// provenance sources reconcile clean must refuse once one byte of a staged
+// source changes on disk while the recorded hash stays, so a silently edited
+// Go source can never keep its frozen corpus coverage. The staged source lives
+// in the fixture's temporary directory, so no tracked file is touched.
+func TestProtocolCorpusCompleteRejectsAlteredGoSourceByte(t *testing.T) {
+	fixture := newInventoryAssetFixture(t, "binary", []byte{0x01}, false)
+	source := fixture.inventory.Families[0].Sources[0]
+	if source.Path == "" {
+		t.Fatal("fixture registers no family provenance source")
+	}
+	if _, err := ReconcileWorking(
+		fixture.root,
+		fixture.inventory,
+		fixture.families,
+		fixture.live,
+		BaselineConsumerRegistry(),
+		BaselineNegativeCoverageExceptions(),
+	); err != nil {
+		t.Fatalf("unmutated fixture does not reconcile: %v", err)
+	}
+
+	staged := filepath.Join(fixture.root, filepath.FromSlash(source.Path))
+	data, err := os.ReadFile(staged)
+	if err != nil {
+		t.Fatalf("read staged source %s: %v", source.Path, err)
+	}
+	if len(data) == 0 {
+		t.Fatalf("staged source %s carries no byte to alter", source.Path)
+	}
+	data[0] ^= 0x01
+	if err := os.WriteFile(staged, data, 0o644); err != nil {
+		t.Fatalf("rewrite staged source %s: %v", source.Path, err)
+	}
+
+	_, err = ReconcileWorking(
+		fixture.root,
+		fixture.inventory,
+		fixture.families,
+		fixture.live,
+		BaselineConsumerRegistry(),
+		BaselineNegativeCoverageExceptions(),
+	)
+	if err == nil {
+		t.Fatal("altered source byte accepted by the working reconciliation")
+	}
+	text := err.Error()
+	if !strings.Contains(text, source.Path) || !strings.Contains(text, "does not match disk") {
+		t.Fatalf("altered source byte refusal %v does not name %s with its disk mismatch", text, source.Path)
+	}
+}
+
 // TestProtocolCorpusClosureCandidateExport stages the one-time source revision
 // refresh as an external candidate. The tracked manifest keeps its recorded
 // revision; the candidate names the current HEAD revision so the controller
 // can verify it at integration and then integrate both sides together. An
 // unset export variable writes nothing.
+// The candidate publishes through the reviewed create-exclusive exporter
+// `writeDomainEventManifestCandidate`, reusing its registered producer path
+// (runtime-oracle/domain-event-manifest) so this node adds no exporter identity.
 func TestProtocolCorpusClosureCandidateExport(t *testing.T) {
 	root := mustRepoRoot(t)
 	before := computeTrackedCorpusDigest(t, root)
